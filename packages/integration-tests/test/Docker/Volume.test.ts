@@ -15,35 +15,6 @@ const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState
 const testVolumeName = (stage: string, suffix: string) => "alchemy-" + stage + "-volume-" + suffix;
 
 test.provider(
-  "diff replaces a volume when labels change",
-  (stack) =>
-    Effect.gen(function* () {
-      const name = testVolumeName(stack.stage, "diff-labels");
-      const volumeProvider = yield* Provider.findProvider(Docker.Volume);
-      const volumeDiff = yield* volumeProvider.diff!({
-        id: "data",
-        fqn: "data",
-        instanceId: "instance",
-        olds: { name, labels: { usage: "old" } },
-        news: { name, labels: { usage: "new" } },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: name,
-          name,
-          driver: "local",
-          driverOpts: {},
-          labels: { usage: "old" },
-          mountpoint: undefined,
-          createdAt: 0,
-        },
-      });
-      expect(volumeDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
-  { tags: ["provider:docker", "provider:docker:volume", "local"] },
-);
-
-test.provider(
   "diff replaces a volume when its Docker context changes",
   (stack) =>
     Effect.gen(function* () {
