@@ -105,6 +105,67 @@ export interface IssuingCardSpendingControls {
   spendingLimits?: IssuingCardSpendingLimit[];
 }
 
+/** A postal address a physical card ships to. */
+export interface IssuingCardShippingAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  /** State, county, province, or region. */
+  state?: string;
+  postalCode: string;
+  /** ISO 3166-1 alpha-2 country code. */
+  country: string;
+}
+
+/** Where and how a physical card is shipped. */
+export interface IssuingCardShipping {
+  /** Recipient name. */
+  name: string;
+  /** Address the card ships to. */
+  address: IssuingCardShippingAddress;
+  /** Shipment speed. @default "standard" */
+  service?: "express" | "priority" | "standard";
+  /** `individual` ships one card per package; `bulk` ships cards together. */
+  type?: "bulk" | "individual";
+  /** Recipient business name, if shipping to a business. */
+  businessName?: string;
+  /** Phone number for the carrier; required for some services and countries. */
+  phoneNumber?: string;
+  /** Whether the recipient must sign for the card. */
+  requireSignature?: boolean;
+  /** EORI number for customs, required for some shipments into the EU. */
+  customsEoriNumber?: string;
+  /**
+   * How Stripe validates the address: `disabled`, `normalization_only`
+   * (normalize it), or `validation_and_normalization` (also reject an
+   * undeliverable address).
+   */
+  addressValidation?: "disabled" | "normalization_only" | "validation_and_normalization";
+}
+
+/** Shipping details Stripe reports back, including tracking. */
+export interface IssuingCardShippingAttributes extends IssuingCardShipping {
+  /** Delivery status, once the card is shipped. */
+  status: string | undefined;
+  /** Carrier, once the card is shipped. */
+  carrier: string | undefined;
+  /** Tracking number, once the card is shipped. */
+  trackingNumber: string | undefined;
+  /** Tracking URL, once the card is shipped. */
+  trackingUrl: string | undefined;
+  /** Estimated delivery time (Unix timestamp), once known. */
+  eta: number | undefined;
+}
+
+/** Rules that cancel the card automatically. */
+export interface IssuingCardLifecycleControls {
+  /**
+   * Cancel the card after this many successful payments (`1` makes a
+   * single-use card).
+   */
+  cancelAfterPaymentCount: number;
+}
+
 export interface IssuingCardProps {
   /**
    * Id of the Issuing Cardholder this card is issued to (`ich_…`).
@@ -166,6 +227,21 @@ export interface IssuingCardProps {
    */
   spendingControls?: IssuingCardSpendingControls;
   /**
+   * Where to ship a `physical` card. Required for physical cards. Updates
+   * in place until the card ships.
+   */
+  shipping?: IssuingCardShipping;
+  /**
+   * Rules that cancel the card automatically, such as after one payment.
+   * Create-only — changing them replaces the card.
+   */
+  lifecycleControls?: IssuingCardLifecycleControls;
+  /**
+   * Why the card is canceled, recorded when destroying this resource
+   * cancels it. Use `lost` or `stolen` when retiring a compromised card.
+   */
+  cancellationReason?: "lost" | "stolen";
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`. Mutable.
@@ -209,6 +285,10 @@ export type IssuingCard = Resource<
     cancellationReason: string | undefined;
     /** Spending controls currently applied to this card. */
     spendingControls: IssuingCardSpendingControls | undefined;
+    /** Shipping details and tracking for a physical card, if set. */
+    shipping: IssuingCardShippingAttributes | undefined;
+    /** Automatic cancellation rules, if set. */
+    lifecycleControls: IssuingCardLifecycleControls | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the card was created. */
@@ -238,7 +318,7 @@ export interface IssuingCardLookup {
  * update in place.
  *
  * Cards cannot be hard-deleted; destroying this resource cancels the
- * card (`status: canceled`). Canceled cards cannot be reactivated — a
+ * card (`status: canceled`), recording `cancellationReason` if set. Canceled cards cannot be reactivated — a
  * later create with the same logical id provisions a new card.
  *
  * Issuing must be enabled on the Stripe account.
@@ -270,6 +350,35 @@ export interface IssuingCardLookup {
  * });
  * ```
  *
+ * **Example:** Physical card shipped to the cardholder
+ * ```typescript
+ * const card = yield* Stripe.IssuingCard("office-card", {
+ *   cardholder: cardholder.id,
+ *   currency: "usd",
+ *   type: "physical",
+ *   shipping: {
+ *     name: "Jenny Rosen",
+ *     address: {
+ *       line1: "123 Main Street",
+ *       city: "San Francisco",
+ *       state: "CA",
+ *       postalCode: "94111",
+ *       country: "US",
+ *     },
+ *     service: "express",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Single-use virtual card
+ * ```typescript
+ * const card = yield* Stripe.IssuingCard("one-off-purchase", {
+ *   cardholder: cardholder.id,
+ *   currency: "usd",
+ *   lifecycleControls: { cancelAfterPaymentCount: 1 },
+ * });
+ * ```
+ *
  * ### Updating a Card
  * **Example:** Freeze and retag
  * ```typescript
@@ -289,6 +398,7 @@ export interface IssuingCardLookup {
  *   cardholder: cardholder.id,
  *   currency: "usd",
  *   type: "physical",
+ *   shipping: { name: "Jenny Rosen", address },
  * });
  * ```
  *
@@ -408,6 +518,84 @@ const toWireSpendingControls = (
     : {}),
 });
 
+const fromWireShipping = (
+  shipping: StripeIssuingCard["shipping"],
+): IssuingCardShippingAttributes | undefined => {
+  if (shipping == null) return undefined;
+  const address = shipping.address;
+  return {
+    name: shipping.name,
+    address: {
+      line1: address.line1 ?? "",
+      ...(address.line2 ? { line2: address.line2 } : {}),
+      city: address.city ?? "",
+      ...(address.state ? { state: address.state } : {}),
+      postalCode: address.postal_code ?? "",
+      country: address.country ?? "",
+    },
+    service: shipping.service as IssuingCardShipping["service"],
+    type: shipping.type as IssuingCardShipping["type"],
+    ...(shipping.business_name != null ? { businessName: shipping.business_name } : {}),
+    ...(shipping.phone_number != null ? { phoneNumber: shipping.phone_number } : {}),
+    ...(shipping.require_signature != null ? { requireSignature: shipping.require_signature } : {}),
+    ...(shipping.customs?.eori_number != null
+      ? { customsEoriNumber: shipping.customs.eori_number }
+      : {}),
+    ...(shipping.address_validation != null
+      ? {
+          addressValidation: shipping.address_validation
+            .mode as IssuingCardShipping["addressValidation"],
+        }
+      : {}),
+    status: shipping.status ?? undefined,
+    carrier: shipping.carrier ?? undefined,
+    trackingNumber: shipping.tracking_number ?? undefined,
+    trackingUrl: shipping.tracking_url ?? undefined,
+    eta: shipping.eta ?? undefined,
+  };
+};
+
+const toWireShipping = (shipping: IssuingCardShipping) => ({
+  name: shipping.name,
+  address: {
+    line1: shipping.address.line1,
+    city: shipping.address.city,
+    postal_code: shipping.address.postalCode,
+    country: shipping.address.country,
+    ...(shipping.address.line2 !== undefined ? { line2: shipping.address.line2 } : {}),
+    ...(shipping.address.state !== undefined ? { state: shipping.address.state } : {}),
+  },
+  ...(shipping.service !== undefined ? { service: shipping.service } : {}),
+  ...(shipping.type !== undefined ? { type: shipping.type } : {}),
+  ...(shipping.businessName !== undefined ? { business_name: shipping.businessName } : {}),
+  ...(shipping.phoneNumber !== undefined ? { phone_number: shipping.phoneNumber } : {}),
+  ...(shipping.requireSignature !== undefined
+    ? { require_signature: shipping.requireSignature }
+    : {}),
+  ...(shipping.customsEoriNumber !== undefined
+    ? { customs: { eori_number: shipping.customsEoriNumber } }
+    : {}),
+  ...(shipping.addressValidation !== undefined
+    ? { address_validation: { mode: shipping.addressValidation } }
+    : {}),
+});
+
+/** Compares only the fields the props set; Stripe fills in defaults. */
+const shippingMatches = (
+  desired: IssuingCardShipping,
+  observed: IssuingCardShippingAttributes | undefined,
+) => {
+  if (observed === undefined) return false;
+  const { address, ...rest } = desired;
+  const addressMatches = (Object.keys(address) as (keyof IssuingCardShippingAddress)[]).every(
+    (key) => address[key] === observed.address[key],
+  );
+  return (
+    addressMatches &&
+    (Object.keys(rest) as (keyof typeof rest)[]).every((key) => rest[key] === observed[key])
+  );
+};
+
 const toAttrs = (card: StripeIssuingCard): IssuingCardAttributes => ({
   id: card.id,
   cardholder: card.cardholder.id,
@@ -425,6 +613,11 @@ const toAttrs = (card: StripeIssuingCard): IssuingCardAttributes => ({
   replacementReason: (card.replacement_reason as IssuingCardReplacementReason | null) ?? undefined,
   cancellationReason: card.cancellation_reason ?? undefined,
   spendingControls: toSpendingControls(card.spending_controls),
+  shipping: fromWireShipping(card.shipping),
+  lifecycleControls:
+    card.lifecycle_controls == null
+      ? undefined
+      : { cancelAfterPaymentCount: card.lifecycle_controls.cancel_after.payment_count },
   metadata: userMetadata(card.metadata),
   created: card.created,
   livemode: card.livemode,
@@ -542,6 +735,12 @@ const shouldReplace = (
   ) {
     return true;
   }
+  if (
+    news.lifecycleControls?.cancelAfterPaymentCount !==
+    output.lifecycleControls?.cancelAfterPaymentCount
+  ) {
+    return true;
+  }
   return false;
 };
 
@@ -636,6 +835,14 @@ export const IssuingCardProvider = () =>
             ? { replacement_reason: news.replacementReason }
             : {}),
           ...(spendingControls !== undefined ? { spending_controls: spendingControls } : {}),
+          ...(news.shipping !== undefined ? { shipping: toWireShipping(news.shipping) } : {}),
+          ...(news.lifecycleControls !== undefined
+            ? {
+                lifecycle_controls: {
+                  cancel_after: { payment_count: news.lifecycleControls.cancelAfterPaymentCount },
+                },
+              }
+            : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-issuing-card-${instanceId}`,
@@ -663,7 +870,17 @@ export const IssuingCardProvider = () =>
           stripNullish: true,
         });
 
-      if (!statusChanged && !personalizationChanged && !spendingChanged && !metadataChanged) {
+      const shippingChanged =
+        news.shipping !== undefined &&
+        !shippingMatches(news.shipping, fromWireShipping(current.shipping));
+
+      if (
+        !statusChanged &&
+        !personalizationChanged &&
+        !spendingChanged &&
+        !shippingChanged &&
+        !metadataChanged
+      ) {
         return toAttrs(current);
       }
 
@@ -672,6 +889,9 @@ export const IssuingCardProvider = () =>
         ...(statusChanged ? { status: desiredStatus } : {}),
         ...(personalizationChanged ? { personalization_design: news.personalizationDesign } : {}),
         ...(spendingChanged ? { spending_controls: spendingControls } : {}),
+        ...(shippingChanged && news.shipping !== undefined
+          ? { shipping: toWireShipping(news.shipping) }
+          : {}),
         ...(metadataChanged
           ? {
               metadata: {
@@ -684,12 +904,16 @@ export const IssuingCardProvider = () =>
       return toAttrs(updated);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ olds, output }) {
       const existing = yield* getByIdAny(output.id);
       if (existing === undefined || existing.status === "canceled") return;
+      const cancellationReason = olds?.cancellationReason;
       yield* UpdateIssuingCard({
         card: existing.id,
         status: "canceled",
+        ...(cancellationReason === "lost" || cancellationReason === "stolen"
+          ? { cancellation_reason: cancellationReason }
+          : {}),
       }).pipe(Effect.catchIf(isMissingCard, () => Effect.void));
     }),
   });

@@ -4,6 +4,7 @@ import {
   GetPrice,
   CreatePrice,
   UpdatePrice,
+  UpdateProduct,
   type Price as StripePrice,
   type PriceProduct,
 } from "@distilled.cloud/stripe/stripe";
@@ -14,6 +15,13 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import {
+  fromWireTiers,
+  tiersEqual,
+  toWireTiers,
+  type Tier,
+  type TiersMode,
+} from "./internal/tiers.ts";
 import {
   alchemyMetadataKeys,
   createInternalMetadata,
@@ -33,22 +41,42 @@ export type PriceInterval = "day" | "month" | "week" | "year";
 export type PriceUsageType = "licensed" | "metered";
 export type PriceType = "one_time" | "recurring";
 export type PriceTaxBehavior = "exclusive" | "inclusive" | "unspecified";
-export type PriceTiersMode = "graduated" | "volume";
+/** How a tiered price applies its tiers. */
+export type PriceTiersMode = TiersMode;
+/** One tier of a tiered price. */
+export type PriceTier = Tier;
 
-export interface PriceTier {
-  /**
-   * Inclusive upper bound of the tier in units. The last tier uses
-   * `"inf"`.
-   */
-  upTo: number | "inf";
-  /**
-   * Per-unit amount in the currency's minor units for units in this tier.
-   */
+/**
+ * Lets the customer choose the amount (pay what you want). Setting it
+ * enables custom amounts; Checkout shows the bounds and the preset.
+ */
+export interface PriceCustomUnitAmount {
+  /** Smallest amount the customer may pay, in minor units. */
+  minimum?: number;
+  /** Largest amount the customer may pay, in minor units. */
+  maximum?: number;
+  /** Amount pre-filled for the customer, in minor units. */
+  preset?: number;
+}
+
+/** Divides the purchased quantity before billing, e.g. sell in packs. */
+export interface PriceTransformQuantity {
+  /** Divide the quantity by this number. */
+  divideBy: number;
+  /** After division, round the result `up` or `down`. */
+  round: "up" | "down";
+}
+
+/** The price in one additional currency. */
+export interface PriceCurrencyOption {
+  /** Amount in the currency's minor units. */
   unitAmount?: number;
-  /**
-   * Flat amount in the currency's minor units added once for this tier.
-   */
-  flatAmount?: number;
+  /** Decimal amount in minor units. Mutually exclusive with `unitAmount`. */
+  unitAmountDecimal?: string;
+  /** Let the customer choose the amount in this currency. */
+  customUnitAmount?: PriceCustomUnitAmount;
+  /** Whether this currency's amount includes tax. */
+  taxBehavior?: PriceTaxBehavior;
 }
 
 export interface PriceRecurring {
@@ -102,6 +130,24 @@ export interface PriceProps {
    */
   unitAmountDecimal?: string;
   /**
+   * Let the customer choose the amount instead of setting `unitAmount`.
+   * Only for one-time prices. Create-only — changing it replaces the price.
+   */
+  customUnitAmount?: PriceCustomUnitAmount;
+  /**
+   * Divide the purchased quantity before billing, e.g. sell seats in packs
+   * of 10 with `{ divideBy: 10, round: "up" }`. Cannot be combined with
+   * `tiers`. Create-only — changing it replaces the price.
+   */
+  transformQuantity?: PriceTransformQuantity;
+  /**
+   * The price in other currencies, keyed by lowercase ISO currency code
+   * (e.g. `{ eur: { unitAmount: 900 } }`). Adding a currency updates in
+   * place; changing or removing one replaces the price, since Stripe can't
+   * change a currency once set.
+   */
+  currencyOptions?: Record<string, PriceCurrencyOption>;
+  /**
    * Recurring billing configuration. Omit for a one-time price.
    * Create-only — changing it replaces the price.
    */
@@ -125,6 +171,14 @@ export interface PriceProps {
    * If omitted, the price keeps its current tax behavior.
    */
   taxBehavior?: PriceTaxBehavior;
+  /**
+   * Make this price its product's default price, which Checkout, Payment
+   * Links, and pricing tables show. When the price is replaced, the
+   * replacement takes over as default. Set `false` or omit it to leave the
+   * product's default alone, unless it is this price, which is unset.
+   * @default false
+   */
+  defaultForProduct?: boolean;
   /**
    * Brief description of the price, hidden from customers.
    */
@@ -155,12 +209,20 @@ export type Price = Resource<
     id: string;
     /** Id of the product this price belongs to. */
     product: string;
+    /** Whether this price is its product's default price. */
+    defaultForProduct: boolean;
     /** Three-letter ISO currency code. */
     currency: string;
     /** Amount in the currency's minor units, or `undefined` when unset. */
     unitAmount: number | undefined;
     /** Decimal amount in the currency's minor units, or `undefined`. */
     unitAmountDecimal: string | undefined;
+    /** Customer-chosen amount bounds, if the price uses a custom amount. */
+    customUnitAmount: PriceCustomUnitAmount | undefined;
+    /** Quantity transformation, if set. */
+    transformQuantity: PriceTransformQuantity | undefined;
+    /** The price in other currencies, keyed by currency code. */
+    currencyOptions: Record<string, PriceCurrencyOption> | undefined;
     /** Whether the price can be used for new purchases. */
     active: boolean;
     /** Brief description of the price, hidden from customers. */
@@ -244,6 +306,51 @@ export interface PriceLookup {
  * });
  * ```
  *
+ * **Example:** Pay what you want
+ * ```typescript
+ * const donation = yield* Stripe.Price("donation", {
+ *   product,
+ *   currency: "usd",
+ *   customUnitAmount: { minimum: 500, preset: 1500 },
+ * });
+ * ```
+ *
+ * **Example:** Sell seats in packs of 10
+ * ```typescript
+ * const pack = yield* Stripe.Price("seat-pack", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 2000,
+ *   transformQuantity: { divideBy: 10, round: "up" },
+ * });
+ * ```
+ *
+ * **Example:** The product's default price
+ * ```typescript
+ * const price = yield* Stripe.Price("pro-monthly", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 1000,
+ *   recurring: { interval: "month" },
+ *   defaultForProduct: true,
+ * });
+ * ```
+ *
+ * ### Charging in several currencies
+ * **Example:** One price in USD, EUR, and GBP
+ * ```typescript
+ * const price = yield* Stripe.Price("pro-monthly", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 1000,
+ *   recurring: { interval: "month" },
+ *   currencyOptions: {
+ *     eur: { unitAmount: 900 },
+ *     gbp: { unitAmount: 800 },
+ *   },
+ * });
+ * ```
+ *
  * ### Updating a Price
  * **Example:** Nickname, metadata, and deactivate
  * ```typescript
@@ -294,6 +401,14 @@ const productIdOf = (product: PriceProduct): string => {
   return product.id;
 };
 
+/** The product's default price id, when the product came back expanded. */
+const productDefaultPriceOf = (product: PriceProduct): string | undefined => {
+  if (typeof product === "string" || !("default_price" in product)) return undefined;
+  const defaultPrice = product.default_price;
+  if (defaultPrice == null) return undefined;
+  return typeof defaultPrice === "string" ? defaultPrice : defaultPrice.id;
+};
+
 const alchemyProductId = (product: string | Product): string => {
   if (typeof product === "string") return product;
   const id = product.id as unknown;
@@ -314,36 +429,147 @@ const toRecurring = (recurring: StripePrice["recurring"]): PriceRecurring | unde
   };
 };
 
-const toTiers = (tiers: StripePrice["tiers"]): PriceTier[] | undefined =>
-  tiers?.map((tier) => ({
-    upTo: tier.up_to ?? "inf",
-    ...(tier.unit_amount != null ? { unitAmount: tier.unit_amount } : {}),
-    ...(tier.flat_amount != null ? { flatAmount: tier.flat_amount } : {}),
-  }));
+const fromWireCustomUnitAmount = (
+  custom: StripePrice["custom_unit_amount"],
+): PriceCustomUnitAmount | undefined =>
+  custom == null
+    ? undefined
+    : {
+        ...(custom.minimum != null ? { minimum: custom.minimum } : {}),
+        ...(custom.maximum != null ? { maximum: custom.maximum } : {}),
+        ...(custom.preset != null ? { preset: custom.preset } : {}),
+      };
 
-const tiersEqual = (news: PriceTier[] | undefined, observed: PriceTier[] | undefined): boolean => {
-  if (news === undefined) return true;
-  if (observed === undefined || news.length !== observed.length) return false;
-  return news.every(
-    (tier, index) =>
-      tier.upTo === observed[index]?.upTo &&
-      tier.unitAmount === observed[index]?.unitAmount &&
-      tier.flatAmount === observed[index]?.flatAmount,
+const toWireCustomUnitAmount = (custom: PriceCustomUnitAmount) => ({
+  enabled: true,
+  ...(custom.minimum !== undefined ? { minimum: custom.minimum } : {}),
+  ...(custom.maximum !== undefined ? { maximum: custom.maximum } : {}),
+  ...(custom.preset !== undefined ? { preset: custom.preset } : {}),
+});
+
+const customUnitAmountEqual = (
+  desired: PriceCustomUnitAmount | undefined,
+  observed: PriceCustomUnitAmount | undefined,
+) =>
+  desired === undefined
+    ? observed === undefined
+    : observed !== undefined &&
+      desired.minimum === observed.minimum &&
+      desired.maximum === observed.maximum &&
+      desired.preset === observed.preset;
+
+/**
+ * Stripe lists the price's own currency among the expanded options and
+ * echoes a decimal amount for every whole one; both are dropped.
+ */
+const fromWireCurrencyOptions = (
+  price: StripePrice,
+): Record<string, PriceCurrencyOption> | undefined => {
+  const options = Object.entries(price.currency_options ?? {}).filter(
+    (entry): entry is [string, NonNullable<(typeof entry)[1]>] =>
+      entry[0] !== price.currency && entry[1] !== undefined,
+  );
+  if (options.length === 0) return undefined;
+  return Object.fromEntries(
+    options.map(([currency, option]) => [
+      currency,
+      {
+        ...(option.unit_amount != null
+          ? { unitAmount: option.unit_amount }
+          : option.unit_amount_decimal != null
+            ? { unitAmountDecimal: option.unit_amount_decimal }
+            : {}),
+        ...(option.custom_unit_amount != null
+          ? { customUnitAmount: fromWireCustomUnitAmount(option.custom_unit_amount) }
+          : {}),
+        ...(option.tax_behavior != null && option.tax_behavior !== "unspecified"
+          ? { taxBehavior: option.tax_behavior as PriceTaxBehavior }
+          : {}),
+      },
+    ]),
   );
 };
+
+const toWireCurrencyOptions = (options: Record<string, PriceCurrencyOption>) =>
+  Object.fromEntries(
+    Object.entries(options).map(([currency, option]) => [
+      currency,
+      {
+        ...(option.unitAmount !== undefined ? { unit_amount: option.unitAmount } : {}),
+        ...(option.unitAmountDecimal !== undefined
+          ? { unit_amount_decimal: option.unitAmountDecimal }
+          : {}),
+        ...(option.customUnitAmount !== undefined
+          ? { custom_unit_amount: toWireCustomUnitAmount(option.customUnitAmount) }
+          : {}),
+        ...(option.taxBehavior !== undefined ? { tax_behavior: option.taxBehavior } : {}),
+      },
+    ]),
+  );
+
+const currencyOptionEqual = (want: PriceCurrencyOption, have: PriceCurrencyOption) =>
+  want.unitAmount === have.unitAmount &&
+  (want.unitAmountDecimal === undefined ||
+    Number(want.unitAmountDecimal) === Number(have.unitAmountDecimal)) &&
+  customUnitAmountEqual(want.customUnitAmount, have.customUnitAmount) &&
+  (want.taxBehavior ?? "unspecified") === (have.taxBehavior ?? "unspecified");
+
+/**
+ * Stripe adds a currency in place, but it can neither change a currency
+ * once set nor remove one, so either replaces the price.
+ */
+const currencyOptionChanged = (
+  desired: Record<string, PriceCurrencyOption> | undefined,
+  observed: Record<string, PriceCurrencyOption> | undefined,
+) => {
+  if (desired === undefined) return false;
+  return Object.entries(observed ?? {}).some(([currency, have]) => {
+    const want = desired[currency];
+    return want === undefined || !currencyOptionEqual(want, have);
+  });
+};
+
+/** `undefined` desired options match anything: the prop was omitted. */
+const currencyOptionsEqual = (
+  desired: Record<string, PriceCurrencyOption> | undefined,
+  observed: Record<string, PriceCurrencyOption> | undefined,
+) => {
+  if (desired === undefined) return true;
+  const observedOptions = observed ?? {};
+  const keys = Object.keys(desired);
+  if (keys.length !== Object.keys(observedOptions).length) return false;
+  return keys.every((currency) => {
+    const want = desired[currency]!;
+    const have = observedOptions[currency];
+    return have !== undefined && currencyOptionEqual(want, have);
+  });
+};
+
+// `product` comes back expanded so its `default_price` is read with the price.
+const PRICE_EXPAND = ["tiers", "currency_options", "product"];
 
 const toAttrs = (price: StripePrice) => ({
   id: price.id,
   product: productIdOf(price.product),
+  defaultForProduct: productDefaultPriceOf(price.product) === price.id,
   currency: price.currency,
   unitAmount: price.unit_amount ?? undefined,
   unitAmountDecimal: price.unit_amount_decimal ?? undefined,
+  customUnitAmount: fromWireCustomUnitAmount(price.custom_unit_amount),
+  transformQuantity:
+    price.transform_quantity == null
+      ? undefined
+      : {
+          divideBy: price.transform_quantity.divide_by,
+          round: price.transform_quantity.round as PriceTransformQuantity["round"],
+        },
+  currencyOptions: fromWireCurrencyOptions(price),
   active: price.active,
   nickname: price.nickname ?? undefined,
   lookupKey: price.lookup_key ?? undefined,
   type: price.type as PriceType,
   recurring: toRecurring(price.recurring),
-  tiers: toTiers(price.tiers),
+  tiers: fromWireTiers(price.tiers),
   tiersMode: (price.tiers_mode ?? undefined) as PriceTiersMode | undefined,
   taxBehavior: (price.tax_behavior ?? undefined) as PriceTaxBehavior | undefined,
   metadata: userMetadata(price.metadata),
@@ -354,7 +580,7 @@ const toAttrs = (price: StripePrice) => ({
 const isMissingPrice = isMissingStripeResource;
 
 const getById = (price: string) =>
-  GetPrice({ price, expand: ["tiers"] }).pipe(
+  GetPrice({ price, expand: PRICE_EXPAND }).pipe(
     Effect.catchIf(isMissingPrice, () => Effect.undefined),
   );
 
@@ -365,7 +591,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
     const response = yield* GetPrices({
       active,
       limit: LIST_PAGE_SIZE,
-      expand: ["data.tiers"],
+      expand: PRICE_EXPAND.map((field) => `data.${field}`),
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
     });
     prices.push(...response.data);
@@ -458,6 +684,19 @@ const shouldReplace = (news: PriceProps, output: Price["Attributes"] | undefined
     return true;
   }
   if (!recurringEqual(news.recurring, output.recurring)) return true;
+  if (currencyOptionChanged(news.currencyOptions, output.currencyOptions)) return true;
+  if (
+    news.customUnitAmount !== undefined &&
+    !customUnitAmountEqual(news.customUnitAmount, output.customUnitAmount)
+  ) {
+    return true;
+  }
+  if (
+    (news.transformQuantity?.divideBy ?? undefined) !== output.transformQuantity?.divideBy ||
+    (news.transformQuantity?.round ?? undefined) !== output.transformQuantity?.round
+  ) {
+    return true;
+  }
   if (!tiersEqual(news.tiers, output.tiers)) return true;
   if (news.tiersMode !== undefined && news.tiersMode !== output.tiersMode) return true;
   if (
@@ -533,7 +772,7 @@ export const PriceProvider = () =>
           currency: news.currency,
           active: desiredActive,
           metadata,
-          expand: ["tiers"],
+          expand: PRICE_EXPAND,
           ...(news.unitAmount !== undefined ? { unit_amount: news.unitAmount } : {}),
           ...(news.unitAmountDecimal !== undefined
             ? { unit_amount_decimal: news.unitAmountDecimal }
@@ -558,14 +797,24 @@ export const PriceProvider = () =>
           ...(news.tiers !== undefined
             ? {
                 billing_scheme: "tiered",
-                tiers: news.tiers.map((tier) => ({
-                  up_to: tier.upTo,
-                  ...(tier.unitAmount !== undefined ? { unit_amount: tier.unitAmount } : {}),
-                  ...(tier.flatAmount !== undefined ? { flat_amount: tier.flatAmount } : {}),
-                })),
+                tiers: toWireTiers(news.tiers),
               }
             : {}),
           ...(news.tiersMode !== undefined ? { tiers_mode: news.tiersMode } : {}),
+          ...(news.customUnitAmount !== undefined
+            ? { custom_unit_amount: toWireCustomUnitAmount(news.customUnitAmount) }
+            : {}),
+          ...(news.transformQuantity !== undefined
+            ? {
+                transform_quantity: {
+                  divide_by: news.transformQuantity.divideBy,
+                  round: news.transformQuantity.round,
+                },
+              }
+            : {}),
+          ...(news.currencyOptions !== undefined
+            ? { currency_options: toWireCurrencyOptions(news.currencyOptions) }
+            : {}),
           ...(news.taxBehavior !== undefined ? { tax_behavior: news.taxBehavior } : {}),
           ...(desiredNickname.length > 0 ? { nickname: desiredNickname } : {}),
           ...(desiredLookupKey.length > 0
@@ -591,26 +840,45 @@ export const PriceProvider = () =>
       const activeChanged = current.active !== desiredActive;
       const nicknameChanged = (current.nickname ?? "") !== desiredNickname;
       const lookupKeyChanged = (current.lookup_key ?? "") !== desiredLookupKey;
+      const currencyOptionsChanged = !currencyOptionsEqual(
+        news.currencyOptions,
+        fromWireCurrencyOptions(current),
+      );
       const taxBehaviorChanged =
         news.taxBehavior !== undefined && news.taxBehavior !== (current.tax_behavior ?? undefined);
+
+      const syncDefault = Effect.fn(function* (price: StripePrice) {
+        const attrs = toAttrs(price);
+        const desiredDefault = news.defaultForProduct ?? false;
+        if (attrs.defaultForProduct === desiredDefault) return attrs;
+        yield* UpdateProduct({
+          id: attrs.product,
+          default_price: desiredDefault ? price.id : "",
+        });
+        return { ...attrs, defaultForProduct: desiredDefault };
+      });
 
       if (
         !activeChanged &&
         !nicknameChanged &&
         !lookupKeyChanged &&
         !taxBehaviorChanged &&
+        !currencyOptionsChanged &&
         !metadataChanged
       ) {
-        return toAttrs(current);
+        return yield* syncDefault(current);
       }
 
       const updated = yield* UpdatePrice({
         price: current.id,
-        expand: ["tiers"],
+        expand: PRICE_EXPAND,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
         ...(lookupKeyChanged ? { lookup_key: desiredLookupKey, transfer_lookup_key: true } : {}),
         ...(taxBehaviorChanged ? { tax_behavior: news.taxBehavior } : {}),
+        ...(currencyOptionsChanged && news.currencyOptions !== undefined
+          ? { currency_options: toWireCurrencyOptions(news.currencyOptions) }
+          : {}),
         ...(metadataChanged
           ? {
               metadata: {
@@ -620,12 +888,17 @@ export const PriceProvider = () =>
             }
           : {}),
       });
-      return toAttrs(updated);
+      return yield* syncDefault(updated);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
+      // Stripe won't archive a product's default price. A replacement has
+      // already taken the default over by now, so this only fires on destroy.
+      if (productDefaultPriceOf(existing.product) === existing.id) {
+        yield* UpdateProduct({ id: productIdOf(existing.product), default_price: "" });
+      }
       yield* UpdatePrice({
         price: existing.id,
         active: false,

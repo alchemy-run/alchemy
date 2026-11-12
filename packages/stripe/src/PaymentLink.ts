@@ -7,8 +7,10 @@ import {
   UpdatePaymentLink,
   type Item as StripeLineItem,
   type PaymentLink as StripePaymentLink,
+  type CreatePaymentLinkRequest,
   type CreatePaymentLinkRequestAfterCompletion,
   type CreatePaymentLinkRequestLineItemsItem,
+  type UpdatePaymentLinkRequest,
   type UpdatePaymentLinkRequestAfterCompletion,
   type UpdatePaymentLinkRequestLineItemsItem,
 } from "@distilled.cloud/stripe/stripe";
@@ -17,8 +19,10 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
+import { subsetDiffers } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { fromWire, toWire } from "./internal/case.ts";
 import {
   alchemyMetadataKeys,
   createInternalMetadata,
@@ -101,6 +105,130 @@ export interface PaymentLinkAfterCompletion {
   redirect?: PaymentLinkAfterCompletionRedirect;
 }
 
+/** Calculates tax with Stripe Tax at checkout. */
+export interface PaymentLinkAutomaticTax {
+  enabled: boolean;
+  /** Which account is liable for the tax: this account (`self`) or a connected `account`. */
+  liability?: { type: "account" | "self"; account?: string };
+}
+
+/** Consents Checkout collects. */
+export interface PaymentLinkConsentCollection {
+  /** `auto` asks for consent to promotional emails where required. */
+  promotions?: "auto" | "none";
+  /** `required` makes the customer accept your terms of service. */
+  termsOfService?: "none" | "required";
+  /** Where the agreement to reuse a saved payment method is shown. */
+  paymentMethodReuseAgreement?: { position: "auto" | "hidden" };
+}
+
+/** Length bounds and default for a text or numeric custom field. */
+export interface PaymentLinkCustomFieldInput {
+  minimumLength?: number;
+  maximumLength?: number;
+  defaultValue?: string;
+}
+
+/** An extra field the customer fills in at checkout (up to 3). */
+export interface PaymentLinkCustomField {
+  /** Key the answer is stored under on the Checkout Session (alphanumeric, up to 200 characters). */
+  key: string;
+  /** Label shown to the customer (up to 50 characters). */
+  label: string;
+  /** `text`, `numeric`, or `dropdown`. */
+  type: "dropdown" | "numeric" | "text";
+  /** Whether the customer may leave it empty. @default false */
+  optional?: boolean;
+  /** Choices for a `dropdown` field. */
+  dropdown?: { options: { label: string; value: string }[]; defaultValue?: string };
+  /** Bounds for a `numeric` field. */
+  numeric?: PaymentLinkCustomFieldInput;
+  /** Bounds for a `text` field. */
+  text?: PaymentLinkCustomFieldInput;
+}
+
+/** Extra text shown on the Checkout page (up to 1200 characters each). */
+export interface PaymentLinkCustomText {
+  /** Shown after the payment confirmation button. */
+  afterSubmit?: string;
+  /** Shown next to the shipping address form. */
+  shippingAddress?: string;
+  /** Shown next to the payment confirmation button. */
+  submit?: string;
+  /** Replaces the default terms of service agreement text. */
+  termsOfServiceAcceptance?: string;
+}
+
+/** Fields shown on an invoice. */
+export interface PaymentLinkInvoiceFields {
+  /** Tax ids (`txi_…`) shown on the invoice. */
+  accountTaxIds?: string[];
+  /** Up to 4 name/value fields shown on the invoice. */
+  customFields?: { name: string; value: string }[];
+  /** Invoice description. */
+  description?: string;
+  /** Invoice footer. */
+  footer?: string;
+  /** Which account issues the invoice: this account (`self`) or a connected `account`. */
+  issuer?: { type: "account" | "self"; account?: string };
+  /** Metadata copied onto the invoice. */
+  metadata?: Record<string, string>;
+  /** How the invoice PDF shows amounts relative to tax. */
+  renderingOptions?: { amountTaxDisplay?: "exclude_tax" | "include_inclusive_tax" };
+}
+
+/** Sends a post-payment invoice for one-time payments. */
+export interface PaymentLinkInvoiceCreation {
+  enabled: boolean;
+  invoiceData?: PaymentLinkInvoiceFields;
+}
+
+/** Collects the customer's business or individual name. */
+export interface PaymentLinkNameCollection {
+  business?: { enabled: boolean; optional?: boolean };
+  individual?: { enabled: boolean; optional?: boolean };
+}
+
+/** Options passed to the PaymentIntent of a one-time payment. */
+export interface PaymentLinkPaymentIntentData {
+  /**
+   * When funds are captured: `automatic`, `automatic_async`, or `manual`.
+   * Create-only — changing it replaces the payment link.
+   */
+  captureMethod?: "automatic" | "automatic_async" | "manual";
+  /** Description on the PaymentIntent. */
+  description?: string;
+  /** Metadata copied onto the PaymentIntent. */
+  metadata?: Record<string, string>;
+  /** Save the payment method for later `on_session` or `off_session` use. */
+  setupFutureUsage?: "off_session" | "on_session";
+  /** Full card statement descriptor for card payments (up to 22 characters). */
+  statementDescriptor?: string;
+  /** Suffix appended to the account's statement descriptor. */
+  statementDescriptorSuffix?: string;
+  /** Groups the payment with related transfers. */
+  transferGroup?: string;
+}
+
+/** Options for subscriptions this link starts. */
+export interface PaymentLinkSubscriptionData {
+  /**
+   * Subscription description shown in the customer portal. Create-only —
+   * changing it replaces the payment link.
+   */
+  description?: string;
+  /** Who issues the subscription's invoices. */
+  invoiceSettings?: { issuer?: { type: "account" | "self"; account?: string } };
+  /** Metadata copied onto the subscription. */
+  metadata?: Record<string, string>;
+  /** Free trial length in days. */
+  trialPeriodDays?: number;
+  /** What happens when the trial ends without a payment method. */
+  trialSettings?: {
+    endBehavior: { missingPaymentMethod: "cancel" | "create_invoice" | "pause" };
+  };
+}
+
 export interface PaymentLinkProps {
   /**
    * Line items sold by this payment link. At least one is required.
@@ -157,6 +285,94 @@ export interface PaymentLinkProps {
    */
   phoneNumberCollection?: boolean;
   /**
+   * Three-letter currency code, when the prices offer several currencies.
+   * Create-only — changing it replaces the payment link.
+   */
+  currency?: string;
+  /**
+   * Calculate tax with Stripe Tax. Requires Stripe Tax to be set up.
+   */
+  automaticTax?: PaymentLinkAutomaticTax;
+  /**
+   * Consents Checkout collects (promotional emails, terms of service).
+   */
+  consentCollection?: PaymentLinkConsentCollection;
+  /**
+   * Up to 3 extra fields the customer fills in at checkout.
+   */
+  customFields?: PaymentLinkCustomField[];
+  /**
+   * Extra text shown on the Checkout page.
+   */
+  customText?: PaymentLinkCustomText;
+  /**
+   * Send a post-payment invoice for one-time payments.
+   */
+  invoiceCreation?: PaymentLinkInvoiceCreation;
+  /**
+   * Collect the customer's business or individual name.
+   */
+  nameCollection?: PaymentLinkNameCollection;
+  /**
+   * Items the customer may add at checkout (up to 10).
+   */
+  optionalItems?: PaymentLinkLineItem[];
+  /**
+   * Options for the PaymentIntent of a one-time payment.
+   */
+  paymentIntentData?: PaymentLinkPaymentIntentData;
+  /**
+   * Card brands to refuse, e.g. `{ card: { restrictions: { brandsBlocked: ["american_express"] } } }`.
+   */
+  paymentMethodOptions?: { card?: { restrictions?: { brandsBlocked?: string[] } } };
+  /**
+   * Payment method types Checkout offers (e.g. `["card"]`). If omitted,
+   * Stripe picks from your payment method settings.
+   */
+  paymentMethodTypes?: string[];
+  /**
+   * Deactivate the link after this many completed checkouts.
+   */
+  restrictions?: { completedSessions: { limit: number } };
+  /**
+   * Collect a shipping address in these countries (ISO 3166-1 alpha-2).
+   */
+  shippingAddressCollection?: { allowedCountries: string[] };
+  /**
+   * Shipping rates (`shr_…`) the customer can choose from.
+   */
+  shippingOptions?: { shippingRate: string }[];
+  /**
+   * Options for subscriptions this link starts.
+   */
+  subscriptionData?: PaymentLinkSubscriptionData;
+  /**
+   * Collect the customer's tax id. `required: "if_supported"` makes it
+   * mandatory where Stripe supports it.
+   */
+  taxIdCollection?: { enabled: boolean; required?: "if_supported" | "never" };
+  /**
+   * Connect: the account the payments are made on behalf of.
+   */
+  onBehalfOf?: string;
+  /**
+   * Connect: transfer funds to a connected account after each payment.
+   */
+  transferData?: { destination: string; amount?: number };
+  /**
+   * Connect: fee in minor units taken from each one-time payment.
+   */
+  applicationFeeAmount?: number;
+  /**
+   * Connect: percentage fee taken from each subscription payment.
+   */
+  applicationFeePercent?: number;
+  /**
+   * Use Stripe Managed Payments, Stripe's merchant of record. Create-only —
+   * changing it replaces the payment link.
+   */
+  managedPayments?: boolean;
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`. Copied onto Checkout Sessions created by this link.
@@ -194,6 +410,46 @@ export type PaymentLink = Resource<
     phoneNumberCollection: boolean;
     /** Three-letter ISO currency code. */
     currency: string;
+    /** Stripe Tax settings. */
+    automaticTax: PaymentLinkAutomaticTax | undefined;
+    /** Consents Checkout collects, if any. */
+    consentCollection: PaymentLinkConsentCollection | undefined;
+    /** Extra fields the customer fills in at checkout. */
+    customFields: PaymentLinkCustomField[];
+    /** Extra text shown on the Checkout page. */
+    customText: PaymentLinkCustomText;
+    /** Post-payment invoice settings, if set. */
+    invoiceCreation: PaymentLinkInvoiceCreation | undefined;
+    /** Name collection settings, if set. */
+    nameCollection: PaymentLinkNameCollection | undefined;
+    /** Items the customer may add at checkout. */
+    optionalItems: PaymentLinkLineItem[];
+    /** PaymentIntent options, if set. */
+    paymentIntentData: PaymentLinkPaymentIntentData | undefined;
+    /** Payment method options, if set. */
+    paymentMethodOptions: PaymentLinkProps["paymentMethodOptions"];
+    /** Payment method types Checkout offers, if restricted. */
+    paymentMethodTypes: string[] | undefined;
+    /** Completed-checkout limit and how many checkouts have completed, if set. */
+    restrictions: { completedSessions: { limit: number; count: number } } | undefined;
+    /** Countries a shipping address is collected in, if set. */
+    shippingAddressCollection: PaymentLinkProps["shippingAddressCollection"];
+    /** Shipping rates the customer can choose from. */
+    shippingOptions: { shippingRate: string }[];
+    /** Subscription options, if set. */
+    subscriptionData: PaymentLinkSubscriptionData | undefined;
+    /** Tax id collection settings. */
+    taxIdCollection: PaymentLinkProps["taxIdCollection"];
+    /** Connect: the account payments are made on behalf of, if set. */
+    onBehalfOf: string | undefined;
+    /** Connect: transfer settings, if set. */
+    transferData: PaymentLinkProps["transferData"];
+    /** Connect: fee per one-time payment, if set. */
+    applicationFeeAmount: number | undefined;
+    /** Connect: fee percentage per subscription payment, if set. */
+    applicationFeePercent: number | undefined;
+    /** Whether Stripe Managed Payments is enabled. */
+    managedPayments: boolean;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Whether the payment link exists in live mode. */
@@ -217,8 +473,10 @@ export interface PaymentLinkLookup {
  * A Stripe Payment Link — a shareable URL that opens a hosted Checkout
  * page. Requires at least one `lineItems` price. Quantity, metadata,
  * `active`, and most Checkout options update in place; changing the set
- * of prices replaces the link. Payment links cannot be deleted; destroy
- * deactivates them (`active=false`).
+ * of prices, `currency`, `managedPayments`, `subscriptionData.description`,
+ * or `paymentIntentData.captureMethod` replaces the link, which gives it a
+ * new URL. Options left out keep their current value. Payment links
+ * cannot be deleted; destroy deactivates them (`active=false`).
  *
  * @see https://docs.stripe.com/api/payment_links
  *
@@ -246,6 +504,46 @@ export interface PaymentLinkLookup {
  *     hostedConfirmation: { customMessage: "Thanks for your order." },
  *   },
  *   metadata: { campaign: "launch" },
+ * });
+ * ```
+ *
+ * ### Checkout options
+ * **Example:** Shipping, custom fields, and a session limit
+ * ```typescript
+ * const ground = yield* Stripe.ShippingRate("ground", {
+ *   displayName: "Ground",
+ *   amount: 500,
+ *   currency: "usd",
+ * });
+ * const link = yield* Stripe.PaymentLink("buy", {
+ *   lineItems: [{ price: price.id, quantity: 1 }],
+ *   shippingAddressCollection: { allowedCountries: ["US", "CA"] },
+ *   shippingOptions: [{ shippingRate: ground.id }],
+ *   customFields: [{ key: "company", label: "Company", type: "text", optional: true }],
+ *   customText: { submit: "We ship within two days." },
+ *   taxIdCollection: { enabled: true },
+ *   restrictions: { completedSessions: { limit: 100 } },
+ * });
+ * ```
+ *
+ * **Example:** Subscription with a free trial
+ * ```typescript
+ * const link = yield* Stripe.PaymentLink("subscribe", {
+ *   lineItems: [{ price: monthly.id, quantity: 1 }],
+ *   subscriptionData: {
+ *     trialPeriodDays: 14,
+ *     trialSettings: { endBehavior: { missingPaymentMethod: "cancel" } },
+ *     metadata: { plan: "pro" },
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Post-payment invoice and an optional add-on
+ * ```typescript
+ * const link = yield* Stripe.PaymentLink("buy", {
+ *   lineItems: [{ price: price.id, quantity: 1 }],
+ *   optionalItems: [{ price: addOn.id, quantity: 1 }],
+ *   invoiceCreation: { enabled: true, invoiceData: { footer: "Thanks!" } },
  * });
  * ```
  *
@@ -375,7 +673,146 @@ const toWireCreateLineItems = (
       : {}),
   }));
 
+const idOf = (value: string | { readonly id: string } | null | undefined) =>
+  value == null ? undefined : typeof value === "string" ? value : value.id;
+
+const fromWireCustomFields = (
+  fields: StripePaymentLink["custom_fields"],
+): PaymentLinkCustomField[] =>
+  fields.map((field) => ({
+    key: field.key,
+    label: field.label.custom ?? "",
+    type: field.type as PaymentLinkCustomField["type"],
+    optional: field.optional,
+    ...(field.dropdown != null
+      ? { dropdown: fromWire<PaymentLinkCustomField["dropdown"]>(field.dropdown) }
+      : {}),
+    ...(field.numeric != null
+      ? { numeric: fromWire<PaymentLinkCustomFieldInput>(field.numeric) }
+      : {}),
+    ...(field.text != null ? { text: fromWire<PaymentLinkCustomFieldInput>(field.text) } : {}),
+  }));
+
+const toWireCustomFields = (fields: PaymentLinkCustomField[]) =>
+  fields.map((field) => ({
+    key: field.key,
+    label: { type: "custom", custom: field.label },
+    type: field.type,
+    ...(field.optional !== undefined ? { optional: field.optional } : {}),
+    ...(field.dropdown !== undefined ? { dropdown: toWire(field.dropdown) } : {}),
+    ...(field.numeric !== undefined ? { numeric: toWire(field.numeric) } : {}),
+    ...(field.text !== undefined ? { text: toWire(field.text) } : {}),
+  }));
+
+const customTextKeys = [
+  "afterSubmit",
+  "shippingAddress",
+  "submit",
+  "termsOfServiceAcceptance",
+] as const;
+
+const fromWireCustomText = (text: StripePaymentLink["custom_text"]): PaymentLinkCustomText => {
+  const camel =
+    fromWire<Partial<Record<(typeof customTextKeys)[number], { message?: string }>>>(text);
+  return Object.fromEntries(
+    customTextKeys.flatMap((key) => {
+      const message = camel[key]?.message;
+      return message !== undefined ? [[key, message]] : [];
+    }),
+  );
+};
+
+const toWireCustomText = (text: PaymentLinkCustomText) =>
+  toWire(
+    Object.fromEntries(
+      customTextKeys.flatMap((key) => {
+        const message = text[key];
+        return message !== undefined ? [[key, { message }]] : [];
+      }),
+    ),
+  );
+
+/** The Checkout options the props manage, as observed on the link. */
+const observedOptions = (link: StripePaymentLink) => ({
+  automaticTax: fromWire<PaymentLinkAutomaticTax | undefined>(link.automatic_tax),
+  consentCollection: fromWire<PaymentLinkConsentCollection | undefined>(link.consent_collection),
+  customFields: fromWireCustomFields(link.custom_fields),
+  customText: fromWireCustomText(link.custom_text),
+  invoiceCreation: fromWire<PaymentLinkInvoiceCreation | undefined>(link.invoice_creation),
+  nameCollection: fromWire<PaymentLinkNameCollection | undefined>(link.name_collection),
+  optionalItems: fromWire<PaymentLinkLineItem[] | undefined>(link.optional_items) ?? [],
+  paymentIntentData: fromWire<PaymentLinkPaymentIntentData | undefined>(link.payment_intent_data),
+  paymentMethodOptions: fromWire<PaymentLinkProps["paymentMethodOptions"]>(
+    link.payment_method_options,
+  ),
+  paymentMethodTypes: link.payment_method_types ?? undefined,
+  restrictions: fromWire<PaymentLinkAttributes["restrictions"]>(link.restrictions),
+  shippingAddressCollection: fromWire<PaymentLinkProps["shippingAddressCollection"]>(
+    link.shipping_address_collection,
+  ),
+  shippingOptions: link.shipping_options.flatMap((option) => {
+    const shippingRate = idOf(option.shipping_rate);
+    return shippingRate !== undefined ? [{ shippingRate }] : [];
+  }),
+  subscriptionData: fromWire<PaymentLinkSubscriptionData | undefined>(link.subscription_data),
+  taxIdCollection: fromWire<PaymentLinkProps["taxIdCollection"]>(link.tax_id_collection),
+  onBehalfOf: idOf(link.on_behalf_of),
+  transferData:
+    link.transfer_data == null
+      ? undefined
+      : {
+          destination: idOf(link.transfer_data.destination) ?? "",
+          ...(link.transfer_data.amount != null ? { amount: link.transfer_data.amount } : {}),
+        },
+  applicationFeeAmount: link.application_fee_amount ?? undefined,
+  applicationFeePercent: link.application_fee_percent ?? undefined,
+});
+
+type CheckoutOptions = ReturnType<typeof observedOptions>;
+
+/** Options Stripe can update in place, with their wire encodings. */
+const updatableOptions = {
+  automaticTax: (value: PaymentLinkAutomaticTax) => toWire(value),
+  consentCollection: (value: PaymentLinkConsentCollection) => toWire(value),
+  customFields: toWireCustomFields,
+  customText: toWireCustomText,
+  invoiceCreation: (value: PaymentLinkInvoiceCreation) => toWire(value),
+  nameCollection: (value: PaymentLinkNameCollection) => toWire(value),
+  optionalItems: (value: PaymentLinkLineItem[]) => toWire(value),
+  paymentIntentData: ({ captureMethod: _, ...value }: PaymentLinkPaymentIntentData) =>
+    toWire(value),
+  paymentMethodOptions: (value: NonNullable<PaymentLinkProps["paymentMethodOptions"]>) =>
+    toWire(value),
+  paymentMethodTypes: (value: string[]) => value,
+  restrictions: (value: NonNullable<PaymentLinkProps["restrictions"]>) => toWire(value),
+  shippingAddressCollection: (value: NonNullable<PaymentLinkProps["shippingAddressCollection"]>) =>
+    toWire(value),
+  shippingOptions: (value: { shippingRate: string }[]) => toWire(value),
+  subscriptionData: ({ description: _, ...value }: PaymentLinkSubscriptionData) => toWire(value),
+  taxIdCollection: (value: NonNullable<PaymentLinkProps["taxIdCollection"]>) => toWire(value),
+  onBehalfOf: (value: string) => value,
+  transferData: (value: NonNullable<PaymentLinkProps["transferData"]>) => toWire(value),
+  applicationFeeAmount: (value: number) => value,
+  applicationFeePercent: (value: number) => value,
+} satisfies { [K in keyof CheckoutOptions]: (value: never) => unknown };
+
+const snakeOf = (key: string) => key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+
+/** Wire fields for every option set in the props, or only those that changed. */
+const optionsToWire = (news: PaymentLinkProps, observed?: CheckoutOptions) =>
+  Object.fromEntries(
+    (Object.keys(updatableOptions) as (keyof typeof updatableOptions)[]).flatMap((key) => {
+      const desired = news[key];
+      if (desired === undefined) return [];
+      if (observed !== undefined && !subsetDiffers(desired, observed[key])) return [];
+      const encode = updatableOptions[key] as (value: typeof desired) => unknown;
+      return [[snakeOf(key), encode(desired)]];
+    }),
+  );
+
 const toAttrs = (link: StripePaymentLink): PaymentLinkAttributes => ({
+  ...observedOptions(link),
+  managedPayments: link.managed_payments?.enabled ?? false,
   id: link.id,
   url: link.url,
   active: link.active,
@@ -394,6 +831,9 @@ const toAttrs = (link: StripePaymentLink): PaymentLinkAttributes => ({
 });
 
 const isMissingPaymentLink = isMissingStripeResource;
+
+// `optional_items` is only returned when expanded.
+const PAYMENT_LINK_EXPAND = ["optional_items"];
 
 const hydrateLineItems = (link: StripePaymentLink) =>
   Effect.gen(function* () {
@@ -426,7 +866,7 @@ const hydrateLineItems = (link: StripePaymentLink) =>
   });
 
 const getById = (payment_link: string) =>
-  GetPaymentLink({ payment_link }).pipe(
+  GetPaymentLink({ payment_link, expand: PAYMENT_LINK_EXPAND }).pipe(
     Effect.catchIf(isMissingPaymentLink, () => Effect.undefined),
     Effect.flatMap((link) => (link === undefined ? Effect.undefined : hydrateLineItems(link))),
   );
@@ -438,6 +878,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
     const response = yield* GetPaymentLinks({
       active,
       limit: LIST_PAGE_SIZE,
+      expand: PAYMENT_LINK_EXPAND.map((field) => `data.${field}`),
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
     });
     links.push(...response.data);
@@ -503,6 +944,20 @@ const shouldReplace = (
   output: PaymentLinkAttributes | undefined,
 ): boolean => {
   if (output === undefined) return false;
+  if (news.currency !== undefined && news.currency !== output.currency) return true;
+  if ((news.managedPayments ?? false) !== output.managedPayments) return true;
+  if (
+    news.subscriptionData?.description !== undefined &&
+    news.subscriptionData.description !== output.subscriptionData?.description
+  ) {
+    return true;
+  }
+  if (
+    news.paymentIntentData?.captureMethod !== undefined &&
+    news.paymentIntentData.captureMethod !== output.paymentIntentData?.captureMethod
+  ) {
+    return true;
+  }
   if (output.lineItems.length === 0) return false;
   if (news.lineItems.length !== output.lineItems.length) return true;
   return news.lineItems.some((item, index) => item.price !== output.lineItems[index]?.price);
@@ -620,6 +1075,7 @@ export const PaymentLinkProvider = () =>
         current = yield* CreatePaymentLink({
           line_items: toWireCreateLineItems(news.lineItems),
           metadata,
+          expand: PAYMENT_LINK_EXPAND,
           ...(news.allowPromotionCodes !== undefined
             ? { allow_promotion_codes: news.allowPromotionCodes }
             : {}),
@@ -643,6 +1099,27 @@ export const PaymentLinkProvider = () =>
           ...(news.inactiveMessage !== undefined ? { inactive_message: news.inactiveMessage } : {}),
           ...(afterCompletion !== undefined
             ? { after_completion: toWireAfterCompletion(afterCompletion) }
+            : {}),
+          ...(news.currency !== undefined ? { currency: news.currency } : {}),
+          ...(news.managedPayments !== undefined
+            ? { managed_payments: { enabled: news.managedPayments } }
+            : {}),
+          ...(optionsToWire(news) as Partial<CreatePaymentLinkRequest>),
+          ...(news.subscriptionData?.description !== undefined
+            ? {
+                subscription_data: {
+                  ...(optionsToWire(news).subscription_data as object),
+                  description: news.subscriptionData.description,
+                },
+              }
+            : {}),
+          ...(news.paymentIntentData?.captureMethod !== undefined
+            ? {
+                payment_intent_data: {
+                  ...(optionsToWire(news).payment_intent_data as object),
+                  capture_method: news.paymentIntentData.captureMethod,
+                },
+              }
             : {}),
         }).pipe(
           withRequestOptions({
@@ -691,6 +1168,8 @@ export const PaymentLinkProvider = () =>
       const updateLineItems = lineItemsChanged
         ? toWireUpdateLineItems(news.lineItems, observedLineItems)
         : undefined;
+      const changedOptions = optionsToWire(news, observedOptions(current));
+      const optionsChanged = Object.keys(changedOptions).length > 0;
 
       if (
         !activeChanged &&
@@ -703,6 +1182,7 @@ export const PaymentLinkProvider = () =>
         !inactiveMessageChanged &&
         !afterCompletionChanged &&
         !lineItemsChanged &&
+        !optionsChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -710,6 +1190,7 @@ export const PaymentLinkProvider = () =>
 
       const updated = yield* UpdatePaymentLink({
         payment_link: current.id,
+        expand: PAYMENT_LINK_EXPAND,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(allowPromotionCodesChanged ? { allow_promotion_codes: news.allowPromotionCodes } : {}),
         ...(billingChanged ? { billing_address_collection: news.billingAddressCollection } : {}),
@@ -734,6 +1215,7 @@ export const PaymentLinkProvider = () =>
             }
           : {}),
         ...(updateLineItems !== undefined ? { line_items: updateLineItems } : {}),
+        ...(changedOptions as Partial<UpdatePaymentLinkRequest>),
         ...(metadataChanged
           ? {
               metadata: {

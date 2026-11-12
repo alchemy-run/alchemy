@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import { DeleteAccount, GetAccountPerson, CreateAccount } from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -236,6 +237,86 @@ test.provider.skipIf(!CONNECT_ENABLED)(
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:account", "provider:stripe:accountperson", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider.skipIf(!CONNECT_ENABLED)(
+  "set and change a person's verification details",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (details: Partial<Stripe.AccountPersonProps>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const account = yield* Stripe.Account("DetailsAccount", {
+              type: "custom",
+              country: "US",
+              email: "alchemy.account.person.details@example.com",
+              businessType: "company",
+              company: { name: "Alchemy Person Details Co" },
+              capabilities: {
+                card_payments: { requested: true },
+                transfers: { requested: true },
+              },
+            });
+            const person = yield* Stripe.AccountPerson("DetailsPerson", {
+              account: account.id,
+              firstName: "Jane",
+              lastName: "Diaz",
+              ...details,
+            });
+            return { account, person };
+          }),
+        );
+
+      const created = yield* deploy({
+        address: {
+          line1: "123 Main Street",
+          city: "San Francisco",
+          state: "CA",
+          postalCode: "94111",
+          country: "US",
+        },
+        dob: { day: 1, month: 1, year: 1990 },
+        nationality: "US",
+        politicalExposure: "none",
+        ssnLast4: Redacted.make("0000"),
+        idNumber: Redacted.make("000000000"),
+      });
+      expect(created.person.address).toMatchObject({
+        line1: "123 Main Street",
+        postalCode: "94111",
+      });
+      expect(created.person.dob).toEqual({ day: 1, month: 1, year: 1990 });
+      expect(created.person.nationality).toEqual("US");
+      expect(created.person.politicalExposure).toEqual("none");
+      expect(created.person.ssnLast4Provided).toEqual(true);
+      expect(created.person.idNumberProvided).toEqual(true);
+
+      const fetched = yield* GetAccountPerson({
+        account: created.account.id,
+        person: created.person.id,
+      });
+      expect(fetched.address?.postal_code).toEqual("94111");
+      expect(fetched.dob?.year).toEqual(1990);
+
+      const changed = yield* deploy({
+        address: { line1: "500 Market Street", city: "San Francisco", postalCode: "94105" },
+        dob: { day: 2, month: 2, year: 1991 },
+        ssnLast4: Redacted.make("0000"),
+        idNumber: Redacted.make("000000000"),
+      });
+      expect(changed.person.id).toEqual(created.person.id);
+      expect(changed.person.address).toMatchObject({ line1: "500 Market Street" });
+      expect(changed.person.dob).toEqual({ day: 2, month: 2, year: 1991 });
+      expect(changed.person.nationality).toEqual("US");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:accountperson", "live"],
     timeout: 120_000,
   },
 );

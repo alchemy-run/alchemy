@@ -140,3 +140,47 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "set display preferences for newer payment methods",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.PaymentMethodConfiguration("NewerMethods", {
+            name: "Alchemy Newer Methods PMC",
+            // Stripe accepts Apple Pay Later but reports it back only where it
+            // is available, so only PayPay is visible on a US test account.
+            // Conecs and SeQura are refused outside France and Spain.
+            applePayLater: { displayPreference: { preference: "off" } },
+            paypay: { displayPreference: { preference: "off" } },
+          });
+        }),
+      );
+      expect(created.paypay?.displayPreference.preference).toEqual("off");
+
+      const fetched = yield* GetPaymentMethodConfiguration({ configuration: created.id });
+      expect(fetched.paypay?.display_preference.preference).toEqual("off");
+
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.PaymentMethodConfiguration("NewerMethods", {
+            name: "Alchemy Newer Methods PMC",
+            paypay: { displayPreference: { preference: "on" } },
+          });
+        }),
+      );
+      expect(updated.id).toEqual(created.id);
+      expect(updated.paypay?.displayPreference.preference).toEqual("on");
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilInactive(created.id)).toEqual("inactive");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:paymentmethodconfiguration", "live"],
+    timeout: 120_000,
+  },
+);

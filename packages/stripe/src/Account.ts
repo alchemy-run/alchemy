@@ -11,6 +11,7 @@ import {
   type CreateAccountRequestBusinessProfile,
   type CreateAccountRequestCapabilities,
   type CreateAccountRequestCompany,
+  type CreateAccountRequestDocuments,
   type CreateAccountRequestController,
   type CreateAccountRequestIndividual,
   type CreateAccountRequestSettings,
@@ -214,6 +215,19 @@ export interface AccountProps {
    */
   controller?: AccountController;
   /**
+   * Verification documents (company license, proof of address, tax id
+   * verification…), each as uploaded File ids. Write-only: Stripe never
+   * returns them, so a deploy sends them when they change. Nested fields
+   * use Stripe's wire names.
+   */
+  documents?: CreateAccountRequestDocuments;
+  /**
+   * Pricing group the account belongs to, by its key or id
+   * (`paymentsPricing`), for platforms that price connected accounts
+   * differently.
+   */
+  groups?: { paymentsPricing?: string };
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`.
@@ -264,6 +278,8 @@ export type Account = Resource<
     requirementsCurrentlyDue: string[];
     /** Why the account is currently disabled, if it is. */
     requirementsDisabledReason: string | undefined;
+    /** Pricing group the account belongs to, if any. */
+    paymentsPricingGroup: string | undefined;
     /** Unix timestamp when the account was connected. */
     created: number | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
@@ -449,6 +465,7 @@ const toAttrs = (account: StripeAccount) => ({
   capabilities: capabilityStatuses(account.capabilities),
   requirementsCurrentlyDue: [...(account.requirements?.currently_due ?? [])],
   requirementsDisabledReason: account.requirements?.disabled_reason ?? undefined,
+  paymentsPricingGroup: account.groups?.payments_pricing ?? undefined,
   created: account.created,
   metadata: userMetadata(account.metadata),
 });
@@ -656,6 +673,10 @@ export const AccountProvider = () =>
           ...(news.company !== undefined ? { company: news.company } : {}),
           ...(news.individual !== undefined ? { individual: news.individual } : {}),
           ...(tosAcceptance !== undefined ? { tos_acceptance: tosAcceptance } : {}),
+          ...(news.documents !== undefined ? { documents: news.documents } : {}),
+          ...(news.groups?.paymentsPricing !== undefined
+            ? { groups: { payments_pricing: news.groups.paymentsPricing } }
+            : {}),
           metadata,
         }).pipe(
           withRequestOptions({
@@ -700,7 +721,15 @@ export const AccountProvider = () =>
             (olds === undefined ||
               !deepEqual(news.tosAcceptance, olds.tosAcceptance, {
                 stripNullish: true,
+              }))) ||
+          (news.documents !== undefined &&
+            (olds === undefined ||
+              !deepEqual(news.documents, olds.documents, {
+                stripNullish: true,
               }))));
+      const groupsChanged =
+        news.groups?.paymentsPricing !== undefined &&
+        (current.groups?.payments_pricing ?? undefined) !== news.groups.paymentsPricing;
 
       if (
         !emailChanged &&
@@ -709,6 +738,7 @@ export const AccountProvider = () =>
         !profileChanged &&
         !capsChanged &&
         !writeOnlyChanged &&
+        !groupsChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -729,6 +759,8 @@ export const AccountProvider = () =>
         ...(writeOnlyChanged && tosAcceptance !== undefined
           ? { tos_acceptance: tosAcceptance }
           : {}),
+        ...(writeOnlyChanged && news.documents !== undefined ? { documents: news.documents } : {}),
+        ...(groupsChanged ? { groups: { payments_pricing: news.groups!.paymentsPricing } } : {}),
         ...(metadataChanged
           ? {
               metadata: {

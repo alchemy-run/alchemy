@@ -233,3 +233,195 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "configure checkout options on a payment link and update them in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({ name: "Alchemy Checkout Options Product" });
+      const price = yield* CreatePrice({ product: product.id, currency: "usd", unit_amount: 2500 });
+      const addOn = yield* CreatePrice({ product: product.id, currency: "usd", unit_amount: 500 });
+
+      const deployLink = (options: Partial<Stripe.PaymentLinkProps>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const shippingRate = yield* Stripe.ShippingRate("CheckoutShipping", {
+              displayName: "Ground",
+              amount: 500,
+              currency: "usd",
+            });
+            const link = yield* Stripe.PaymentLink("CheckoutLink", {
+              lineItems: [{ price: price.id, quantity: 1 }],
+              shippingOptions: [{ shippingRate: shippingRate.id }],
+              ...options,
+            });
+            return { link, shippingRate };
+          }),
+        );
+
+      const { link: created, shippingRate } = yield* deployLink({
+        automaticTax: { enabled: false },
+        consentCollection: { paymentMethodReuseAgreement: { position: "hidden" } },
+        customFields: [
+          { key: "company", label: "Company", type: "text", optional: true },
+          {
+            key: "size",
+            label: "Size",
+            type: "dropdown",
+            dropdown: {
+              options: [
+                { label: "Small", value: "s" },
+                { label: "Large", value: "l" },
+              ],
+            },
+          },
+        ],
+        customText: { submit: "We ship within two days." },
+        invoiceCreation: { enabled: true, invoiceData: { footer: "Thanks!" } },
+        nameCollection: { business: { enabled: true, optional: true } },
+        optionalItems: [{ price: addOn.id, quantity: 1 }],
+        paymentIntentData: {
+          description: "Alchemy order",
+          statementDescriptorSuffix: "ORDER",
+          metadata: { channel: "web" },
+        },
+        paymentMethodTypes: ["card"],
+        paymentMethodOptions: { card: { restrictions: { brandsBlocked: ["american_express"] } } },
+        restrictions: { completedSessions: { limit: 100 } },
+        shippingAddressCollection: { allowedCountries: ["US", "CA"] },
+        taxIdCollection: { enabled: true, required: "never" },
+      });
+
+      expect(created.shippingOptions).toEqual([{ shippingRate: shippingRate.id }]);
+      expect(created.customFields).toMatchObject([
+        { key: "company", label: "Company", type: "text", optional: true },
+        { key: "size", label: "Size", type: "dropdown" },
+      ]);
+      expect(created.customText).toMatchObject({ submit: "We ship within two days." });
+      expect(created.invoiceCreation).toMatchObject({
+        enabled: true,
+        invoiceData: { footer: "Thanks!" },
+      });
+      expect(created.nameCollection).toMatchObject({ business: { enabled: true, optional: true } });
+      expect(created.optionalItems).toMatchObject([{ price: addOn.id, quantity: 1 }]);
+      expect(created.paymentIntentData).toMatchObject({
+        description: "Alchemy order",
+        statementDescriptorSuffix: "ORDER",
+        metadata: { channel: "web" },
+      });
+      expect(created.paymentMethodTypes).toEqual(["card"]);
+      expect(created.restrictions).toEqual({ completedSessions: { limit: 100, count: 0 } });
+      expect(created.shippingAddressCollection).toEqual({ allowedCountries: ["US", "CA"] });
+      expect(created.taxIdCollection).toMatchObject({ enabled: true, required: "never" });
+
+      const fetched = yield* GetPaymentLink({ payment_link: created.id });
+      expect(fetched.custom_fields.map((field) => field.key)).toEqual(["company", "size"]);
+      expect(fetched.payment_intent_data?.metadata).toMatchObject({ channel: "web" });
+      expect(fetched.payment_method_options?.card?.restrictions?.brands_blocked).toEqual([
+        "american_express",
+      ]);
+      expect(fetched.restrictions?.completed_sessions.limit).toEqual(100);
+
+      const { link: updated } = yield* deployLink({
+        customFields: [{ key: "company", label: "Company name", type: "text" }],
+        customText: { submit: "Ships in a week." },
+        invoiceCreation: { enabled: false },
+        paymentIntentData: { description: "Alchemy order v2" },
+        restrictions: { completedSessions: { limit: 50 } },
+        shippingAddressCollection: { allowedCountries: ["US"] },
+        taxIdCollection: { enabled: false },
+      });
+      expect(updated.id).toEqual(created.id);
+      expect(updated.url).toEqual(created.url);
+      expect(updated.customFields).toMatchObject([{ key: "company", label: "Company name" }]);
+      expect(updated.customText).toMatchObject({ submit: "Ships in a week." });
+      expect(updated.invoiceCreation).toMatchObject({ enabled: false });
+      expect(updated.paymentIntentData).toMatchObject({ description: "Alchemy order v2" });
+      expect(updated.restrictions).toEqual({ completedSessions: { limit: 50, count: 0 } });
+      expect(updated.shippingAddressCollection).toEqual({ allowedCountries: ["US"] });
+      expect(updated.taxIdCollection).toMatchObject({ enabled: false });
+
+      const refetched = yield* GetPaymentLink({ payment_link: created.id });
+      expect(refetched.custom_fields.map((field) => field.label.custom)).toEqual(["Company name"]);
+      expect(refetched.restrictions?.completed_sessions.limit).toEqual(50);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(created.id)).toEqual("inactive");
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:paymentlink", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "configure subscription data on a payment link and replace it when a create-only field changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({ name: "Alchemy Subscription Link Product" });
+      const price = yield* CreatePrice({
+        product: product.id,
+        currency: "usd",
+        unit_amount: 1500,
+        recurring: { interval: "month" },
+      });
+
+      const deployLink = (subscriptionData: Stripe.PaymentLinkSubscriptionData) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.PaymentLink("SubscriptionLink", {
+              lineItems: [{ price: price.id, quantity: 1 }],
+              subscriptionData,
+            });
+          }),
+        );
+
+      const created = yield* deployLink({
+        description: "Pro plan",
+        trialPeriodDays: 14,
+        trialSettings: { endBehavior: { missingPaymentMethod: "cancel" } },
+        metadata: { plan: "pro" },
+      });
+      expect(created.subscriptionData).toMatchObject({
+        description: "Pro plan",
+        trialPeriodDays: 14,
+        trialSettings: { endBehavior: { missingPaymentMethod: "cancel" } },
+        metadata: { plan: "pro" },
+      });
+
+      const updated = yield* deployLink({
+        description: "Pro plan",
+        trialPeriodDays: 30,
+        trialSettings: { endBehavior: { missingPaymentMethod: "pause" } },
+        metadata: { plan: "pro", cohort: "fall" },
+      });
+      expect(updated.id).toEqual(created.id);
+      expect(updated.subscriptionData).toMatchObject({
+        trialPeriodDays: 30,
+        trialSettings: { endBehavior: { missingPaymentMethod: "pause" } },
+        metadata: { plan: "pro", cohort: "fall" },
+      });
+      const fetched = yield* GetPaymentLink({ payment_link: created.id });
+      expect(fetched.subscription_data?.trial_period_days).toEqual(30);
+
+      const replaced = yield* deployLink({ description: "Pro plan (annual billing)" });
+      expect(replaced.id).not.toEqual(created.id);
+      expect(replaced.subscriptionData).toMatchObject({ description: "Pro plan (annual billing)" });
+      expect(yield* waitUntilDeactivated(created.id)).toEqual("inactive");
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(replaced.id)).toEqual("inactive");
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:paymentlink", "live"],
+    timeout: 120_000,
+  },
+);

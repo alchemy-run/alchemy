@@ -22,10 +22,11 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { isMissingStripeResource } from "./missing.ts";
 import type { Providers } from "./Providers.ts";
 
-const NAME_MAX_LENGTH = 250;
+const NAME_MAX_LENGTH = 100;
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
 
@@ -94,6 +95,15 @@ export interface TerminalTipping {
 }
 
 /** Device-specific splash screen. */
+/** Reader security settings. */
+export interface TerminalReaderSecurity {
+  /**
+   * 5-digit passcode that unlocks the reader's admin menu. Pass a
+   * `Redacted` to keep it out of logs and state.
+   */
+  adminMenuPasscode: string | Redacted.Redacted<string>;
+}
+
 export interface TerminalDeviceConfig {
   /**
    * Stripe File id of an image to display on the reader. Empty string
@@ -269,6 +279,11 @@ export interface TerminalConfigurationProps {
    */
   wifi?: TerminalWifi | null;
   /**
+   * Reader security, such as the admin menu passcode. `null` clears it on
+   * update.
+   */
+  readerSecurity?: TerminalReaderSecurity | null;
+  /**
    * BBPOS WisePad 3 splash screen. `null` clears it on update.
    */
   bbposWisepad3?: TerminalDeviceConfig | null;
@@ -284,6 +299,10 @@ export interface TerminalConfigurationProps {
    * Stripe S710 splash screen. `null` clears it on update.
    */
   stripeS710?: TerminalDeviceConfig | null;
+  /**
+   * Stripe Reader T600 splash screen. `null` clears it on update.
+   */
+  stripeT600?: TerminalDeviceConfig | null;
   /**
    * Verifone M425 splash screen. `null` clears it on update.
    */
@@ -314,6 +333,7 @@ const DEVICE_MAP = [
   ["bbposWiseposE", "bbpos_wisepos_e"],
   ["stripeS700", "stripe_s700"],
   ["stripeS710", "stripe_s710"],
+  ["stripeT600", "stripe_t600"],
   ["verifoneM425", "verifone_m425"],
   ["verifoneP400", "verifone_p400"],
   ["verifoneP630", "verifone_p630"],
@@ -369,6 +389,8 @@ export type TerminalConfiguration = Resource<
     cellular: TerminalCellular | undefined;
     /** Observed Wi-Fi (passwords omitted). */
     wifi: TerminalWifiState | undefined;
+    /** Reader security, with the passcode redacted, if configured. */
+    readerSecurity: { adminMenuPasscode: Redacted.Redacted<string> } | undefined;
     /** Whether the configuration exists in live mode. */
     livemode: boolean;
   } & DeviceAttributes,
@@ -420,6 +442,13 @@ export interface TerminalConfigurationLookup {
  * const config = yield* Stripe.TerminalConfiguration("storefront", {
  *   name: "Storefront",
  *   rebootWindow: { startHour: 2, endHour: 4 },
+ * });
+ * ```
+ *
+ * **Example:** Lock the reader admin menu
+ * ```typescript
+ * const config = yield* Stripe.TerminalConfiguration("store-readers", {
+ *   readerSecurity: { adminMenuPasscode: Redacted.make("24680") },
  * });
  * ```
  *
@@ -594,6 +623,12 @@ const toAttrs = (configuration: StripeTerminalConfiguration): ConfigurationAttri
         ? undefined
         : { enabled: configuration.cellular.enabled },
     wifi: toWifiState(configuration.wifi),
+    readerSecurity:
+      configuration.reader_security == null
+        ? undefined
+        : {
+            adminMenuPasscode: Redacted.make(configuration.reader_security.admin_menu_passcode),
+          },
     livemode: configuration.livemode,
     ...devices,
   };
@@ -714,6 +749,13 @@ const pickSpecified = (desired: unknown, observed: unknown): unknown => {
   return observed;
 };
 
+const passcodeOf = (passcode: string | Redacted.Redacted<string>) =>
+  Redacted.isRedacted(passcode) ? Redacted.value(passcode) : passcode;
+
+const toWireReaderSecurity = (security: TerminalReaderSecurity) => ({
+  admin_menu_passcode: passcodeOf(security.adminMenuPasscode),
+});
+
 const nestedNeedSync = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return false;
   if (desired === null) return observed !== undefined;
@@ -806,6 +848,9 @@ const toCreatePayload = (
       : {}),
     ...(news.cellular != null ? { cellular: news.cellular } : {}),
     ...(news.wifi != null ? { wifi: toWireWifi(news.wifi) } : {}),
+    ...(news.readerSecurity != null
+      ? { reader_security: toWireReaderSecurity(news.readerSecurity) }
+      : {}),
     ...createDevices,
   };
 };
@@ -881,6 +926,14 @@ export const TerminalConfigurationProvider = () =>
           : news.wifi !== undefined &&
             nestedNeedSync(wifiComparable(news.wifi), wifiComparable(attrs.wifi));
 
+      const readerSecurityChanged =
+        news.readerSecurity === null
+          ? attrs.readerSecurity !== undefined
+          : news.readerSecurity !== undefined &&
+            (attrs.readerSecurity === undefined ||
+              passcodeOf(news.readerSecurity.adminMenuPasscode) !==
+                Redacted.value(attrs.readerSecurity.adminMenuPasscode));
+
       const changedDevices: Partial<Record<SnakeDeviceKey, DeviceWire | "">> = {};
       for (const [camel, snake] of DEVICE_MAP) {
         const desired = news[camel];
@@ -898,6 +951,7 @@ export const TerminalConfigurationProvider = () =>
         !rebootWindowChanged &&
         !cellularChanged &&
         !wifiChanged &&
+        !readerSecurityChanged &&
         !devicesChanged
       ) {
         return attrs;
@@ -925,6 +979,12 @@ export const TerminalConfigurationProvider = () =>
           : {}),
         ...(cellularChanged ? { cellular: news.cellular === null ? "" : news.cellular! } : {}),
         ...(wifiChanged ? { wifi: news.wifi === null ? "" : toWireWifi(news.wifi!) } : {}),
+        ...(readerSecurityChanged
+          ? {
+              reader_security:
+                news.readerSecurity === null ? "" : toWireReaderSecurity(news.readerSecurity!),
+            }
+          : {}),
         ...changedDevices,
       });
       const next = asConfiguration(updated);

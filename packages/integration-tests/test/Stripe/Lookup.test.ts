@@ -73,6 +73,9 @@ describe.concurrent("lookup", () => {
           EntitlementsFeature: Stripe.EntitlementsFeature.lookup({
             id: "feat_test_61ViPgW7tqrUvG3pP41F0iMJZ5935ZZZ",
           }),
+          EventDestination: Stripe.EventDestination.lookup({
+            id: "ed_test_AlchemyMissing000000000000000000000000000000",
+          }),
           FileLink: Stripe.FileLink.lookup({ id: "link_AlchemyMissing0000" }),
           IssuingCard: Stripe.IssuingCard.lookup({ id: "ic_AlchemyMissing0000" }),
           IssuingCardholder: Stripe.IssuingCardholder.lookup({ id: "ich_AlchemyMissing0000" }),
@@ -90,6 +93,7 @@ describe.concurrent("lookup", () => {
           PromotionCode: Stripe.PromotionCode.lookup({ id: "promo_AlchemyMissing0000" }),
           RadarValueList: Stripe.RadarValueList.lookup({ id: "rsl_AlchemyMissing0000" }),
           ShippingRate: Stripe.ShippingRate.lookup({ id: "shr_AlchemyMissing0000" }),
+          TaxId: Stripe.TaxId.lookup({ id: "txi_AlchemyMissing0000" }),
           TaxRate: Stripe.TaxRate.lookup({ id: "txr_AlchemyMissing0000" }),
           TaxRegistration: Stripe.TaxRegistration.lookup({ id: "taxreg_1UZ1ieF0iMJZ5935cBWQ2ZZZ" }),
           TerminalConfiguration: Stripe.TerminalConfiguration.lookup({
@@ -97,6 +101,7 @@ describe.concurrent("lookup", () => {
           }),
           TerminalLocation: Stripe.TerminalLocation.lookup({ id: "tml_AlchemyMissing0000" }),
           TerminalReader: Stripe.TerminalReader.lookup({ id: "tmr_AlchemyMissing0000" }),
+          TrialOffer: Stripe.TrialOffer.lookup({ id: "to_AlchemyMissing0000" }),
           WebhookEndpoint: Stripe.WebhookEndpoint.lookup({ id: "we_AlchemyMissing0000" }),
         } as unknown as Record<string, Output.Output<unknown>>;
 
