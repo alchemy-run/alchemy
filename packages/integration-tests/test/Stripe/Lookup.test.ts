@@ -73,6 +73,9 @@ describe.concurrent("lookup", () => {
           EntitlementsFeature: Stripe.EntitlementsFeature.lookup({
             id: "feat_test_61ViPgW7tqrUvG3pP41F0iMJZ5935ZZZ",
           }),
+          EventDestination: Stripe.EventDestination.lookup({
+            id: "ed_test_AlchemyMissing000000000000000000000000000000",
+          }),
           FileLink: Stripe.FileLink.lookup({ id: "link_AlchemyMissing0000" }),
           IssuingCard: Stripe.IssuingCard.lookup({ id: "ic_AlchemyMissing0000" }),
           IssuingCardholder: Stripe.IssuingCardholder.lookup({ id: "ich_AlchemyMissing0000" }),

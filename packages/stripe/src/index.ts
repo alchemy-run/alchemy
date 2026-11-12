@@ -36,6 +36,7 @@ export * from "./CreditGrant.ts";
 export * from "./Customer.ts";
 export * from "./CustomerTaxId.ts";
 export * from "./EntitlementsFeature.ts";
+export * from "./EventDestination.ts";
 export * from "./Events.ts";
 export * from "./FileLink.ts";
 export * from "./IssuingCard.ts";

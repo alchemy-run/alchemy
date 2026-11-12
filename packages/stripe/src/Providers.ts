@@ -33,6 +33,7 @@ import { CreditGrant, CreditGrantProvider } from "./CreditGrant.ts";
 import { Customer, CustomerProvider } from "./Customer.ts";
 import { CustomerTaxId, CustomerTaxIdProvider } from "./CustomerTaxId.ts";
 import { EntitlementsFeature, EntitlementsFeatureProvider } from "./EntitlementsFeature.ts";
+import { EventDestination, EventDestinationProvider } from "./EventDestination.ts";
 import { FileLink, FileLinkProvider } from "./FileLink.ts";
 import { IssuingCard, IssuingCardProvider } from "./IssuingCard.ts";
 import { IssuingCardholder, IssuingCardholderProvider } from "./IssuingCardholder.ts";
@@ -153,6 +154,7 @@ export const providers = () =>
       Customer,
       CustomerTaxId,
       EntitlementsFeature,
+      EventDestination,
       FileLink,
       IssuingCard,
       IssuingCardholder,
@@ -193,6 +195,7 @@ export const providers = () =>
         CustomerProvider(),
         CustomerTaxIdProvider(),
         EntitlementsFeatureProvider(),
+        EventDestinationProvider(),
         FileLinkProvider(),
         IssuingCardProvider(),
         IssuingCardholderProvider(),
