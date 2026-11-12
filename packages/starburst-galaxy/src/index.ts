@@ -9,3 +9,5 @@ export {
   fromClientCredentials,
 } from "./Credentials.ts";
 export * from "./Providers.ts";
+export * from "./Role/index.ts";
+export * from "./ServiceAccount/index.ts";

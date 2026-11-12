@@ -8,6 +8,13 @@ import { PostgresqlCatalog, PostgresqlCatalogProvider } from "./Catalog/Postgres
 import { S3Catalog, S3CatalogProvider } from "./Catalog/S3Catalog.ts";
 import { Cluster, ClusterProvider } from "./Cluster/Cluster.ts";
 import * as Credentials from "./Credentials.ts";
+import { Role, RoleProvider } from "./Role/Role.ts";
+import { RolePrivilege, RolePrivilegeProvider } from "./Role/RolePrivilege.ts";
+import { ServiceAccount, ServiceAccountProvider } from "./ServiceAccount/ServiceAccount.ts";
+import {
+  ServiceAccountPassword,
+  ServiceAccountPasswordProvider,
+} from "./ServiceAccount/ServiceAccountPassword.ts";
 
 /**
  * Service tag bundling every Starburst Galaxy provider, the AuthProvider
@@ -18,9 +25,9 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Starbur
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
- * Starburst Galaxy providers and credentials: catalogs and clusters.
- * Registers the Starburst Galaxy AuthProvider so `alchemy profile edit`
- * can configure it.
+ * Starburst Galaxy providers and credentials: catalogs, clusters, roles
+ * and privileges, service accounts and passwords. Registers the Starburst
+ * Galaxy AuthProvider so `alchemy profile edit` can configure it.
  *
  * @example
  * ```ts
@@ -28,9 +35,28 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Cluster, PostgresqlCatalog, S3Catalog])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([
+      Cluster,
+      PostgresqlCatalog,
+      Role,
+      RolePrivilege,
+      S3Catalog,
+      ServiceAccount,
+      ServiceAccountPassword,
+    ]),
+  ).pipe(
     Layer.provide(
-      Layer.mergeAll(ClusterProvider(), PostgresqlCatalogProvider(), S3CatalogProvider()),
+      Layer.mergeAll(
+        ClusterProvider(),
+        PostgresqlCatalogProvider(),
+        RoleProvider(),
+        RolePrivilegeProvider(),
+        S3CatalogProvider(),
+        ServiceAccountProvider(),
+        ServiceAccountPasswordProvider(),
+      ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
