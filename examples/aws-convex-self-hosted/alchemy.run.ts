@@ -22,7 +22,8 @@ export default Alchemy.Stack(
 
     const backend = yield* Convex.Backend("Backend", {
       platform: convex,
-      // A preview keeps its data in SQLite on its own volume, so it's up in minutes.
+      // A preview keeps SQLite on its task's disk, so it's up in minutes. Its data
+      // starts over with each new task, and Functions pushes again then.
       db: isProd ? undefined : { engine: "sqlite" },
       // Pinned, because Convex migrations only go forward.
       image:

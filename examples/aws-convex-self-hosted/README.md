@@ -22,7 +22,7 @@ pnpm alchemy deploy --stage alice --profile dev --yes
 
 Open the `websiteUrl` it prints and click "Add a message". The row appears through the Convex websocket.
 
-A stage gets `alice.cloud.previews.example.com` and `alice.site.previews.example.com`, with its own SQLite volume and its own prefix in the buckets. Once the platform exists, a new stage takes a few minutes.
+A stage gets `alice.cloud.previews.example.com` and `alice.site.previews.example.com`, with SQLite on its task's disk and its own prefix in the buckets. Once the platform exists, a new stage takes a few minutes. Its data starts over whenever a deploy restarts the backend.
 
 ## Production
 

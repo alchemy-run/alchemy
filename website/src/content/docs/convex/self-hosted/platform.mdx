@@ -86,7 +86,7 @@ A backend's hosts are `[<stage>.]cloud.<domain>` and `[<stage>.]site.<domain>`, 
 
 ## Run previews on SQLite
 
-A preview doesn't need the platform's database server. With `db: { engine: "sqlite" }` a stage keeps its data in a file on its own EFS volume, so it comes up in minutes, and a platform whose stages all do this can leave out `db` and run no RDS at all:
+A preview doesn't need the platform's database server. With `db: { engine: "sqlite" }` a stage keeps its data in a file on its task's own disk, so it needs no database and no volume and comes up in minutes. A platform whose stages all do this can leave out `db` and run no RDS at all:
 
 ```typescript
 const convex = yield* Convex.Platform("Convex", { domain });
@@ -100,7 +100,7 @@ const backend = yield* Convex.Backend("Backend", {
 });
 ```
 
-A production backend refuses SQLite. Destroying a SQLite stage deletes its volume and its bucket prefix.
+The data starts empty whenever a new task does, which includes a deploy that changes the backend; `Convex.Functions` pushes your functions and variables again when that happens. A production backend refuses SQLite. Destroying a SQLite stage deletes its bucket prefix.
 
 ## Mark the production backend
 

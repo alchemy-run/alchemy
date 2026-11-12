@@ -16,6 +16,11 @@ export interface EnvironmentVariablesProps {
   token: Redacted.Redacted<string>;
   /** The variables to set. */
   env: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Changes whenever the deployment's data starts over, such as a self-hosted
+   * SQLite backend's new task. A new value sets every variable again.
+   */
+  revision?: string;
 }
 
 export interface EnvironmentVariablesAttributes {

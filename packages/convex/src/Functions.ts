@@ -21,7 +21,12 @@ export type FunctionsTarget =
     }
   | {
       /** The self-hosted backend to push to. */
-      backend: { url: Input<string>; adminKey: Input<Redacted.Redacted<string>> };
+      backend: {
+        url: Input<string>;
+        adminKey: Input<Redacted.Redacted<string>>;
+        /** Changes when the backend's data starts over; the push runs again then. */
+        dataRevision?: Input<string | undefined>;
+      };
       deployment?: never;
     };
 
@@ -151,16 +156,19 @@ export const Functions = (id: string, props: FunctionsProps) =>
           : {
               url: props.backend.url,
               token: props.backend.adminKey,
+              revision: props.backend.dataRevision,
               env: {
                 CONVEX_SELF_HOSTED_URL: props.backend.url,
                 CONVEX_SELF_HOSTED_ADMIN_KEY: props.backend.adminKey,
               },
             };
 
+      const revision = "revision" in target ? target.revision : undefined;
       const variables = yield* EnvironmentVariables("Env", {
         url: target.url,
         token: target.token,
         env: props.env ?? {},
+        revision: revision as Input<string> | undefined,
       });
 
       // The hash orders the variables before the push, and pushes again when
@@ -171,7 +179,12 @@ export const Functions = (id: string, props: FunctionsProps) =>
         shell: true,
         cwd: props.rootDir,
         memo: props.memo,
-        env: { ...target.env, ALCHEMY_CONVEX_ENV_HASH: variables.hash },
+        // A backend whose data started over has lost its functions too.
+        env: {
+          ...target.env,
+          ALCHEMY_CONVEX_ENV_HASH: variables.hash,
+          ...(revision === undefined ? {} : { ALCHEMY_CONVEX_DATA_REVISION: revision }),
+        },
       });
 
       return { url: target.url };

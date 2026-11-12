@@ -1,7 +1,5 @@
 import { resolveDomainDns } from "@alchemy.run/aws/CustomDomain";
-import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ECS from "@alchemy.run/aws/ECS";
-import * as EFS from "@alchemy.run/aws/EFS";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
 import * as IAM from "@alchemy.run/aws/IAM";
 import { CurrentRegion } from "@alchemy.run/aws/Region";
@@ -52,7 +50,11 @@ const SITE_PORT = 3211;
 
 export type BackendDb =
   | {
-      /** SQLite on EFS, for development only. Refused when `production` is true. */
+      /**
+       * SQLite on the task's own disk, for development and tests. The data
+       * starts empty whenever a new task does, which includes a deploy that
+       * changes the backend. Refused when `production` is true.
+       */
       engine: "sqlite";
     }
   | CreatedDatabase
@@ -148,9 +150,10 @@ export interface PlatformBackendProps extends BackendCommonProps {
   dns?: DnsConfig;
   domain?: never;
   /**
-   * `{ engine: "sqlite" }` keeps this stage's data in a file on its own EFS
-   * volume instead of the platform's database server. Previews come up faster
-   * and need no RDS; production refuses it.
+   * `{ engine: "sqlite" }` keeps this stage's data in a file on the task's own
+   * disk instead of the platform's database server. It needs no RDS and no
+   * volume, so a preview comes up fastest; the data starts empty whenever a new
+   * task does. Production refuses it.
    * @default a database on the platform's server
    */
   db?: { engine: "sqlite" };
@@ -231,7 +234,7 @@ const hostOn = (
  * });
  * ```
  *
- * **Example:** A file on EFS, for development
+ * **Example:** A file on the task's disk, for development
  * ```typescript
  * const backend = yield* Convex.Backend("Backend", {
  *   image,
@@ -398,11 +401,6 @@ export const Backend = (id: string, props: BackendProps) =>
       let secrets: Input<Record<string, string>> = {
         INSTANCE_SECRET: instanceSecret.parameterArn,
       } as never;
-      let volumes: Parameters<typeof ECS.Service>[1] extends infer P
-        ? P extends { volumes?: infer V }
-          ? V
-          : never
-        : never;
       if (props.platform !== undefined && !onSqlite) {
         const password = yield* Random("DatabasePassword", { bytes: 16 });
         const stageDatabase = yield* StageDatabase("Database", {
@@ -436,29 +434,8 @@ export const Backend = (id: string, props: BackendProps) =>
             instanceName,
           });
         }
-        const efsSecurityGroup = yield* EC2.SecurityGroup("DataSecurityGroup", {
-          vpcId: platform.vpcId as never,
-          description: "Convex SQLite on EFS, reachable from the backend only",
-          ingress: [
-            {
-              ipProtocol: "tcp",
-              fromPort: 2049,
-              toPort: 2049,
-              referencedGroupId: platform.backendSecurityGroupId as never,
-            },
-          ],
-          tags,
-        });
-        const fileSystem = yield* EFS.FileSystem("Data", { encrypted: true, tags });
-        yield* EFS.MountTarget("DataMount", {
-          fileSystemId: fileSystem.fileSystemId,
-          subnetId: platform.subnetId as never,
-          securityGroups: [efsSecurityGroup.groupId],
-        });
-        // The volume names the file system, not the mount target, so the image
-        // mirror runs while the mount target comes up (about a minute and a
-        // half). A task that starts first fails to mount and ECS starts another.
-        volumes = [{ efs: { fileSystemId: fileSystem.fileSystemId }, path: "/convex/data" }];
+        // The SQLite file lives on the task's own disk, so it needs no volume
+        // and starts empty whenever a new task does.
       } else {
         const value =
           url !== undefined
@@ -649,7 +626,6 @@ export const Backend = (id: string, props: BackendProps) =>
         secrets: secrets as never,
         taskRoleManagedPolicyArns: [storagePolicy.policyArn],
         logging: { retention: props.logRetention },
-        ...(volumes! === undefined ? {} : { volumes }),
         tags,
       });
 
@@ -665,6 +641,9 @@ export const Backend = (id: string, props: BackendProps) =>
         siteUrl: running(siteUrl),
         // Known before the backend runs, so a site build can start right away.
         endpoints: { url: cloudUrl, siteUrl },
+        // A SQLite backend's data lives with its task, and a new task definition
+        // means a new task. Functions pushes again when this changes.
+        dataRevision: onSqlite ? service.taskDefinitionArn : undefined,
         adminKey: adminKey.value,
         instanceName,
         databaseName: database,

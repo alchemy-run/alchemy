@@ -118,12 +118,15 @@ test.provider.skipIf(skipPaid)(
       expect(redirect.status).toBe(301);
       expect(redirect.headers.location).toMatch(/^https:\/\//);
 
-      // Data survives a redeploy that restarts the task, because SQLite is on EFS.
+      // A redeploy that restarts the task starts SQLite over, and pushes the
+      // functions again, so the new task serves them on an empty database.
       const before = yield* ecs.listTasks({ cluster, serviceName: service.serviceName });
       const redeployed = yield* stack.deploy(app(stack.stage, rootDir, { RUST_LOG: "warn" }));
       const after = yield* ecs.listTasks({ cluster, serviceName: service.serviceName });
       expect(after.taskArns).not.toEqual(before.taskArns);
-      expect(yield* listMessages(redeployed.url)).toContain("written through the load balancer");
+      expect(redeployed.dataRevision).not.toBe(pushed.dataRevision);
+      expect(yield* listMessages(redeployed.url)).toEqual([]);
+      yield* assertRuntime({ url: redeployed.url, text: "written after a restart" });
 
       // An instance name change fails before touching the service.
       const current = yield* ecs.describeServices({

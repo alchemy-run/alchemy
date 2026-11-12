@@ -70,7 +70,7 @@ const backend = yield* Convex.Backend("Backend", {
 });
 ```
 
-A preview keeps its data in SQLite on its own EFS volume, so it comes up in minutes and needs no RDS. Production gets its own database on the production server.
+A preview keeps its data in SQLite on its task's own disk, so it comes up in minutes and needs no RDS. That data starts empty whenever a new task does, and `Convex.Functions` pushes again then. Production gets its own database on the production server.
 
 Only plain values cross stacks. The database master password stays in SSM and only its parameter name crosses, so it never lands in a stage's state.
 
