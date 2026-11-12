@@ -7,6 +7,10 @@ import { ApiKey, ApiKeyProvider } from "./ApiKeys/ApiKey.ts";
 import { ClickHouseCloudAuth } from "./AuthProvider.ts";
 import { BackupConfiguration, BackupConfigurationProvider } from "./Backup/BackupConfiguration.ts";
 import * as Credentials from "./Credentials.ts";
+import {
+  MemberNotificationSetting,
+  MemberNotificationSettingProvider,
+} from "./Notifications/MemberNotificationSetting.ts";
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
@@ -40,6 +44,7 @@ export const providers = () =>
       BackupConfiguration,
       Invitation,
       Member,
+      MemberNotificationSetting,
       Organization,
       PreviewFeature,
       Role,
@@ -52,6 +57,7 @@ export const providers = () =>
         BackupConfigurationProvider(),
         InvitationProvider(),
         MemberProvider(),
+        MemberNotificationSettingProvider(),
         OrganizationProvider(),
         PreviewFeatureProvider(),
         RoleProvider(),
