@@ -12,7 +12,7 @@ import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
-import { STORAGE_KEYS, type StorageKey } from "../internal/selfhosted.ts";
+import { certificateNames, STORAGE_KEYS, type StorageKey } from "../internal/selfhosted.ts";
 
 export type DatabaseEngine = "postgres" | "mysql";
 
@@ -35,8 +35,12 @@ export interface PlatformProps {
    * @default Route 53
    */
   dns?: DnsConfig;
-  /** The database server stages share. Each stage gets its own database and user. */
-  db: CreatedDatabase;
+  /**
+   * The database server stages share. Each stage gets its own database and
+   * user. Omit it for a platform whose stages all run on SQLite, which needs no
+   * RDS and comes up faster.
+   */
+  db?: CreatedDatabase;
   /**
    * Protect the database from deletion and refuse to delete buckets with
    * objects. Turn it off and deploy before destroying.
@@ -329,13 +333,14 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
 
 /**
  * Infrastructure stages share in one AWS account: the network, ECS cluster, load
- * balancer with a wildcard certificate, one database server and five buckets.
+ * balancer with a wildcard certificate, five buckets, and a database server
+ * unless every stage runs on SQLite.
  * Deploy it once per account, from its own stack, and pass it to each
  * `Convex.Backend`.
  *
  * :::caution
  * A platform serves the stages of one app. Hosts come from the stage name
- * alone, so a second app's `alice` stage would claim `alice-cloud.<domain>` too:
+ * alone, so a second app's `alice` stage would claim `alice.cloud.<domain>` too:
  * traffic would reach only one of them, and destroying either would delete the
  * other's DNS records. Give each app its own platform.
  * :::
@@ -344,9 +349,11 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
  * **Example:** One platform per account
  * ```typescript
  * // stacks/platform.ts, deployed once to production and once to development
+ * const isProd = stage === "prod";
  * const convex = yield* Convex.Platform("Convex", {
- *   domain: stage === "prod" ? "domain.com" : "dev.domain.com",
- *   db: { engine: "postgres", instanceClass: "db.t4g.medium", storage: 100 },
+ *   domain: isProd ? "example.com" : "previews.example.com",
+ *   // Previews run on SQLite, so the development platform needs no database.
+ *   db: isProd ? { engine: "postgres", instanceClass: "db.t4g.medium", storage: 100 } : undefined,
  * });
  * return { convex };
  * ```
@@ -364,7 +371,7 @@ export const Platform = (id: string, props: PlatformProps) =>
   Namespace.push(
     id,
     Infrastructure({
-      certificate: { domainName: props.domain, subjectAlternativeNames: [`*.${props.domain}`] },
+      certificate: certificateNames(props.domain),
       domain: props.domain,
       hostedZoneId: props.hostedZoneId,
       dns: props.dns,

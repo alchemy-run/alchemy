@@ -14,7 +14,7 @@ import {
   databaseServerGone,
   selfHostedApp,
   serviceGone,
-  skipPaid,
+  skipRds,
   TEST_DOMAIN,
 } from "./support.ts";
 
@@ -97,7 +97,7 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
       expect(yield* serviceGone(backend.service.clusterArn, backend.service.serviceArn)).toBe(true);
     });
 
-  test.provider.skipIf(skipPaid)(
+  test.provider.skipIf(skipRds)(
     `${engine} backend end to end on AWS`,
     (stack) =>
       Effect.gen(function* () {

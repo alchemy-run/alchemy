@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Cloud from "../Providers.ts";
 import { AdminKey, AdminKeyProvider } from "./AdminKey.ts";
 import { StageDatabase, StageDatabaseProvider } from "./StageDatabase.ts";
+import { StageStorage, StageStorageProvider } from "./StageStorage.ts";
 
 /**
  * Service tag bundling the self-hosted Convex providers. Use
@@ -23,8 +24,10 @@ export class Providers extends Provider.ProviderCollection<Providers>()("ConvexA
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([AdminKey, StageDatabase])).pipe(
-    Layer.provide(Layer.mergeAll(AdminKeyProvider(), StageDatabaseProvider())),
+  Layer.effect(Providers, Provider.collection([AdminKey, StageDatabase, StageStorage])).pipe(
+    Layer.provide(
+      Layer.mergeAll(AdminKeyProvider(), StageDatabaseProvider(), StageStorageProvider()),
+    ),
     Layer.provideMerge(Cloud.providers()),
     Layer.provideMerge(AWS.providers()),
   );

@@ -5,6 +5,7 @@ import {
   assertNoReservedEnv,
   assertPinnedImage,
   assertStageHosts,
+  certificateNames,
   hostLabelOf,
   backendEnv,
   backendTuning,
@@ -225,23 +226,37 @@ test(
 );
 
 test(
-  "stageHosts stay flat so one wildcard certificate covers them",
+  "a stage is the one leftmost label, so the platform certificate covers it",
   () => {
-    expect(stageHosts("dev.domain.com", "christian-stamati", false)).toEqual({
-      web: "christian-stamati.dev.domain.com",
-      cloud: "christian-stamati-cloud.dev.domain.com",
-      site: "christian-stamati-site.dev.domain.com",
+    const hosts = stageHosts("previews.example.com", "christian-stamati", false);
+    expect(hosts).toEqual({
+      web: "christian-stamati.previews.example.com",
+      cloud: "christian-stamati.cloud.previews.example.com",
+      site: "christian-stamati.site.previews.example.com",
     });
+    const { domainName, subjectAlternativeNames } = certificateNames("previews.example.com");
+    const covers = (host: string) =>
+      host === domainName ||
+      subjectAlternativeNames.some(
+        (name) => name.startsWith("*.") && host.split(".").slice(1).join(".") === name.slice(2),
+      );
+    for (const host of Object.values(hosts)) expect(covers(host)).toBe(true);
+    for (const host of Object.values(stageHosts("example.com", "prod", true))) {
+      expect(covers(host.replace("example.com", "previews.example.com"))).toBe(true);
+    }
   },
   { tags: ["unit", "provider:convex", "local"] },
 );
 
 test(
-  "assertStageHosts refuses a stage that takes another stage's host",
+  "assertStageHosts refuses a stage that claims the production host",
   async () => {
-    const error = await assertStageHosts("x-cloud").pipe(Effect.flip, Effect.runPromise);
-    expect(error._tag).toBe("InvalidStageName");
+    for (const stage of ["cloud", "site"]) {
+      const error = await assertStageHosts(stage).pipe(Effect.flip, Effect.runPromise);
+      expect(error._tag).toBe("InvalidStageName");
+    }
     await Effect.runPromise(assertStageHosts("pr-42"));
+    await Effect.runPromise(assertStageHosts("staging-cloud"));
   },
   { tags: ["unit", "provider:convex", "local"] },
 );
@@ -250,7 +265,8 @@ test(
   "assertStageHosts refuses what can't be a hostname label",
   async () => {
     await assertStageHosts("Bad_Stage").pipe(Effect.flip, Effect.runPromise);
-    await assertStageHosts("a".repeat(60)).pipe(Effect.flip, Effect.runPromise);
+    await assertStageHosts("a".repeat(64)).pipe(Effect.flip, Effect.runPromise);
+    await Effect.runPromise(assertStageHosts("a".repeat(63)));
   },
   { tags: ["unit", "provider:convex", "local"] },
 );

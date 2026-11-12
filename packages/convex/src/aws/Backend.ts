@@ -41,6 +41,7 @@ import {
   type PlatformInputs,
 } from "./Platform.ts";
 import { StageDatabase } from "./StageDatabase.ts";
+import { StageStorage } from "./StageStorage.ts";
 
 const CONTAINER = "backend";
 const RDS_CA_PATH = "/tmp/rds-ca.pem";
@@ -146,7 +147,13 @@ export interface PlatformBackendProps extends BackendCommonProps {
    */
   dns?: DnsConfig;
   domain?: never;
-  db?: never;
+  /**
+   * `{ engine: "sqlite" }` keeps this stage's data in a file on its own EFS
+   * volume instead of the platform's database server. Previews come up faster
+   * and need no RDS; production refuses it.
+   * @default a database on the platform's server
+   */
+  db?: { engine: "sqlite" };
   /**
    * Refuse to destroy this stage's database and bucket prefix. Turn it off and
    * deploy before destroying.
@@ -254,7 +261,7 @@ const hostOn = (
  * const backend = yield* Convex.Backend("Backend", { platform: convex, image });
  * ```
  *
- * A stage named `alice` gets `alice-cloud.<domain>` and `alice-site.<domain>`.
+ * A stage named `alice` gets `alice.cloud.<domain>` and `alice.site.<domain>`.
  * The production backend gets `cloud.<domain>` and `site.<domain>`, a protected
  * database, and no SQLite. That's the `prod` stage unless you say otherwise.
  *
@@ -369,7 +376,8 @@ export const Backend = (id: string, props: BackendProps) =>
 
       // Where the data lives.
       const url = props.db !== undefined && "url" in props.db ? props.db : undefined;
-      const onRds = props.platform !== undefined || created?.owned !== undefined;
+      const onSqlite = props.db?.engine === "sqlite";
+      const onRds = (props.platform !== undefined && !onSqlite) || created?.owned !== undefined;
       const databaseEnv: Record<string, string> = {
         ...(url?.requireSsl === false ? { DO_NOT_REQUIRE_SSL: "1" } : {}),
         ...(onRds ? { PG_CA_FILE: RDS_CA_PATH, MYSQL_CA_FILE: RDS_CA_PATH } : {}),
@@ -382,7 +390,7 @@ export const Backend = (id: string, props: BackendProps) =>
           ? V
           : never
         : never;
-      if (props.platform !== undefined) {
+      if (props.platform !== undefined && !onSqlite) {
         const password = yield* Random("DatabasePassword", { bytes: 16 });
         const stageDatabase = yield* StageDatabase("Database", {
           platform: props.platform as never,
@@ -407,7 +415,14 @@ export const Backend = (id: string, props: BackendProps) =>
             [URL_ENV[engine]]: database,
           }),
         ) as never;
-      } else if (props.db.engine === "sqlite") {
+      } else if (onSqlite) {
+        if (props.platform !== undefined) {
+          // The stage database cleans up the bucket prefix; SQLite has none.
+          yield* StageStorage("Storage", {
+            storage: platform.storage as never,
+            instanceName,
+          });
+        }
         const efsSecurityGroup = yield* EC2.SecurityGroup("DataSecurityGroup", {
           vpcId: platform.vpcId as never,
           description: "Convex SQLite on EFS, reachable from the backend only",
@@ -446,7 +461,8 @@ export const Backend = (id: string, props: BackendProps) =>
         });
         secrets = {
           INSTANCE_SECRET: instanceSecret.parameterArn,
-          [URL_ENV[props.db.engine]]: parameter.parameterArn,
+          // Only an owned backend on a server reaches here: a url, or one it created.
+          [URL_ENV[url?.engine ?? created!.owned!.engine]]: parameter.parameterArn,
         } as never;
       }
 

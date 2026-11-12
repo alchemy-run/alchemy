@@ -3,7 +3,6 @@ import type {
   MigrationRunnerResponse,
 } from "@alchemy.run/aws/RDS/MigrationRunnerHandler";
 import * as lambda from "@distilled.cloud/aws/lambda";
-import * as s3 from "@distilled.cloud/aws/s3";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -14,8 +13,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { databaseName, isStagePrefix, STORAGE_KEYS } from "../internal/selfhosted.ts";
+import { databaseName, STORAGE_KEYS } from "../internal/selfhosted.ts";
 import { createStatements, dropStatements, readyQuery } from "../internal/stageDatabase.ts";
+import { deleteStagePrefix } from "../internal/stagePrefix.ts";
 import type { PlatformHandle } from "./Platform.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -85,8 +85,6 @@ export type StageDatabase = Resource<
  */
 export const StageDatabase = Resource<StageDatabase>("Convex.StageDatabase");
 
-const MAX_LIST_PAGES = 1000;
-
 /** The SSM parameter naming the resource that owns a stage database. */
 const ownerParameterName = (host: string, database: string) =>
   `/alchemy/convex/stage-databases/${host}/${database}`;
@@ -99,8 +97,6 @@ export const StageDatabaseProvider = () =>
       const getParameter = yield* ssm.getParameter;
       const putParameter = yield* ssm.putParameter;
       const deleteParameter = yield* ssm.deleteParameter;
-      const listObjects = yield* s3.listObjectsV2;
-      const deleteObjects = yield* s3.deleteObjects;
 
       /** `undefined` once the platform's server is gone, which takes every stage's data with it. */
       const connect = Effect.fn(function* (platform: PlatformHandle) {
@@ -210,40 +206,6 @@ export const StageDatabaseProvider = () =>
         );
       });
 
-      const deletePrefix = Effect.fn(function* (bucket: string, instance: string) {
-        let token: string | undefined;
-        for (let page = 0; page < MAX_LIST_PAGES; page++) {
-          const listed = yield* listObjects({
-            Bucket: bucket,
-            Prefix: `${instance}-`,
-            ContinuationToken: token,
-          }).pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
-          // The platform took the bucket with it.
-          if (listed === undefined) return;
-          // `<instance>-*` also matches `<instance>-42-<uuid>/`, which is another stage.
-          const keys = (listed.Contents ?? [])
-            .map((object) => object.Key!)
-            .filter((key) => isStagePrefix(instance, key));
-          if (keys.length > 0) {
-            const deleted = yield* deleteObjects({
-              Bucket: bucket,
-              Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
-            });
-            const failed = deleted.Errors ?? [];
-            if (failed.length > 0) {
-              return yield* new StageDatabaseError({
-                message: `Failed to delete ${failed.length} objects from ${bucket}, such as ${failed[0]!.Key}: ${failed[0]!.Message ?? failed[0]!.Code}. Run destroy again.`,
-              });
-            }
-          }
-          token = listed.NextContinuationToken;
-          if (token === undefined) return;
-        }
-        return yield* new StageDatabaseError({
-          message: `Stopped after ${MAX_LIST_PAGES} pages deleting ${instance} from ${bucket}. Run destroy again.`,
-        });
-      });
-
       return {
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -310,7 +272,7 @@ export const StageDatabaseProvider = () =>
             yield* query(connection, sql);
           }
           for (const key of STORAGE_KEYS) {
-            yield* deletePrefix(olds.platform.storage[key].name, olds.instanceName);
+            yield* deleteStagePrefix(olds.platform.storage[key].name, olds.instanceName);
           }
           yield* deleteParameter({
             Name: ownerParameterName(connection.host, output.databaseName),

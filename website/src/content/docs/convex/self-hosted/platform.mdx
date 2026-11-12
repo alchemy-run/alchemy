@@ -37,7 +37,7 @@ export default Platform.make(
 ```
 
 ```sh
-CONVEX_DOMAIN=dev.example.com alchemy deploy stacks/platform.ts --stage dev
+CONVEX_DOMAIN=previews.example.com alchemy deploy stacks/platform.ts --stage dev
 ```
 
 ## Add a stage
@@ -78,11 +78,29 @@ alchemy deploy --stage alice
 
 | Stage | Convex API | HTTP actions |
 | --- | --- | --- |
-| `alice` | `alice-cloud.dev.example.com` | `alice-site.dev.example.com` |
-| `dev_sam` | `dev-sam-cloud.dev.example.com` | `dev-sam-site.dev.example.com` |
+| `alice` | `alice.cloud.previews.example.com` | `alice.site.previews.example.com` |
+| `dev_sam` | `dev-sam.cloud.previews.example.com` | `dev-sam.site.previews.example.com` |
 | `prod` | `cloud.example.com` | `site.example.com` |
 
-Hosts stay flat under the domain so one wildcard certificate covers them. That's why a stage name can't end in `-cloud` or `-site`. Characters a hostname can't hold become hyphens.
+A backend's hosts are `[<stage>.]cloud.<domain>` and `[<stage>.]site.<domain>`, and the production backend leaves the stage out. The stage is always one label in front of a fixed name, so the platform's certificate (`*.<domain>`, `*.cloud.<domain>`, `*.site.<domain>`) covers every stage and a new stage never waits for one. Characters a hostname can't hold become hyphens, and a stage can't be named `cloud` or `site`.
+
+## Run previews on SQLite
+
+A preview doesn't need the platform's database server. With `db: { engine: "sqlite" }` a stage keeps its data in a file on its own EFS volume, so it comes up in minutes, and a platform whose stages all do this can leave out `db` and run no RDS at all:
+
+```typescript
+const convex = yield* Convex.Platform("Convex", { domain });
+```
+
+```typescript
+const backend = yield* Convex.Backend("Backend", {
+  platform: convex,
+  image,
+  db: { engine: "sqlite" },
+});
+```
+
+A production backend refuses SQLite. Destroying a SQLite stage deletes its volume and its bucket prefix.
 
 ## Mark the production backend
 
@@ -98,7 +116,9 @@ const backend = yield* Convex.Backend("Backend", {
 
 ## Give each app its own platform
 
-Hosts come from the stage name alone, so a platform serves one app. A second app's `alice` stage would claim `alice-cloud.dev.example.com` too: traffic would reach only one of them, and destroying either would delete the other's DNS records.
+Hosts come from the stage name alone, so a platform serves one app. A second app's `alice` stage would claim `alice.cloud.previews.example.com` too: traffic would reach only one of them, and destroying either would delete the other's DNS records.
+
+[Two AWS accounts](/convex/self-hosted/two-accounts) shows production, staging, developer and pull-request stages across a production and a development account.
 
 ## Use another DNS host
 

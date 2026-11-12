@@ -7,6 +7,7 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Config from "effect/Config";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess } from "effect/process";
@@ -74,7 +75,7 @@ const taskDefinitionOf = (instance: string) =>
 const UUID = "3f2b9c1e-0000-4000-8000-000000000000";
 
 test.provider.skipIf(skipPaid)(
-  "two stages share one platform and stay apart",
+  "two SQLite stages share one platform and stay apart",
   (stack) =>
     Effect.gen(function* () {
       // Stages and the platform are this run's own, never the example's `dev`.
@@ -89,11 +90,18 @@ test.provider.skipIf(skipPaid)(
       return yield* Effect.gen(function* () {
         yield* assertDevAccount;
         yield* cli("deploy", "stacks/platform.ts", "--stage", platform);
-        const first = yield* cli("deploy", "--stage", one);
-        yield* cli("deploy", "--stage", two);
 
-        const oneUrl = `https://${one}-cloud.${TEST_DOMAIN}`;
-        const twoUrl = `https://${two}-cloud.${TEST_DOMAIN}`;
+        // Once the platform exists, a preview stage is up within five minutes.
+        const [firstTook, first] = yield* Effect.timed(cli("deploy", "--stage", one));
+        const [secondTook] = yield* Effect.timed(cli("deploy", "--stage", two));
+        yield* Effect.logInfo(
+          `stage deploys took ${Duration.format(firstTook)} and ${Duration.format(secondTook)}`,
+        );
+        expect(Duration.toMinutes(firstTook)).toBeLessThan(5);
+        expect(Duration.toMinutes(secondTook)).toBeLessThan(5);
+
+        const oneUrl = `https://${one}.cloud.${TEST_DOMAIN}`;
+        const twoUrl = `https://${two}.cloud.${TEST_DOMAIN}`;
 
         // The TanStack Start site serves, on the real Website component.
         const websiteUrl = /websiteUrl: '([^']+)'/.exec(first)?.[1];

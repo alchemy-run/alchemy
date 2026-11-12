@@ -12,7 +12,8 @@ export const BACKEND_IMAGE =
   "ghcr.io/convex/convex-backend:latest@sha256:207cf95def42f01614b6e3af0af5c20d0dcaa5ff2adf258ee7bc9555576644fa";
 
 // Self-hosted suites cost money and time, so they run only when asked:
-//   CONVEX_TEST_AWS=1                         run the paid AWS suites
+//   CONVEX_TEST_AWS=1                         run the paid AWS suites, on SQLite
+//   CONVEX_TEST_RDS=1                         also run the suites that create RDS (slow)
 //   CONVEX_TEST_DOMAIN=<zone>                 a public Route 53 zone in the test account
 //   CONVEX_TEST_PRODUCTION_AWS_ACCOUNT=<id>   an account no suite may ever run in
 // Convex Cloud suites that need the Professional plan run with CONVEX_TEST_PRO=1.
@@ -22,6 +23,9 @@ export const TEST_DOMAIN = process.env.CONVEX_TEST_DOMAIN ?? "";
 
 /** Paid suites run only when asked for, and only with a domain for their certificate. */
 export const skipPaid = process.env.CONVEX_TEST_AWS !== "1" || TEST_DOMAIN === "";
+
+/** RDS takes ten minutes or more to come up, so its suites run only on request. */
+export const skipRds = skipPaid || process.env.CONVEX_TEST_RDS !== "1";
 
 /** A private copy of the self-hosted fixture app. */
 export const selfHostedApp = (name: string) => scratchApp(name, SELF_HOSTED_FIXTURE_DIR);

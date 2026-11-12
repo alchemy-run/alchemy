@@ -209,7 +209,7 @@ const databaseExists = Effect.fn(function* (handle: {
   return parsed.rows.length > 0;
 });
 
-test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1")(
+test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1" || process.env.CONVEX_TEST_RDS !== "1")(
   "a production backend uses bare hosts and refuses to drop its database",
   (stack) =>
     Effect.gen(function* () {

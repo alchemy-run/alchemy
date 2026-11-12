@@ -62,8 +62,10 @@ export class InvalidStageName extends Data.TaggedError("InvalidStageName")<{
 }> {}
 
 const MAX_INSTANCE_NAME = 48;
-/** A hostname label is at most 63, and `<stage>-cloud` has to fit. */
-const MAX_STAGE_LENGTH = 57;
+/** A stage is one hostname label, which holds at most 63 characters. */
+const MAX_STAGE_LENGTH = 63;
+/** A stage with one of these names would claim the production backend's host. */
+const RESERVED_STAGE_LABELS = ["cloud", "site"];
 
 const shortHash = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 8);
 
@@ -195,17 +197,26 @@ export const databaseUrl = Effect.fn(function* (
 });
 
 /**
- * Hostnames for a stage. Stage hosts stay flat under the domain so a single
- * `*.<domain>` certificate covers them.
+ * Hostnames for a stage: `[<stage>.]cloud.<domain>` for the Convex API and
+ * `[<stage>.]site.<domain>` for HTTP actions. The production backend leaves the
+ * stage out. The stage is always the one leftmost label, so the platform's
+ * certificate (`*.<domain>`, `*.cloud.<domain>`, `*.site.<domain>`) covers every
+ * stage and a new stage never waits for one.
  */
 export const stageHosts = (domain: string, stage: string, isProd: boolean) =>
   isProd
     ? { web: domain, cloud: `cloud.${domain}`, site: `site.${domain}` }
     : {
         web: `${stage}.${domain}`,
-        cloud: `${stage}-cloud.${domain}`,
-        site: `${stage}-site.${domain}`,
+        cloud: `${stage}.cloud.${domain}`,
+        site: `${stage}.site.${domain}`,
       };
+
+/** The names the platform's certificate covers. */
+export const certificateNames = (domain: string) => ({
+  domainName: domain,
+  subjectAlternativeNames: [`*.${domain}`, `*.cloud.${domain}`, `*.site.${domain}`],
+});
 
 /**
  * A stage's name as a hostname label: lowercase, with anything else turned into
@@ -223,9 +234,9 @@ export const assertStageHosts = Effect.fn(function* (stage: string) {
       message: `Stage ${stage} must fit in a hostname: lowercase letters, digits and hyphens, at most ${MAX_STAGE_LENGTH} characters.`,
     });
   }
-  if (/-(cloud|site)$/.test(stage)) {
+  if (RESERVED_STAGE_LABELS.includes(stage)) {
     return yield* new InvalidStageName({
-      message: `Stage ${stage} would take another stage's Convex host, so it can't end in -cloud or -site.`,
+      message: `Stage ${stage} would claim the production backend's host, so it can't be named ${RESERVED_STAGE_LABELS.join(" or ")}.`,
     });
   }
 });

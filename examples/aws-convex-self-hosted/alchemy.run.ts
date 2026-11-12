@@ -22,6 +22,8 @@ export default Alchemy.Stack(
 
     const backend = yield* Convex.Backend("Backend", {
       platform: convex,
+      // A preview keeps its data in SQLite on its own volume, so it's up in minutes.
+      db: isProd ? undefined : { engine: "sqlite" },
       // Pinned, because Convex migrations only go forward.
       image:
         "ghcr.io/convex/convex-backend:latest@sha256:207cf95def42f01614b6e3af0af5c20d0dcaa5ff2adf258ee7bc9555576644fa",
