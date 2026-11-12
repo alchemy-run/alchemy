@@ -30,12 +30,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./Catalog": "./src/Catalog/index.ts",
+    "./CloudAccess": "./src/CloudAccess/index.ts",
     "./Cluster": "./src/Cluster/index.ts",
     "./DataProduct": "./src/DataProduct/index.ts",
     "./Governance": "./src/Governance/index.ts",
+    "./Network": "./src/Network/index.ts",
     "./Role": "./src/Role/index.ts",
     "./ServiceAccount": "./src/ServiceAccount/index.ts",
     "./SqlJob": "./src/SqlJob/index.ts",
+    "./User": "./src/User/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -52,6 +55,12 @@
         "bun": "./src/Catalog/index.ts",
         "worker": "./src/Catalog/index.ts",
         "default": "./lib/Catalog/index.js"
+      },
+      "./CloudAccess": {
+        "types": "./lib/CloudAccess/index.d.ts",
+        "bun": "./src/CloudAccess/index.ts",
+        "worker": "./src/CloudAccess/index.ts",
+        "default": "./lib/CloudAccess/index.js"
       },
       "./Cluster": {
         "types": "./lib/Cluster/index.d.ts",
@@ -71,6 +80,12 @@
         "worker": "./src/Governance/index.ts",
         "default": "./lib/Governance/index.js"
       },
+      "./Network": {
+        "types": "./lib/Network/index.d.ts",
+        "bun": "./src/Network/index.ts",
+        "worker": "./src/Network/index.ts",
+        "default": "./lib/Network/index.js"
+      },
       "./Role": {
         "types": "./lib/Role/index.d.ts",
         "bun": "./src/Role/index.ts",
@@ -88,6 +103,12 @@
         "bun": "./src/SqlJob/index.ts",
         "worker": "./src/SqlJob/index.ts",
         "default": "./lib/SqlJob/index.js"
+      },
+      "./User": {
+        "types": "./lib/User/index.d.ts",
+        "bun": "./src/User/index.ts",
+        "worker": "./src/User/index.ts",
+        "default": "./lib/User/index.js"
       },
       "./internal": null,
       "./*": {

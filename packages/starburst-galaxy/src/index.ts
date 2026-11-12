@@ -1,5 +1,6 @@
 export * as Auth from "./AuthProvider.ts";
 export * from "./Catalog/index.ts";
+export * from "./CloudAccess/index.ts";
 export * from "./Cluster/index.ts";
 export {
   Credentials,
@@ -10,7 +11,10 @@ export {
 } from "./Credentials.ts";
 export * from "./DataProduct/index.ts";
 export * from "./Governance/index.ts";
+export * from "./LookupOnly.ts";
+export * from "./Network/index.ts";
 export * from "./Providers.ts";
 export * from "./Role/index.ts";
 export * from "./ServiceAccount/index.ts";
 export * from "./SqlJob/index.ts";
+export * from "./User/index.ts";
