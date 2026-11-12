@@ -475,6 +475,8 @@ export type Service = Resource<
  * yield* updateState("awake");
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getReplicaAwareRouting`, `updateReplicaAwareRouting`.
+ *
  * @resource
  * @product Service
  */

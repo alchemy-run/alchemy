@@ -9,6 +9,7 @@
   },
   "type": "module",
   "scripts": {
+    "audit:clickhouse-cloud": "node scripts/audit-clickhouse-cloud.ts",
     "audit:service": "node scripts/audit-service.ts",
     "bench:containers": "cd benchmark/container && bun run bench",
     "build": "pnpm -r --filter \"{./packages/*}...\" run build:package && pnpm --filter ./website build && tsrs -b && bun lint:providers",

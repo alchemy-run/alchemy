@@ -51,6 +51,8 @@ export interface GetPostgresServiceMetricsRequest {
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getPostgresServiceMetrics`.
+ *
  * @binding
  * @product Postgres
  */

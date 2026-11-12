@@ -43,6 +43,8 @@ import type { Service } from "../Service/Service.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `discoverClickPipeSchema`.
+ *
  * @binding
  * @product ClickPipes
  */

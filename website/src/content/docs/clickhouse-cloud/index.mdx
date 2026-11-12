@@ -90,6 +90,13 @@ Bindings call the Cloud API from any runtime with the host's own key:
 
 ClickHouse Cloud trusts no OIDC issuer, so each binding gives its host a role scoped to the bound object, and an API key that holds only that role. See [Credentials & bindings](/clickhouse-cloud/credentials).
 
+:::note[Beta endpoints]
+ClickHouse marks part of the Cloud API Beta: the contract is stable and no breaking changes are expected. These call Beta endpoints, and each one's reference entry names them:
+
+- Resources: `Backup.BackupBucket`, `Snapshot.SnapshotConfiguration`, `Service.ClickHouseSetting`, `Service.JwtProvider`, `Organization.PreviewFeature`, `Organization.ByocInfrastructure`, `Notifications.MemberNotificationSetting`, `ClickPipes.WorkloadIdentity`, every `ClickStack` resource, `Postgres.Service`, and `Service.Service` when it sets replica-aware routing.
+- Bindings: `Billing.GetCreditBalances`, `Notifications.ListNotifications` and `ListNotificationTypes`, `Organization.ListOrganizationQuotas` and `GetOrganizationQuota`, `ClickPipes.DiscoverClickPipeSchema`, the ClickStack alert bindings, the Snapshot bindings, the Postgres bindings except `Connect`, and the Postgres Prometheus bindings.
+:::
+
 ## Out of scope
 
 - Deprecated create fields: `tier`, `minTotalMemoryGb`, `maxTotalMemoryGb` and create-time `privateEndpointIds` on a service, an API key's legacy `roles`, and the organization's `privateEndpoints` patch. Use the replica memory and replica count props, `assignedRoleIds`, and `Service.PrivateEndpoint`.

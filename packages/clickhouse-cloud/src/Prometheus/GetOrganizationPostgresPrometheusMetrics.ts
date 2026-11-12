@@ -33,6 +33,8 @@ import type { Organization } from "../Organization/Organization.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getOrganizationPostgresPrometheusMetrics`.
+ *
  * @binding
  * @product Prometheus
  */

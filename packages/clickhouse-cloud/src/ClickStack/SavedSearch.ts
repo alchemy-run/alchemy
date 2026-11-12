@@ -57,6 +57,8 @@ export type SavedSearch = Resource<
  * Changing `serviceId` replaces the object.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createClickStackSavedSearch`, `deleteClickStackSavedSearch`, `getClickStackSavedSearch`, `updateClickStackSavedSearch`.
+ *
  * @resource
  * @product ClickStack
  */

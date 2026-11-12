@@ -73,6 +73,8 @@ export type Source = Resource<
  * Changing `serviceId` or the source `kind` replaces the object.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createClickStackSource`, `deleteClickStackSource`, `getClickStackSource`, `updateClickStackSource`.
+ *
  * @resource
  * @product ClickStack
  */

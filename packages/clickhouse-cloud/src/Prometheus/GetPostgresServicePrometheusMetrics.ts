@@ -38,6 +38,8 @@ import type { Service as PostgresService } from "../Postgres/Service.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getPostgresServicePrometheusMetrics`.
+ *
  * @binding
  * @product Prometheus
  */

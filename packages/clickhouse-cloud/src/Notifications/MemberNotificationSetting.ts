@@ -95,6 +95,8 @@ export type MemberNotificationSetting = Resource<
  * back to the defaults.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listMemberNotificationSettings`, `updateMemberNotificationSettings`.
+ *
  * @resource
  * @product Notifications
  */

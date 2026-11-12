@@ -72,6 +72,8 @@ export type PreviewFeature = Resource<
  * });
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listOrganizationPublicPreviews`, `updateOrganizationPublicPreview`.
+ *
  * @resource
  * @product Organization
  */

@@ -252,6 +252,8 @@ export type Service = Resource<
  * its data.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createPostgresService`, `createPostgresServiceReadReplica`, `deletePostgresService`, `getPostgresService`, `getPostgresServiceCaCertificates`, `getPostgresServiceConfig`, `listPostgresServices`, `replacePostgresServiceConfig`, `restorePostgresService`, `updatePostgresService`, `updatePostgresServiceConfig`, `updatePostgresServicePassword`, `updatePostgresServiceState`.
+ *
  * @resource
  * @product Postgres
  */

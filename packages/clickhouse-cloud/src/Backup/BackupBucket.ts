@@ -124,6 +124,8 @@ export type BackupBucket = Resource<
  * Changing `serviceId` or `bucketProvider` replaces the resource.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createBackupBucket`, `deleteBackupBucket`, `getBackupBucket`, `updateBackupBucket`.
+ *
  * @resource
  * @product Backup
  */
