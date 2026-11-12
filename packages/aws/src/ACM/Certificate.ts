@@ -63,7 +63,9 @@ export interface CertificateProps {
    *
    * - `"route53"` — the provider upserts them into Route 53
    *   ({@link hostedZoneId}, or the inferred public zone) and waits for
-   *   issuance.
+   *   issuance. Deleting the certificate removes them again, except a record
+   *   another certificate in the account still uses: ACM gives every
+   *   certificate for a name the same record.
    * - `"external"` — the provider only waits until ACM has computed the
    *   records and returns the certificate `PENDING_VALIDATION` with
    *   `domainValidationOptions` filled in. Publish them yourself — e.g.
@@ -443,15 +445,7 @@ export const CertificateProvider = () =>
         hostedZoneId: string,
         certificate: acm.CertificateDetail,
       ) {
-        // A name and its wildcard (`example.com` + `*.example.com`) share one
-        // validation record. Route 53 rejects a batch that changes the same
-        // record twice, so keep one change per name and type.
-        const records = new Map(
-          (certificate.DomainValidationOptions ?? [])
-            .flatMap((option) => (option.ResourceRecord ? [option.ResourceRecord] : []))
-            .map((record) => [`${record.Name} ${record.Type}`, record] as const),
-        );
-        const changes = [...records.values()].map((record) => ({
+        const changes = dnsValidationRecords(certificate.DomainValidationOptions).map((record) => ({
           Action: "UPSERT" as const,
           ResourceRecordSet: {
             Name: record.Name,
@@ -474,6 +468,95 @@ export const CertificateProvider = () =>
         });
 
         yield* waitForRoute53Change(response.ChangeInfo.Id);
+      });
+
+      // ACM gives every certificate for a name in an account the same
+      // validation record, so a replacement's new certificate, or another
+      // stack's certificate for the same name, may still depend on one this
+      // certificate created. Collect the records other certificates use, in
+      // every region this provider requests certificates in.
+      const validationRecordsInUse = Effect.fn(function* (
+        certificateArn: string,
+        domainNames: string[],
+      ) {
+        const names = new Set(domainNames.map(validatedName));
+        const ambientRegion = yield* Effect.serviceOption(AwsRegion).pipe(
+          Effect.flatMap(
+            Option.match({ onNone: () => Effect.succeed(undefined), onSome: (region) => region }),
+          ),
+        );
+        const regions = [
+          ...new Set(
+            [regionOfCertificateArn(certificateArn), ACM_REGION, ambientRegion].filter(
+              (region): region is string => region !== undefined,
+            ),
+          ),
+        ];
+        const details = yield* Effect.forEach(regions, (region) =>
+          withCertRegion(region)(
+            acm.listCertificates.items({ Includes: { keyTypes: ALL_KEY_TYPES } }).pipe(
+              Stream.filter(
+                (summary) =>
+                  summary.CertificateArn !== undefined &&
+                  summary.CertificateArn !== certificateArn &&
+                  (summary.HasAdditionalSubjectAlternativeNames === true ||
+                    [summary.DomainName, ...(summary.SubjectAlternativeNameSummaries ?? [])].some(
+                      (name) => name !== undefined && names.has(validatedName(name)),
+                    )),
+              ),
+              Stream.mapEffect((summary) => describeCertificate(summary.CertificateArn!), {
+                concurrency: 5,
+              }),
+              Stream.runCollect,
+            ),
+          ),
+        );
+        return new Set(
+          details
+            .flatMap((chunk) => Array.from(chunk))
+            .flatMap((detail) => dnsValidationRecords(detail?.DomainValidationOptions))
+            .map(recordKey),
+        );
+      });
+
+      // Delete one validation record, only while it still holds the value ACM
+      // asked for: a record someone has since repointed isn't ours to remove.
+      const deleteValidationRecord = Effect.fn(function* (
+        hostedZoneId: string,
+        record: acm.ResourceRecord,
+      ) {
+        const listed = yield* route53.listResourceRecordSets({
+          HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+          StartRecordName: record.Name,
+          StartRecordType: record.Type,
+          MaxItems: 1,
+        });
+        const live = listed.ResourceRecordSets?.[0];
+        if (
+          live === undefined ||
+          recordKey(live) !== recordKey(record) ||
+          !live.ResourceRecords?.some(
+            (value) => normalizeDnsName(value.Value) === normalizeDnsName(record.Value),
+          )
+        ) {
+          return;
+        }
+        const changed = yield* route53
+          .changeResourceRecordSets({
+            HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+            ChangeBatch: {
+              Comment: "Alchemy ACM DNS validation cleanup",
+              Changes: [{ Action: "DELETE", ResourceRecordSet: live }],
+            },
+          })
+          .pipe(
+            Effect.map(Option.some),
+            // Deleted between the list and the change, e.g. by a concurrent destroy.
+            Effect.catchTag("InvalidChangeBatch", () => Effect.succeed(Option.none())),
+          );
+        if (Option.isSome(changed)) {
+          yield* waitForRoute53Change(changed.value.ChangeInfo.Id);
+        }
       });
 
       return {
@@ -765,7 +848,14 @@ export const CertificateProvider = () =>
           const finalTags = yield* listCertificateTags(certificateArn);
           return toAttrs(news, certificate, finalTags);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output }) {
+          // Read the validation records while the certificate still exists; a
+          // retried delete falls back to the ones persisted at deploy time.
+          const live = yield* describeCertificate(output.certificateArn);
+          const records = dnsValidationRecords(
+            live?.DomainValidationOptions ?? output.domainValidationOptions,
+          );
+
           yield* withCertRegion(regionOfCertificateArn(output.certificateArn))(
             acm
               .deleteCertificate({
@@ -785,6 +875,32 @@ export const CertificateProvider = () =>
                 Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               ),
           );
+
+          // Remove the validation records reconcile published to Route 53.
+          // With `dnsValidation: "external"` the caller published them, and
+          // owns removing them.
+          if (
+            records.length === 0 ||
+            olds?.dnsValidation === "external" ||
+            (output.validationMethod ?? defaultValidationMethod) !== "DNS"
+          ) {
+            return;
+          }
+          const hostedZoneId =
+            output.hostedZoneId ??
+            olds?.hostedZoneId ??
+            (yield* findPublicHostedZoneId(output.domainName));
+          if (hostedZoneId === undefined) {
+            return;
+          }
+          const inUse = yield* validationRecordsInUse(output.certificateArn, [
+            output.domainName,
+            ...output.subjectAlternativeNames,
+          ]);
+          yield* Effect.forEach(
+            records.filter((record) => !inUse.has(recordKey(record))),
+            (record) => deleteValidationRecord(hostedZoneId, record),
+          ).pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.void));
         }),
       };
     }),
@@ -840,6 +956,39 @@ const withCertRegion =
     );
 
 const normalizeHostedZoneId = (hostedZoneId: string) => hostedZoneId.replace(/^\/hostedzone\//, "");
+
+/** `listCertificates` returns only RSA_2048 certificates unless asked for every key type. */
+const ALL_KEY_TYPES: acm.KeyAlgorithm[] = [
+  "RSA_1024",
+  "RSA_2048",
+  "RSA_3072",
+  "RSA_4096",
+  "EC_prime256v1",
+  "EC_secp384r1",
+  "EC_secp521r1",
+];
+
+const normalizeDnsName = (name: string) => name.toLowerCase().replace(/\.$/, "");
+
+/** A name and its wildcard (`example.com`, `*.example.com`) validate through the same record. */
+const validatedName = (name: string) => normalizeDnsName(name).replace(/^\*\./, "");
+
+const recordKey = (record: { Name: string; Type: string }) =>
+  `${record.Type} ${normalizeDnsName(record.Name)}`;
+
+/**
+ * A certificate's DNS validation records, one per name and type: a name and its
+ * wildcard share one, and Route 53 rejects a batch that changes a record twice.
+ */
+const dnsValidationRecords = (
+  validations: acm.DomainValidation[] | undefined,
+): acm.ResourceRecord[] => [
+  ...new Map(
+    (validations ?? [])
+      .flatMap((option) => (option.ResourceRecord ? [option.ResourceRecord] : []))
+      .map((record) => [recordKey(record), record] as const),
+  ).values(),
+];
 
 const normalizeSanList = (names: string[] | undefined) =>
   [...(names ?? [])].sort((a, b) => a.localeCompare(b));
