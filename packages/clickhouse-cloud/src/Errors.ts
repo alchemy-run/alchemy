@@ -195,3 +195,15 @@ export class PostgresDeletionProtected extends Data.TaggedError(
     );
   }
 }
+
+/** Running a Query API endpoint answered an error status, or a body that is not JSON rows. */
+export class RunQueryApiEndpointFailed extends Data.TaggedError(
+  "ClickHouseCloud.RunQueryApiEndpointFailed",
+)<{
+  readonly status: number;
+  readonly body: string;
+}> {
+  override get message() {
+    return `Running the ClickHouse Cloud Query API endpoint failed (${this.status}): ${this.body}`;
+  }
+}
