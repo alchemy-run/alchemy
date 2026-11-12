@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { type Contact, contactsOf, type Link, linksOf } from "../Contact.ts";
 import {
   changedFields,
@@ -12,6 +13,7 @@ import {
   DATA_DOMAIN_NAME,
   findFirst,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
 } from "../internal.ts";
@@ -273,5 +275,11 @@ export const DataProductProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () => collectAll(galaxy.dataProduct.listDataProducts.items({}), toAttributes),
+    list: () =>
+      collectAll(
+        galaxy.dataProduct.listDataProducts
+          .items({})
+          .pipe(Stream.filter((item) => isGeneratedName(item.name))),
+        toAttributes,
+      ),
   });

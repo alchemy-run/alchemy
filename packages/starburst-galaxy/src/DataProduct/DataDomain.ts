@@ -10,11 +10,12 @@ import * as Stream from "effect/Stream";
 import {
   changedFields,
   collectAll,
+  DATA_DOMAIN_NAME,
   findFirst,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
-  DATA_DOMAIN_NAME,
 } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -239,7 +240,7 @@ export const DataDomainProvider = () =>
     // The account's default domain is not ours to delete.
     list: () =>
       galaxy.dataDomain.listDataDomains.items({}).pipe(
-        Stream.filter((domain) => !domain.isDefault),
+        Stream.filter((domain) => !domain.isDefault && isGeneratedName(domain.name)),
         (domains) => collectAll(domains, toAttributes),
       ),
   });

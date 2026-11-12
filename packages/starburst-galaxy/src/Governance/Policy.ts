@@ -10,12 +10,14 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import {
   changedFields,
   collectAll,
   findFirst,
   GOVERNANCE_NAME,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
 } from "../internal.ts";
@@ -315,5 +317,11 @@ export const PolicyProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () => collectAll(galaxy.policy.listPolicies.items({}), toAttributes),
+    list: () =>
+      collectAll(
+        galaxy.policy.listPolicies
+          .items({})
+          .pipe(Stream.filter((item) => isGeneratedName(item.name))),
+        toAttributes,
+      ),
   });

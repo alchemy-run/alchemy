@@ -5,10 +5,10 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 const withNeon = Test.make({
@@ -78,6 +78,12 @@ test.provider(
       );
       expect(rotated.catalogId).toBe(catalogId);
 
+      // Nuke's `list` reports a catalog under its generated name.
+      const provider = yield* Provider.findProvider(StarburstGalaxy.PostgresqlCatalog);
+      expect((yield* provider.list()).some((catalog) => catalog.catalogId === catalogId)).toBe(
+        true,
+      );
+
       // A rename keeps the catalog id.
       const named = yield* stack.deploy(
         StarburstGalaxy.PostgresqlCatalog("Pg", {
@@ -92,12 +98,11 @@ test.provider(
       expect(renamedLive.readOnly).toBe(false);
       expect(renamedLive.description ?? "").toBe("");
 
-      // `lookup` finds it by name; `list` reports it.
-      const provider = yield* Provider.findProvider(StarburstGalaxy.PostgresqlCatalog);
-      const found = yield* provider.lookup!({ name: renamed });
-      expect(found?.catalogId).toBe(catalogId);
-      const listed = yield* provider.list();
-      expect(listed.find((catalog) => catalog.catalogId === catalogId)?.name).toBe(renamed);
+      // `lookup` finds it by name; `list` leaves hand-named catalogs to their owners.
+      yield* expectFound(StarburstGalaxy.PostgresqlCatalog.lookup({ name: renamed }), named);
+      expect((yield* provider.list()).some((catalog) => catalog.catalogId === catalogId)).toBe(
+        false,
+      );
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(catalogId));
@@ -108,7 +113,7 @@ test.provider(
   },
 );
 
-withNeon.test.provider.skipIf(!process.env.STARBURST_GALAXY_TEST_NEON)(
+withNeon.test.provider(
   "a catalog over a Neon project passes Galaxy's validation, and a wrong password fails it",
   (stack) =>
     Effect.gen(function* () {
@@ -116,7 +121,8 @@ withNeon.test.provider.skipIf(!process.env.STARBURST_GALAXY_TEST_NEON)(
 
       const app = (password?: Redacted.Redacted<string>) =>
         Effect.gen(function* () {
-          const project = yield* Neon.Project("Project");
+          // The free plan caps history retention at 6 hours.
+          const project = yield* Neon.Project("Project", { historyRetentionSeconds: 21600 });
           return yield* StarburstGalaxy.PostgresqlCatalog("Neon", {
             endpoint: project.origin.host,
             databaseName: project.origin.database,
@@ -131,8 +137,11 @@ withNeon.test.provider.skipIf(!process.env.STARBURST_GALAXY_TEST_NEON)(
       });
       expect(validation.validationSuccessful).toBe(true);
 
-      const wrong = yield* stack.deploy(app(secret("wrong-password"))).pipe(Effect.exit);
-      expect(Exit.isFailure(wrong)).toBe(true);
+      const wrong = yield* stack.deploy(app(secret("wrong-password"))).pipe(Effect.flip);
+      expect(wrong).toBeInstanceOf(StarburstGalaxy.CatalogValidationFailed);
+      expect(
+        wrong instanceof StarburstGalaxy.CatalogValidationFailed && wrong.errors.length,
+      ).toBeGreaterThan(0);
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(catalog.catalogId));

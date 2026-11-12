@@ -6,11 +6,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import {
-  BUILT_IN_ROLES,
   changedFields,
   collectAll,
   findFirst,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
   ROLE_NAME,
@@ -226,7 +226,7 @@ export const RoleProvider = () =>
     // Galaxy's built-in roles exist in every account and cannot be deleted.
     list: () =>
       galaxy.role.listRoles.items({}).pipe(
-        Stream.filter((role) => !BUILT_IN_ROLES[role.roleName]),
+        Stream.filter((role) => isGeneratedName(role.roleName)),
         (roles) => collectAll(roles, toAttributes),
       ),
   });

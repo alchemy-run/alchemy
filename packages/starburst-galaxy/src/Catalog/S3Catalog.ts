@@ -13,10 +13,10 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** Galaxy's own metastore: Galaxy keeps the table metadata. */
 export interface S3GalaxyMetastore {
@@ -291,26 +291,62 @@ export const S3CatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listS3Catalogs.items({}),
-      toCreate: (name, props) =>
-        ({
+      toCreate: (name, props): CreateS3CatalogRequest => {
+        const fields = {
           ...commonSettingsOf(name, props),
-          ...metastoreSettingsOf(props.metastore),
-          ...secretsOf(props),
-          metastoreType: props.metastore.type,
+          secretKey: props.secretKey,
           validate: props.validate ?? true,
-        }) as CreateS3CatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+        };
+        const metastore = props.metastore;
+        switch (metastore.type) {
+          case "galaxy":
+            return {
+              ...fields,
+              metastoreType: "galaxy",
+              defaultBucket: metastore.defaultBucket,
+              defaultDataLocation: metastore.defaultDataLocation,
+            };
+          case "glue":
+            return {
+              ...fields,
+              metastoreType: "glue",
+              region: metastore.region,
+              defaultBucket: metastore.defaultBucket,
+              defaultDataLocation: metastore.defaultDataLocation,
+              glueRoleArn: metastore.glueRoleArn,
+              glueAccessKey: metastore.glueAccessKey,
+              glueSecretKey: metastore.glueSecretKey,
+            };
+          case "hive":
+            return {
+              ...fields,
+              metastoreType: "hive",
+              hiveMetastoreHost: metastore.host,
+              hiveMetastorePort: metastore.port,
+              sshTunnelId: metastore.sshTunnelId,
+            };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): S3CatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
           { ...commonSettingsOf(name, props), ...metastoreSettingsOf(props.metastore) },
         );
         if (!hasChanges(delta) && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(withSecrets ? secretsOf(props) : {}),
-          metastoreType: props.metastore.type,
           validate: props.validate ?? true,
-        } as S3CatalogPatch;
+        };
+        // The metastore type never changes in place (it replaces), so the patch uses the current one.
+        switch (props.metastore.type) {
+          case "galaxy":
+            return { ...fields, metastoreType: "galaxy" };
+          case "glue":
+            return { ...fields, metastoreType: "glue" };
+          case "hive":
+            return { ...fields, metastoreType: "hive" };
+        }
       },
       toAttributes,
       secretsChanged: (olds, news) =>

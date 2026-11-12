@@ -13,10 +13,10 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** An internal user and password (OpenSearch fine-grained access control). */
 export interface OpenSearchBasicAuth {
@@ -171,7 +171,6 @@ const settingsOf = (name: string, props: OpenSearchCatalogProps) => ({
   endpoint: props.endpoint,
   port: props.port,
   sshTunnelId: props.sshTunnelId,
-  ...authSettingsOf(props.auth),
 });
 
 export const OpenSearchCatalogProvider = () =>
@@ -196,25 +195,49 @@ export const OpenSearchCatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listOpenSearchCatalogs.items({}),
-      toCreate: (name, props) =>
-        ({
-          ...settingsOf(name, props),
-          ...secretsOf(props.auth),
-          authType: props.auth.type,
-          validate: props.validate ?? true,
-        }) as CreateOpenSearchCatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+      toCreate: (name, props): CreateOpenSearchCatalogRequest => {
+        const fields = { ...settingsOf(name, props), validate: props.validate ?? true };
+        const auth = props.auth;
+        switch (auth.type) {
+          case "basic":
+            return {
+              ...fields,
+              authType: "basic",
+              username: auth.username,
+              password: auth.password,
+            };
+          case "accessKey":
+            return {
+              ...fields,
+              authType: "accessKey",
+              accessKey: auth.accessKey,
+              secretKey: auth.secretKey,
+              region: auth.region,
+            };
+          case "role":
+            return { ...fields, authType: "role", roleArn: auth.roleArn, region: auth.region };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): OpenSearchCatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
-          settingsOf(name, props),
+          { ...settingsOf(name, props), ...authSettingsOf(props.auth) },
         );
         if (!hasChanges(delta) && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(withSecrets ? secretsOf(props.auth) : {}),
-          authType: props.auth.type,
           validate: props.validate ?? true,
-        } as OpenSearchCatalogPatch;
+        };
+        // The auth type never changes in place (it replaces), so the patch uses the current one.
+        switch (props.auth.type) {
+          case "basic":
+            return { ...fields, authType: "basic" };
+          case "accessKey":
+            return { ...fields, authType: "accessKey" };
+          case "role":
+            return { ...fields, authType: "role" };
+        }
       },
       toAttributes: (shape: OpenSearchCatalogShape): OpenSearchCatalogAttributes => ({
         catalogId: shape.catalogId,

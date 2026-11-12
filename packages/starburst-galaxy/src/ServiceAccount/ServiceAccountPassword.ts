@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { isGeneratedName } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ServiceAccountPasswordProps {
@@ -206,6 +207,7 @@ export const ServiceAccountPasswordProvider = () =>
     // A listed password's secret is no longer returned by Galaxy.
     list: () =>
       galaxy.serviceAccount.listServiceAccounts.items({}).pipe(
+        Stream.filter((account) => isGeneratedName(account.userName.split("@")[0])),
         Stream.flatMap((account) =>
           Stream.fromIterable(
             account.passwords.map((password): ServiceAccountPasswordAttributes => ({

@@ -9,6 +9,7 @@ import {
   changedFields,
   findFirst,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
   SQL_JOB_NAME,
@@ -240,6 +241,7 @@ export const SqlJobProvider = () =>
     // Listed jobs lack their cluster and queries: read each in full.
     list: () =>
       galaxy.sqlJobs.listSqlJobs.items({}).pipe(
+        Stream.filter((listed) => isGeneratedName(listed.name)),
         Stream.mapEffect((listed) => getJob(listed.sqlJobId)),
         Stream.filter((job): job is SqlJobShape => job !== undefined),
         Stream.map(toAttributes),

@@ -5,9 +5,11 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import {
   collectAll,
   findFirst,
+  isGeneratedName,
   ownership,
   physicalName,
   sameIds,
@@ -239,5 +241,11 @@ export const ServiceAccountProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () => collectAll(galaxy.serviceAccount.listServiceAccounts.items({}), toAttributes),
+    list: () =>
+      collectAll(
+        galaxy.serviceAccount.listServiceAccounts
+          .items({})
+          .pipe(Stream.filter((item) => isGeneratedName(nameOf(item.userName)))),
+        toAttributes,
+      ),
   });

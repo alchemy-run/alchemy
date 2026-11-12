@@ -5,7 +5,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { collectAll, findFirst, GOVERNANCE_NAME, ownership, physicalName } from "../internal.ts";
+import * as Stream from "effect/Stream";
+import {
+  collectAll,
+  findFirst,
+  GOVERNANCE_NAME,
+  isGeneratedName,
+  ownership,
+  physicalName,
+} from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CrossAccountIamRoleProps {
@@ -172,5 +180,10 @@ export const CrossAccountIamRoleProvider = () =>
     }),
 
     list: () =>
-      collectAll(galaxy.crossAccountIamRole.listCrossAccountIamRoles.items({}), toAttributes),
+      collectAll(
+        galaxy.crossAccountIamRole.listCrossAccountIamRoles
+          .items({})
+          .pipe(Stream.filter((item) => isGeneratedName(item.aliasName))),
+        toAttributes,
+      ),
   });

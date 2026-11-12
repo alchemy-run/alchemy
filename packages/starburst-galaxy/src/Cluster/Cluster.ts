@@ -7,15 +7,17 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import {
   changedFields,
+  CLUSTER_NAME,
   collectAll,
   findFirst,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
   sameIds,
-  CLUSTER_NAME,
 } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -556,5 +558,11 @@ export const ClusterProvider = () =>
       }
     }),
 
-    list: () => collectAll(galaxy.cluster.listClusters.items({ extended: true }), toAttributes),
+    list: () =>
+      collectAll(
+        galaxy.cluster.listClusters
+          .items({ extended: true })
+          .pipe(Stream.filter((item) => isGeneratedName(item.name))),
+        toAttributes,
+      ),
   });

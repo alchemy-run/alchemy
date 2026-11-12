@@ -7,8 +7,15 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type * as Stream from "effect/Stream";
-import { CATALOG_NAME, collectAll, findFirst, ownership, physicalName } from "../internal.ts";
+import * as Stream from "effect/Stream";
+import {
+  CATALOG_NAME,
+  collectAll,
+  findFirst,
+  isGeneratedName,
+  ownership,
+  physicalName,
+} from "../internal.ts";
 
 /**
  * The plain value of an optional secret prop, for comparing the deployed
@@ -19,6 +26,14 @@ export const secretValue = (secret: Redacted.Redacted<string> | undefined) =>
 
 /** The cloud a database runs in, for Galaxy's network routing. */
 export type CloudKind = "AWS" | "AZURE" | "GCP";
+
+/** Find a catalog this stack doesn't manage by its name. */
+export interface CatalogLookup {
+  /** Catalog name (unique across every kind in the account). */
+  readonly name: string;
+}
+
+const CATALOG_STABLES: Array<"catalogId"> = ["catalogId"];
 
 /** Props every Galaxy catalog kind accepts. */
 export interface CatalogBaseProps {
@@ -224,7 +239,7 @@ export const catalogLifecycle = <
   });
 
   return {
-    stables: ["catalogId"] as Array<"catalogId">,
+    stables: CATALOG_STABLES,
 
     diff: Effect.fn(function* ({
       news,
@@ -241,8 +256,6 @@ export const catalogLifecycle = <
         const deleteFirst = news.name !== undefined && news.name === (output?.name ?? olds.name);
         return { action: "replace", deleteFirst } as const;
       }
-      // Secrets are `Redacted`, so the engine's own comparison cannot see them change.
-      if (def.secretsChanged(olds, news)) return { action: "update" } as const;
       return undefined;
     }),
 
@@ -322,6 +335,10 @@ export const catalogLifecycle = <
       yield* def.delete(output.catalogId);
     }),
 
-    list: () => collectAll(def.list, def.toAttributes),
+    list: () =>
+      collectAll(
+        def.list.pipe(Stream.filter((shape) => isGeneratedName(shape.name))),
+        def.toAttributes,
+      ),
   };
 };

@@ -13,11 +13,11 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   type CloudKind,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** Galaxy connects to the MongoDB hosts directly over the internet. */
 export interface MongoDBDirectConnection {
@@ -182,7 +182,6 @@ const settingsOf = (name: string, props: MongoDBCatalogProps) => ({
   dnsSeedListEnabled: props.dnsSeedListEnabled,
   tlsEnabled: props.tlsEnabled,
   federatedDatabaseEnabled: props.federatedDatabaseEnabled,
-  ...connectionSettingsOf(props.connection),
 });
 
 export const MongoDBCatalogProvider = () =>
@@ -207,28 +206,54 @@ export const MongoDBCatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listMongoDBCatalogs.items({}),
-      toCreate: (name, props) =>
-        ({
+      toCreate: (name, props): CreateMongoDBCatalogRequest => {
+        const fields = {
           ...settingsOf(name, props),
-          connectionType: props.connection.type,
           regions: [...props.regions],
           password: props.password,
           validate: props.validate ?? true,
-        }) as CreateMongoDBCatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+        };
+        const connection = props.connection;
+        switch (connection.type) {
+          case "direct":
+            return { ...fields, connectionType: "direct", hosts: connection.hosts };
+          case "sshTunnel":
+            return {
+              ...fields,
+              connectionType: "sshTunnel",
+              sshTunnelId: connection.sshTunnelId,
+              hosts: connection.hosts,
+            };
+          case "privateLink":
+            return {
+              ...fields,
+              connectionType: "privateLink",
+              privateLinkId: connection.privateLinkId,
+            };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): MongoDBCatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
-          settingsOf(name, props),
+          { ...settingsOf(name, props), ...connectionSettingsOf(props.connection) },
         );
         const regionsChanged = !sameIds(observed.regions, props.regions);
         if (!hasChanges(delta) && !regionsChanged && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(regionsChanged ? { regions: [...props.regions] } : {}),
           ...(withSecrets ? { password: props.password } : {}),
-          connectionType: props.connection.type,
           validate: props.validate ?? true,
-        } as MongoDBCatalogPatch;
+        };
+        // The connection type never changes in place (it replaces), so the patch uses the current one.
+        switch (props.connection.type) {
+          case "direct":
+            return { ...fields, connectionType: "direct" };
+          case "sshTunnel":
+            return { ...fields, connectionType: "sshTunnel" };
+          case "privateLink":
+            return { ...fields, connectionType: "privateLink" };
+        }
       },
       toAttributes: (shape: MongoDBCatalogShape): MongoDBCatalogAttributes => ({
         catalogId: shape.catalogId,
