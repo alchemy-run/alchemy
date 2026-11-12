@@ -18,6 +18,10 @@ import {
 } from "./Organization/ByocInfrastructure.ts";
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
+import {
+  QueryApiEndpoint,
+  QueryApiEndpointProvider,
+} from "./QueryApiEndpoints/QueryApiEndpoint.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
 import { SavedQuery, SavedQueryProvider } from "./SavedQueries/SavedQuery.ts";
 import { ClickHouseSetting, ClickHouseSettingProvider } from "./Service/ClickHouseSetting.ts";
@@ -68,6 +72,7 @@ export const providers = () =>
       Organization,
       PreviewFeature,
       PrivateEndpoint,
+      QueryApiEndpoint,
       QueryEndpoint,
       Role,
       SavedQuery,
@@ -91,6 +96,7 @@ export const providers = () =>
         OrganizationProvider(),
         PreviewFeatureProvider(),
         PrivateEndpointProvider(),
+        QueryApiEndpointProvider(),
         QueryEndpointProvider(),
         RoleProvider(),
         SavedQueryProvider(),

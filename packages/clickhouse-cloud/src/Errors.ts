@@ -134,6 +134,17 @@ export class ByocValidationFailed extends Data.TaggedError("ClickHouseCloud.Byoc
   }
 }
 
+/** A Query API endpoint whose query belongs to a console user, which the API refuses to change. */
+export class QueryApiEndpointUserOwned extends Data.TaggedError(
+  "ClickHouseCloud.QueryApiEndpointUserOwned",
+)<{
+  readonly endpointId: string;
+}> {
+  override get message() {
+    return `ClickHouse Cloud Query API endpoint ${this.endpointId} runs a query owned by a console user; the API cannot update or delete it`;
+  }
+}
+
 /** A long-running object (UDF build, attachment, ClickPipe, reverse private endpoint) ended in a failed state. */
 export class OperationFailed extends Data.TaggedError("ClickHouseCloud.OperationFailed")<{
   readonly kind: string;

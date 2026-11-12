@@ -34,6 +34,7 @@
     "./Notifications": "./src/Notifications/index.ts",
     "./Organization": "./src/Organization/index.ts",
     "./Prometheus": "./src/Prometheus/index.ts",
+    "./QueryApiEndpoints": "./src/QueryApiEndpoints/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
     "./SavedQueries": "./src/SavedQueries/index.ts",
     "./Service": "./src/Service/index.ts",
@@ -79,6 +80,12 @@
         "bun": "./src/Prometheus/index.ts",
         "worker": "./src/Prometheus/index.ts",
         "default": "./lib/Prometheus/index.js"
+      },
+      "./QueryApiEndpoints": {
+        "types": "./lib/QueryApiEndpoints/index.d.ts",
+        "bun": "./src/QueryApiEndpoints/index.ts",
+        "worker": "./src/QueryApiEndpoints/index.ts",
+        "default": "./lib/QueryApiEndpoints/index.js"
       },
       "./RoleManagement": {
         "types": "./lib/RoleManagement/index.d.ts",
