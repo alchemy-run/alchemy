@@ -31,6 +31,8 @@ const bank = (depth: number) =>
     source: new URL("../src/Bank.model.ts", import.meta.url),
     apis: [CustomerApi, SupportApi],
     depth,
+    // FraudReview reacts to a view, which the explorer does not follow yet.
+    allow: { skipped: ["FraudReview"] },
   });
 
 it.effect(
@@ -73,9 +75,9 @@ it.effect(
         report.endings.find((ending) => ending.ending === "waits for decision")?.story,
       ).toHaveLength(1);
       // The bank's own invariants hold after every one of those sequences.
-      expect(report.rules).toEqual([
-        { name: "TransfersLoseNoMoney", broken: undefined },
-        { name: "NoTransferLeftPending", broken: undefined },
+      expect(report.rules.map((rule) => [rule.name, rule.broken])).toEqual([
+        ["TransfersLoseNoMoney", undefined],
+        ["NoTransferLeftPending", undefined],
       ]);
       expect(report.failures).toEqual([]);
       expect(report.unsettled).toBe(0);

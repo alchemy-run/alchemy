@@ -303,8 +303,25 @@ export const invariantNames = (definition: Definition): ReadonlyArray<string> =>
     : [];
 };
 
-/** The object passed to `Domain.Aggregate(name, { ... })` in a file. */
-export const find = (program: Node, name: string): Node | undefined => {
+/** The invariants a class has that the definition read from its file does not declare. */
+export const unread = (
+  definition: Definition,
+  invariants: { readonly [name: string]: unknown } | undefined,
+): ReadonlyArray<string> => {
+  const read = new Set(invariantNames(definition));
+  return Object.keys(invariants ?? {}).filter((name) => !read.has(name));
+};
+
+/**
+ * The object passed to `Domain.Aggregate(name, { ... })` or
+ * `Domain.Model(name, { ... })` in a file: the one with the property `key`,
+ * which an event or a command of the same name does not have.
+ */
+export const find = (
+  program: Node,
+  name: string,
+  key: "decide" | "aggregates",
+): Node | undefined => {
   const visit = (node: unknown): Node | undefined => {
     if (Array.isArray(node)) {
       for (const item of node) {
@@ -319,7 +336,10 @@ export const find = (program: Node, name: string): Node | undefined => {
       n.type === "CallExpression" &&
       n.arguments?.[0]?.type === "Literal" &&
       n.arguments[0].value === name &&
-      n.arguments[1]?.type === "ObjectExpression"
+      n.arguments[1]?.type === "ObjectExpression" &&
+      (n.arguments[1].properties as ReadonlyArray<Node>).some(
+        (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === key,
+      )
     )
       return n.arguments[1] as Node;
     for (const [key, value] of Object.entries(n)) {
@@ -354,20 +374,25 @@ export const load = (
               ),
             );
     const loader = yield* Source.loader;
+    loader.adopt(aggregate);
     const module = yield* loader.load(file);
-    const node = find(module.program, aggregate.aggregateName);
+    const node = find(module.program, aggregate.aggregateName, "decide");
     if (!node)
       return yield* new Source.LoadError({
         file,
         message: `${file} does not declare the aggregate ${aggregate.aggregateName}`,
       });
-    return {
-      loader,
-      definition: {
-        module,
-        node,
-        name: aggregate.aggregateName,
-        state: aggregate.definition.state,
-      },
+    const definition: Definition = {
+      module,
+      node,
+      name: aggregate.aggregateName,
+      state: aggregate.definition.state,
     };
+    const missed = unread(definition, aggregate.definition.invariants);
+    if (missed.length > 0)
+      return yield* new Source.LoadError({
+        file,
+        message: `${file} declares ${aggregate.aggregateName} without its invariants ${missed.join(", ")}: each must be written in its definition, as a property`,
+      });
+    return { loader, definition };
   });

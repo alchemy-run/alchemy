@@ -60,7 +60,14 @@ export interface Found {
      * then holds after any number of commands, not only the ones run here.
      */
     readonly proved: boolean;
+    /** The states reached in which it was looked at. */
+    readonly states: number;
   }>;
+  /**
+   * The commands no state the invariants allow accepts: they never record an
+   * event, so nothing said here is about them.
+   */
+  readonly dead: ReadonlyArray<string>;
   readonly outcomes: ReadonlyArray<Outcome>;
   readonly reached: ReadonlyArray<{ readonly tag: string; readonly story: Story | undefined }>;
   /** Code the explorer could not read: sequences through it were not run. */
@@ -186,7 +193,7 @@ export const search = Effect.fn(function* (
   const rows = yield* Induction.rows(solver, interpreter, aggregate, definition);
   const kept = new Map<string, ReadonlySet<string>>(
     Schema.is(definition.state as Schema.Schema<unknown>)(aggregate.definition.initial) &&
-      rows.every((row) => row.fits)
+      Induction.closed(rows)
       ? rows.map((row) => [
           row.command,
           new Set(
@@ -198,6 +205,7 @@ export const search = Effect.fn(function* (
       : [],
   );
   let states = 0;
+  const looked = new Map<string, number>();
   const undecided = new Map<string, number>();
   const gaveUp = (reason: string) => undecided.set(reason, (undecided.get(reason) ?? 0) + 1);
 
@@ -378,7 +386,10 @@ export const search = Effect.fn(function* (
         if (Result.isFailure(check.condition)) {
           const error = check.condition.failure;
           unread.set(`${error.file}:${error.line}`, error);
-        } else if (
+          continue;
+        }
+        looked.set(check.name, (looked.get(check.name) ?? 0) + 1);
+        if (
           check.condition.success !== "true" &&
           !kept.get(last.command.tag)?.has(check.name) &&
           shorter(broken.get(check.name), trail.length)
@@ -509,7 +520,9 @@ export const search = Effect.fn(function* (
       name,
       broken: story,
       proved: !story && commands.every((command) => kept.get(command.tag)?.has(name) === true),
+      states: looked.get(name) ?? 0,
     })),
+    dead: rows.flatMap((row) => (row.accepted === false ? [row.command] : [])),
     outcomes: [...outcomes.values()],
     reached: [...reached].map(([tag, story]) => ({ tag, story })),
     unread: [...unread.values()],

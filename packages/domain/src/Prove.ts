@@ -12,6 +12,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
 import type { Verdict } from "./Prove/internal/Check.ts";
 import * as Induction from "./Prove/internal/Induction.ts";
@@ -39,6 +40,25 @@ export class InvariantsNotProved extends Data.TaggedError("InvariantsNotProved")
 
 export interface Report {
   readonly aggregate: string;
+  /** Whether the aggregate's initial state is one its state's schema allows. */
+  readonly initial: boolean;
+  readonly commands: ReadonlyArray<{
+    readonly command: string;
+    /** The paths through the command that were checked. */
+    readonly paths: number;
+    /**
+     * Whether every state the command leaves is one the state's schema allows.
+     * Each proof starts from a state in the schema, so the proofs follow one
+     * another only when every command keeps the state there.
+     */
+    readonly schema: Verdict;
+    /**
+     * Whether some state lets the command record an event. `false` when none
+     * does: the command is proved to keep every invariant only because it
+     * never does anything. `undefined` when the prover could not tell.
+     */
+    readonly accepted: boolean | undefined;
+  }>;
   readonly invariants: ReadonlyArray<{
     readonly name: string;
     /** Whether the invariant holds on the aggregate's initial state. */
@@ -57,7 +77,7 @@ export interface Report {
 const ASSUMPTIONS = [
   "numbers are exact: integers stay within ±2^53",
   "an event or rejection whose fields fail its schema crashes the command, and nothing is committed",
-  "a command's state satisfies every invariant, and its schema as far as the prover reads it (types, integers, bounds)",
+  "of the state's schema, the prover reads types, integers and bounds: a check of another kind is not proved kept",
 ];
 
 /**
@@ -91,6 +111,13 @@ export const report = (
     const initial = aggregate.definition.initial;
     const made: Report = {
       aggregate: aggregate.aggregateName,
+      initial: Schema.is(aggregate.definition.state)(initial),
+      commands: rows.map((row) => ({
+        command: row.command,
+        paths: row.paths,
+        schema: row.fits,
+        accepted: row.accepted,
+      })),
       invariants: yield* Effect.forEach(names, (name) =>
         Effect.try({
           try: () => real[name]?.(initial) === true,
@@ -117,8 +144,18 @@ export const report = (
     ),
   );
 
-/** Whether a report proves every invariant for every command. */
+/** Whether every command keeps the state in its schema: the proofs then follow one another. */
+const closed = (report: Report): boolean =>
+  report.initial && report.commands.every((c) => c.schema._tag === "Proved");
+
+/**
+ * Whether a report proves every invariant for every command: each command
+ * keeps the state in its schema and keeps every invariant, and each can
+ * record an event from some state.
+ */
 export const proved = (report: Report): boolean =>
+  closed(report) &&
+  report.commands.every((c) => c.accepted !== false) &&
   report.invariants.every(
     (invariant) =>
       invariant.initial && invariant.commands.every((c) => c.verdict._tag === "Proved"),
@@ -183,23 +220,50 @@ const LABEL = {
 /** A report as text, one invariant after another. */
 export const render = (report: Report): string => {
   const lines: Array<string> = [
-    `${report.aggregate}: ${report.invariants.length} invariants, ${report.invariants[0]?.commands.length ?? 0} commands`,
+    `${report.aggregate}: ${report.invariants.length} invariants, ${report.commands.length} commands`,
     "",
   ];
-  for (const invariant of report.invariants) {
-    const failed = invariant.commands.filter((c) => c.verdict._tag !== "Proved");
-    const ok = invariant.initial && failed.length === 0;
-    lines.push(`${ok ? "✓" : "✗"} ${invariant.name}`);
-    lines.push(`    ${invariant.initial ? "✓ holds" : "✗ does not hold"} on the initial state`);
-    const passed = invariant.commands.filter((c) => c.verdict._tag === "Proved");
+  const section = (
+    title: string,
+    initial: boolean,
+    commands: ReadonlyArray<{ readonly command: string; readonly verdict: Verdict }>,
+    notes: ReadonlyArray<string>,
+  ) => {
+    const failed = commands.filter((c) => c.verdict._tag !== "Proved");
+    const ok = initial && failed.length === 0 && notes.length === 0;
+    lines.push(`${ok ? "✓" : "✗"} ${title}`);
+    lines.push(`    ${initial ? "✓ holds" : "✗ does not hold"} on the initial state`);
+    const passed = commands.filter((c) => c.verdict._tag === "Proved");
     if (passed.length > 0)
       lines.push(`    ✓ proved for ${passed.map((c) => c.command).join(", ")}`);
     for (const row of failed) {
       lines.push(`    ✗ ${row.command}: ${LABEL[row.verdict._tag]}`);
       for (const line of detail(row.verdict)) lines.push(`        ${line}`);
     }
-    lines.push("");
-  }
+    lines.push(...notes.map((note) => `    ✗ ${note}`), "");
+  };
+  const leaving = report.commands.filter((c) => c.schema._tag !== "Proved").map((c) => c.command);
+  section(
+    "The state stays in its schema",
+    report.initial,
+    report.commands.map((c) => ({ command: c.command, verdict: c.schema })),
+    [],
+  );
+  // A proof starts from a state in the schema: it says nothing after a command that leaves it.
+  const open = closed(report)
+    ? []
+    : [
+        leaving.length > 0
+          ? `proved only from a state in the schema, which ${leaving.join(", ")} may leave`
+          : "proved only from a state in the schema, and the initial state is not in it",
+      ];
+  for (const invariant of report.invariants)
+    section(invariant.name, invariant.initial, invariant.commands, open);
+  for (const c of report.commands.filter((c) => c.accepted === false))
+    lines.push(
+      `✗ ${c.command} is never accepted: no state the invariants allow lets it record an event`,
+      "",
+    );
   lines.push("Assuming:", ...report.assumptions.map((a) => `  - ${a}`));
   return lines.join("\n");
 };

@@ -46,6 +46,11 @@ export interface Options {
    * @default 100000
    */
   readonly budget?: number;
+  /** What `check` passes with, though it leaves part of the search undone. */
+  readonly allow?: {
+    /** Pass when the search stops at its budget before every sequence is run. */
+    readonly truncated?: boolean;
+  };
 }
 
 export interface ModelOptions {
@@ -69,6 +74,13 @@ export interface ModelOptions {
    * @default 2
    */
   readonly instances?: number;
+  /** What `check` passes with, though it leaves part of the search undone. */
+  readonly allow?: {
+    /** Pass when the search stops at its budget before every sequence is run. */
+    readonly truncated?: boolean;
+    /** The policies and sagas the explorer may leave out, by name. */
+    readonly skipped?: ReadonlyArray<string>;
+  };
 }
 
 /** The explorer could not start: a file did not load, or the solver is missing. */
@@ -77,6 +89,16 @@ export class ExploreError extends Data.TaggedError("ExploreError")<{ readonly me
 /** A sequence of commands breaks an invariant. The message is the report. */
 export class InvariantBroken extends Data.TaggedError("InvariantBroken")<{
   readonly message: string;
+  readonly report: Report | ModelReport;
+}> {}
+
+/**
+ * No invariant was seen to break, but part of the search was not done, so the
+ * search does not say that none does. `reasons` names each part.
+ */
+export class Incomplete extends Data.TaggedError("Incomplete")<{
+  readonly message: string;
+  readonly reasons: ReadonlyArray<string>;
   readonly report: Report | ModelReport;
 }> {}
 
@@ -158,10 +180,15 @@ const reportModel = (
     const loader = yield* Source.loader;
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
+    loader.adopt(model);
     const located = yield* ModelSearch.locate(loader, interpreter, model, file);
     if (located.missing.length > 0)
       return yield* new ExploreError({
         message: `${file} does not import the file that declares ${located.missing.join(", ")}`,
+      });
+    if (located.unread.length > 0)
+      return yield* new ExploreError({
+        message: `the explorer does not find the invariants ${located.unread.join(", ")} in the source: each must be written in its definition, as a property`,
       });
     const depth = options.depth ?? 2;
     const found = yield* ModelSearch.search(
@@ -211,6 +238,10 @@ const reportAggregate = (
  * Explore an aggregate, and fail with the report when a sequence of commands
  * breaks an invariant.
  *
+ * It also fails, with `Incomplete`, when part of the search was not done:
+ * code it could not read, a search that stopped at its budget, a command no
+ * state accepts, no state reached at all.
+ *
  * **Example:** In a test
  * ```typescript
  * it.effect("no three commands break an account", () =>
@@ -223,10 +254,15 @@ const reportAggregate = (
 export function check(
   aggregate: Aggregate.Any,
   options: Options,
-): Effect.Effect<Report, ExploreError | InvariantBroken, Requirements>;
+): Effect.Effect<Report, ExploreError | InvariantBroken | Incomplete, Requirements>;
 /**
  * Explore a model, and fail with the report when a sequence of commands
- * breaks an invariant of one of its aggregates.
+ * breaks an invariant of one of its aggregates or of the model.
+ *
+ * It also fails, with `Incomplete`, when part of the search was not done:
+ * code it could not read, a policy it left out, a search that stopped at its
+ * budget, an invariant no sequence reached. `allow` names the parts a pass
+ * may leave undone.
  *
  * **Example:** In a test
  * ```typescript
@@ -241,23 +277,106 @@ export function check(
 export function check(
   model: Model.Any,
   options: ModelOptions,
-): Effect.Effect<ModelReport, ExploreError | InvariantBroken, Requirements>;
+): Effect.Effect<ModelReport, ExploreError | InvariantBroken | Incomplete, Requirements>;
 export function check(
   target: Aggregate.Any | Model.Any,
   options: Options | ModelOptions,
-): Effect.Effect<Report | ModelReport, ExploreError | InvariantBroken, Requirements> {
+): Effect.Effect<Report | ModelReport, ExploreError | InvariantBroken | Incomplete, Requirements> {
   const made: Effect.Effect<Report | ModelReport, ExploreError, Requirements> = isModel(target)
     ? reportModel(target, options as ModelOptions)
     : reportAggregate(target, options);
   return made.pipe(
-    Effect.flatMap((made) =>
-      made.invariants.some((invariant) => invariant.broken) ||
-      ("rules" in made && made.rules.some((rule) => rule.broken))
-        ? Effect.fail(new InvariantBroken({ message: `\n${render(made)}`, report: made }))
-        : Effect.succeed(made),
-    ),
+    Effect.flatMap((made): Effect.Effect<Report | ModelReport, InvariantBroken | Incomplete> => {
+      if (
+        made.invariants.some((invariant) => invariant.broken) ||
+        ("rules" in made && made.rules.some((rule) => rule.broken))
+      )
+        return Effect.fail(new InvariantBroken({ message: `\n${render(made)}`, report: made }));
+      const reasons = undone(made, options.allow ?? {});
+      return reasons.length > 0
+        ? Effect.fail(
+            new Incomplete({
+              message: `\nNo invariant was seen to break, but the search was not whole:\n${reasons
+                .map((reason) => `  ✗ ${reason}`)
+                .join("\n")}\n\n${render(made)}`,
+              reasons,
+              report: made,
+            }),
+          )
+        : Effect.succeed(made);
+    }),
   );
 }
+
+/** Each part of a search that was not done, so that a pass would say less than it seems to. */
+const undone = (
+  report: Report | ModelReport,
+  allow: NonNullable<ModelOptions["allow"]>,
+): ReadonlyArray<string> => {
+  const out: Array<string> = [];
+  if (report.unread.length > 0)
+    out.push(
+      `the explorer could not read ${report.unread
+        .map((error) => `${error.file}:${error.line}`)
+        .join(", ")}: the sequences through it were not run`,
+    );
+  if (report.disagreements.length > 0)
+    out.push(
+      `the real code disagrees with what the explorer read in ${count(report.disagreements.length)} sequences`,
+    );
+  if (report.undecided.length > 0)
+    out.push(
+      `the solver gave up on ${count(report.undecided.reduce((sum, entry) => sum + entry.times, 0))} questions`,
+    );
+  if (report.dead.length > 0)
+    out.push(
+      `${report.dead.join(", ")} ${report.dead.length === 1 ? "is" : "are"} never accepted: no state the invariants allow lets ${report.dead.length === 1 ? "it" : "them"} record an event`,
+    );
+  if (report.truncated && allow.truncated !== true)
+    out.push(
+      `the search stopped at its budget: only every sequence of up to ${report.complete} commands was run (allow: { truncated: true } passes with this)`,
+    );
+  if ("model" in report) {
+    const left = [...new Set(report.skipped.map((skipped) => skipped.policy))].filter(
+      (name) => !(allow.skipped ?? []).includes(name),
+    );
+    if (left.length > 0)
+      out.push(
+        `${left.join(", ")} ${left.length === 1 ? "was" : "were"} not followed: the sequences ran as if ${left.length === 1 ? "it" : "they"} did nothing (allow: { skipped: [${left.map((name) => JSON.stringify(name)).join(", ")}] } passes with this)`,
+      );
+    if (report.unsettled > 0)
+      out.push(
+        `${count(report.unsettled)} sequences were still reacting after the most the explorer follows`,
+      );
+  }
+  const name = (invariant: { readonly aggregate?: string; readonly name: string }) =>
+    invariant.aggregate === undefined ? invariant.name : `${invariant.aggregate}.${invariant.name}`;
+  if (report.states === 0) out.push("no sequence recorded an event, so no state was looked at");
+  else {
+    const unseen = report.invariants.filter(
+      (invariant) => !invariant.proved && invariant.states === 0,
+    );
+    if (unseen.length > 0)
+      out.push(
+        `${unseen.map(name).join(", ")} ${unseen.length === 1 ? "was" : "were"} not looked at in any state: no sequence changed ${unseen.length === 1 ? "its aggregate" : "their aggregates"}`,
+      );
+    if ("model" in report) {
+      const unruled = report.rules.filter((rule) => rule.states === 0);
+      if (unruled.length > 0)
+        out.push(
+          `${unruled.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unruled.length === 1 ? "was" : "were"} not looked at: no sequence that changed a state came to rest`,
+        );
+    }
+  }
+  return out;
+};
+
+const held = (name: string, invariant: { readonly proved: boolean; readonly states: number }) =>
+  invariant.proved
+    ? `✓ ${name} holds in every state: no command can break it`
+    : invariant.states > 0
+      ? `✓ ${name} holds in the ${count(invariant.states)} states reached`
+      : `? ${name} was not looked at: no state was reached`;
 
 const tagOf = (value: unknown): string => String((value as { readonly _tag?: unknown })._tag);
 
@@ -334,11 +453,7 @@ const renderModel = (report: ModelReport): string => {
   for (const invariant of report.invariants) {
     const name = `${invariant.aggregate}.${invariant.name}`;
     if (!invariant.broken) {
-      out.push(
-        invariant.proved
-          ? `✓ ${name} holds in every state: no command can break it`
-          : `✓ ${name} holds in every state reached`,
-      );
+      out.push(held(name, invariant));
       continue;
     }
     const last = invariant.broken[invariant.broken.length - 1];
@@ -353,7 +468,9 @@ const renderModel = (report: ModelReport): string => {
   for (const rule of report.rules) {
     if (!rule.broken) {
       out.push(
-        `✓ ${report.model}.${rule.name} holds whenever nothing is left to react, in every sequence run`,
+        rule.states > 0
+          ? `✓ ${report.model}.${rule.name} holds whenever nothing is left to react, in the ${count(rule.states)} sequences that came to rest`
+          : `? ${report.model}.${rule.name} was not looked at: no sequence that changed a state came to rest`,
       );
       continue;
     }
@@ -422,6 +539,7 @@ const renderModel = (report: ModelReport): string => {
       "The solver gave up",
       ...report.undecided.map((entry) => `  ${count(entry.times)} times: ${entry.reason}`),
     );
+  if (report.dead.length > 0) out.push("", `Never accepted: ${report.dead.join(", ")}`);
   return out.join("\n");
 };
 
@@ -439,11 +557,7 @@ export const render = (report: Report | ModelReport): string => {
   ];
   for (const invariant of report.invariants) {
     if (!invariant.broken) {
-      out.push(
-        invariant.proved
-          ? `✓ ${invariant.name} holds in every state: no command can break it`
-          : `✓ ${invariant.name} holds in every state reached`,
-      );
+      out.push(held(invariant.name, invariant));
       continue;
     }
     const last = invariant.broken[invariant.broken.length - 1];
@@ -496,5 +610,6 @@ export const render = (report: Report | ModelReport): string => {
       "The solver gave up",
       ...report.undecided.map((entry) => `  ${count(entry.times)} times: ${entry.reason}`),
     );
+  if (report.dead.length > 0) out.push("", `Never accepted: ${report.dead.join(", ")}`);
   return out.join("\n");
 };

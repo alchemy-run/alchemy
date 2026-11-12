@@ -13,7 +13,49 @@ export class LoadError extends Data.TaggedError("LoadError")<{
 export interface Loader {
   /** A source file, parsed and loaded. Each file is read once. */
   readonly load: (file: string) => Effect.Effect<Module, LoadError>;
+  /**
+   * Name the domain classes the caller holds: a model or an aggregate, and
+   * every class it lists. A test runner may load a source file a second time,
+   * as classes that are not the caller's. Where a loaded file exports one of
+   * those, the loader gives the caller's class in its place.
+   */
+  readonly adopt: (root: unknown) => void;
 }
+
+/** What a domain class is and its name: two loads of one file give classes that agree on it. */
+const identityOf = (value: unknown): string | undefined => {
+  if (typeof value !== "function") return undefined;
+  const cls = value as unknown as Readonly<Record<string, unknown>>;
+  for (const key of ["modelName", "aggregateName", "policyName", "sagaName", "viewName", "tag"])
+    if (typeof cls[key] === "string") return `${key} ${cls[key]}`;
+  return undefined;
+};
+
+const isPlain = (value: unknown): value is Readonly<Record<string, unknown>> => {
+  if (typeof value !== "object" || value === null) return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null || Array.isArray(value);
+};
+
+/** The domain classes a class lists, each with where it is listed. */
+const listed = (root: unknown): ReadonlyArray<readonly [string, unknown]> => {
+  const made: Array<readonly [string, unknown]> = [];
+  const visit = (value: unknown, at: string, depth: number): void => {
+    if (identityOf(value) !== undefined) made.push([at, value]);
+    else if (depth < 4 && isPlain(value))
+      for (const [key, field] of Object.entries(value)) visit(field, `${at}.${key}`, depth + 1);
+  };
+  // `class Bank extends Domain.Model(...)` has its fields on the class it extends.
+  const fields = new Map<string, unknown>();
+  for (
+    let cls: unknown = root;
+    typeof cls === "function" && cls !== Function.prototype;
+    cls = Object.getPrototypeOf(cls)
+  )
+    for (const [key, field] of Object.entries(cls)) if (!fields.has(key)) fields.set(key, field);
+  for (const [key, field] of fields) visit(field, key, 0);
+  return made;
+};
 
 const lineStartsOf = (source: string): ReadonlyArray<number> => {
   const starts = [0];
@@ -65,6 +107,40 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
         }),
     });
     const loaded = new Map<string, Module>();
+    /** The caller's classes by what they are, and the classes of a second load they stand for. */
+    const ours = new Map<string, Set<unknown>>();
+    const twins = new Map<unknown, unknown>();
+
+    const adopt: Loader["adopt"] = (root) => {
+      const seen = new Set<unknown>();
+      const visit = (value: unknown): void => {
+        const identity = identityOf(value);
+        if (identity === undefined || seen.has(value)) return;
+        seen.add(value);
+        ours.set(identity, (ours.get(identity) ?? new Set()).add(value));
+        for (const [, child] of listed(value)) visit(child);
+      };
+      visit(root);
+    };
+
+    /** Pair a class of a second load with the caller's, and the classes each lists in the same place. */
+    const pair = (theirs: unknown, mine: unknown): void => {
+      if (theirs === mine || twins.has(theirs) || identityOf(theirs) !== identityOf(mine)) return;
+      twins.set(theirs, mine);
+      const places = new Map(listed(mine));
+      for (const [at, child] of listed(theirs)) pair(child, places.get(at));
+    };
+
+    /** The caller's class a loaded value stands for, or the value. */
+    const canonical = (value: unknown): unknown => {
+      const identity = identityOf(value);
+      if (identity === undefined) return value;
+      const known = ours.get(identity);
+      if (known?.has(value)) return value;
+      // Two classes may share a tag: only a name one class carries says which one this is.
+      if (!twins.has(value) && known?.size === 1) pair(value, [...known][0]);
+      return twins.get(value) ?? value;
+    };
 
     const resolve = Effect.fn(function* (from: string, specifier: string) {
       const base = path.resolve(path.dirname(from), specifier);
@@ -91,10 +167,12 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
           message: `cannot parse: ${parsed.errors[0]!.message}`,
         });
       const url = yield* path.toFileUrl(file).pipe(Effect.mapError(failed("not a file path")));
-      const exports = yield* Effect.tryPromise({
+      const namespace = yield* Effect.tryPromise({
         try: () => import(url.href) as Promise<Record<string, unknown>>,
         catch: failed("cannot load"),
       });
+      const exports: Record<string, unknown> = {};
+      for (const [name, value] of Object.entries(namespace)) exports[name] = canonical(value);
       const program = parsed.program as unknown as Node;
       const declarations = new Map<string, Declaration>();
       const imports = new Map<string, Import>();
@@ -156,5 +234,5 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
       return module;
     });
 
-    return { load };
+    return { load, adopt };
   });

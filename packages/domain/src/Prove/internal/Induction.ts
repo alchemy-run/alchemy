@@ -19,8 +19,18 @@ export interface Row {
    * The proofs assume it of the state a command meets, so they follow one
    * another only when every command keeps it.
    */
-  readonly fits: boolean;
+  readonly fits: Verdict;
+  /**
+   * Whether some state the invariants allow lets the command record an event:
+   * `false` when none does, so the proofs say nothing about it, and
+   * `undefined` when the prover could not tell.
+   */
+  readonly accepted: boolean | undefined;
 }
+
+/** Whether every command keeps the state in its schema, so that the proofs follow one another. */
+export const closed = (rows: ReadonlyArray<Row>): boolean =>
+  rows.every((row) => row.fits._tag === "Proved");
 
 const RANK = { Proved: 0, Unknown: 1, NotTranslated: 2, Unconfirmed: 3, Violated: 4 } as const;
 
@@ -53,13 +63,19 @@ export const rows = Effect.fn(function* (
     const all = (verdict: Verdict) => {
       for (const name of names) verdicts.set(name, worse(verdicts.get(name)!, verdict));
     };
-    let fits = true;
+    let fits: Verdict = { _tag: "Proved" };
+    let accepted: boolean | undefined = false;
     let paths = 0;
     let prefix: ReadonlyArray<number> | undefined = [];
     while (prefix) {
       if (++paths > MAX_PATHS) {
-        all({ _tag: "Unknown", reason: `${command.tag} has more than ${MAX_PATHS} paths` });
-        fits = false;
+        const many: Verdict = {
+          _tag: "Unknown",
+          reason: `${command.tag} has more than ${MAX_PATHS} paths`,
+        };
+        all(many);
+        fits = worse(fits, many);
+        accepted ||= undefined;
         break;
       }
       const taken = yield* Paths.path(interpreter, definition, command, prefix);
@@ -68,6 +84,8 @@ export const rows = Effect.fn(function* (
       if (outcome._tag === "Stopped") {
         const unread = notRead(outcome.error);
         all(unread);
+        fits = worse(fits, unread);
+        accepted ||= undefined;
       }
       if (outcome._tag !== "Changed" || !taken.inputs) continue;
       for (const check of outcome.checks) {
@@ -76,19 +94,31 @@ export const rows = Effect.fn(function* (
           : yield* Check.check(
               solver,
               aggregate,
-              check.name,
+              Check.invariant(aggregate, check.name),
               taken.run,
               taken.inputs,
               check.condition.success,
             );
         verdicts.set(check.name, worse(verdicts.get(check.name)!, verdict));
       }
-      if (fits && outcome.fits !== "true")
-        fits =
-          outcome.fits !== "false" &&
-          (yield* Check.solve(solver, taken.run, outcome.fits))._tag === "Unsat";
+      fits = worse(
+        fits,
+        yield* Check.check(
+          solver,
+          aggregate,
+          Check.schema(aggregate),
+          taken.run,
+          taken.inputs,
+          outcome.fits,
+        ),
+      );
+      if (accepted !== true) {
+        // Any inputs at all that take this path: the command can record an event.
+        const taking = yield* Check.solve(solver, taken.run, "false");
+        accepted = taking._tag === "Sat" ? true : taking._tag === "Unknown" ? undefined : accepted;
+      }
     }
-    made.push({ command: command.tag, paths, verdicts, fits });
+    made.push({ command: command.tag, paths, verdicts, fits, accepted });
   }
   return made;
 });

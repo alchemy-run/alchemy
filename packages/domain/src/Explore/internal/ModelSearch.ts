@@ -72,12 +72,24 @@ export interface Found {
     readonly name: string;
     readonly broken: Story | undefined;
     readonly proved: boolean;
+    /** The states reached in which it was looked at. */
+    readonly states: number;
   }>;
   /**
    * The model's own invariants, looked at whenever a sequence has nothing left
-   * to react: `broken` is the shortest sequence found that breaks one.
+   * to react: `broken` is the shortest sequence found that breaks one, and
+   * `states` is how many times one was looked at.
    */
-  readonly rules: ReadonlyArray<{ readonly name: string; readonly broken: Story | undefined }>;
+  readonly rules: ReadonlyArray<{
+    readonly name: string;
+    readonly broken: Story | undefined;
+    readonly states: number;
+  }>;
+  /**
+   * The commands no state the invariants allow accepts: they never record an
+   * event, so nothing said here is about them.
+   */
+  readonly dead: ReadonlyArray<string>;
   readonly outcomes: ReadonlyArray<Outcome>;
   readonly reached: ReadonlyArray<{
     readonly aggregate: string;
@@ -325,11 +337,12 @@ export const locate = Effect.fn(function* (
 
   const aggregates: Array<Agg> = [];
   const missing: Array<string> = [];
+  const unread: Array<string> = [];
   for (const cls of model.definitions.aggregates) {
     const module = modules.find(
       (m) =>
         Object.values(m.exports).includes(cls) &&
-        Paths.find(m.program, cls.aggregateName) !== undefined,
+        Paths.find(m.program, cls.aggregateName, "decide") !== undefined,
     );
     if (!module) {
       missing.push(cls.aggregateName);
@@ -337,10 +350,15 @@ export const locate = Effect.fn(function* (
     }
     const definition: Paths.Definition = {
       module,
-      node: Paths.find(module.program, cls.aggregateName)!,
+      node: Paths.find(module.program, cls.aggregateName, "decide")!,
       name: cls.aggregateName,
       state: cls.definition.state,
     };
+    unread.push(
+      ...Paths.unread(definition, cls.definition.invariants).map(
+        (name) => `${cls.aggregateName}.${name}`,
+      ),
+    );
     aggregates.push({
       cls,
       name: cls.aggregateName,
@@ -423,21 +441,27 @@ export const locate = Effect.fn(function* (
   // The model's own invariants, where its file declares them.
   const home = modules.find(
     (m) =>
-      Paths.find(m.program, model.modelName) !== undefined &&
+      Paths.find(m.program, model.modelName, "aggregates") !== undefined &&
       Object.values(m.exports).includes(model),
   );
   const declared: Paths.Definition | undefined = home && {
     module: home,
-    node: Paths.find(home.program, model.modelName)!,
+    node: Paths.find(home.program, model.modelName, "aggregates")!,
     name: model.modelName,
     state: undefined,
   };
+  unread.push(
+    ...(declared
+      ? Paths.unread(declared, model.invariants)
+      : Object.keys(model.invariants ?? {})
+    ).map((name) => `${model.modelName}.${name}`),
+  );
   const rules = {
     definition: declared,
     names: declared ? Paths.invariantNames(declared) : [],
     real: (model.invariants ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
   };
-  return { aggregates, missing, policies, sagas, skipped, rules };
+  return { aggregates, missing, unread, policies, sagas, skipped, rules };
 });
 
 export type Located = Effect.Success<ReturnType<typeof locate>>;
@@ -466,13 +490,15 @@ export const search = Effect.fn(function* (
    * The invariants each command keeps whatever state it meets. A policy's
    * command is one of them, so the proofs cover what policies send too.
    */
+  const dead: Array<string> = [];
   const kept = new Map<string, ReadonlySet<string>>();
   for (const agg of aggs) {
     if (agg.invariants.length === 0) continue;
     const rows = yield* Induction.rows(solver, interpreter, agg.cls, agg.definition);
+    for (const row of rows) if (row.accepted === false) dead.push(`${agg.name}.${row.command}`);
     if (!Schema.is(agg.definition.state as Schema.Schema<unknown>)(agg.cls.definition.initial))
       continue;
-    if (!rows.every((row) => row.fits)) continue;
+    if (!Induction.closed(rows)) continue;
     for (const row of rows)
       kept.set(
         `${agg.name}.${row.command}`,
@@ -540,6 +566,8 @@ export const search = Effect.fn(function* (
     const undecided = new Map<string, number>();
     const gaveUp = (reason: string) => undecided.set(reason, (undecided.get(reason) ?? 0) + 1);
     let states = 0;
+    const looked = new Map<string, number>();
+    const look = (name: string) => looked.set(name, (looked.get(name) ?? 0) + 1);
     let unsettled = 0;
     let sequences = 0;
     let truncated = false;
@@ -1551,7 +1579,10 @@ export const search = Effect.fn(function* (
           if (Result.isFailure(check.condition)) {
             const error = check.condition.failure;
             unread.set(`${error.file}:${error.line}`, error);
-          } else if (
+            continue;
+          }
+          look(`${entry.agg.name}.${check.name}`);
+          if (
             check.condition.success !== "true" &&
             !kept.get(`${entry.agg.name}.${entry.command.tag}`)?.has(check.name) &&
             shorter(broken.get(`${entry.agg.name}.${check.name}`)?.story, at + 1)
@@ -1564,7 +1595,10 @@ export const search = Effect.fn(function* (
         if (Result.isFailure(check.condition)) {
           const error = check.condition.failure;
           unread.set(`${error.file}:${error.line}`, error);
-        } else if (
+          continue;
+        }
+        look(` ${check.name}`);
+        if (
           check.condition.success !== "true" &&
           shorter(ruled.get(check.name), played.trail.length)
         ) {
@@ -1766,8 +1800,14 @@ export const search = Effect.fn(function* (
             .commands.every(
               (command) => kept.get(`${entry.aggregate}.${command.tag}`)?.has(entry.name) === true,
             ),
+        states: looked.get(`${entry.aggregate}.${entry.name}`) ?? 0,
       })),
-      rules: [...ruled].map(([name, story]) => ({ name, broken: story })),
+      dead,
+      rules: [...ruled].map(([name, story]) => ({
+        name,
+        broken: story,
+        states: looked.get(` ${name}`) ?? 0,
+      })),
       outcomes: [...outcomes.values()],
       reached: [...reached.values()],
       followed: [...followed],

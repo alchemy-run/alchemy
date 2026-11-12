@@ -121,10 +121,32 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
 const attempt = <A>(what: string, evaluate: () => A): Effect.Effect<A, Verdict> =>
   Effect.try({ try: evaluate, catch: (cause) => unconfirmed(`${what}: ${String(cause)}`) });
 
-/** Build the counterexample as real values, and run the real `decide`, `evolve` and invariant on it. */
+/** Something a command must keep true of the state it leaves. */
+export interface Kept {
+  /** How a sentence names it: an invariant's name, or `the state's schema`. */
+  readonly what: string;
+  readonly holds: (state: unknown) => boolean;
+}
+
+/** The invariant of an aggregate with this name, as something a command must keep. */
+export const invariant = (aggregate: Aggregate.Any, name: string): Kept => ({
+  what: name,
+  holds: (state) =>
+    (aggregate.definition.invariants as unknown as Record<string, (state: unknown) => boolean>)[
+      name
+    ]!(state),
+});
+
+/** That the state is one the aggregate's schema allows, as something a command must keep. */
+export const schema = (aggregate: Aggregate.Any): Kept => ({
+  what: "the state's schema",
+  holds: Schema.is(aggregate.definition.state),
+});
+
+/** Build the counterexample as real values, and run the real `decide`, `evolve` and check on it. */
 const replay = Effect.fn(function* (
   aggregate: Aggregate.Any,
-  invariant: string,
+  kept: Kept,
   run: Run,
   inputs: Inputs,
   model: Model,
@@ -188,12 +210,10 @@ const replay = Effect.fn(function* (
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code fails on it: ${Cause.pretty(prediction.cause)}`,
     );
-  const holds = yield* attempt(`${invariant} threw`, () =>
-    invariants[invariant]!(prediction.state),
-  );
+  const holds = yield* attempt(`${kept.what} threw`, () => kept.holds(prediction.state));
   if (holds)
     return unconfirmed(
-      `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code keeps ${invariant} on it`,
+      `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code keeps ${kept.what} on it`,
     );
   const verdict: Verdict = {
     _tag: "Violated",
@@ -210,13 +230,14 @@ const replay = Effect.fn(function* (
 });
 
 /**
- * Whether an invariant can be false at the end of one path. A counterexample
- * counts only when the real code, run on it, breaks the invariant too.
+ * Whether an invariant, or the state's schema, can be false at the end of one
+ * path. A counterexample counts only when the real code, run on it, breaks it
+ * too.
  */
 export const check = (
   solver: Smt.Solver,
   aggregate: Aggregate.Any,
-  invariant: string,
+  kept: Kept,
   run: Run,
   inputs: Inputs,
   condition: string,
@@ -229,7 +250,7 @@ export const check = (
             ? Effect.succeed({ _tag: "Proved" })
             : answer._tag === "Unknown"
               ? Effect.succeed({ _tag: "Unknown", reason: answer.reason })
-              : replay(aggregate, invariant, run, inputs, answer.model).pipe(
+              : replay(aggregate, kept, run, inputs, answer.model).pipe(
                   Effect.catch((verdict) => Effect.succeed(verdict)),
                 ),
         ),
