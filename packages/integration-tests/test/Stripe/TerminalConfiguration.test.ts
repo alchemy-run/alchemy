@@ -9,6 +9,7 @@ import {
 } from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectFound } from "./lookup.ts";
@@ -172,6 +173,47 @@ test.provider(
 
       const after = yield* provider.list();
       expect(after.find((configuration) => configuration.id === deployed.id)).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:terminalconfiguration", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "set, change, and clear the reader admin menu passcode",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (readerSecurity: Stripe.TerminalReaderSecurity | null | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.TerminalConfiguration("SecureReaders", {
+              ...(readerSecurity !== undefined ? { readerSecurity } : {}),
+            });
+          }),
+        );
+
+      const created = yield* deploy({ adminMenuPasscode: Redacted.make("24680") });
+      expect(created.readerSecurity).toBeDefined();
+      expect(Redacted.value(created.readerSecurity!.adminMenuPasscode)).toEqual("24680");
+
+      const fetched = yield* GetTerminalConfiguration({ configuration: created.id });
+      expect(
+        "reader_security" in fetched ? fetched.reader_security?.admin_menu_passcode : undefined,
+      ).toEqual("24680");
+
+      const changed = yield* deploy({ adminMenuPasscode: "13579" });
+      expect(changed.id).toEqual(created.id);
+      expect(Redacted.value(changed.readerSecurity!.adminMenuPasscode)).toEqual("13579");
+
+      const cleared = yield* deploy(null);
+      expect(cleared.readerSecurity).toBeUndefined();
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:terminalconfiguration", "live"],
