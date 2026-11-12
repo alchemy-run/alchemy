@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/planetscale",
-  "version": "2.0.0-beta.86",
+  "version": "2.0.0-beta.87",
   "description": "PlanetScale MySQL and Postgres databases for Alchemy.",
   "keywords": [
     "alchemy",
