@@ -207,6 +207,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       );
       await connect(handle.address);
       let address = handle.address;
+      let socketPath = handle.socketPath;
       let proxySharedSecret = handle.proxySharedSecret;
 
       const bindWebSocket = () => {
@@ -215,6 +216,17 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           ? handleWebSocket(server.httpServer, address, proxySharedSecret)
           : undefined;
       };
+
+      const forward: vite.Connect.NextHandleFunction = (req, res, next) =>
+        forwardWorkerRequest(
+          req,
+          res,
+          workerRequestUrl(req.originalUrl ?? req.url, address),
+          socketPath,
+          proxySharedSecret,
+          server.config.logger,
+          next,
+        );
 
       /**
        * Replaces the Worker runtime so it is regenerated for `exportTypes`.
@@ -234,6 +246,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
         );
         await connect(handle.address);
         address = handle.address;
+        socketPath = handle.socketPath;
         proxySharedSecret = handle.proxySharedSecret;
         bindWebSocket();
       };
@@ -309,8 +322,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           ) {
             return next();
           }
-          const url = workerRequestUrl(req.originalUrl ?? req.url, address);
-          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger, next);
+          forward(req, res, next);
         });
       }
 
@@ -319,8 +331,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           // The Worker's own `ASSETS` calls run through Vite's middleware;
           // one Vite didn't serve must not come back to the Worker.
           if (VITE_ASSET_REQUEST in req) return next();
-          const url = workerRequestUrl(req.originalUrl ?? req.url, address);
-          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger, next);
+          forward(req, res, next);
         });
         if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
           // Move the proxy middleware from the end of the stack to directly
