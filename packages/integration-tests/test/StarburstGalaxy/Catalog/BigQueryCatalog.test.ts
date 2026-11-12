@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { expectGone, serviceAccountKey } from "../helpers.ts";
+import { expectGone, freshStack, serviceAccountKey } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -20,12 +20,12 @@ test.provider(
   "create, point at another project, rotate the key of, and delete a BigQuery catalog",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       // A well-formed key for an account that does not exist: Galaxy stores
       // it without checking when `validate` is off.
       const created = yield* stack.deploy(
-        StarburstGalaxy.BigQueryCatalog("Warehouse", {
+        StarburstGalaxy.Catalog.BigQueryCatalog("Warehouse", {
           credentialsKey: serviceAccountKey("v1"),
           validate: false,
         }),
@@ -36,7 +36,7 @@ test.provider(
       expect(live.projectId).toBeUndefined();
 
       const pointed = yield* stack.deploy(
-        StarburstGalaxy.BigQueryCatalog("Warehouse", {
+        StarburstGalaxy.Catalog.BigQueryCatalog("Warehouse", {
           credentialsKey: serviceAccountKey("v2"),
           projectId: "bigquery-public-data",
           parentProjectId: "alchemy-test-billing",
@@ -53,9 +53,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

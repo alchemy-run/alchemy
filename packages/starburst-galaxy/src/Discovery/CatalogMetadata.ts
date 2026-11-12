@@ -30,7 +30,7 @@ export interface CatalogMetadataAttributes {
 }
 
 export type CatalogMetadata = Resource<
-  "StarburstGalaxy.CatalogMetadata",
+  "StarburstGalaxy.Discovery.CatalogMetadata",
   CatalogMetadataProps,
   CatalogMetadataAttributes,
   never,
@@ -50,9 +50,9 @@ export type CatalogMetadata = Resource<
  * ### Naming a catalog's contacts
  * **Example:** The data owner of an orders catalog
  * ```typescript
- * const owner = StarburstGalaxy.User.lookup({ email: "ada@example.com" });
- * const shop = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "shop" });
- * yield* StarburstGalaxy.CatalogMetadata("ShopContacts", {
+ * const owner = StarburstGalaxy.User.User.lookup({ email: "ada@example.com" });
+ * const shop = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "shop" });
+ * yield* StarburstGalaxy.Discovery.CatalogMetadata("ShopContacts", {
  *   catalogId: shop.catalogId,
  *   contacts: [{ userId: owner.userId, email: owner.email }],
  * });
@@ -61,7 +61,9 @@ export type CatalogMetadata = Resource<
  * @resource
  * @product Discovery
  */
-export const CatalogMetadata = Resource<CatalogMetadata>("StarburstGalaxy.CatalogMetadata");
+export const CatalogMetadata = Resource<CatalogMetadata>(
+  "StarburstGalaxy.Discovery.CatalogMetadata",
+);
 
 const toAttributes = (metadata: CatalogMetadataShape): CatalogMetadataAttributes => ({
   catalogId: metadata.catalogId,

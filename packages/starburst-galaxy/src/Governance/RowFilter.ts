@@ -51,7 +51,7 @@ export interface RowFilterAttributes {
 }
 
 export type RowFilter = Resource<
-  "StarburstGalaxy.RowFilter",
+  "StarburstGalaxy.Governance.RowFilter",
   RowFilterProps,
   RowFilterAttributes,
   never,
@@ -72,7 +72,7 @@ export type RowFilter = Resource<
  * ### Creating a row filter
  * **Example:** Show only European rows
  * ```typescript
- * const euOnly = yield* StarburstGalaxy.RowFilter("EuOnly", {
+ * const euOnly = yield* StarburstGalaxy.Governance.RowFilter("EuOnly", {
  *   expression: "region = 'EU'",
  *   description: "Rows visible to the EU team",
  * });
@@ -80,7 +80,7 @@ export type RowFilter = Resource<
  *
  * **Example:** Show each user only their own rows
  * ```typescript
- * yield* StarburstGalaxy.RowFilter("OwnRows", {
+ * yield* StarburstGalaxy.Governance.RowFilter("OwnRows", {
  *   expression: "owner_email = current_user",
  * });
  * ```
@@ -88,7 +88,7 @@ export type RowFilter = Resource<
  * @resource
  * @product Data governance
  */
-export const RowFilter = Resource<RowFilter>("StarburstGalaxy.RowFilter");
+export const RowFilter = Resource<RowFilter>("StarburstGalaxy.Governance.RowFilter");
 
 /** Galaxy accepted a row filter create but the filter could not be read back. */
 export class RowFilterNotResolved extends Data.TaggedError("StarburstGalaxy.RowFilterNotResolved")<{

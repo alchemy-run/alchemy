@@ -115,7 +115,7 @@ export interface S3CatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type S3Catalog = Resource<
-  "StarburstGalaxy.S3Catalog",
+  "StarburstGalaxy.Catalog.S3Catalog",
   S3CatalogProps,
   S3CatalogAttributes,
   never,
@@ -141,7 +141,7 @@ export type S3Catalog = Resource<
  * **Example:** Galaxy metastore over a bucket, read through an IAM role
  * ```typescript
  * const lake = yield* AWS.S3.Bucket("Lake", {});
- * const lakehouse = yield* StarburstGalaxy.S3Catalog("Lakehouse", {
+ * const lakehouse = yield* StarburstGalaxy.Catalog.S3Catalog("Lakehouse", {
  *   roleArn: "arn:aws:iam::123456789012:role/galaxy-lake",
  *   metastore: {
  *     type: "galaxy",
@@ -149,7 +149,7 @@ export type S3Catalog = Resource<
  *     defaultDataLocation: "warehouse",
  *   },
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [lakehouse.catalogId],
  * });
@@ -159,7 +159,7 @@ export type S3Catalog = Resource<
  * **Example:** Iceberg tables registered in Glue, with access keys
  * ```typescript
  * const secretKey = yield* Config.Redacted("GALAXY_LAKE_SECRET_KEY");
- * yield* StarburstGalaxy.S3Catalog("Glue", {
+ * yield* StarburstGalaxy.Catalog.S3Catalog("Glue", {
  *   accessKey: "AKIAIOSFODNN7EXAMPLE",
  *   secretKey,
  *   defaultTableFormat: "ICEBERG",
@@ -175,7 +175,7 @@ export type S3Catalog = Resource<
  * ### Using a Hive metastore
  * **Example:** A Hive metastore reached through an SSH tunnel
  * ```typescript
- * yield* StarburstGalaxy.S3Catalog("Hive", {
+ * yield* StarburstGalaxy.Catalog.S3Catalog("Hive", {
  *   roleArn: "arn:aws:iam::123456789012:role/galaxy-lake",
  *   defaultTableFormat: "HIVE",
  *   metastore: { type: "hive", host: "metastore.internal", sshTunnelId: "st-1234567890" },
@@ -185,13 +185,13 @@ export type S3Catalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const lake = StarburstGalaxy.S3Catalog.lookup({ name: "lake" });
+ * const lake = StarburstGalaxy.Catalog.S3Catalog.lookup({ name: "lake" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const S3Catalog = Resource<S3Catalog>("StarburstGalaxy.S3Catalog");
+export const S3Catalog = Resource<S3Catalog>("StarburstGalaxy.Catalog.S3Catalog");
 
 const metastoreOf = (shape: S3CatalogShape): S3CatalogAttributes["metastore"] =>
   shape.metastoreType === "galaxy"

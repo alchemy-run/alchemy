@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -26,11 +26,11 @@ test.provider(
   "create, reconfigure, rotate the password of, rename and delete a SQL Server catalog",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("mssql");
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.SqlServerCatalog("Erp", { ...base, password: secret("mssql-v1") }),
+        StarburstGalaxy.Catalog.SqlServerCatalog("Erp", { ...base, password: secret("mssql-v1") }),
       );
       const catalogId = created.catalogId;
       const live = yield* getCatalog(catalogId);
@@ -39,7 +39,7 @@ test.provider(
       expect(live.databaseName).toBe("erp");
 
       const reconfigured = yield* stack.deploy(
-        StarburstGalaxy.SqlServerCatalog("Erp", {
+        StarburstGalaxy.Catalog.SqlServerCatalog("Erp", {
           ...base,
           password: secret("mssql-v2"),
           databaseName: "erp_v2",
@@ -53,7 +53,7 @@ test.provider(
 
       // A rename keeps the catalog id.
       const named = yield* stack.deploy(
-        StarburstGalaxy.SqlServerCatalog("Erp", {
+        StarburstGalaxy.Catalog.SqlServerCatalog("Erp", {
           ...base,
           name: renamed,
           password: secret("mssql-v2"),
@@ -64,9 +64,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

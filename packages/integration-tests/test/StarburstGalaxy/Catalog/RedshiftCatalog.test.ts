@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -21,10 +21,10 @@ test.provider(
   "create a Redshift catalog with a password, and replace it with an access-key one",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.RedshiftCatalog("Warehouse", {
+        StarburstGalaxy.Catalog.RedshiftCatalog("Warehouse", {
           endpoint,
           auth: { type: "basic", username: "galaxy", password: secret("redshift-v1") },
           validate: false,
@@ -37,7 +37,7 @@ test.provider(
       expect(live.username).toBe("galaxy");
 
       const keyed = yield* stack.deploy(
-        StarburstGalaxy.RedshiftCatalog("Warehouse", {
+        StarburstGalaxy.Catalog.RedshiftCatalog("Warehouse", {
           endpoint,
           auth: {
             type: "accessKey",
@@ -61,9 +61,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(keyed.catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

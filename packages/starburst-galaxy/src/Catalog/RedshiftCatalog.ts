@@ -40,7 +40,7 @@ export interface RedshiftAccessKeyAuth {
   readonly region: string;
 }
 
-/** A cross-account IAM role Galaxy assumes (see `StarburstGalaxy.CrossAccountIamRole`). */
+/** A cross-account IAM role Galaxy assumes (see `StarburstGalaxy.CloudAccess.CrossAccountIamRole`). */
 export interface RedshiftRoleAuth {
   readonly type: "role";
   /** Database user Galaxy connects as. */
@@ -81,7 +81,7 @@ export interface RedshiftCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type RedshiftCatalog = Resource<
-  "StarburstGalaxy.RedshiftCatalog",
+  "StarburstGalaxy.Catalog.RedshiftCatalog",
   RedshiftCatalogProps,
   RedshiftCatalogAttributes,
   never,
@@ -110,11 +110,11 @@ export type RedshiftCatalog = Resource<
  * **Example:** A user and password
  * ```typescript
  * const password = yield* Config.Redacted("REDSHIFT_PASSWORD");
- * const dw = yield* StarburstGalaxy.RedshiftCatalog("Warehouse", {
+ * const dw = yield* StarburstGalaxy.Catalog.RedshiftCatalog("Warehouse", {
  *   endpoint: "analytics.abc123.us-east-1.redshift.amazonaws.com:5439/dev",
  *   auth: { type: "basic", username: "galaxy", password },
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [dw.catalogId],
  * });
@@ -123,7 +123,7 @@ export type RedshiftCatalog = Resource<
  * ### Signing in with an IAM role
  * **Example:** A role registered as a cross-account IAM role
  * ```typescript
- * yield* StarburstGalaxy.RedshiftCatalog("Warehouse", {
+ * yield* StarburstGalaxy.Catalog.RedshiftCatalog("Warehouse", {
  *   endpoint: "analytics.abc123.us-east-1.redshift.amazonaws.com:5439/dev",
  *   auth: {
  *     type: "role",
@@ -137,13 +137,13 @@ export type RedshiftCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const dw = StarburstGalaxy.RedshiftCatalog.lookup({ name: "warehouse" });
+ * const dw = StarburstGalaxy.Catalog.RedshiftCatalog.lookup({ name: "warehouse" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const RedshiftCatalog = Resource<RedshiftCatalog>("StarburstGalaxy.RedshiftCatalog");
+export const RedshiftCatalog = Resource<RedshiftCatalog>("StarburstGalaxy.Catalog.RedshiftCatalog");
 
 /** The auth's non-secret settings, as Galaxy names them. */
 const authSettingsOf = (auth: RedshiftAuth) =>

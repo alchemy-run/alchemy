@@ -45,7 +45,7 @@ export interface RoleGrantAttributes {
 }
 
 export type RoleGrant = Resource<
-  "StarburstGalaxy.RoleGrant",
+  "StarburstGalaxy.Role.RoleGrant",
   RoleGrantProps,
   RoleGrantAttributes,
   never,
@@ -88,9 +88,9 @@ export class RoleGrantRoleNotFound extends Data.TaggedError(
  * ### Granting a role to a role
  * **Example:** Analysts inherit everything the reporting role may do
  * ```typescript
- * const reporting = yield* StarburstGalaxy.Role("Reporting", {});
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RoleGrant("AnalystsReport", {
+ * const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RoleGrant("AnalystsReport", {
  *   role: reporting.roleId,
  *   principal: { type: "Role", roleId: analysts.roleId },
  * });
@@ -99,9 +99,9 @@ export class RoleGrantRoleNotFound extends Data.TaggedError(
  * ### Granting a role to a person
  * **Example:** With the admin option, so they can grant it on
  * ```typescript
- * const lead = StarburstGalaxy.User.lookup({ email: "lead@example.com" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RoleGrant("LeadAnalysts", {
+ * const lead = StarburstGalaxy.User.User.lookup({ email: "lead@example.com" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RoleGrant("LeadAnalysts", {
  *   role: analysts.roleId,
  *   principal: { type: "User", userId: lead.userId },
  *   adminOption: true,
@@ -111,9 +111,9 @@ export class RoleGrantRoleNotFound extends Data.TaggedError(
  * ### Granting a role to a group
  * **Example:** Every member of an identity-provider group
  * ```typescript
- * const finance = StarburstGalaxy.Group.lookup({ name: "finance" });
- * const ledger = yield* StarburstGalaxy.Role("LedgerReaders", {});
- * yield* StarburstGalaxy.RoleGrant("FinanceLedger", {
+ * const finance = StarburstGalaxy.User.Group.lookup({ name: "finance" });
+ * const ledger = yield* StarburstGalaxy.Role.Role("LedgerReaders", {});
+ * yield* StarburstGalaxy.Role.RoleGrant("FinanceLedger", {
  *   role: ledger.roleId,
  *   principal: { type: "Group", groupId: finance.groupId },
  * });
@@ -122,7 +122,7 @@ export class RoleGrantRoleNotFound extends Data.TaggedError(
  * @resource
  * @product Access
  */
-export const RoleGrant = Resource<RoleGrant>("StarburstGalaxy.RoleGrant");
+export const RoleGrant = Resource<RoleGrant>("StarburstGalaxy.Role.RoleGrant");
 
 interface DirectGrant {
   readonly roleId: string;
@@ -213,7 +213,7 @@ export const RoleGrantProvider = () => {
   return Provider.succeed(RoleGrant, {
     stables: ["roleId", "roleName", "principal"],
 
-    nuke: { dependsOn: ["StarburstGalaxy.Role"] },
+    nuke: { dependsOn: ["StarburstGalaxy.Role.Role"] },
 
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;

@@ -63,7 +63,7 @@ export interface DataDomainAttributes {
 }
 
 export type DataDomain = Resource<
-  "StarburstGalaxy.DataDomain",
+  "StarburstGalaxy.DataProduct.DataDomain",
   DataDomainProps,
   DataDomainAttributes,
   never,
@@ -85,8 +85,8 @@ export type DataDomain = Resource<
  * ### Creating a data domain
  * **Example:** A domain owned by a team role
  * ```typescript
- * const finance = yield* StarburstGalaxy.Role("Finance", {});
- * const domain = yield* StarburstGalaxy.DataDomain("Finance", {
+ * const finance = yield* StarburstGalaxy.Role.Role("Finance", {});
+ * const domain = yield* StarburstGalaxy.DataProduct.DataDomain("Finance", {
  *   description: "Revenue, billing and forecasting data products",
  *   owningRole: finance.roleId,
  * });
@@ -94,7 +94,7 @@ export type DataDomain = Resource<
  *
  * **Example:** A domain with a contact
  * ```typescript
- * yield* StarburstGalaxy.DataDomain("Sales", {
+ * yield* StarburstGalaxy.DataProduct.DataDomain("Sales", {
  *   name: "Sales",
  *   contactUserId: "u-1234567890",
  * });
@@ -103,7 +103,7 @@ export type DataDomain = Resource<
  * @resource
  * @product Data products
  */
-export const DataDomain = Resource<DataDomain>("StarburstGalaxy.DataDomain");
+export const DataDomain = Resource<DataDomain>("StarburstGalaxy.DataProduct.DataDomain");
 
 /** Galaxy accepted a data domain create but the domain could not be read back. */
 export class DataDomainNotResolved extends Data.TaggedError(
@@ -151,7 +151,7 @@ export const DataDomainProvider = () =>
 
     nuke: {
       // A domain is owned by a role; delete domains before roles.
-      dependsOn: ["StarburstGalaxy.Role"],
+      dependsOn: ["StarburstGalaxy.Role.Role"],
     },
 
     diff: Effect.fn(function* ({ news, output }) {

@@ -10,8 +10,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import { findFirst, isGeneratedName } from "../internal.ts";
+import { findFirst } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -87,7 +86,7 @@ export interface RolePrivilegeAttributes {
 }
 
 export type RolePrivilege = Resource<
-  "StarburstGalaxy.RolePrivilege",
+  "StarburstGalaxy.Role.RolePrivilege",
   RolePrivilegeProps,
   RolePrivilegeAttributes,
   never,
@@ -110,9 +109,9 @@ export type RolePrivilege = Resource<
  * ### Granting cluster access
  * **Example:** Let a role run queries on a cluster
  * ```typescript
- * const cluster = yield* StarburstGalaxy.Cluster("Analytics", { cloudRegionId: "aws-us-east1" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RolePrivilege("AnalystsUseCluster", {
+ * const cluster = yield* StarburstGalaxy.Cluster.Cluster("Analytics", { cloudRegionId: "aws-us-east1" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RolePrivilege("AnalystsUseCluster", {
  *   role: analysts.roleId,
  *   privilege: "UseCluster",
  *   entity: { kind: "Cluster", clusterId: cluster.clusterId },
@@ -122,9 +121,9 @@ export type RolePrivilege = Resource<
  * ### Granting data access
  * **Example:** Read every table of one schema
  * ```typescript
- * const catalog = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "analytics" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RolePrivilege("AnalystsSelectSales", {
+ * const catalog = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "analytics" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RolePrivilege("AnalystsSelectSales", {
  *   role: analysts.roleId,
  *   privilege: "Select",
  *   entity: { kind: "Table", catalogId: catalog.catalogId, schemaName: "sales", tableName: "*" },
@@ -133,9 +132,9 @@ export type RolePrivilege = Resource<
  *
  * **Example:** Deny one sensitive column
  * ```typescript
- * const catalog = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "analytics" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RolePrivilege("AnalystsNoSsn", {
+ * const catalog = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "analytics" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RolePrivilege("AnalystsNoSsn", {
  *   role: analysts.roleId,
  *   privilege: "Select",
  *   grantKind: "Deny",
@@ -152,8 +151,8 @@ export type RolePrivilege = Resource<
  * ### Granting account privileges
  * **Example:** Let a role create catalogs
  * ```typescript
- * const engineers = yield* StarburstGalaxy.Role("Engineers", {});
- * yield* StarburstGalaxy.RolePrivilege("EngineersCreateCatalog", {
+ * const engineers = yield* StarburstGalaxy.Role.Role("Engineers", {});
+ * yield* StarburstGalaxy.Role.RolePrivilege("EngineersCreateCatalog", {
  *   role: engineers.roleId,
  *   privilege: "CreateCatalog",
  *   entity: { kind: "Account", entityId: "a-1234567890" },
@@ -163,7 +162,7 @@ export type RolePrivilege = Resource<
  * @resource
  * @product Access control
  */
-export const RolePrivilege = Resource<RolePrivilege>("StarburstGalaxy.RolePrivilege");
+export const RolePrivilege = Resource<RolePrivilege>("StarburstGalaxy.Role.RolePrivilege");
 
 /** The grant tuple as Galaxy names it. */
 const tupleOf = (props: RolePrivilegeProps): RolePrivilegeAttributes => {
@@ -250,7 +249,11 @@ export const RolePrivilegeProvider = () =>
 
     nuke: {
       // Revoke privileges before the roles, clusters and catalogs they name.
-      dependsOn: ["StarburstGalaxy.Role", "StarburstGalaxy.Cluster", "StarburstGalaxy.*Catalog"],
+      dependsOn: [
+        "StarburstGalaxy.Role.Role",
+        "StarburstGalaxy.Cluster.Cluster",
+        "StarburstGalaxy.Catalog.*",
+      ],
     },
 
     diff: Effect.fn(function* ({ news, olds }) {
@@ -335,16 +338,6 @@ export const RolePrivilegeProvider = () =>
     }),
 
     // Every direct grant of every role but Galaxy's built-in ones.
-    list: () =>
-      galaxy.role.listRoles.items({}).pipe(
-        // Only grants on roles Alchemy named; a grant itself carries no marker.
-        Stream.filter((role) => isGeneratedName(role.roleName)),
-        Stream.flatMap((role) =>
-          galaxy.privilege.listRolePrivileges
-            .items({ roleId: role.roleId, listAllPrivileges: false })
-            .pipe(Stream.map((granted) => toAttributes(role.roleId, granted))),
-        ),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      ),
+    // Grants belong to their role: deleting a role Alchemy created removes them.
+    list: () => Effect.succeed([]),
   });

@@ -48,7 +48,7 @@ export interface DataProductUsageExampleAttributes {
 }
 
 export type DataProductUsageExample = Resource<
-  "StarburstGalaxy.DataProductUsageExample",
+  "StarburstGalaxy.DataProduct.DataProductUsageExample",
   DataProductUsageExampleProps,
   DataProductUsageExampleAttributes,
   never,
@@ -77,13 +77,13 @@ export class DataProductUsageExampleNotResolved extends Data.TaggedError(
  * ### Adding an example query
  * **Example:** The top customers by spend
  * ```typescript
- * const shop = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "shop" });
- * const orders = yield* StarburstGalaxy.DataProduct("Orders", {
+ * const shop = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "shop" });
+ * const orders = yield* StarburstGalaxy.DataProduct.DataProduct("Orders", {
  *   summary: "Every order placed in the shop",
  *   catalogId: shop.catalogId,
  *   schemaName: "orders",
  * });
- * yield* StarburstGalaxy.DataProductUsageExample("TopCustomers", {
+ * yield* StarburstGalaxy.DataProduct.DataProductUsageExample("TopCustomers", {
  *   dataProductId: orders.dataProductId,
  *   name: "Top customers",
  *   code: "SELECT customer, sum(amount) AS spend FROM shop.orders.orders GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
@@ -95,7 +95,7 @@ export class DataProductUsageExampleNotResolved extends Data.TaggedError(
  * @product Data products
  */
 export const DataProductUsageExample = Resource<DataProductUsageExample>(
-  "StarburstGalaxy.DataProductUsageExample",
+  "StarburstGalaxy.DataProduct.DataProductUsageExample",
 );
 
 const toAttributes = (example: UsageExample): DataProductUsageExampleAttributes => ({
@@ -129,7 +129,7 @@ export const DataProductUsageExampleProvider = () =>
   Provider.succeed(DataProductUsageExample, {
     stables: ["usageExampleId", "dataProductId"],
 
-    nuke: { dependsOn: ["StarburstGalaxy.DataProduct"] },
+    nuke: { dependsOn: ["StarburstGalaxy.DataProduct.DataProduct"] },
 
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;

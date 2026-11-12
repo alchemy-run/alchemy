@@ -5,7 +5,7 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Stream from "effect/Stream";
-import { expectGone } from "../helpers.ts";
+import { expectGone, freshStack } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -26,19 +26,19 @@ test.provider(
   "a role Galaxy cannot assume is refused at registration",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const arn = "arn:aws:iam::123456789012:role/alchemy-test-untrusted";
       const exit = yield* stack
-        .deploy(StarburstGalaxy.CrossAccountIamRole("Untrusted", { roleArn: arn }))
+        .deploy(StarburstGalaxy.CloudAccess.CrossAccountIamRole("Untrusted", { roleArn: arn }))
         .pipe(Effect.exit);
       expect(Exit.isFailure(exit)).toBe(true);
       expect(String(Exit.isFailure(exit) && exit.cause)).toContain("Unable to assume role");
       expect(yield* registered(arn)).toBe(false);
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:cross-account-iam-role", "live"],
-    timeout: 60_000,
+    timeout: 300_000,
   },
 );
 
@@ -46,16 +46,16 @@ test.provider.skipIf(!roleArn)(
   "register a trusted role, replace it on a new alias, and remove it",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const created = yield* stack.deploy(
-        StarburstGalaxy.CrossAccountIamRole("Lake", { roleArn: roleArn! }),
+        StarburstGalaxy.CloudAccess.CrossAccountIamRole("Lake", { roleArn: roleArn! }),
       );
       expect(created.roleArn).toBe(roleArn);
       expect(created.dependants).toEqual([]);
       expect(yield* registered(roleArn!)).toBe(true);
 
       const renamed = yield* stack.deploy(
-        StarburstGalaxy.CrossAccountIamRole("Lake", {
+        StarburstGalaxy.CloudAccess.CrossAccountIamRole("Lake", {
           roleArn: roleArn!,
           aliasName: "alchemy_lake",
         }),
@@ -64,9 +64,9 @@ test.provider.skipIf(!roleArn)(
 
       yield* stack.destroy();
       yield* expectGone(registered(roleArn!));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:cross-account-iam-role", "live"],
-    timeout: 120_000,
+    timeout: 420_000,
   },
 );

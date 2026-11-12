@@ -68,3 +68,11 @@ export const serviceAccountKey = (version: string) =>
       token_uri: "https://oauth2.googleapis.com/token",
     }),
   );
+
+/**
+ * Destroy the stack before the test, and again when its scope closes,
+ * whether its assertions pass or fail: a failing test leaves nothing in
+ * the account. Pipe the test body through `Effect.scoped`.
+ */
+export const freshStack = <E, R>(stack: { readonly destroy: () => Effect.Effect<unknown, E, R> }) =>
+  Effect.acquireRelease(stack.destroy(), () => stack.destroy().pipe(Effect.ignore));

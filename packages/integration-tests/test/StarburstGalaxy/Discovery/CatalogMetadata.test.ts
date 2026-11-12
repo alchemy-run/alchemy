@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -16,14 +16,18 @@ test.provider(
   "name a catalog's contacts, change them, and clear them on removal",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const app = (who: ReadonlyArray<"First" | "Second"> | undefined) =>
         Effect.gen(function* () {
-          const role = yield* StarburstGalaxy.Role("Role", {});
-          const first = yield* StarburstGalaxy.ServiceAccount("First", { role: role.roleId });
-          const second = yield* StarburstGalaxy.ServiceAccount("Second", { role: role.roleId });
-          const catalog = yield* StarburstGalaxy.PostgresqlCatalog("Crm", {
+          const role = yield* StarburstGalaxy.Role.Role("Role", {});
+          const first = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("First", {
+            role: role.roleId,
+          });
+          const second = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Second", {
+            role: role.roleId,
+          });
+          const catalog = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Crm", {
             endpoint: UNVALIDATED_ENDPOINT,
             databaseName: "crm",
             username: "galaxy",
@@ -34,7 +38,7 @@ test.provider(
           const metadata =
             who === undefined
               ? undefined
-              : yield* StarburstGalaxy.CatalogMetadata("CrmContacts", {
+              : yield* StarburstGalaxy.Discovery.CatalogMetadata("CrmContacts", {
                   catalogId: catalog.catalogId,
                   contacts: who.map((key) => ({
                     userId: accounts[key].serviceAccountId,
@@ -58,9 +62,9 @@ test.provider(
       expect(yield* contactsOf(set.catalog.catalogId)).toEqual([]);
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:discovery", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

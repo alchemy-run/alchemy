@@ -69,7 +69,7 @@ export interface SqlServerCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type SqlServerCatalog = Resource<
-  "StarburstGalaxy.SqlServerCatalog",
+  "StarburstGalaxy.Catalog.SqlServerCatalog",
   SqlServerCatalogProps,
   SqlServerCatalogAttributes,
   never,
@@ -97,14 +97,14 @@ export type SqlServerCatalog = Resource<
  * **Example:** A catalog over an Azure SQL database
  * ```typescript
  * const password = yield* Config.Redacted("ERP_SQL_PASSWORD");
- * const erp = yield* StarburstGalaxy.SqlServerCatalog("Erp", {
+ * const erp = yield* StarburstGalaxy.Catalog.SqlServerCatalog("Erp", {
  *   endpoint: "erp.database.windows.net",
  *   databaseName: "erp",
  *   username: "galaxy",
  *   password,
  *   cloudKind: "AZURE",
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "azure-us-east2",
  *   catalogs: [erp.catalogId],
  * });
@@ -113,13 +113,15 @@ export type SqlServerCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const erp = StarburstGalaxy.SqlServerCatalog.lookup({ name: "erp" });
+ * const erp = StarburstGalaxy.Catalog.SqlServerCatalog.lookup({ name: "erp" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const SqlServerCatalog = Resource<SqlServerCatalog>("StarburstGalaxy.SqlServerCatalog");
+export const SqlServerCatalog = Resource<SqlServerCatalog>(
+  "StarburstGalaxy.Catalog.SqlServerCatalog",
+);
 
 /** The non-secret settings, as Galaxy names them. */
 const settingsOf = (name: string, props: SqlServerCatalogProps) => ({

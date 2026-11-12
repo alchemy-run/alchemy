@@ -67,7 +67,7 @@ export interface RoleLookup {
 }
 
 export type Role = Resource<
-  "StarburstGalaxy.Role",
+  "StarburstGalaxy.Role.Role",
   RoleProps,
   RoleAttributes,
   never,
@@ -77,7 +77,7 @@ export type Role = Resource<
 
 /**
  * A Starburst Galaxy role. Privileges are granted to roles
- * (`StarburstGalaxy.RolePrivilege`), roles are the default and additional
+ * (`StarburstGalaxy.Role.RolePrivilege`), roles are the default and additional
  * roles of service accounts, and policies and data domains are owned by
  * roles.
  *
@@ -91,23 +91,23 @@ export type Role = Resource<
  * ### Creating a role
  * **Example:** A role for analysts
  * ```typescript
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {
  *   description: "Read access to the analytics catalogs",
  * });
  * ```
  *
  * **Example:** A role owned by another role
  * ```typescript
- * const admins = yield* StarburstGalaxy.Role("DataAdmins", {});
- * yield* StarburstGalaxy.Role("Analysts", { owningRole: admins.roleId });
+ * const admins = yield* StarburstGalaxy.Role.Role("DataAdmins", {});
+ * yield* StarburstGalaxy.Role.Role("Analysts", { owningRole: admins.roleId });
  * ```
  *
  * ### Granting privileges to the role
  * **Example:** Let the role query a catalog
  * ```typescript
- * const catalog = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "analytics" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RolePrivilege("AnalystsSelect", {
+ * const catalog = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "analytics" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RolePrivilege("AnalystsSelect", {
  *   role: analysts.roleId,
  *   privilege: "Select",
  *   entity: { kind: "Table", catalogId: catalog.catalogId, schemaName: "*", tableName: "*" },
@@ -117,13 +117,13 @@ export type Role = Resource<
  * ### Looking up a built-in role
  * **Example:** Reference `accountadmin`
  * ```typescript
- * const admin = StarburstGalaxy.Role.lookup({ name: "accountadmin" });
+ * const admin = StarburstGalaxy.Role.Role.lookup({ name: "accountadmin" });
  * ```
  *
  * @resource
  * @product Access control
  */
-export const Role = Resource<Role>("StarburstGalaxy.Role");
+export const Role = Resource<Role>("StarburstGalaxy.Role.Role");
 
 /** Galaxy accepted a role create but the role could not be read back. */
 export class RoleNotResolved extends Data.TaggedError("StarburstGalaxy.RoleNotResolved")<{

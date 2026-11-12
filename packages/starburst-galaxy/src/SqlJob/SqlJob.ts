@@ -74,7 +74,7 @@ export interface SqlJobAttributes {
 }
 
 export type SqlJob = Resource<
-  "StarburstGalaxy.SqlJob",
+  "StarburstGalaxy.SqlJob.SqlJob",
   SqlJobProps,
   SqlJobAttributes,
   never,
@@ -96,14 +96,14 @@ export type SqlJob = Resource<
  * ### Scheduling SQL
  * **Example:** Refresh a summary table nightly
  * ```typescript
- * const cluster = yield* StarburstGalaxy.Cluster("Etl", { cloudRegionId: "aws-us-east1" });
- * const etl = yield* StarburstGalaxy.Role("Etl", {});
- * const useCluster = yield* StarburstGalaxy.RolePrivilege("EtlUseCluster", {
+ * const cluster = yield* StarburstGalaxy.Cluster.Cluster("Etl", { cloudRegionId: "aws-us-east1" });
+ * const etl = yield* StarburstGalaxy.Role.Role("Etl", {});
+ * const useCluster = yield* StarburstGalaxy.Role.RolePrivilege("EtlUseCluster", {
  *   role: etl.roleId,
  *   privilege: "UseCluster",
  *   entity: { kind: "Cluster", clusterId: cluster.clusterId },
  * });
- * yield* StarburstGalaxy.SqlJob("NightlyRollup", {
+ * yield* StarburstGalaxy.SqlJob.SqlJob("NightlyRollup", {
  *   role: useCluster.roleId, // created after the grant Galaxy checks
  *   cluster: cluster.clusterId,
  *   schedule: "0 3 * * *",
@@ -118,7 +118,7 @@ export type SqlJob = Resource<
  * @resource
  * @product SQL jobs
  */
-export const SqlJob = Resource<SqlJob>("StarburstGalaxy.SqlJob");
+export const SqlJob = Resource<SqlJob>("StarburstGalaxy.SqlJob.SqlJob");
 
 /** Galaxy accepted a SQL job create but the job could not be read back. */
 export class SqlJobNotResolved extends Data.TaggedError("StarburstGalaxy.SqlJobNotResolved")<{
@@ -164,7 +164,7 @@ export const SqlJobProvider = () =>
 
     nuke: {
       // A job runs on a cluster as a role; delete jobs before both.
-      dependsOn: ["StarburstGalaxy.Cluster", "StarburstGalaxy.Role"],
+      dependsOn: ["StarburstGalaxy.Cluster.Cluster", "StarburstGalaxy.Role.Role"],
     },
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {

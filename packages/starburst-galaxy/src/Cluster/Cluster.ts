@@ -18,6 +18,7 @@ import {
   ownership,
   physicalName,
   sameIds,
+  waitForState,
 } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -97,13 +98,17 @@ export interface ClusterProps {
 }
 
 /** Galaxy's cluster states, normalised. Unknown strings are kept, never guessed into a known one. */
-export type ClusterState =
-  | { readonly _tag: "NotEnabled" }
-  | { readonly _tag: "Enabled" }
-  | { readonly _tag: "Starting" }
-  | { readonly _tag: "Running" }
-  | { readonly _tag: "Suspended" }
-  | { readonly _tag: "Other"; readonly raw: string };
+export type ClusterState = Data.TaggedEnum<{
+  NotEnabled: {};
+  Enabled: {};
+  Starting: {};
+  Running: {};
+  Suspended: {};
+  Other: { readonly raw: string };
+}>;
+
+/** Constructors and `$is`/`$match` for {@link ClusterState}. */
+export const ClusterState = Data.taggedEnum<ClusterState>();
 
 export interface ClusterAttributes {
   /** Galaxy's cluster ID (`w-…`). */
@@ -152,7 +157,7 @@ export interface ClusterLookup {
 }
 
 export type Cluster = Resource<
-  "StarburstGalaxy.Cluster",
+  "StarburstGalaxy.Cluster.Cluster",
   ClusterProps,
   ClusterAttributes,
   never,
@@ -183,13 +188,13 @@ export type Cluster = Resource<
  * **Example:** A free-size cluster over a PostgreSQL catalog
  * ```typescript
  * const project = yield* Neon.Project("app");
- * const pg = yield* StarburstGalaxy.PostgresqlCatalog("App", {
+ * const pg = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("App", {
  *   endpoint: project.origin.host,
  *   databaseName: project.origin.database,
  *   username: project.origin.user,
  *   password: project.origin.password,
  * });
- * const cluster = yield* StarburstGalaxy.Cluster("Analytics", {
+ * const cluster = yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [pg.catalogId],
  * });
@@ -199,7 +204,7 @@ export type Cluster = Resource<
  * ### Starting, stopping and idling
  * **Example:** Keep the configuration but refuse queries and cost nothing
  * ```typescript
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   enabled: false,
  * });
@@ -207,7 +212,7 @@ export type Cluster = Resource<
  *
  * **Example:** Suspend after a minute of idleness
  * ```typescript
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   autoSuspend: "1 minute",
  * });
@@ -216,7 +221,7 @@ export type Cluster = Resource<
  * ### Sizing and processing
  * **Example:** An autoscaling cluster with fault-tolerant execution and a result cache
  * ```typescript
- * yield* StarburstGalaxy.Cluster("Etl", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Etl", {
  *   cloudRegionId: "aws-us-east1",
  *   minWorkers: 2,
  *   maxWorkers: 8,
@@ -229,9 +234,9 @@ export type Cluster = Resource<
  * ### Granting use of a cluster
  * **Example:** Let a role run queries on the cluster
  * ```typescript
- * const cluster = yield* StarburstGalaxy.Cluster("Analytics", { cloudRegionId: "aws-us-east1" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RolePrivilege("AnalystsUseCluster", {
+ * const cluster = yield* StarburstGalaxy.Cluster.Cluster("Analytics", { cloudRegionId: "aws-us-east1" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RolePrivilege("AnalystsUseCluster", {
  *   role: analysts.roleId,
  *   privilege: "UseCluster",
  *   entity: { kind: "Cluster", clusterId: cluster.clusterId },
@@ -241,26 +246,13 @@ export type Cluster = Resource<
  * ### Looking up an existing cluster
  * **Example:** Reference a cluster created in the Galaxy console
  * ```typescript
- * const shared = StarburstGalaxy.Cluster.lookup({ name: "shared" });
+ * const shared = StarburstGalaxy.Cluster.Cluster.lookup({ name: "shared" });
  * ```
  *
  * @resource
  * @product Clusters
  */
-export const Cluster = Resource<Cluster>("StarburstGalaxy.Cluster");
-
-/** A cluster that never settled into the state an enable or disable asked for. */
-export class ClusterTransitionTimedOut extends Data.TaggedError(
-  "StarburstGalaxy.ClusterTransitionTimedOut",
-)<{
-  readonly clusterName: string;
-  readonly wanted: "enabled" | "disabled";
-  readonly lastState: string;
-}> {
-  override get message() {
-    return `Cluster ${this.clusterName} did not become ${this.wanted} within 90 seconds (last state: ${this.lastState || "unknown"})`;
-  }
-}
+export const Cluster = Resource<Cluster>("StarburstGalaxy.Cluster.Cluster");
 
 /** Galaxy reports the cluster in a state it cannot leave on its own. */
 export class ClusterFailed extends Data.TaggedError("StarburstGalaxy.ClusterFailed")<{
@@ -289,21 +281,18 @@ const FAILED_STATES: Record<string, true> = {
   TERMINATING: true,
 };
 
-/** Galaxy's upper-case state string (`RUNNING`, `SUSPENDED`, `DISABLED`, …), normalised. */
-export const clusterStateOf = (raw: string | undefined): ClusterState => {
-  const key = (raw ?? "").toUpperCase().replace(/[\s-]/g, "_");
-  return key === "DISABLED" || key === "NOT_ENABLED"
-    ? { _tag: "NotEnabled" }
-    : key === "ENABLED"
-      ? { _tag: "Enabled" }
-      : key === "STARTING"
-        ? { _tag: "Starting" }
-        : key === "RUNNING"
-          ? { _tag: "Running" }
-          : key === "SUSPENDED"
-            ? { _tag: "Suspended" }
-            : { _tag: "Other", raw: raw ?? "" };
+/** Galaxy's state strings (upper case on the wire) and the states they name. */
+const STATE_BY_WIRE: Record<string, ClusterState> = {
+  DISABLED: ClusterState.NotEnabled(),
+  ENABLED: ClusterState.Enabled(),
+  STARTING: ClusterState.Starting(),
+  RUNNING: ClusterState.Running(),
+  SUSPENDED: ClusterState.Suspended(),
 };
+
+/** The cluster state Galaxy reports; a state Galaxy adds later is kept verbatim as `Other`. */
+export const clusterStateOf = (raw: string | undefined): ClusterState =>
+  STATE_BY_WIRE[raw ?? ""] ?? ClusterState.Other({ raw: raw ?? "" });
 
 const IDLE_STOP_MINUTES = {
   "1 minute": 1,
@@ -382,10 +371,6 @@ const observe = Effect.fn(function* (clusterId: string | undefined, name: string
   return yield* findByName(name);
 });
 
-class NotSettled extends Data.TaggedError("StarburstGalaxy.ClusterNotSettled")<{
-  readonly cluster: ClusterShape;
-}> {}
-
 /**
  * Wait until Galaxy reflects `enabled`. Enabled means any state but
  * `DISABLED`: a suspended cluster resumes on the next query, so the one to
@@ -399,32 +384,20 @@ const settled = Effect.fn(function* (
   session: ScopedPlanStatusSession,
 ) {
   yield* session.note(`Waiting for cluster ${name} to be ${enabled ? "enabled" : "disabled"}...`);
-  return yield* galaxy.cluster.getCluster({ clusterId, extended: true }).pipe(
-    Effect.flatMap((cluster): Effect.Effect<ClusterShape, ClusterFailed | NotSettled> => {
-      if (FAILED_STATES[(cluster.clusterState ?? "").toUpperCase()]) {
-        return Effect.fail(
-          new ClusterFailed({ clusterName: name, state: cluster.clusterState ?? "" }),
-        );
-      }
-      const done =
-        enabledOf(cluster) === enabled && clusterStateOf(cluster.clusterState)._tag !== "Other";
-      return done ? Effect.succeed(cluster) : Effect.fail(new NotSettled({ cluster }));
-    }),
-    Effect.retry({
-      while: (error) => error._tag === "StarburstGalaxy.ClusterNotSettled",
-      schedule: Schedule.spaced("3 seconds"),
-      times: 30,
-    }),
-    Effect.catchTag("StarburstGalaxy.ClusterNotSettled", ({ cluster }) =>
-      Effect.fail(
-        new ClusterTransitionTimedOut({
-          clusterName: name,
-          wanted: enabled ? "enabled" : "disabled",
-          lastState: cluster.clusterState ?? "",
-        }),
-      ),
+  const observe = galaxy.cluster.getCluster({ clusterId, extended: true }).pipe(
+    Effect.filterOrFail(
+      (cluster) => !FAILED_STATES[cluster.clusterState ?? ""],
+      (cluster) => new ClusterFailed({ clusterName: name, state: cluster.clusterState ?? "" }),
     ),
   );
+  return yield* waitForState(observe, {
+    waitingFor: `cluster ${name} to be ${enabled ? "enabled" : "disabled"}`,
+    done: (cluster): cluster is ClusterShape =>
+      enabledOf(cluster) === enabled && clusterStateOf(cluster.clusterState)._tag !== "Other",
+    stateOf: (cluster) => cluster.clusterState ?? "",
+    interval: "3 seconds",
+    budget: "90 seconds",
+  });
 });
 
 export const ClusterProvider = () =>
@@ -433,7 +406,7 @@ export const ClusterProvider = () =>
 
     nuke: {
       // A cluster references catalogs by id; delete clusters before them.
-      dependsOn: ["StarburstGalaxy.*Catalog"],
+      dependsOn: ["StarburstGalaxy.Catalog.*"],
     },
 
     diff: Effect.fn(function* ({ news, olds, output }) {

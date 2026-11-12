@@ -25,7 +25,7 @@ const plain = (value: unknown): unknown =>
 const planLookup = (lookup: Output.Output<unknown> | object) =>
   Core.scratchStack({ providers: StarburstGalaxy.providers() }, "StarburstGalaxyLookupProbe")
     .plan(
-      StarburstGalaxy.Role("LookupProbe", {
+      StarburstGalaxy.Role.Role("LookupProbe", {
         description: Output.map(lookup as Output.Output<unknown>, (attrs) =>
           JSON.stringify(plain(attrs)),
         ),

@@ -20,7 +20,7 @@ export interface CrossAccountIamRoleProps {
   /**
    * ARN of the AWS IAM role Galaxy assumes. Its trust policy must name
    * Starburst's AWS account and require Galaxy's external ID (see
-   * `StarburstGalaxy.CrossAccountIamRoleTrust`): Galaxy assumes the role
+   * `StarburstGalaxy.CloudAccess.CrossAccountIamRoleTrust`): Galaxy assumes the role
    * when it is registered. Changing it replaces the registration.
    */
   readonly roleArn: string;
@@ -41,7 +41,7 @@ export interface CrossAccountIamRoleAttributes {
 }
 
 export type CrossAccountIamRole = Resource<
-  "StarburstGalaxy.CrossAccountIamRole",
+  "StarburstGalaxy.CloudAccess.CrossAccountIamRole",
   CrossAccountIamRoleProps,
   CrossAccountIamRoleAttributes,
   never,
@@ -76,7 +76,7 @@ export class CrossAccountIamRoleNotResolved extends Data.TaggedError(
  * ### Registering a role
  * **Example:** A role trusted by Galaxy, used by an S3 catalog
  * ```typescript
- * const trust = StarburstGalaxy.CrossAccountIamRoleTrust.lookup({});
+ * const trust = StarburstGalaxy.CloudAccess.CrossAccountIamRoleTrust.lookup({});
  * const role = yield* AWS.IAM.Role("GalaxyLake", {
  *   assumeRolePolicyDocument: {
  *     Version: "2012-10-17",
@@ -90,10 +90,10 @@ export class CrossAccountIamRoleNotResolved extends Data.TaggedError(
  *     ],
  *   },
  * });
- * const registered = yield* StarburstGalaxy.CrossAccountIamRole("GalaxyLake", {
+ * const registered = yield* StarburstGalaxy.CloudAccess.CrossAccountIamRole("GalaxyLake", {
  *   roleArn: role.roleArn,
  * });
- * yield* StarburstGalaxy.S3Catalog("Lake", {
+ * yield* StarburstGalaxy.Catalog.S3Catalog("Lake", {
  *   roleArn: registered.roleArn,
  *   metastore: { type: "galaxy", defaultBucket: "analytics-lake", defaultDataLocation: "warehouse" },
  * });
@@ -103,7 +103,7 @@ export class CrossAccountIamRoleNotResolved extends Data.TaggedError(
  * @product Cloud access
  */
 export const CrossAccountIamRole = Resource<CrossAccountIamRole>(
-  "StarburstGalaxy.CrossAccountIamRole",
+  "StarburstGalaxy.CloudAccess.CrossAccountIamRole",
 );
 
 const toAttributes = (role: CrossAccountIamRoleShape): CrossAccountIamRoleAttributes => ({
@@ -126,9 +126,9 @@ export const CrossAccountIamRoleProvider = () =>
     nuke: {
       // Catalogs that assume the role are deleted first.
       dependsOn: [
-        "StarburstGalaxy.S3Catalog",
-        "StarburstGalaxy.RedshiftCatalog",
-        "StarburstGalaxy.OpenSearchCatalog",
+        "StarburstGalaxy.Catalog.S3Catalog",
+        "StarburstGalaxy.Catalog.RedshiftCatalog",
+        "StarburstGalaxy.Catalog.OpenSearchCatalog",
       ],
     },
 

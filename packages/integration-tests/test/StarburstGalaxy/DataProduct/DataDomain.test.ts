@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -17,13 +17,13 @@ test.provider(
   "create a data domain, change its owner and description, and replace it on rename",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("domain", "-");
 
-      const app = (props: Partial<StarburstGalaxy.DataDomainProps>, owned = false) =>
+      const app = (props: Partial<StarburstGalaxy.DataProduct.DataDomainProps>, owned = false) =>
         Effect.gen(function* () {
-          const owner = yield* StarburstGalaxy.Role("Owner", {});
-          const domain = yield* StarburstGalaxy.DataDomain("Domain", {
+          const owner = yield* StarburstGalaxy.Role.Role("Owner", {});
+          const domain = yield* StarburstGalaxy.DataProduct.DataDomain("Domain", {
             ...props,
             ...(owned ? { owningRole: owner.roleId } : {}),
           });
@@ -52,9 +52,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(domainExists(replaced.domain.dataDomainId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:data-domain", "live"],
-    timeout: 120_000,
+    timeout: 420_000,
   },
 );

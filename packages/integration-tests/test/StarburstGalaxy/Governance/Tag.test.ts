@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
@@ -18,10 +18,12 @@ test.provider(
   "create, recolor, rename, look up and delete a tag",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("tag");
 
-      const created = yield* stack.deploy(StarburstGalaxy.Tag("Tag", { color: "#FF0000" }));
+      const created = yield* stack.deploy(
+        StarburstGalaxy.Governance.Tag("Tag", { color: "#FF0000" }),
+      );
       const tagId = created.tagId;
       const live = yield* galaxy.tag.getTag({ tagId });
       expect(live.name).toBe(created.name);
@@ -29,7 +31,11 @@ test.provider(
 
       // Every prop converges in place, the name included.
       const changed = yield* stack.deploy(
-        StarburstGalaxy.Tag("Tag", { name: renamed, color: "#00FF00", description: "public" }),
+        StarburstGalaxy.Governance.Tag("Tag", {
+          name: renamed,
+          color: "#00FF00",
+          description: "public",
+        }),
       );
       expect(changed.tagId).toBe(tagId);
       const changedLive = yield* galaxy.tag.getTag({ tagId });
@@ -37,13 +43,13 @@ test.provider(
       expect(changedLive.color).toBe("#00FF00");
       expect(changedLive.description).toBe("public");
 
-      yield* expectFound(StarburstGalaxy.Tag.lookup({ name: renamed }), changed);
+      yield* expectFound(StarburstGalaxy.Governance.Tag.lookup({ name: renamed }), changed);
 
       yield* stack.destroy();
       yield* expectGone(tagExists(tagId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:tag", "live"],
-    timeout: 90_000,
+    timeout: 300_000,
   },
 );

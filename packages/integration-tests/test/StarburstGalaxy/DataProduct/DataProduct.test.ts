@@ -2,8 +2,9 @@ import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
+import type { Input, InputProps } from "alchemy/Input";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -17,27 +18,29 @@ test.provider(
   "publish a schema as a data product, describe it, move its domain, rename it, and replace it on a new schema",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("product", "-");
 
       const app = (
         props: (refs: {
-          dataDomainId: string;
-          contact: StarburstGalaxy.Contact;
-        }) => Partial<StarburstGalaxy.DataProductProps>,
+          dataDomainId: Input<string>;
+          contact: Input<StarburstGalaxy.Contact>;
+        }) => Partial<InputProps<StarburstGalaxy.DataProduct.DataProductProps>>,
       ) =>
         Effect.gen(function* () {
-          const catalog = yield* StarburstGalaxy.PostgresqlCatalog("Shop", {
+          const catalog = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Shop", {
             endpoint: UNVALIDATED_ENDPOINT,
             databaseName: "shop",
             username: "galaxy",
             password: secret("shop"),
             validate: false,
           });
-          const domain = yield* StarburstGalaxy.DataDomain("Sales", {});
-          const role = yield* StarburstGalaxy.Role("Owner", {});
-          const owner = yield* StarburstGalaxy.ServiceAccount("Contact", { role: role.roleId });
-          const product = yield* StarburstGalaxy.DataProduct("Orders", {
+          const domain = yield* StarburstGalaxy.DataProduct.DataDomain("Sales", {});
+          const role = yield* StarburstGalaxy.Role.Role("Owner", {});
+          const owner = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Contact", {
+            role: role.roleId,
+          });
+          const product = yield* StarburstGalaxy.DataProduct.DataProduct("Orders", {
             summary: "Every order",
             catalogId: catalog.catalogId,
             schemaName: "orders",
@@ -95,9 +98,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(productExists(moved.product.dataProductId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:data-product", "live"],
-    timeout: 240_000,
+    timeout: 600_000,
   },
 );

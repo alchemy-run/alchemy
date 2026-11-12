@@ -78,7 +78,7 @@ export interface CassandraCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type CassandraCatalog = Resource<
-  "StarburstGalaxy.CassandraCatalog",
+  "StarburstGalaxy.Catalog.CassandraCatalog",
   CassandraCatalogProps,
   CassandraCatalogAttributes,
   never,
@@ -106,7 +106,7 @@ export type CassandraCatalog = Resource<
  * **Example:** An Astra DB database
  * ```typescript
  * const token = yield* Config.Redacted("ASTRA_TOKEN");
- * const iot = yield* StarburstGalaxy.CassandraCatalog("Iot", {
+ * const iot = yield* StarburstGalaxy.Catalog.CassandraCatalog("Iot", {
  *   deployment: {
  *     type: "astraDB",
  *     databaseId: "3f8b2d4e-1c2a-4e8b-9f1d-2a3b4c5d6e7f",
@@ -114,7 +114,7 @@ export type CassandraCatalog = Resource<
  *     token,
  *   },
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [iot.catalogId],
  * });
@@ -124,7 +124,7 @@ export type CassandraCatalog = Resource<
  * **Example:** Contact points in one data center
  * ```typescript
  * const password = yield* Config.Redacted("CASSANDRA_PASSWORD");
- * yield* StarburstGalaxy.CassandraCatalog("Ledger", {
+ * yield* StarburstGalaxy.Catalog.CassandraCatalog("Ledger", {
  *   deployment: {
  *     type: "apacheCassandra",
  *     contactPoints: "cass-1.example.com,cass-2.example.com",
@@ -138,13 +138,15 @@ export type CassandraCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const iot = StarburstGalaxy.CassandraCatalog.lookup({ name: "iot" });
+ * const iot = StarburstGalaxy.Catalog.CassandraCatalog.lookup({ name: "iot" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const CassandraCatalog = Resource<CassandraCatalog>("StarburstGalaxy.CassandraCatalog");
+export const CassandraCatalog = Resource<CassandraCatalog>(
+  "StarburstGalaxy.Catalog.CassandraCatalog",
+);
 
 const deploymentOf = (shape: CassandraCatalogShape): CassandraDeploymentAttributes =>
   shape.deploymentType === "apacheCassandra"

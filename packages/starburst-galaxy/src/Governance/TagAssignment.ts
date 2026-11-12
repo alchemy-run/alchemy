@@ -5,8 +5,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import { isGeneratedName } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface TagAssignmentProps {
@@ -44,7 +42,7 @@ export interface TagAssignmentAttributes {
 }
 
 export type TagAssignment = Resource<
-  "StarburstGalaxy.TagAssignment",
+  "StarburstGalaxy.Governance.TagAssignment",
   TagAssignmentProps,
   TagAssignmentAttributes,
   never,
@@ -66,9 +64,9 @@ export type TagAssignment = Resource<
  * ### Tagging a catalog
  * **Example:** Mark a catalog as PII
  * ```typescript
- * const catalog = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "customers" });
- * const pii = yield* StarburstGalaxy.Tag("Pii", { color: "#FF0000" });
- * yield* StarburstGalaxy.TagAssignment("CustomersPii", {
+ * const catalog = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "customers" });
+ * const pii = yield* StarburstGalaxy.Governance.Tag("Pii", { color: "#FF0000" });
+ * yield* StarburstGalaxy.Governance.TagAssignment("CustomersPii", {
  *   tag: pii.tagId,
  *   catalog: catalog.catalogId,
  * });
@@ -77,9 +75,9 @@ export type TagAssignment = Resource<
  * ### Tagging a column
  * **Example:** Mark one column as PII
  * ```typescript
- * const catalog = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "customers" });
- * const pii = yield* StarburstGalaxy.Tag("Pii", { color: "#FF0000" });
- * yield* StarburstGalaxy.TagAssignment("EmailPii", {
+ * const catalog = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "customers" });
+ * const pii = yield* StarburstGalaxy.Governance.Tag("Pii", { color: "#FF0000" });
+ * yield* StarburstGalaxy.Governance.TagAssignment("EmailPii", {
  *   tag: pii.tagId,
  *   catalog: catalog.catalogId,
  *   schema: "public",
@@ -91,7 +89,7 @@ export type TagAssignment = Resource<
  * @resource
  * @product Data governance
  */
-export const TagAssignment = Resource<TagAssignment>("StarburstGalaxy.TagAssignment");
+export const TagAssignment = Resource<TagAssignment>("StarburstGalaxy.Governance.TagAssignment");
 
 /** A table without its schema, or a column without its table. */
 export class TagAssignmentTargetInvalid extends Data.TaggedError(
@@ -192,7 +190,7 @@ export const TagAssignmentProvider = () =>
 
     nuke: {
       // Remove assignments before the tags and catalogs they name.
-      dependsOn: ["StarburstGalaxy.Tag", "StarburstGalaxy.*Catalog"],
+      dependsOn: ["StarburstGalaxy.Governance.Tag", "StarburstGalaxy.Catalog.*"],
     },
 
     diff: Effect.fn(function* ({ news, olds }) {
@@ -234,26 +232,6 @@ export const TagAssignmentProvider = () =>
 
     // Galaxy has no account-wide read of assignments: list the catalog-level
     // ones, which `getCatalogMetadata` reports for every catalog.
-    list: () =>
-      galaxy.catalog.listCatalogs.items({}).pipe(
-        Stream.mapEffect((catalog) =>
-          galaxy.discovery.getCatalogMetadata({ catalogId: catalog.catalogId }).pipe(
-            Effect.map((metadata) =>
-              metadata.tags
-                .filter((tag) => isGeneratedName(tag.name))
-                .map((tag): TagAssignmentAttributes => ({
-                  tagId: tag.tagId,
-                  tagName: tag.name,
-                  catalogId: catalog.catalogId,
-                  schemaId: undefined,
-                  tableId: undefined,
-                  columnId: undefined,
-                })),
-            ),
-          ),
-        ),
-        Stream.flatMap((assignments) => Stream.fromIterable(assignments)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      ),
+    // Assignments belong to their tag: deleting a tag Alchemy created removes them.
+    list: () => Effect.succeed([]),
   });

@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { SALES, Warehouse } from "../fixtures/warehouse.ts";
+import { freshStack } from "../helpers.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(StarburstGalaxy.providers(), Neon.providers()),
@@ -16,15 +17,15 @@ test.provider(
   "describe a table and its columns, change them, and clear them on removal",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
-      const app = (props: Partial<StarburstGalaxy.TableMetadataProps> | undefined) =>
+      const app = (props: Partial<StarburstGalaxy.Discovery.TableMetadataProps> | undefined) =>
         Effect.gen(function* () {
           const catalog = yield* Warehouse;
           const metadata =
             props === undefined
               ? undefined
-              : yield* StarburstGalaxy.TableMetadata("OrdersDocs", {
+              : yield* StarburstGalaxy.Discovery.TableMetadata("OrdersDocs", {
                   catalogId: catalog.catalogId,
                   ...SALES,
                   ...props,
@@ -84,7 +85,7 @@ test.provider(
       });
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: [
       "provider:starburst-galaxy",
@@ -92,6 +93,6 @@ test.provider(
       "provider:neon",
       "live",
     ],
-    timeout: 300_000,
+    timeout: 600_000,
   },
 );

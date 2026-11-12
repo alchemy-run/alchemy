@@ -78,7 +78,7 @@ export interface SnowflakeCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type SnowflakeCatalog = Resource<
-  "StarburstGalaxy.SnowflakeCatalog",
+  "StarburstGalaxy.Catalog.SnowflakeCatalog",
   SnowflakeCatalogProps,
   SnowflakeCatalogAttributes,
   never,
@@ -106,14 +106,14 @@ export type SnowflakeCatalog = Resource<
  * **Example:** Password authentication
  * ```typescript
  * const password = yield* Config.Redacted("SNOWFLAKE_PASSWORD");
- * const sf = yield* StarburstGalaxy.SnowflakeCatalog("Finance", {
+ * const sf = yield* StarburstGalaxy.Catalog.SnowflakeCatalog("Finance", {
  *   accountIdentifier: "myorg-finance",
  *   databaseName: "FINANCE",
  *   username: "GALAXY",
  *   auth: { type: "password", password },
  *   warehouse: "COMPUTE_WH",
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [sf.catalogId],
  * });
@@ -124,7 +124,7 @@ export type SnowflakeCatalog = Resource<
  * ```typescript
  * const privateKey = yield* Config.Redacted("SNOWFLAKE_PRIVATE_KEY");
  * const privateKeyPassphrase = yield* Config.Redacted("SNOWFLAKE_KEY_PASSPHRASE");
- * yield* StarburstGalaxy.SnowflakeCatalog("Finance", {
+ * yield* StarburstGalaxy.Catalog.SnowflakeCatalog("Finance", {
  *   accountIdentifier: "myorg-finance",
  *   databaseName: "FINANCE",
  *   username: "GALAXY",
@@ -136,13 +136,15 @@ export type SnowflakeCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const finance = StarburstGalaxy.SnowflakeCatalog.lookup({ name: "finance" });
+ * const finance = StarburstGalaxy.Catalog.SnowflakeCatalog.lookup({ name: "finance" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const SnowflakeCatalog = Resource<SnowflakeCatalog>("StarburstGalaxy.SnowflakeCatalog");
+export const SnowflakeCatalog = Resource<SnowflakeCatalog>(
+  "StarburstGalaxy.Catalog.SnowflakeCatalog",
+);
 
 /** The non-secret settings, as Galaxy names them. */
 const settingsOf = (name: string, props: SnowflakeCatalogProps) => ({

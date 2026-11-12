@@ -64,7 +64,7 @@ export interface TableMetadataAttributes {
 }
 
 export type TableMetadata = Resource<
-  "StarburstGalaxy.TableMetadata",
+  "StarburstGalaxy.Discovery.TableMetadata",
   TableMetadataProps,
   TableMetadataAttributes,
   never,
@@ -86,8 +86,8 @@ export type TableMetadata = Resource<
  * ### Documenting a table and its columns
  * **Example:** What each column of an orders table means
  * ```typescript
- * const shop = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "shop" });
- * yield* StarburstGalaxy.TableMetadata("OrdersDocs", {
+ * const shop = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "shop" });
+ * yield* StarburstGalaxy.Discovery.TableMetadata("OrdersDocs", {
  *   catalogId: shop.catalogId,
  *   schemaName: "sales",
  *   tableName: "orders",
@@ -102,7 +102,7 @@ export type TableMetadata = Resource<
  * @resource
  * @product Discovery
  */
-export const TableMetadata = Resource<TableMetadata>("StarburstGalaxy.TableMetadata");
+export const TableMetadata = Resource<TableMetadata>("StarburstGalaxy.Discovery.TableMetadata");
 
 interface TableIds {
   readonly catalogId: string;

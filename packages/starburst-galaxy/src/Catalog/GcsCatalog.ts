@@ -89,7 +89,7 @@ export interface GcsCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type GcsCatalog = Resource<
-  "StarburstGalaxy.GcsCatalog",
+  "StarburstGalaxy.Catalog.GcsCatalog",
   GcsCatalogProps,
   GcsCatalogAttributes,
   never,
@@ -115,7 +115,7 @@ export type GcsCatalog = Resource<
  * **Example:** Iceberg tables in a bucket, metadata in Galaxy
  * ```typescript
  * const credentialsKey = yield* Config.Redacted("LAKE_SERVICE_ACCOUNT_JSON");
- * const lake = yield* StarburstGalaxy.GcsCatalog("Lake", {
+ * const lake = yield* StarburstGalaxy.Catalog.GcsCatalog("Lake", {
  *   credentialsKey,
  *   metastore: {
  *     type: "galaxy",
@@ -123,7 +123,7 @@ export type GcsCatalog = Resource<
  *     defaultDataLocation: "warehouse",
  *   },
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "gcp-us-east1",
  *   catalogs: [lake.catalogId],
  * });
@@ -133,7 +133,7 @@ export type GcsCatalog = Resource<
  * **Example:** An existing Hive metastore
  * ```typescript
  * const credentialsKey = yield* Config.Redacted("LAKE_SERVICE_ACCOUNT_JSON");
- * yield* StarburstGalaxy.GcsCatalog("Hive", {
+ * yield* StarburstGalaxy.Catalog.GcsCatalog("Hive", {
  *   credentialsKey,
  *   defaultTableFormat: "HIVE",
  *   metastore: { type: "hive", host: "metastore.example.com" },
@@ -143,13 +143,13 @@ export type GcsCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const lake = StarburstGalaxy.GcsCatalog.lookup({ name: "lake" });
+ * const lake = StarburstGalaxy.Catalog.GcsCatalog.lookup({ name: "lake" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const GcsCatalog = Resource<GcsCatalog>("StarburstGalaxy.GcsCatalog");
+export const GcsCatalog = Resource<GcsCatalog>("StarburstGalaxy.Catalog.GcsCatalog");
 
 const metastoreOf = (shape: GcsCatalogShape): GcsMetastore =>
   shape.metastoreType === "galaxy"
