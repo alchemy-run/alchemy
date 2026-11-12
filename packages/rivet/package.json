@@ -117,6 +117,9 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/rivet": "workspace:*",
     "@effect/platform-node": "catalog:",
+    "@rivet-dev/agentos": "^0.4.6",
+    "@rivet-dev/agentos-core": "^0.4.7",
+    "@rivet-dev/workflows": "^1.1.1",
     "rivetkit": "3.0.0"
   },
   "devDependencies": {
