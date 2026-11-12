@@ -1,0 +1,201 @@
+---
+title: "Tutorial: an API over a ClickHouse table"
+description: Load a public CSV into a ClickHouse Cloud service with a ClickPipe, publish a Query API endpoint, and serve it from a Cloudflare Worker.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Build a small API that answers "which weather stations are hottest?". ClickHouse Cloud holds the data and runs the SQL; a Cloudflare Worker serves it. When you're done, `GET /hottest?n=3` on the Worker returns rows from ClickHouse.
+
+The finished code is in [`examples/clickhouse-cloud-query-api`](https://github.com/alchemy-run/alchemy/tree/main/examples/clickhouse-cloud-query-api).
+
+## Prerequisites
+
+Finish [ClickHouse Cloud setup](/clickhouse-cloud/setup) and [Cloudflare setup](/cloudflare/setup). Install the providers:
+
+<PackageManagers add="@alchemy.run/clickhouse-cloud @alchemy.run/cloudflare alchemy effect" />
+
+The service bills by the minute while it runs. It idles after five minutes without queries, and `alchemy destroy` deletes it.
+
+## Declare the service
+
+The smallest service is one 8 GB replica:
+
+```typescript title="src/Data.ts"
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+
+export const Analytics = ClickHouseCloud.Service.Service("Analytics", {
+  provider: "aws",
+  region: "us-east-1",
+  minReplicaMemoryGb: 8,
+  maxReplicaMemoryGb: 8,
+  numReplicas: 1,
+  idleScaling: true,
+  idleTimeoutMinutes: 5,
+  ipAccessList: [{ source: "0.0.0.0/0", description: "anywhere" }],
+});
+```
+
+Deploy waits until the service is running, about a minute.
+
+## Load the data with a ClickPipe
+
+A ClickPipe reads from object storage, Kafka, Kinesis, Pub/Sub or a database and writes into a table. This one reads ClickHouse's public CSV of 412 weather stations once (`isContinuous: false`) and creates the `stations` table for it (`managedTable: true`):
+
+```typescript title="src/Data.ts"
+export const Stations = Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  return yield* ClickHouseCloud.ClickPipes.ClickPipe("Stations", {
+    serviceId: analytics.serviceId,
+    source: {
+      objectStorage: {
+        type: "s3",
+        format: "CSVWithNames",
+        url: "https://datasets-documentation.s3.eu-west-3.amazonaws.com/1brc/stations.csv",
+        isContinuous: false,
+      },
+    },
+    destination: {
+      database: "default",
+      table: "stations",
+      managedTable: true,
+      tableDefinition: { engine: { type: "MergeTree" }, sortingKey: ["station"] },
+      columns: [
+        { name: "station", type: "String" },
+        { name: "avg", type: "Float64" },
+      ],
+    },
+    fieldMappings: [
+      { sourceField: "station", destinationField: "station" },
+      { sourceField: "avg", destinationField: "avg" },
+    ],
+  });
+});
+```
+
+Deploy waits until the one-shot load completes. Changing the source or the destination replaces the pipe; renaming it updates it in place.
+
+## Publish the query
+
+A Query API endpoint is SQL served over HTTPS. `{n:UInt8}` is a query variable with a default of 5:
+
+```typescript title="src/Data.ts"
+export const Hottest = Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  const stations = yield* Stations;
+  return yield* ClickHouseCloud.QueryApiEndpoints.QueryApiEndpoint("Hottest", {
+    serviceId: analytics.serviceId,
+    // Read from the pipe's table, so the endpoint is created after the load.
+    database: Output.map(stations.destination, (d) => d?.database ?? "default"),
+    sql: "SELECT station, avg FROM stations ORDER BY avg DESC, station LIMIT {n:UInt8}",
+    parameters: { n: "5" },
+    roles: ["default_role"],
+  });
+});
+```
+
+`roles` are the database roles the SQL runs as. `default_role` exists in every service.
+
+## Serve it from a Worker
+
+`RunQueryApiEndpoint` gives the Worker its own API key, adds it to the endpoint's allowed keys, and runs the endpoint with it:
+
+```typescript title="src/Api.ts"
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { Analytics, Hottest } from "./Data.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const hottest = yield* ClickHouseCloud.QueryApiEndpoints.RunQueryApiEndpoint(Hottest);
+    const getService = yield* ClickHouseCloud.Service.GetService(Analytics);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
+
+        if (url.pathname === "/hottest") {
+          const n = Number(url.searchParams.get("n") ?? "5");
+          return yield* HttpServerResponse.json(yield* hottest({ queryVariables: { n } }));
+        }
+
+        if (url.pathname === "/status") {
+          const service = yield* getService();
+          return yield* HttpServerResponse.json({ state: service.state });
+        }
+
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json({ error: String(cause) }, { status: 500 }),
+        ),
+      ),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        ClickHouseCloud.QueryApiEndpoints.RunQueryApiEndpointHttp,
+        ClickHouseCloud.Service.GetServiceHttp,
+      ),
+    ),
+  ),
+) {}
+```
+
+`GetService` gets a second key, whose role may only view this service. See [Credentials & bindings](/clickhouse-cloud/credentials) for what each binding's key may do.
+
+## Deploy
+
+```typescript title="alchemy.run.ts"
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Analytics } from "./src/Data.ts";
+
+export default Alchemy.Stack(
+  "ClickHouseCloudQueryApi",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), ClickHouseCloud.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const analytics = yield* Analytics;
+    const api = yield* Api;
+    return { url: api.url.as<string>(), serviceId: analytics.serviceId };
+  }),
+);
+```
+
+```sh
+alchemy deploy
+```
+
+The first deploy takes a few minutes: the service starts, the pipe loads the file, then the Worker deploys. Call it:
+
+```sh
+curl "$URL/hottest?n=3"
+```
+
+```json
+[{"station":"Assab","avg":30.5},{"station":"Bosaso","avg":30},{"station":"Djibouti","avg":29.9}]
+```
+
+## Clean up
+
+```sh
+alchemy destroy
+```
+
+This deletes the Worker, the endpoint, the pipe, the service and the Worker's keys and roles.
