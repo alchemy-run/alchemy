@@ -28,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { resourceContext } from "../../Util/ResourceContext.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -579,7 +580,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TestBucket", {
-            bucketName: "alchemy-test-bucket-crud",
+            bucketName: testName("alchemy-test-bucket-crud"),
             tags: { Environment: "test" },
             forceDestroy: true,
           });
@@ -594,7 +595,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TestBucket", {
-            bucketName: "alchemy-test-bucket-crud",
+            bucketName: testName("alchemy-test-bucket-crud"),
             tags: { Environment: "production", Team: "platform" },
             forceDestroy: true,
           });
@@ -621,13 +622,13 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("CustomNameBucket", {
-            bucketName: "alchemy-test-bucket-custom-name",
+            bucketName: testName("alchemy-test-bucket-custom-name"),
             forceDestroy: true,
           });
         }),
       );
 
-      expect(bucket.bucketName).toEqual("alchemy-test-bucket-custom-name");
+      expect(bucket.bucketName).toEqual(testName("alchemy-test-bucket-custom-name"));
       expect(bucket.bucketArn).toEqual("arn:aws:s3:::alchemy-test-bucket-custom-name");
 
       yield* S3.headBucket({ Bucket: bucket.bucketName });
@@ -648,7 +649,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("ForceDestroyBucket", {
-            bucketName: "alchemy-test-bucket-force-destroy",
+            bucketName: testName("alchemy-test-bucket-force-destroy"),
             forceDestroy: true,
           });
         }),
@@ -687,7 +688,7 @@ test.provider(
       const bucket1 = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("IdempotentBucket", {
-            bucketName: "alchemy-test-bucket-idempotent",
+            bucketName: testName("alchemy-test-bucket-idempotent"),
             forceDestroy: true,
           });
         }),
@@ -697,7 +698,7 @@ test.provider(
       const bucket2 = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("IdempotentBucket", {
-            bucketName: "alchemy-test-bucket-idempotent",
+            bucketName: testName("alchemy-test-bucket-idempotent"),
             forceDestroy: true,
           });
         }),
@@ -720,7 +721,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("ObjectLockBucket", {
-            bucketName: "alchemy-test-bucket-object-lock",
+            bucketName: testName("alchemy-test-bucket-object-lock"),
             objectLockEnabled: true,
             forceDestroy: true,
           });
@@ -746,7 +747,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TagRemovalBucket", {
-            bucketName: "alchemy-test-bucket-tag-removal",
+            bucketName: testName("alchemy-test-bucket-tag-removal"),
             tags: { Environment: "test", Team: "platform" },
             forceDestroy: true,
           });
@@ -760,7 +761,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("TagRemovalBucket", {
-            bucketName: "alchemy-test-bucket-tag-removal",
+            bucketName: testName("alchemy-test-bucket-tag-removal"),
             forceDestroy: true,
           });
         }),
@@ -791,7 +792,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           const bucket = yield* Bucket("PolicyBucket", {
-            bucketName: "alchemy-test-bucket-policy-bindings",
+            bucketName: testName("alchemy-test-bucket-policy-bindings"),
             forceDestroy: true,
           });
 
@@ -826,7 +827,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("PolicyBucket", {
-            bucketName: "alchemy-test-bucket-policy-bindings",
+            bucketName: testName("alchemy-test-bucket-policy-bindings"),
             forceDestroy: true,
           });
         }),
@@ -932,7 +933,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Bucket("ListBucket", {
-            bucketName: "alchemy-test-bucket-list",
+            bucketName: testName("alchemy-test-bucket-list"),
             forceDestroy: true,
           });
         }),
@@ -956,7 +957,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-versioning";
+      const name = testName("alchemy-test-bucket-versioning");
       const bucket = yield* stack.deploy(
         Bucket("VersioningBucket", { bucketName: name, versioning: "Enabled", forceDestroy: true }),
       );
@@ -987,7 +988,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-encryption";
+      const name = testName("alchemy-test-bucket-encryption");
       const bucket = yield* stack.deploy(
         Bucket("EncryptionBucket", {
           bucketName: name,
@@ -1025,7 +1026,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-pab";
+      const name = testName("alchemy-test-bucket-pab");
       const bucket = yield* stack.deploy(
         Bucket("PabBucket", {
           bucketName: name,
@@ -1071,7 +1072,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-cors";
+      const name = testName("alchemy-test-bucket-cors");
       const bucket = yield* stack.deploy(
         Bucket("CorsBucket", {
           bucketName: name,
@@ -1129,7 +1130,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-lifecycle";
+      const name = testName("alchemy-test-bucket-lifecycle");
       const bucket = yield* stack.deploy(
         Bucket("LifecycleBucket", {
           bucketName: name,
@@ -1185,7 +1186,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-website";
+      const name = testName("alchemy-test-bucket-website");
       const bucket = yield* stack.deploy(
         Bucket("WebsiteBucket", {
           bucketName: name,
@@ -1332,8 +1333,8 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const target = "alchemy-test-bucket-logging-target";
-      const source = "alchemy-test-bucket-logging-src";
+      const target = testName("alchemy-test-bucket-logging-target");
+      const source = testName("alchemy-test-bucket-logging-src");
 
       const deployWith = (targetPrefix: string) =>
         stack.deploy(
@@ -1391,7 +1392,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-accel-pay";
+      const name = testName("alchemy-test-bucket-accel-pay");
       const bucket = yield* stack.deploy(
         Bucket("AccelPayBucket", {
           bucketName: name,
@@ -1434,7 +1435,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-objlock-retention";
+      const name = testName("alchemy-test-bucket-objlock-retention");
       const bucket = yield* stack.deploy(
         Bucket("ObjLockRetentionBucket", {
           bucketName: name,
@@ -1460,7 +1461,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-int-tiering";
+      const name = testName("alchemy-test-bucket-int-tiering");
       const bucket = yield* stack.deploy(
         Bucket("IntTieringBucket", {
           bucketName: name,
@@ -1510,7 +1511,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const name = "alchemy-test-bucket-policy-prop";
+      const name = testName("alchemy-test-bucket-policy-prop");
       const bucketArn = `arn:aws:s3:::${name}`;
       const bucket = yield* stack.deploy(
         Bucket("PolicyPropBucket", {
@@ -1547,8 +1548,8 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const dest = "alchemy-test-bucket-replication-dest";
-      const src = "alchemy-test-bucket-replication-src";
+      const dest = testName("alchemy-test-bucket-replication-dest");
+      const src = testName("alchemy-test-bucket-replication-src");
 
       const buckets = yield* stack.deploy(
         Effect.gen(function* () {
