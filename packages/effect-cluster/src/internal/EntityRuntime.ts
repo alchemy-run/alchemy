@@ -189,7 +189,7 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   const mailbox = yield* Semaphore.make(1);
   /** Run `effect` alone on the mailbox, to its end even if its caller stops waiting. */
   const locked = <A>(effect: Effect.Effect<A>) =>
-    Effect.uninterruptible(mailbox.withPermits(1)(effect));
+    effect.pipe(mailbox.withPermits(1), Effect.uninterruptible);
 
   const limit = options.maxEncodedBytes;
   const encoder = new TextEncoder();
@@ -395,20 +395,21 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
       const stored = tooLarge(text)
         ? Exit.die(`A chunk of ${active.key} is over ${limit} bytes and can't be stored`)
         : yield* locked(
-            Effect.exit(
-              Effect.suspend(() =>
-                exec(
-                  "INSERT OR REPLACE INTO cluster_chunks (request_id, seq, chunk) VALUES (?, ?, ?)",
-                  active.key,
-                  active.sequence++,
-                  text,
-                ),
-              ).pipe(Effect.map(() => [...active.listeners])),
+            Effect.suspend(() =>
+              exec(
+                "INSERT OR REPLACE INTO cluster_chunks (request_id, seq, chunk) VALUES (?, ?, ?)",
+                active.key,
+                active.sequence++,
+                text,
+              ),
+            ).pipe(
+              Effect.map(() => [...active.listeners]),
+              Effect.exit,
             ),
           );
       if (Exit.isFailure(stored)) {
         // A stream that can't be replayed in full fails where it stands.
-        yield* complete(active, Exit.die(Cause.pretty(stored.cause)));
+        yield* complete(active, stored.cause.pipe(Cause.pretty, Exit.die));
         return yield* stop(active);
       }
       for (const listener of stored.value) yield* listener(text);
