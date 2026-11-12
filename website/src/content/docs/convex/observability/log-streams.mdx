@@ -18,7 +18,7 @@ const stream = yield* Convex.LogStream("Logs", {
 });
 ```
 
-`stream.hmacSecret` signs each request. Convex returns it only at creation, so Alchemy keeps it in state.
+`stream.hmacSecret` signs each request. Alchemy reads it from the deployment, so a stream you adopt has its secret too.
 
 ## Change where logs go
 
