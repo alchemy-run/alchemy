@@ -6,6 +6,7 @@
  * - `/increment/:id?by=n` sends `Increment`; `{ accepted: total }` or `{ rejected: tag }`
  * - `/again/:id?by=n` sends `Increment` twice under one command id
  * - `/counter/:id`, `/echo/:id`, `/total/:id` read the counter, what the saga wrote, the view
+ * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
  */
 import * as Effect from "effect/Effect";
@@ -50,6 +51,20 @@ export const app = Effect.gen(function* () {
         return yield* HttpServerResponse.json(
           Option.getOrElse(total, () => ({ total: 0, increments: 0 })),
         );
+      }
+      case "totals": {
+        const order = url.searchParams.get("order");
+        const take = url.searchParams.get("take");
+        const after = url.searchParams.get("after");
+        const page = yield* totals.list(Counter.ref(id), {
+          ...(order === "asc" || order === "desc" ? { order } : {}),
+          ...(take === null ? {} : { take: Number(take) }),
+          ...(after === null ? {} : { after: Number(after) }),
+        });
+        return yield* HttpServerResponse.json({
+          totals: page.entries.map((entry) => entry.state?.total ?? null),
+          cursor: page.cursor,
+        });
       }
       case "place":
         yield* holds.send(id, new PlaceHold());

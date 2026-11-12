@@ -375,6 +375,92 @@ describe("Action output convergence", { tags: ["unit", "local"] }, () => {
       }),
   );
 
+  // A pool collects env from what it hosts and hands it to its host as a
+  // prop, and what it hosts binds the host's address: Pool and Host are in a
+  // cycle, and a change to the bound env alone has to reach the Host.
+  test.provider(
+    "a binding-only change to a cycle member reaches the consumers of its attributes",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const pool = yield* BindingTarget("Pool", { name: "pool" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+            yield* pool.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        expect(actionOfPlan(yield* stack.plan(program("1")), "Host")).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Pool.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Pool.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
+  test.provider(
+    "a changed cycle member reaches the consumers of the member it is bound to",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const pool = yield* BindingTarget("Pool", { name: "pool" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+            const entity = yield* Function("Entity", {
+              name: "entity",
+              env: { GEN: generation, HOST: host.functionArn },
+            });
+            yield* pool.bind("Entity", { env: { GEN: entity.env.GEN } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        const unchanged = yield* stack.plan(program("1"));
+        expect(unchanged.resources.Pool.action).toBe("noop");
+        expect(unchanged.resources.Host.action).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Entity.action).toBe("update");
+        expect(changed.resources.Pool.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Pool.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
+  test.provider(
+    "a binding-only change crosses every binding of a cycle before the next deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const outer = yield* BindingTarget("Outer", { name: "outer" });
+            const inner = yield* BindingTarget("Inner", { name: "inner" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: outer.env.GEN } });
+            yield* inner.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+            yield* outer.bind("Relay", { env: { GEN: inner.env.GEN } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        const unchanged = yield* stack.plan(program("1"));
+        expect(unchanged.resources.Inner.action).toBe("noop");
+        expect(unchanged.resources.Outer.action).toBe("noop");
+        expect(unchanged.resources.Host.action).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Inner.action).toBe("update");
+        expect(changed.resources.Outer.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Inner.action).toBe("noop");
+        expect(settled.resources.Outer.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
   test.provider(
     "an Action planned to run skips its body when upstream resolves to the same input",
     (stack) =>

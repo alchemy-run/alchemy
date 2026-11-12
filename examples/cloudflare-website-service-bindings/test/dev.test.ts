@@ -32,8 +32,11 @@ for (const { name, marker } of frameworks) {
       });
       expect(response.status).toBe(200);
       expect(yield* response.text).toContain(marker);
-    }).pipe(Effect.timeout("30 seconds")),
-    { timeout: 35_000 },
+      // The first request compiles the framework's SSR graph on demand
+      // (Vocs transforms the MCP SDK and React tree): ~6s alone, past 30s
+      // while nine dev servers and other examples build at once.
+    }).pipe(Effect.timeout("90 seconds")),
+    { timeout: 95_000 },
   );
   test(
     `${name}: the Gateway reaches the Website through its service binding`,
