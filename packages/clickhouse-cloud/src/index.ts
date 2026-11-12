@@ -1,5 +1,6 @@
 export * as ApiKeys from "./ApiKeys/index.ts";
 export * from "./AuthProvider.ts";
+export * as Backup from "./Backup/index.ts";
 export {
   Credentials,
   CredentialsFromEnv,
@@ -14,8 +15,10 @@ export {
   ResultMissing,
   ServiceDeletionProtected,
   ServiceFailed,
+  ServiceLimitReached,
   ServiceNotReady,
   SystemRoleImmutable,
 } from "./internal/Errors.ts";
 export * from "./Providers.ts";
 export * as RoleManagement from "./RoleManagement/index.ts";
+export * as Service from "./Service/index.ts";

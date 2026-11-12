@@ -66,6 +66,12 @@ export const ownerTags = Effect.fn(function* (id: string) {
   } as Record<string, string>;
 });
 
+/**
+ * Tag holding the engine's instance ID: it changes on every replacement, so
+ * it tells a replacement apart from the generation it replaces.
+ */
+export const INSTANCE_TAG = "alchemy.instance";
+
 /** Whether `tags` carry this logical ID's ownership tags. */
 export const hasOwnerTags = Effect.fn(function* (
   id: string,

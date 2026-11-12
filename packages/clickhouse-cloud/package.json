@@ -30,7 +30,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./ApiKeys": "./src/ApiKeys/index.ts",
+    "./Backup": "./src/Backup/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
+    "./Service": "./src/Service/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -48,11 +50,23 @@
         "worker": "./src/ApiKeys/index.ts",
         "default": "./lib/ApiKeys/index.js"
       },
+      "./Backup": {
+        "types": "./lib/Backup/index.d.ts",
+        "bun": "./src/Backup/index.ts",
+        "worker": "./src/Backup/index.ts",
+        "default": "./lib/Backup/index.js"
+      },
       "./RoleManagement": {
         "types": "./lib/RoleManagement/index.d.ts",
         "bun": "./src/RoleManagement/index.ts",
         "worker": "./src/RoleManagement/index.ts",
         "default": "./lib/RoleManagement/index.js"
+      },
+      "./Service": {
+        "types": "./lib/Service/index.d.ts",
+        "bun": "./src/Service/index.ts",
+        "worker": "./src/Service/index.ts",
+        "default": "./lib/Service/index.js"
       },
       "./internal/*": null,
       "./*": {
