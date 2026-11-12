@@ -5,6 +5,7 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { expectGone, pinnedName } from "../helpers.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -50,12 +51,16 @@ test.provider(
       const renamedLive = yield* galaxy.role.getRole({ roleId });
       expect(renamedLive.roleName).toBe(renamed);
 
-      // Built-in roles are found by lookup and left out of `list`.
+      // Built-in roles are found by lookup; `list` holds only generated names, so neither
+      // they nor this now hand-named role are nuke's to delete.
+      yield* expectFound(StarburstGalaxy.Role.lookup({ name: "accountadmin" }), {
+        name: "accountadmin",
+      });
+      yield* expectFound(StarburstGalaxy.Role.lookup({ name: renamed }), named.role);
       const provider = yield* Provider.findProvider(StarburstGalaxy.Role);
-      const admin = yield* provider.lookup!({ name: "accountadmin" });
-      expect(admin?.name).toBe("accountadmin");
       const listed = yield* provider.list();
-      expect(listed.some((role) => role.roleId === roleId)).toBe(true);
+      expect(listed.some((role) => role.roleId === created.owner.roleId)).toBe(true);
+      expect(listed.some((role) => role.roleId === roleId)).toBe(false);
       expect(listed.some((role) => role.name === "accountadmin")).toBe(false);
 
       yield* stack.destroy();

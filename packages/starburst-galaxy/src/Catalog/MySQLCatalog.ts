@@ -13,11 +13,11 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   type CloudKind,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** Galaxy connects to the MySQL server's host directly over the internet. */
 export interface MySQLDirectConnection {
@@ -170,7 +170,6 @@ const settingsOf = (name: string, props: MySQLCatalogProps) => ({
   cloudKind: props.cloudKind,
   port: props.port,
   username: props.username,
-  ...connectionSettingsOf(props.connection),
 });
 
 export const MySQLCatalogProvider = () =>
@@ -195,25 +194,51 @@ export const MySQLCatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listMySQLCatalogs.items({}),
-      toCreate: (name, props) =>
-        ({
+      toCreate: (name, props): CreateMySQLCatalogRequest => {
+        const fields = {
           ...settingsOf(name, props),
-          connectionType: props.connection.type,
           password: props.password,
           validate: props.validate ?? true,
-        }) as CreateMySQLCatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+        };
+        const connection = props.connection;
+        switch (connection.type) {
+          case "direct":
+            return { ...fields, connectionType: "direct", host: connection.host };
+          case "sshTunnel":
+            return {
+              ...fields,
+              connectionType: "sshTunnel",
+              sshTunnelId: connection.sshTunnelId,
+              host: connection.host,
+            };
+          case "privateLink":
+            return {
+              ...fields,
+              connectionType: "privateLink",
+              privateLinkId: connection.privateLinkId,
+            };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): MySQLCatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
-          settingsOf(name, props),
+          { ...settingsOf(name, props), ...connectionSettingsOf(props.connection) },
         );
         if (!hasChanges(delta) && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(withSecrets ? { password: props.password } : {}),
-          connectionType: props.connection.type,
           validate: props.validate ?? true,
-        } as MySQLCatalogPatch;
+        };
+        // The connection type never changes in place (it replaces), so the patch uses the current one.
+        switch (props.connection.type) {
+          case "direct":
+            return { ...fields, connectionType: "direct" };
+          case "sshTunnel":
+            return { ...fields, connectionType: "sshTunnel" };
+          case "privateLink":
+            return { ...fields, connectionType: "privateLink" };
+        }
       },
       toAttributes: (shape: MySQLCatalogShape): MySQLCatalogAttributes => ({
         catalogId: shape.catalogId,

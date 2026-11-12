@@ -7,13 +7,16 @@ import type {
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import { changedFields, hasChanges } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
+  type CloudKind,
+  secretValue,
 } from "./CatalogKind.ts";
 
 export interface PostgresqlCatalogProps extends CatalogBaseProps {
@@ -47,7 +50,7 @@ export interface PostgresqlCatalogProps extends CatalogBaseProps {
    * Cloud the PostgreSQL server runs in, for Galaxy's network routing.
    * @default "AWS"
    */
-  readonly cloudKind?: "AWS" | "AZURE" | "GCP";
+  readonly cloudKind?: CloudKind;
   /** ID of a Galaxy SSH tunnel to reach a private server through. */
   readonly sshTunnelId?: string;
   /** ID of a Galaxy PrivateLink connection to reach the server through. */
@@ -56,7 +59,7 @@ export interface PostgresqlCatalogProps extends CatalogBaseProps {
 
 export interface PostgresqlCatalogAttributes extends CatalogBaseAttributes {
   /** Cloud the server runs in, as Galaxy reports it. */
-  readonly cloudKind: "AWS" | "AZURE" | "GCP" | undefined;
+  readonly cloudKind: CloudKind | undefined;
   /** Host name Galaxy connects to. */
   readonly endpoint: string | undefined;
   /** Port Galaxy connects to. */
@@ -71,12 +74,6 @@ export interface PostgresqlCatalogAttributes extends CatalogBaseAttributes {
   readonly sshTunnelId: string | undefined;
   /** PrivateLink connection Galaxy connects through, if any. */
   readonly privateLinkId: string | undefined;
-}
-
-/** Find a catalog this stack doesn't manage by its name. */
-export interface CatalogLookup {
-  /** Catalog name (unique across every kind in the account). */
-  readonly name: string;
 }
 
 export type PostgresqlCatalog = Resource<
@@ -239,7 +236,6 @@ export const PostgresqlCatalogProvider = () =>
         };
       },
       toAttributes,
-      secretsChanged: (olds, news) =>
-        Redacted.value(olds.password) !== Redacted.value(news.password),
+      secretsChanged: (olds, news) => secretValue(olds.password) !== secretValue(news.password),
     }),
   );

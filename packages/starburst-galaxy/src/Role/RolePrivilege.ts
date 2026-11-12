@@ -11,7 +11,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { BUILT_IN_ROLES, findFirst } from "../internal.ts";
+import { findFirst, isGeneratedName } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -337,7 +337,8 @@ export const RolePrivilegeProvider = () =>
     // Every direct grant of every role but Galaxy's built-in ones.
     list: () =>
       galaxy.role.listRoles.items({}).pipe(
-        Stream.filter((role) => !BUILT_IN_ROLES[role.roleName]),
+        // Only grants on roles Alchemy named; a grant itself carries no marker.
+        Stream.filter((role) => isGeneratedName(role.roleName)),
         Stream.flatMap((role) =>
           galaxy.privilege.listRolePrivileges
             .items({ roleId: role.roleId, listAllPrivileges: false })

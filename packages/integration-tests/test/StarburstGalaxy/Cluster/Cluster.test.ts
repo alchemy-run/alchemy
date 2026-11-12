@@ -5,6 +5,7 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -96,18 +97,21 @@ test.provider(
       const withoutCatalog = yield* getCluster(clusterId);
       expect(withoutCatalog.catalogRefs).toEqual([]);
 
+      // Nuke's `list` reports a cluster under its generated name.
+      const provider = yield* Provider.findProvider(StarburstGalaxy.Cluster);
+      const generated = (yield* provider.list()).find((cluster) => cluster.clusterId === clusterId);
+      expect(generated?.cloudRegionId).toBe(REGION);
+
       // A rename updates the same cluster.
       const named = yield* stack.deploy(app({ name: renamed, autoSuspend: "5 minutes" }));
       expect(named.cluster.clusterId).toBe(clusterId);
       const renamedLive = yield* getCluster(clusterId);
       expect(renamedLive.name).toBe(renamed);
 
-      // `list` reports it in the shape `read` returns.
-      const provider = yield* Provider.findProvider(StarburstGalaxy.Cluster);
+      // `lookup` finds it by its explicit name; `list` leaves hand-named clusters to their owners.
+      yield* expectFound(StarburstGalaxy.Cluster.lookup({ name: renamed }), named.cluster);
       const listed = yield* provider.list();
-      const row = listed.find((cluster) => cluster.clusterId === clusterId);
-      expect(row?.name).toBe(renamed);
-      expect(row?.cloudRegionId).toBe(REGION);
+      expect(listed.some((cluster) => cluster.clusterId === clusterId)).toBe(false);
 
       // Disabling waits until Galaxy reports it.
       const stopped = yield* stack.deploy(app({ name: renamed, enabled: false }));

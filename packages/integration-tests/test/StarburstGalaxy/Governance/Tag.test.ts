@@ -2,9 +2,9 @@ import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
-import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { expectGone, pinnedName } from "../helpers.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -37,9 +37,7 @@ test.provider(
       expect(changedLive.color).toBe("#00FF00");
       expect(changedLive.description).toBe("public");
 
-      const provider = yield* Provider.findProvider(StarburstGalaxy.Tag);
-      const found = yield* provider.lookup!({ name: renamed });
-      expect(found?.tagId).toBe(tagId);
+      yield* expectFound(StarburstGalaxy.Tag.lookup({ name: renamed }), changed);
 
       yield* stack.destroy();
       yield* expectGone(tagExists(tagId));

@@ -57,6 +57,17 @@ export const physicalName = (id: string, name: string | undefined, rule: NameRul
         forbiddenPrefixes: [...(rule.forbiddenPrefixes ?? []), ...DIGITS],
       }).pipe(Effect.map((generated) => generated.replaceAll(/[-_]/g, rule.delimiter)));
 
+/**
+ * Whether Alchemy generated `name` with {@link physicalName}: it ends in
+ * the 16-character base32 instance suffix after a delimiter, or, when the
+ * rule's length limit truncated it, in the 24-character hash and suffix.
+ * Galaxy objects carry no labels, so `list` reports only these: `alchemy
+ * unsafe nuke` never deletes an object someone named by hand. An object
+ * deployed under an explicit `name` is not listed.
+ */
+export const isGeneratedName = (name: string | undefined) =>
+  name !== undefined && /[-_][a-z2-7]{16}$|[a-z2-7]{24}$/.test(name);
+
 /** The first element of a paginated stream that matches, reading no further pages. */
 export const findFirst = <A, E, R>(stream: Stream.Stream<A, E, R>, predicate: (a: A) => boolean) =>
   stream.pipe(Stream.filter(predicate), Stream.runHead, Effect.map(Option.getOrUndefined));
@@ -112,6 +123,3 @@ export const hasChanges = (delta: object) => Object.keys(delta).length > 0;
 /** Order-insensitive equality of id lists Galaxy may return in any order. */
 export const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && [...a].sort().join("\u0000") === [...b].sort().join("\u0000");
-
-/** Roles every Galaxy account has; they cannot be deleted, so `list` leaves them out. */
-export const BUILT_IN_ROLES: Record<string, true> = { accountadmin: true, public: true };

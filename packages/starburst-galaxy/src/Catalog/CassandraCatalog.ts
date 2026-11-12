@@ -13,11 +13,11 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   type CloudKind,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** A self-managed Apache Cassandra cluster. */
 export interface ApacheCassandraDeployment {
@@ -184,7 +184,6 @@ const settingsOf = (name: string, props: CassandraCatalogProps) => ({
   description: props.description ?? "",
   readOnly: props.readOnly ?? false,
   cloudKind: props.cloudKind,
-  ...deploymentSettingsOf(props.deployment),
 });
 
 export const CassandraCatalogProvider = () =>
@@ -209,25 +208,46 @@ export const CassandraCatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listCassandraCatalogs.items({}),
-      toCreate: (name, props) =>
-        ({
-          ...settingsOf(name, props),
-          ...secretsOf(props.deployment),
-          deploymentType: props.deployment.type,
-          validate: props.validate ?? true,
-        }) as CreateCassandraCatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+      toCreate: (name, props): CreateCassandraCatalogRequest => {
+        const fields = { ...settingsOf(name, props), validate: props.validate ?? true };
+        const deployment = props.deployment;
+        switch (deployment.type) {
+          case "apacheCassandra":
+            return {
+              ...fields,
+              deploymentType: "apacheCassandra",
+              contactPoints: deployment.contactPoints,
+              localDatacenter: deployment.localDatacenter,
+              port: deployment.port,
+              username: deployment.username,
+              password: deployment.password,
+              sshTunnelId: deployment.sshTunnelId,
+            };
+          case "astraDB":
+            return {
+              ...fields,
+              deploymentType: "astraDB",
+              databaseId: deployment.databaseId,
+              region: deployment.region,
+              token: deployment.token,
+            };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): CassandraCatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
-          settingsOf(name, props),
+          { ...settingsOf(name, props), ...deploymentSettingsOf(props.deployment) },
         );
         if (!hasChanges(delta) && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(withSecrets ? secretsOf(props.deployment) : {}),
-          deploymentType: props.deployment.type,
           validate: props.validate ?? true,
-        } as CassandraCatalogPatch;
+        };
+        // The deployment type never changes in place (it replaces), so the patch uses the current one.
+        return props.deployment.type === "apacheCassandra"
+          ? { ...fields, deploymentType: "apacheCassandra" }
+          : { ...fields, deploymentType: "astraDB" };
       },
       toAttributes: (shape: CassandraCatalogShape): CassandraCatalogAttributes => ({
         catalogId: shape.catalogId,

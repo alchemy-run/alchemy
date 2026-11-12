@@ -13,10 +13,10 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** Galaxy's own metastore: Galaxy keeps the table metadata. */
 export interface GcsGalaxyMetastore {
@@ -187,7 +187,6 @@ const settingsOf = (name: string, props: GcsCatalogProps) => ({
   externalTableCreationEnabled: props.externalTableCreationEnabled,
   externalTableWritesEnabled: props.externalTableWritesEnabled,
   metadataMaxStalenessSeconds: props.metadataMaxStalenessSeconds,
-  ...metastoreSettingsOf(props.metastore),
 });
 
 export const GcsCatalogProvider = () =>
@@ -212,25 +211,46 @@ export const GcsCatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listGcsCatalogs.items({}),
-      toCreate: (name, props) =>
-        ({
+      toCreate: (name, props): CreateGcsCatalogRequest => {
+        const fields = {
           ...settingsOf(name, props),
           credentialsKey: props.credentialsKey,
-          metastoreType: props.metastore.type,
           validate: props.validate ?? true,
-        }) as CreateGcsCatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+        };
+        const metastore = props.metastore;
+        switch (metastore.type) {
+          case "galaxy":
+            return {
+              ...fields,
+              metastoreType: "galaxy",
+              defaultBucket: metastore.defaultBucket,
+              defaultDataLocation: metastore.defaultDataLocation,
+            };
+          case "hive":
+            return {
+              ...fields,
+              metastoreType: "hive",
+              hiveMetastoreHost: metastore.host,
+              hiveMetastorePort: metastore.port,
+              sshTunnelId: metastore.sshTunnelId,
+            };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): GcsCatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
-          settingsOf(name, props),
+          { ...settingsOf(name, props), ...metastoreSettingsOf(props.metastore) },
         );
         if (!hasChanges(delta) && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(withSecrets ? { credentialsKey: props.credentialsKey } : {}),
-          metastoreType: props.metastore.type,
           validate: props.validate ?? true,
-        } as GcsCatalogPatch;
+        };
+        // The metastore type never changes in place (it replaces), so the patch uses the current one.
+        return props.metastore.type === "galaxy"
+          ? { ...fields, metastoreType: "galaxy" }
+          : { ...fields, metastoreType: "hive" };
       },
       toAttributes: (shape: GcsCatalogShape): GcsCatalogAttributes => ({
         catalogId: shape.catalogId,

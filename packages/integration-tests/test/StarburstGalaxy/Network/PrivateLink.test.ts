@@ -2,10 +2,10 @@ import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
-import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Stream from "effect/Stream";
+import { expectFound, expectNotFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -14,18 +14,27 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const provider = yield* Provider.findProvider(StarburstGalaxy.PrivateLink);
-
-      expect(yield* provider.lookup!({ name: "alchemy-no-such-link" })).toBeUndefined();
-      expect(yield* provider.lookup!({ privateLinkId: "pvtlnk-1234567890" })).toBeUndefined();
+      yield* expectNotFound(StarburstGalaxy.PrivateLink.lookup({ name: "alchemy-no-such-link" }));
+      yield* expectNotFound(
+        StarburstGalaxy.PrivateLink.lookup({ privateLinkId: "pvtlnk-1234567890" }),
+      );
 
       // Starburst provisions connections through support: when the account has one, both keys find it.
       const first = yield* galaxy.privatelink.listPrivateLinks.items({}).pipe(Stream.runHead);
       if (first._tag === "Some") {
-        const byName = yield* provider.lookup!({ name: first.value.name });
-        expect(byName?.privateLinkId).toBe(first.value.privatelinkId);
-        const byId = yield* provider.lookup!({ privateLinkId: first.value.privatelinkId });
-        expect(byId?.cloudRegionId).toBe(first.value.cloudRegionId);
+        const expected = {
+          privateLinkId: first.value.privatelinkId,
+          name: first.value.name,
+          cloudRegionId: first.value.cloudRegionId,
+        };
+        yield* expectFound(
+          StarburstGalaxy.PrivateLink.lookup({ name: first.value.name }),
+          expected,
+        );
+        yield* expectFound(
+          StarburstGalaxy.PrivateLink.lookup({ privateLinkId: first.value.privatelinkId }),
+          expected,
+        );
       }
 
       const declared = yield* stack

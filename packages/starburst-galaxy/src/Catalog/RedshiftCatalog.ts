@@ -13,10 +13,10 @@ import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
+  type CatalogLookup,
   catalogLifecycle,
   secretValue,
 } from "./CatalogKind.ts";
-import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
 /** Database user and password. */
 export interface RedshiftBasicAuth {
@@ -174,7 +174,6 @@ const settingsOf = (name: string, props: RedshiftCatalogProps) => ({
   readOnly: props.readOnly ?? false,
   endpoint: props.endpoint,
   sshTunnelId: props.sshTunnelId,
-  ...authSettingsOf(props.auth),
 });
 
 export const RedshiftCatalogProvider = () =>
@@ -199,25 +198,56 @@ export const RedshiftCatalogProvider = () =>
           Effect.catchTag("NotFound", () => Effect.void),
         ),
       list: galaxy.catalog.listRedshiftCatalogs.items({}),
-      toCreate: (name, props) =>
-        ({
-          ...settingsOf(name, props),
-          ...secretsOf(props.auth),
-          authType: props.auth.type,
-          validate: props.validate ?? true,
-        }) as CreateRedshiftCatalogRequest,
-      toPatch: (name, props, observed, withSecrets) => {
+      toCreate: (name, props): CreateRedshiftCatalogRequest => {
+        const fields = { ...settingsOf(name, props), validate: props.validate ?? true };
+        const auth = props.auth;
+        switch (auth.type) {
+          case "basic":
+            return {
+              ...fields,
+              authType: "basic",
+              username: auth.username,
+              password: auth.password,
+            };
+          case "accessKey":
+            return {
+              ...fields,
+              authType: "accessKey",
+              username: auth.username,
+              accessKey: auth.accessKey,
+              secretKey: auth.secretKey,
+              region: auth.region,
+            };
+          case "role":
+            return {
+              ...fields,
+              authType: "role",
+              username: auth.username,
+              roleArn: auth.roleArn,
+              region: auth.region,
+            };
+        }
+      },
+      toPatch: (name, props, observed, withSecrets): RedshiftCatalogPatch | undefined => {
         const delta = changedFields(
           { ...observed, description: observed.description ?? "" },
-          settingsOf(name, props),
+          { ...settingsOf(name, props), ...authSettingsOf(props.auth) },
         );
         if (!hasChanges(delta) && !withSecrets) return undefined;
-        return {
+        const fields = {
           ...delta,
           ...(withSecrets ? secretsOf(props.auth) : {}),
-          authType: props.auth.type,
           validate: props.validate ?? true,
-        } as RedshiftCatalogPatch;
+        };
+        // The auth type never changes in place (it replaces), so the patch uses the current one.
+        switch (props.auth.type) {
+          case "basic":
+            return { ...fields, authType: "basic" };
+          case "accessKey":
+            return { ...fields, authType: "accessKey" };
+          case "role":
+            return { ...fields, authType: "role" };
+        }
       },
       toAttributes: (shape: RedshiftCatalogShape): RedshiftCatalogAttributes => ({
         catalogId: shape.catalogId,

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { isGeneratedName } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface TagAssignmentProps {
@@ -238,14 +239,16 @@ export const TagAssignmentProvider = () =>
         Stream.mapEffect((catalog) =>
           galaxy.discovery.getCatalogMetadata({ catalogId: catalog.catalogId }).pipe(
             Effect.map((metadata) =>
-              metadata.tags.map((tag): TagAssignmentAttributes => ({
-                tagId: tag.tagId,
-                tagName: tag.name,
-                catalogId: catalog.catalogId,
-                schemaId: undefined,
-                tableId: undefined,
-                columnId: undefined,
-              })),
+              metadata.tags
+                .filter((tag) => isGeneratedName(tag.name))
+                .map((tag): TagAssignmentAttributes => ({
+                  tagId: tag.tagId,
+                  tagName: tag.name,
+                  catalogId: catalog.catalogId,
+                  schemaId: undefined,
+                  tableId: undefined,
+                  columnId: undefined,
+                })),
             ),
           ),
         ),

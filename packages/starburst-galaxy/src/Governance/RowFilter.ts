@@ -4,14 +4,16 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import {
   changedFields,
   collectAll,
   findFirst,
+  GOVERNANCE_NAME,
   hasChanges,
+  isGeneratedName,
   ownership,
   physicalName,
-  GOVERNANCE_NAME,
 } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -180,5 +182,11 @@ export const RowFilterProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () => collectAll(galaxy.rowFilter.listRowFilters.items({}), toAttributes),
+    list: () =>
+      collectAll(
+        galaxy.rowFilter.listRowFilters
+          .items({})
+          .pipe(Stream.filter((item) => isGeneratedName(item.name))),
+        toAttributes,
+      ),
   });

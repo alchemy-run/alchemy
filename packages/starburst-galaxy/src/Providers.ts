@@ -70,7 +70,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * they do not all return in the same window; twelve tries bound the wait
  * at about three minutes.
  */
-export const RetryPolicy = Layer.succeed(Retry, {
+const RetryPolicy = Layer.succeed(Retry, {
   while: isTransientError,
   backoff: {
     baseMs: 1_000,
