@@ -629,7 +629,9 @@ test.provider(
       );
 
       expect(bucket.bucketName).toEqual(testName("alchemy-test-bucket-custom-name"));
-      expect(bucket.bucketArn).toEqual("arn:aws:s3:::alchemy-test-bucket-custom-name");
+      expect(bucket.bucketArn).toEqual(
+        `arn:aws:s3:::${testName("alchemy-test-bucket-custom-name")}`,
+      );
 
       yield* S3.headBucket({ Bucket: bucket.bucketName });
 
@@ -787,7 +789,7 @@ test.provider(
       yield* stack.destroy();
 
       const distributionArn = "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
-      const bucketArn = "arn:aws:s3:::alchemy-test-bucket-policy-bindings";
+      const bucketArn = `arn:aws:s3:::${testName("alchemy-test-bucket-policy-bindings")}`;
 
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
