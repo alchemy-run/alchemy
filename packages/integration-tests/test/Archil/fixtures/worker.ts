@@ -235,61 +235,68 @@ export default class ArchilWorker extends Cloudflare.Worker<ArchilWorker>()(
           }
           case "/sandbox": {
             const sandbox = yield* sandboxes.create({ name: q("name") });
-            yield* sandbox.files.write("/tmp/note.txt", "hi from worker");
-            const out = yield* sandbox.exec("cat /tmp/note.txt");
-            const text = yield* sandbox.files.readText("/tmp/note.txt");
-            // The rest of `files`: a directory, its listing, a stat, a removal.
-            yield* sandbox.files.makeDir("/tmp/tree/sub");
-            yield* sandbox.files.write("/tmp/tree/a.txt", "abc");
-            const listed = (yield* sandbox.files.list("/tmp/tree"))
-              .map((e) => `${e.type}:${e.path}`)
-              .sort();
-            const stat = yield* sandbox.files.stat("/tmp/tree/a.txt");
-            yield* sandbox.files.remove("/tmp/tree");
-            const removed = yield* sandbox.exec("test -e /tmp/tree");
-            // An argument list is quoted; stdin is written, then closed.
-            const piped = yield* sandbox.exec(["sh", "-c", "tr a-z A-Z"], { stdin: "piped in" });
-            const failed = yield* sandbox.exec("exit 3");
-            // A background process, attached until it exits.
-            const started = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const process = yield* sandbox.start("echo -n started", { cwd: "/tmp" });
-                const output = yield* process.output.pipe(
-                  Stream.map((chunk) => new TextDecoder().decode(chunk.data)),
-                  Stream.mkString,
-                );
-                const exit = yield* process.wait;
-                return { output, exitCode: exit.exitCode };
-              }),
-            );
-            // A terminal of 100 x 30.
-            const size = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const pty = yield* sandbox.pty.open({ cols: 100, rows: 30, command: "stty size" });
-                const output = yield* pty.output.pipe(
-                  Stream.map((bytes) => new TextDecoder().decode(bytes)),
-                  Stream.mkString,
-                );
-                yield* pty.wait;
-                return output.trim();
-              }),
-            );
-            const forked = yield* sandbox.fork({ name: `${q("name")}-fork` });
-            const forkOut = yield* forked.exec("cat /tmp/note.txt");
-            yield* forked.delete();
-            yield* sandbox.delete();
-            return yield* HttpServerResponse.json({
-              stdout: out.stdout,
-              text,
-              listed,
-              stat: { type: stat.type, size: stat.size },
-              removed: removed.exitCode,
-              piped: piped.stdout,
-              failed: failed.exitCode,
-              started,
-              size,
-              fork: forkOut.stdout,
-            });
+            // Deleted however the route ends, so a failure never strands it.
+            return yield* Effect.gen(function* () {
+              yield* sandbox.files.write("/tmp/note.txt", "hi from worker");
+              const out = yield* sandbox.exec("cat /tmp/note.txt");
+              const text = yield* sandbox.files.readText("/tmp/note.txt");
+              // The rest of `files`: a directory, its listing, a stat, a removal.
+              yield* sandbox.files.makeDir("/tmp/tree/sub");
+              yield* sandbox.files.write("/tmp/tree/a.txt", "abc");
+              const listed = (yield* sandbox.files.list("/tmp/tree"))
+                .map((e) => `${e.type}:${e.path}`)
+                .sort();
+              const stat = yield* sandbox.files.stat("/tmp/tree/a.txt");
+              yield* sandbox.files.remove("/tmp/tree");
+              const removed = yield* sandbox.exec("test -e /tmp/tree");
+              // An argument list is quoted; stdin is written, then closed.
+              const piped = yield* sandbox.exec(["sh", "-c", "tr a-z A-Z"], { stdin: "piped in" });
+              const failed = yield* sandbox.exec("exit 3");
+              // A background process, attached until it exits.
+              const started = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const process = yield* sandbox.start("echo -n started", { cwd: "/tmp" });
+                  const output = yield* process.output.pipe(
+                    Stream.map((chunk) => new TextDecoder().decode(chunk.data)),
+                    Stream.mkString,
+                  );
+                  const exit = yield* process.wait;
+                  return { output, exitCode: exit.exitCode };
+                }),
+              );
+              // A terminal of 100 x 30.
+              const size = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const pty = yield* sandbox.pty.open({
+                    cols: 100,
+                    rows: 30,
+                    command: "stty size",
+                  });
+                  const output = yield* pty.output.pipe(
+                    Stream.map((bytes) => new TextDecoder().decode(bytes)),
+                    Stream.mkString,
+                  );
+                  yield* pty.wait;
+                  return output.trim();
+                }),
+              );
+              const forked = yield* sandbox.fork({ name: `${q("name")}-fork` });
+              const forkOut = yield* forked
+                .exec("cat /tmp/note.txt")
+                .pipe(Effect.ensuring(forked.delete().pipe(Effect.ignore)));
+              return yield* HttpServerResponse.json({
+                stdout: out.stdout,
+                text,
+                listed,
+                stat: { type: stat.type, size: stat.size },
+                removed: removed.exitCode,
+                piped: piped.stdout,
+                failed: failed.exitCode,
+                started,
+                size,
+                fork: forkOut.stdout,
+              });
+            }).pipe(Effect.ensuring(sandbox.delete().pipe(Effect.ignore)));
           }
           case "/preview": {
             const out = yield* preview.exec("echo -n preview-ok");

@@ -88,9 +88,19 @@ export default Room.make(
 );
 ```
 
+An instance held with `Entity.keepAlive(true)` doesn't stop when idle. If its object restarts, the alarm starts the instance again.
+
+## Handlers run as on runners
+
+Each instance runs its handlers behind Effect's own RPC server, the way Effect Cluster's runners do. RPC middleware, `concurrency`, `Rpc.fork` and `Rpc.uninterruptible` all work as they do on runners. When a caller is interrupted, its handler is interrupted too.
+
+A defect restarts the instance and runs its messages again, with a growing pause between restarts. To send the defect to the caller instead, set `disableFatalDefects: true`.
+
 ## Persisted messages live in the object
 
-A persisted message is written to the object's own SQLite before it runs, and its reply after. A primary key runs once, and a message cut short by a restart runs again when the object's alarm fires.
+A persisted message is written to the object's own SQLite before it runs, and its reply after. A message with a primary key runs once. A duplicate that arrives while the first is running waits for its reply. A message cut short by a restart runs again when the object's alarm fires. A message with `DeliverAt` waits in SQLite until its time, and the alarm wakes the object to run it.
+
+A call the object never answers fails with `PersistenceError`. A persisted call is first sent again to a fresh stub, since the object stores it under the same id and runs it once.
 
 ## Workflows, singletons and crons
 
