@@ -18,6 +18,7 @@ import {
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
+import { PrivateEndpoint, PrivateEndpointProvider } from "./Service/PrivateEndpoint.ts";
 import { QueryEndpoint, QueryEndpointProvider } from "./Service/QueryEndpoint.ts";
 import { ScalingSchedule, ScalingScheduleProvider } from "./Service/ScalingSchedule.ts";
 import { Service, ServiceProvider } from "./Service/Service.ts";
@@ -54,6 +55,7 @@ export const providers = () =>
       MemberNotificationSetting,
       Organization,
       PreviewFeature,
+      PrivateEndpoint,
       QueryEndpoint,
       Role,
       ScalingSchedule,
@@ -70,6 +72,7 @@ export const providers = () =>
         MemberNotificationSettingProvider(),
         OrganizationProvider(),
         PreviewFeatureProvider(),
+        PrivateEndpointProvider(),
         QueryEndpointProvider(),
         RoleProvider(),
         ScalingScheduleProvider(),
