@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as organization from "@distilled.cloud/clickhouse-cloud/organization";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
+import { cleanSlate } from "../fixtures/cleanup.ts";
 
 const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 
@@ -17,7 +18,7 @@ test.provider(
   "rename the organization and restore the original name on destroy",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
       const before = yield* observe;
       const stage = yield* Stage;
       const renamed = `alchemy ${stage}`.replace(/[^A-Za-z0-9 ]/g, " ").slice(0, 50);

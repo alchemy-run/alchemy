@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as backup from "@distilled.cloud/clickhouse-cloud/backup";
 import * as Effect from "effect/Effect";
+import { cleanSlate } from "../fixtures/cleanup.ts";
 
 const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 
@@ -43,7 +44,7 @@ test.provider.skipIf(slow)(
   "configure backups, change them, reset them on destroy",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
 
       // The service alone first, to record its defaults.
       const bare = yield* stack.deploy(
@@ -92,6 +93,6 @@ test.provider.skipIf(slow)(
       );
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );
