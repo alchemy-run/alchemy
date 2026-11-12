@@ -1509,6 +1509,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/clickhouse-cloud" },
             { label: "Setup", link: "/clickhouse-cloud/setup" },
+            { label: "Credentials & bindings", link: "/clickhouse-cloud/credentials" },
             providerResourcesEntry("ClickHouseCloud"),
           ],
         },
