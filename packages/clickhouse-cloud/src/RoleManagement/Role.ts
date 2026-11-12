@@ -242,7 +242,7 @@ export const RoleProvider = () =>
             )
             .map((r) => toAttributes(organizationId, r));
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const organizationId = output?.organizationId ?? (yield* currentOrganizationId);
           const name = yield* resolveName(id, olds?.name, output?.name);
           const observed = output?.roleId
@@ -251,7 +251,11 @@ export const RoleProvider = () =>
           if (observed === undefined) return undefined;
           const attrs = toAttributes(organizationId, observed);
           if (observed.type === "system") return Unowned(attrs);
-          return (yield* isOwnedName(id, attrs.name, output !== undefined))
+          return (yield* isOwnedName(
+            id,
+            attrs.name,
+            output !== undefined || attrs.roleId === previous?.roleId,
+          ))
             ? attrs
             : Unowned(attrs);
         }),

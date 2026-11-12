@@ -31,9 +31,9 @@ export const resolveName = Effect.fn(function* (
 });
 
 /**
- * Whether an object found by `name` is ours: a name in state always is; a
- * user-chosen name with no state is not (adopting it needs `--adopt`); the
- * generated name is.
+ * Whether an object found by `name` is ours: one in state, or the generation
+ * a replacement replaces, always is; a user-chosen name with no state is not
+ * (adopting it needs `--adopt`); the generated name is.
  */
 export const isOwnedName = Effect.fn(function* (id: string, name: string, inState: boolean) {
   if (inState) return true;

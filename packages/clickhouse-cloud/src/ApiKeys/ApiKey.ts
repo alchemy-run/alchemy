@@ -273,10 +273,13 @@ export const ApiKeyProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds, output }) {
           if (!isResolved(news) || output === undefined || olds === undefined) return undefined;
-          if (!deepEqual(news.hashData, olds.hashData)) return { action: "replace" } as const;
+          // Delete first: the new key keeps the old one's name.
+          if (!deepEqual(news.hashData, olds.hashData)) {
+            return { action: "replace", deleteFirst: true } as const;
+          }
           return undefined;
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const organizationId = output?.organizationId ?? (yield* currentOrganizationId);
           const secret = {
             keyId: output?.keyId ?? "",
@@ -291,7 +294,11 @@ export const ApiKeyProvider = () =>
           const attrs = toAttributes(organizationId, observed, secret);
           // The secret is only shown at creation: a key found without state
           // can't be adopted with it, and reconcile replaces it.
-          return (yield* isOwnedName(id, attrs.name, output !== undefined))
+          return (yield* isOwnedName(
+            id,
+            attrs.name,
+            output !== undefined || attrs.id === previous?.id,
+          ))
             ? attrs
             : Unowned(attrs);
         }),
