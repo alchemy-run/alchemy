@@ -20,7 +20,6 @@ export {
   MemberNotFound,
   OperationFailed,
   OperationTimedOut,
-  PostgresDeletionProtected,
   PreviewNotOffered,
   QueryApiEndpointUserOwned,
   ResultMissing,

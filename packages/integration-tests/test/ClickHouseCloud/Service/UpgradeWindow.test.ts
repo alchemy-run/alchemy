@@ -23,12 +23,12 @@ const declare = (weekday: number) =>
   });
 
 test.provider.skipIf(needsService || enterprise)(
-  "below Enterprise the deploy fails with the API's Forbidden",
+  "below Enterprise the deploy fails with FeatureUnavailable",
   (stack) =>
     Effect.gen(function* () {
       yield* cleanSlate(stack);
       const error = yield* stack.deploy(declare(2)).pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+      expect(error._tag).toEqual("FeatureUnavailable");
       expect(error.message).toEqual(
         "FORBIDDEN: Cannot use scheduled upgrades in SCALE pricing package",
       );

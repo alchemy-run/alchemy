@@ -185,11 +185,14 @@ export const ensureAwake = Effect.fn(function* (input: {
   }
   if (observed.state === "idle") {
     if (input.session) yield* input.session.note("Waking the idle service...");
-    yield* service.updateServiceState({
-      organizationId: input.organizationId,
-      serviceId: input.serviceId,
-      command: "awake",
-    });
+    // Already waking (no longer idle): wait for it like any other.
+    yield* service
+      .updateServiceState({
+        organizationId: input.organizationId,
+        serviceId: input.serviceId,
+        command: "awake",
+      })
+      .pipe(Effect.catchTag("ServiceNotIdle", () => Effect.void));
   }
   return yield* waitForService({
     organizationId: input.organizationId,

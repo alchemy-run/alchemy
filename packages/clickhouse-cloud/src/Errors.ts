@@ -1,5 +1,4 @@
 import type * as service from "@distilled.cloud/clickhouse-cloud/service";
-import type { Conflict } from "@distilled.cloud/core/errors";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
@@ -177,22 +176,6 @@ export class FeatureUnavailable extends Data.TaggedError("ClickHouseCloud.Featur
 }> {
   override get message() {
     return `ClickHouse Cloud ${this.feature} is not available: ${this.reason}`;
-  }
-}
-
-/** `deletePostgresService` answered 409: deletion protection is on. */
-export class PostgresDeletionProtected extends Data.TaggedError(
-  "ClickHouseCloud.PostgresDeletionProtected",
-)<{
-  readonly postgresId: string;
-  /** The API's 409 answer. */
-  readonly cause: Conflict;
-}> {
-  override get message() {
-    return (
-      `ClickHouse Cloud Postgres service ${this.postgresId} has deletion protection on. ` +
-      "Set `deletionProtection: false` and deploy before deleting it."
-    );
   }
 }
 

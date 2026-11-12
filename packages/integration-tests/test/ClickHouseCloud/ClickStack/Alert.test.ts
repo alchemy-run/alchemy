@@ -13,7 +13,7 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const clickstack = process.env.CLICKHOUSE_CLOUD_TEST_CLICKSTACK_CONNECTION !== undefined;
 
 test.provider.skipIf(needsService || clickstack)(
-  "a service without ClickStack set up fails with the API's Forbidden",
+  "a service without ClickStack set up fails with FeatureUnavailable",
   (scratch) =>
     Effect.gen(function* () {
       yield* cleanSlate(scratch);
@@ -34,7 +34,7 @@ test.provider.skipIf(needsService || clickstack)(
           }),
         )
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+      expect(error._tag).toEqual("FeatureUnavailable");
       expect(error.message).toEqual("FORBIDDEN: ClickStack has not been setup for this service");
       yield* scratch.destroy();
     }).pipe(Effect.scoped),
