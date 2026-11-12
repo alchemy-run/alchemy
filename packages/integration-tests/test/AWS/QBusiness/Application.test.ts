@@ -145,7 +145,7 @@ describe(
 
                 const index = yield* Index("Docs", { applicationId: app.applicationId });
 
-                const retriever = yield* Retriever("Docs", {
+                const retriever = yield* Retriever("DocsRetriever", {
                   applicationId: app.applicationId,
                   type: "NATIVE_INDEX",
                   configuration: { nativeIndexConfiguration: { indexId: index.indexId } },

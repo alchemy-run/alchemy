@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 /**
  * Standing prerequisites for the Floci-gated AWS suites (EKS, AMP scraper,
  * SageMaker HyperPod and endpoints, RDS proxy, ECS capacity providers, Flink,
- * custom domains, API Gateway VPC links, SES, OAM, Control Tower). They are
+ * custom domains, API Gateway VPC links, SES, OAM, Q Apps, Control Tower). They are
  * created through the emulated AWS APIs before `test:aws:floci` spawns the
  * suite, exported as the env vars the suites read, and removed after the run.
  *
@@ -24,6 +24,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as oam from "@distilled.cloud/aws/oam";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -109,6 +110,7 @@ type Group =
   | "vpcLink"
   | "ses"
   | "oam"
+  | "qapps"
   | "sagemakerEndpoint"
   | "controlTower"
   | "mediaConvert";
@@ -157,6 +159,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
     "AWS_TEST_SES_VDM",
   ],
   oam: ["AWS_TEST_OAM_SINK_ARN"],
+  qapps: ["AWS_TEST_QAPPS", "QAPPS_INSTANCE_ID"],
   sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
   mediaConvert: ["MEDIACONVERT_ROLE_ARN", "MEDIACONVERT_TEST_INPUT", "MEDIACONVERT_TEST_OUTPUT"],
   controlTower: [
@@ -200,6 +203,7 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
     "SES/CustomVerificationEmailTemplate.test.ts",
   ],
   oam: ["OAM/Sink.test.ts"],
+  qapps: ["QApps/QApp.test.ts", "QApps/Bindings.test.ts", "QApps/QAppsMissingLookup.test.ts"],
   sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
   mediaConvert: ["MediaConvert/MediaConvert.test.ts"],
@@ -1273,6 +1277,43 @@ const ensureSesFixtures = (ledger: Array<Cleanup>) =>
     return { bounceMessageId: sent.MessageId };
   });
 
+// ─── Q Apps instance ────────────────────────────────────────────────────────
+
+// A Q Apps instance is a Q Business application with Q Apps enabled.
+const ensureQAppsInstance = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const listed = yield* qbusiness.listApplications({});
+    const existing = (listed.applications ?? []).find((app) => app.displayName === NAME);
+    const applicationId =
+      existing?.applicationId ??
+      (yield* qbusiness
+        .createApplication({
+          displayName: NAME,
+          identityType: "ANONYMOUS",
+          qAppsConfiguration: { qAppsControlMode: "ENABLED" },
+          tags: [{ key: FIXTURE_TAG_KEY, value: FIXTURE_TAG_VALUE }],
+        })
+        .pipe(Effect.map((created) => created.applicationId)));
+    if (applicationId === undefined) {
+      return yield* fixtureError(`Q Business application ${NAME} has no id`);
+    }
+    const id = applicationId;
+    yield* register(ledger, {
+      label: `Q Business application ${id}`,
+      run: qbusiness
+        .deleteApplication({ applicationId: id })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    });
+    yield* qbusiness.getApplication({ applicationId: id }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("500 millis"),
+        until: (app) => app.status === "ACTIVE",
+        times: 60,
+      }),
+    );
+    return id;
+  });
+
 // ─── OAM (second account) ────────────────────────────────────────────────────
 
 const OAM_RESOURCE_TYPES = ["AWS::CloudWatch::Metric", "AWS::Logs::LogGroup", "AWS::XRay::Trace"];
@@ -1628,6 +1669,11 @@ const provision = (
 
     if (groups.has("oam")) {
       env.AWS_TEST_OAM_SINK_ARN = yield* ensureOamSink(ledger);
+    }
+
+    if (groups.has("qapps")) {
+      env.QAPPS_INSTANCE_ID = yield* ensureQAppsInstance(ledger);
+      env.AWS_TEST_QAPPS = "1";
     }
 
     if (groups.has("sagemakerEndpoint")) {
