@@ -18,6 +18,7 @@ import {
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
+import { ClickHouseSetting, ClickHouseSettingProvider } from "./Service/ClickHouseSetting.ts";
 import { PrivateEndpoint, PrivateEndpointProvider } from "./Service/PrivateEndpoint.ts";
 import { QueryEndpoint, QueryEndpointProvider } from "./Service/QueryEndpoint.ts";
 import { ScalingSchedule, ScalingScheduleProvider } from "./Service/ScalingSchedule.ts";
@@ -50,6 +51,7 @@ export const providers = () =>
       ApiKey,
       BackupConfiguration,
       ByocInfrastructure,
+      ClickHouseSetting,
       Invitation,
       Member,
       MemberNotificationSetting,
@@ -67,6 +69,7 @@ export const providers = () =>
         ApiKeyProvider(),
         BackupConfigurationProvider(),
         ByocInfrastructureProvider(),
+        ClickHouseSettingProvider(),
         InvitationProvider(),
         MemberProvider(),
         MemberNotificationSettingProvider(),
