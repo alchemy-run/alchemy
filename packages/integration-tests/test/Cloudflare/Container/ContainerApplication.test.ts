@@ -11,7 +11,6 @@ import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import { noopSession } from "alchemy/Report";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
@@ -1517,29 +1516,44 @@ describe.concurrent(
     // Cloudflare rejects a default application created without its Durable
     // Object binding ("This account requires a Durable Object binding when
     // creating a default application."), and a cycle precreates before the
-    // Worker has a namespace. So precreate publishes the image and creates no
-    // application; reconcile creates it once, with the namespace (#3264).
+    // Worker has a namespace. Precreate publishes the image and creates no
+    // application; reconcile creates it once, attached (#3264).
     test.provider(
-      "precreate publishes the image and creates no application",
-      (stack) =>
+      "a fresh Worker and Container cycle creates one attached application",
+      (scratch) =>
         Effect.gen(function* () {
-          yield* stack.destroy();
+          yield* scratch.destroy();
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const provider = yield* Provider.findProvider(Cloudflare.Container);
-          const precreated = yield* provider.precreate!({
-            id: "PrecreateOnly",
-            fqn: "PrecreateOnly",
-            instanceId: "precreate-only-test",
-            news: { image: "mendhak/http-https-echo:41", maxInstances: 1 },
-            bindings: [],
-            session: { ...noopSession, note: () => Effect.void },
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* RemoteContainerWorker;
+            const app = yield* RemoteContainer.Application;
+            return { url: worker.url.as<string>(), app };
           });
-          expect(isLiveId(precreated.applicationId)).toBe(false);
-          expect(precreated.hash?.digest).toBeDefined();
-          const apps = yield* Containers.listContainerApplications({ accountId });
-          expect(apps.map((app) => app.name)).not.toContain(precreated.applicationName);
+
+          const { app } = yield* scratch.deploy(program);
+          expect(isLiveId(app.applicationId)).toBe(true);
+          const namespaceId = app.durableObjects?.namespaceId;
+          expect(namespaceId).toBeDefined();
+          const named = (yield* Containers.listContainerApplications({ accountId })).filter(
+            (item) => item.name === app.applicationName,
+          );
+          expect(named.map((item) => item.id)).toEqual([app.applicationId]);
+          expect(
+            yield* live(accountId, app.applicationId).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ContainerApplicationNotFound",
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            ),
+          ).toMatchObject({ durableObjects: { namespaceId } });
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* waitForApplicationDeleted(accountId, app.applicationId)).toBeUndefined();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
     );
 
     // Placement constraints pass through to Cloudflare unchanged and read back
@@ -1928,8 +1942,8 @@ describe.concurrent(
     );
 
     // The Durable Object attachment is immutable, so a reconcile that finds an
-    // application without it (precreate's stub, or a deploy that died between
-    // precreate and reconcile) deletes and re-creates the application. When
+    // application without it (a deploy that died between creating and
+    // attaching it, or one created out of band) deletes and re-creates the application. When
     // the source hash has drifted in between, that path rebuilds the image and
     // must apply the same digest comparison as a plain update.
     test.provider(
