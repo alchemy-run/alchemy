@@ -14,13 +14,15 @@ import * as Stream from "effect/Stream";
 /**
  * Durable Object target whose events emit child spans — one HTTP fetch
  * event and one RPC method event, so both DurableObjectBridge paths get
- * telemetry coverage.
+ * telemetry coverage. Its instance phase forks a fiber that records a span
+ * outside any event, into the instance's own exporters.
  */
 export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlushTarget>()(
   "OtelEventFlushTarget",
   Effect.succeed(
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
+      yield* Effect.forkDetach(Effect.void.pipe(Effect.withSpan("otel-event-flush.instance")));
       return {
         fetch: Effect.succeed(HttpServerResponse.text("durable-object-ok")).pipe(
           Effect.withSpan("otel-event-flush.child"),

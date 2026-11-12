@@ -196,6 +196,12 @@ describe(
             timeout: "120 seconds",
             label: "deployed DO rpc event batch",
           });
+          // A fiber the DO's instance phase forked records into the
+          // instance's own exporters, flushed at the end of an event.
+          yield* expectUrlContains(collected, "otel-event-flush.instance", {
+            timeout: "120 seconds",
+            label: "deployed DO instance-phase span",
+          });
           // The DO RPC event continues the caller's trace, parented on the
           // Worker span that made the call, as the DO fetch event does. The
           // Worker's own batch can land after the DO's, so poll for it.

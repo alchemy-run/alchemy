@@ -1,11 +1,12 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as OtlpExporter from "effect/observability/OtlpExporter";
 import * as OtlpLogger from "effect/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
@@ -270,6 +271,8 @@ export const configuredDestinations: Effect.Effect<ResolvedDestination[]> = Effe
 const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
   shutdownTimeout?: Duration.Input;
+  /** Leave the metrics exporter out even when a destination configures it. */
+  withoutMetrics?: boolean;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -281,7 +284,7 @@ const makeExporterLayer = (options?: {
         });
       const traces = targets("traces");
       const logs = targets("logs");
-      const metrics = targets("metrics");
+      const metrics = options?.withoutMetrics ? [] : targets("metrics");
       if (traces.length === 0 && logs.length === 0 && metrics.length === 0) {
         return Layer.empty;
       }
@@ -372,6 +375,19 @@ export const fromBoundConfig: TelemetryLayer = makeExporterLayer({
 const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
 
 /**
+ * The Durable Object instance half: the bound trace and log exporters with
+ * no export interval, so a pending export timer never keeps the object out
+ * of hibernation. Records wait in the buffer until the bridge flushes them
+ * at the end of the next event. Metrics are left out: their exporter
+ * reports cumulative values on every interval.
+ */
+const fromBoundConfigInstance: TelemetryLayer = makeExporterLayer({
+  exportInterval: Duration.infinity,
+  shutdownTimeout: "10 seconds",
+  withoutMetrics: true,
+});
+
+/**
  * The per-event telemetry exporters, as a `Context.Reference` holding the
  * Layer the runtime bridges build into every event's request scope.
  * Provide it via {@link layerOtlp} / {@link layer} rather than directly —
@@ -440,6 +456,11 @@ export const buildEventTelemetry = (
  * field carries the custom Layer(s) registered by {@link layer}
  * during init, composed with the bound OTLP destinations (read with the
  * standard periodic export intervals).
+ *
+ * Not for Durable Objects: the periodic exporters keep a timer pending, and
+ * workerd won't hibernate an object while one is. The Durable Object bridge
+ * gives each instance interval-free exporters of its own, flushed per event
+ * (see {@link buildInstanceTelemetry}).
  */
 export const provideProcessTelemetry =
   (runtimeContext?: { telemetry?: TelemetryLayer | undefined }) =>
@@ -455,3 +476,45 @@ export const provideProcessTelemetry =
       );
       return yield* Effect.provideContext(effect, telemetry);
     });
+
+/**
+ * Telemetry built once for a Durable Object instance: the services to
+ * provide to its initializer, and the flush the bridge runs at the end of
+ * every event.
+ *
+ * @internal
+ */
+export interface InstanceTelemetry {
+  readonly context: Context.Context<never>;
+  readonly flush: Effect.Effect<void>;
+}
+
+/**
+ * Build the bound trace and log exporters into a Durable Object instance's
+ * scope, which never closes (workerd gives an instance no shutdown hook).
+ * Fibers the initializer forks (a tick loop, a subscription) record into
+ * them. The exporters have no export interval, so nothing keeps the object
+ * awake while it is idle; `flush` delivers what they hold, and the bridge
+ * runs it at the end of every event, inside that event's I/O context.
+ *
+ * Custom {@link layer} exporters stay per event: their intervals aren't
+ * ours to turn off.
+ *
+ * @internal
+ */
+export const buildInstanceTelemetry = (
+  context: Context.Context<never>,
+  scope: Scope.Scope,
+): Effect.Effect<InstanceTelemetry> =>
+  buildEventTelemetry(context, scope, undefined, fromBoundConfigInstance).pipe(
+    Effect.map((built) => {
+      const flusher = Context.getOption(built, OtlpExporter.Flusher);
+      return {
+        context: built,
+        flush:
+          flusher._tag === "Some"
+            ? flusher.value.flush.pipe(Effect.timeoutOption("10 seconds"), Effect.asVoid)
+            : Effect.void,
+      };
+    }),
+  );
