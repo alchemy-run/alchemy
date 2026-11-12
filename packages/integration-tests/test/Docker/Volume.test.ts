@@ -16,20 +16,21 @@ const testVolumeName = (stage: string, suffix: string) => "alchemy-" + stage + "
 
 test.provider(
   "diff replaces a volume when labels change",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
+      const name = testVolumeName(stack.stage, "diff-labels");
       const volumeProvider = yield* Provider.findProvider(Docker.Volume);
       const volumeDiff = yield* volumeProvider.diff!({
         id: "data",
         fqn: "data",
         instanceId: "instance",
-        olds: { name: "data", labels: { usage: "old" } },
-        news: { name: "data", labels: { usage: "new" } },
+        olds: { name, labels: { usage: "old" } },
+        news: { name, labels: { usage: "new" } },
         oldBindings: [],
         newBindings: [],
         output: {
-          id: "data",
-          name: "data",
+          id: name,
+          name,
           driver: "local",
           driverOpts: {},
           labels: { usage: "old" },
@@ -44,20 +45,21 @@ test.provider(
 
 test.provider(
   "diff replaces a volume when its Docker context changes",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
+      const name = testVolumeName(stack.stage, "diff-context");
       const volumeProvider = yield* Provider.findProvider(Docker.Volume);
       const volumeDiff = yield* volumeProvider.diff!({
         id: "data",
         fqn: "data",
         instanceId: "instance",
-        olds: { name: "data", context: "default" },
-        news: { name: "data", context: "remote-build" },
+        olds: { name, context: "default" },
+        news: { name, context: "remote-build" },
         oldBindings: [],
         newBindings: [],
         output: {
-          id: "data",
-          name: "data",
+          id: name,
+          name,
           driver: "local",
           driverOpts: {},
           labels: {},
