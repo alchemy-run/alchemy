@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as apiKeys from "@distilled.cloud/clickhouse-cloud/api_keys";
 import * as userManagement from "@distilled.cloud/clickhouse-cloud/user_management";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -118,4 +119,74 @@ test.provider(
       yield* expectGone(created.key.id);
     }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "a key found by name has no secret: it is refused without adopt, re-minted with it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* cleanSlate(stack);
+      const organizationId = yield* ClickHouseCloud.organizationId;
+      const name = `alchemy-adopt-${stack.stage.toLowerCase()}`.slice(0, 50);
+      // A key with this name made outside the stack, as a create whose
+      // result never reached state would leave it. Deleted when the test
+      // ends, whatever happens.
+      const outside = yield* Effect.acquireRelease(
+        Effect.gen(function* () {
+          const role = yield* ClickHouseCloud.RoleManagement.Role("Viewer", {
+            policies: [
+              {
+                allowDeny: "ALLOW",
+                permissions: ["control-plane:organization:view"],
+                resources: [`organization/${organizationId}`],
+              },
+            ],
+          }).pipe(stack.deploy);
+          const { result } = yield* apiKeys.createApiKey({
+            organizationId,
+            name,
+            assignedRoleIds: [role.roleId],
+          });
+          return { roleId: role.roleId, keyId: result!.key!.id! };
+        }),
+        ({ keyId }) =>
+          apiKeys.deleteApiKey({ organizationId, keyId }).pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+            Effect.ignore,
+          ),
+      );
+      const declare = Effect.gen(function* () {
+        const role = yield* ClickHouseCloud.RoleManagement.Role("Viewer", {
+          policies: [
+            {
+              allowDeny: "ALLOW",
+              permissions: ["control-plane:organization:view"],
+              resources: [`organization/${organizationId}`],
+            },
+          ],
+        });
+        return yield* ClickHouseCloud.ApiKeys.ApiKey("Key", {
+          name,
+          assignedRoleIds: [role.roleId],
+        });
+      });
+
+      const refused = yield* stack.deploy(declare).pipe(Effect.flip);
+      expect(refused._tag).toEqual("OwnedBySomeoneElse");
+      expect((yield* getKey(outside.keyId))?.name).toEqual(name);
+
+      const adopted = yield* stack.deploy(declare.pipe(adopt(true)));
+      // The secret of the found key was never seen, so the key is replaced
+      // by a new one whose secret is in state.
+      expect(adopted.id).not.toEqual(outside.keyId);
+      expect(adopted.name).toEqual(name);
+      expect(Redacted.value(adopted.keySecret)).not.toEqual("");
+      yield* expectGone(outside.keyId);
+      const me = yield* whoami(adopted.keyId, adopted.keySecret);
+      expect(me.result).toMatchObject({ name });
+
+      yield* stack.destroy();
+      yield* expectGone(adopted.id);
+    }).pipe(Effect.scoped),
+  { tags: ["provider:clickhouse-cloud", "live"], timeout: 180_000 },
 );

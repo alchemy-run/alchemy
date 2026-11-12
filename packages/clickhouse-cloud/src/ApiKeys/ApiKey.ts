@@ -304,14 +304,18 @@ export const ApiKeyProvider = () =>
           let observed = output?.id
             ? yield* getKey(organizationId, output.id)
             : yield* findByName(organizationId, name);
-          let secret =
-            output !== undefined && observed?.id === output.id
+          // The secret is held only when state has it for this key: an
+          // adopted key, or one whose create never reached state, comes with
+          // an empty one. With `hashData` the caller holds the secret.
+          let secret: KeyMaterial | undefined =
+            output !== undefined &&
+            observed?.id === output.id &&
+            (Redacted.value(output.keySecret) !== "" || news.hashData !== undefined)
               ? { keyId: output.keyId, keySecret: output.keySecret, apiBaseUrl }
               : undefined;
 
-          // A key whose secret alchemy doesn't hold (a lost create) can't be
-          // handed to anyone: delete it and create it again. With
-          // `hashData` the caller holds the secret, so the key is kept.
+          // A key whose secret alchemy doesn't hold can't be handed to
+          // anyone: delete it and create it again.
           if (observed !== undefined && secret === undefined && news.hashData === undefined) {
             yield* session.note(`Re-creating ClickHouse Cloud API key ${name}...`);
             yield* deleteKey(organizationId, observed.id!);
@@ -344,6 +348,13 @@ export const ApiKeyProvider = () =>
             secret = { keyId: created.keyId ?? "", keySecret, apiBaseUrl };
           }
           const keyId = observed.id!;
+          // A key created from `hashData` before this state existed: the
+          // caller holds its secret, and only the hashes reached ClickHouse.
+          const material: KeyMaterial = secret ?? {
+            keyId: output?.keyId ?? "",
+            keySecret: Redacted.make(""),
+            apiBaseUrl,
+          };
 
           // Sync against the observed key. Roles this resource assigned and
           // no longer declares are removed; roles a Role assigned through its
@@ -381,7 +392,7 @@ export const ApiKeyProvider = () =>
               .pipe(Effect.flatMap(requireResult("updateApiKey")));
           }
 
-          return toAttributes(organizationId, observed, secret!);
+          return toAttributes(organizationId, observed, material);
         }),
         delete: Effect.fn(function* ({ output }) {
           if (output.keyId !== "" && output.keyId === (yield* deployer).keyId) {
