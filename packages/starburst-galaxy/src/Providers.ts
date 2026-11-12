@@ -8,6 +8,7 @@ import { PostgresqlCatalog, PostgresqlCatalogProvider } from "./Catalog/Postgres
 import { S3Catalog, S3CatalogProvider } from "./Catalog/S3Catalog.ts";
 import { Cluster, ClusterProvider } from "./Cluster/Cluster.ts";
 import * as Credentials from "./Credentials.ts";
+import { DataDomain, DataDomainProvider } from "./DataProduct/DataDomain.ts";
 import { ColumnMask, ColumnMaskProvider } from "./Governance/ColumnMask.ts";
 import { RowFilter, RowFilterProvider } from "./Governance/RowFilter.ts";
 import { Tag, TagProvider } from "./Governance/Tag.ts";
@@ -19,6 +20,7 @@ import {
   ServiceAccountPassword,
   ServiceAccountPasswordProvider,
 } from "./ServiceAccount/ServiceAccountPassword.ts";
+import { SqlJob, SqlJobProvider } from "./SqlJob/SqlJob.ts";
 
 /**
  * Service tag bundling every Starburst Galaxy provider, the AuthProvider
@@ -29,10 +31,10 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Starbur
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
- * Starburst Galaxy providers and credentials: catalogs, clusters, roles
- * and privileges, service accounts and passwords, column masks, row
- * filters and tags. Registers the Starburst Galaxy AuthProvider so
- * `alchemy profile edit` can configure it.
+ * Starburst Galaxy providers and credentials: catalogs, clusters, roles and
+ * privileges, service accounts and passwords, column masks, row filters,
+ * tags, data domains and SQL jobs. Registers the Starburst Galaxy
+ * AuthProvider so `alchemy profile edit` can configure it.
  *
  * @example
  * ```ts
@@ -45,6 +47,7 @@ export const providers = () =>
     Provider.collection([
       Cluster,
       ColumnMask,
+      DataDomain,
       PostgresqlCatalog,
       Role,
       RolePrivilege,
@@ -52,6 +55,7 @@ export const providers = () =>
       S3Catalog,
       ServiceAccount,
       ServiceAccountPassword,
+      SqlJob,
       Tag,
       TagAssignment,
     ]),
@@ -60,6 +64,7 @@ export const providers = () =>
       Layer.mergeAll(
         ClusterProvider(),
         ColumnMaskProvider(),
+        DataDomainProvider(),
         PostgresqlCatalogProvider(),
         RoleProvider(),
         RolePrivilegeProvider(),
@@ -67,6 +72,7 @@ export const providers = () =>
         S3CatalogProvider(),
         ServiceAccountProvider(),
         ServiceAccountPasswordProvider(),
+        SqlJobProvider(),
         TagProvider(),
         TagAssignmentProvider(),
       ),
