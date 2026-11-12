@@ -31,6 +31,7 @@
     ".": "./src/index.ts",
     "./Catalog": "./src/Catalog/index.ts",
     "./Cluster": "./src/Cluster/index.ts",
+    "./Governance": "./src/Governance/index.ts",
     "./Role": "./src/Role/index.ts",
     "./ServiceAccount": "./src/ServiceAccount/index.ts",
     "./*": "./src/*.ts",
@@ -55,6 +56,12 @@
         "bun": "./src/Cluster/index.ts",
         "worker": "./src/Cluster/index.ts",
         "default": "./lib/Cluster/index.js"
+      },
+      "./Governance": {
+        "types": "./lib/Governance/index.d.ts",
+        "bun": "./src/Governance/index.ts",
+        "worker": "./src/Governance/index.ts",
+        "default": "./lib/Governance/index.js"
       },
       "./Role": {
         "types": "./lib/Role/index.d.ts",
