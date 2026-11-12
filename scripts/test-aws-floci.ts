@@ -200,6 +200,7 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_GLACIER: "1",
   // floci treats its accounts as existing Kendra customers and provisions indexes in seconds.
   AWS_TEST_KENDRA: "1",
+  AWS_TEST_LICENSE_MANAGER_CREATE: "1",
   AWS_TEST_GRAFANA: "1",
   AWS_TEST_HEALTHLAKE: "1",
   AWS_TEST_IOTFLEETWISE: "1",
