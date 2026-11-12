@@ -181,7 +181,7 @@ export const summarize = (plan: Plan.Plan): PlanSummary => {
     run: 0,
     noop: 0,
   };
-  for (const node of Object.values(plan.resources)) summary[node.action]++;
+  for (const node of Object.values(plan.resources)) summary[Plan.displayAction(node)]++;
   for (const node of Object.values(plan.actions)) summary[node.action]++;
   for (const node of [...Object.values(plan.deletions), ...Object.values(plan.actionDeletions)]) {
     if (node !== undefined) summary[node.action]++;

@@ -10865,7 +10865,9 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
             .pipe(Effect.flip, Effect.option);
           if (admits) {
             expect(Option.isNone(result)).toBe(true);
-            expect(cloud.events.slice(0, 3)).toEqual([
+            // The plan observes the identity first, to label the create.
+            expect(cloud.events.slice(0, 4)).toEqual([
+              "observe target",
               "observe target",
               "precreate target",
               "reconcile target",
@@ -10878,7 +10880,7 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
               logicalId: "Subject",
             });
             // Refused before precreate or reconcile touched it.
-            expect(cloud.events).toEqual(["observe target"]);
+            expect(cloud.events).toEqual(["observe target", "observe target"]);
             expect(cloud.owners.get("target")).toBe("SomeoneElse");
             expect((yield* getState("Subject")).attr).toBeUndefined();
           }
@@ -10896,7 +10898,8 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
         const cloud = yield* reset(stack);
         if (owner) cloud.owners.set("fresh", owner);
         yield* stack.deploy(subject("fresh"));
-        expect(cloud.events.slice(0, 3)).toEqual([
+        expect(cloud.events.slice(0, 4)).toEqual([
+          "observe fresh",
           "observe fresh",
           "precreate fresh",
           "reconcile fresh",
@@ -11229,7 +11232,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const cloud = yield* foreign(stack);
       const error = yield* stack.deploy(subject("tenant", { late: "tag" })).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
-      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.events).toEqual(["observe tenant/api", "observe tenant/api"]);
       expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
       yield* stack.destroy();
     }),
@@ -11240,7 +11243,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const cloud = yield* foreign(stack);
       const error = yield* stack.deploy(subject("tenant", { cycle: false })).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
-      expect(cloud.events).toEqual(["read tenant/api"]);
+      expect(cloud.events).toEqual(["observe unresolved", "read tenant/api"]);
       expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
       yield* stack.destroy();
     }),
@@ -11258,7 +11261,12 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
           const error = yield* stack.deploy(subject("tenant")).pipe(Effect.flip);
           expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
           // The stub claims nothing; the resolved identity is read before reconcile.
-          expect(cloud.events).toEqual(["observe unresolved", "precreate stub", "read tenant/api"]);
+          expect(cloud.events).toEqual([
+            "observe unresolved",
+            "observe unresolved",
+            "precreate stub",
+            "read tenant/api",
+          ]);
           expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
           yield* stack.destroy();
           expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
@@ -11279,7 +11287,11 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
           }),
           Effect.flip,
         );
-        expect(cloud.events).toEqual(["observe unresolved", "precreate stub"]);
+        expect(cloud.events).toEqual([
+          "observe unresolved",
+          "observe unresolved",
+          "precreate stub",
+        ]);
         const checkpoint = yield* getState("Subject");
         expect(checkpoint.status).toBe("creating");
         expect(checkpoint.attr).toBeUndefined();
@@ -11315,6 +11327,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const cloud = yield* reset(stack);
       yield* stack.deploy(subject("tenant"));
       expect(cloud.events).toEqual([
+        "observe unresolved",
         "observe unresolved",
         "precreate stub",
         "read tenant/api",
@@ -11435,7 +11448,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const error = yield* stack.deploy(subject("tenant", { from: "upstream" })).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
       // Refused before precreate: no stub was written.
-      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.events).toEqual(["observe unresolved", "observe tenant/api"]);
       expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
       yield* stack.destroy();
     }),
@@ -11446,6 +11459,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const cloud = yield* reset(stack);
       yield* stack.deploy(subject("tenant", { from: "upstream" }));
       expect(cloud.events).toEqual([
+        "observe unresolved",
         "observe tenant/api",
         "precreate tenant/api",
         "reconcile tenant/api",
@@ -11497,7 +11511,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const cloud = yield* foreign(stack);
       const error = yield* stack.deploy(subject("tenant", { cycle: false })).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
-      expect(cloud.events).toEqual(["observe tenant/api"]);
+      expect(cloud.events).toEqual(["observe unresolved", "observe tenant/api"]);
       expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
       yield* stack.destroy();
     }),
@@ -11522,7 +11536,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const exit = yield* stack.deploy(subject("tenant", { cycle: false })).pipe(Effect.exit);
       assert(Exit.isFailure(exit));
       expect(Cause.pretty(exit.cause)).toContain("UnresolvedObservation");
-      expect(cloud.events).toEqual(["observe unresolved"]);
+      expect(cloud.events).toEqual(["observe unresolved", "observe unresolved"]);
       expect(cloud.owners.has("tenant/api")).toBe(false);
       cloud.broken = false;
       yield* stack.destroy();
@@ -11534,6 +11548,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
       const cloud = yield* reset(stack);
       yield* stack.deploy(subject("tenant", { late: "tag" }));
       expect(cloud.events).toEqual([
+        "observe tenant/api",
         "observe tenant/api",
         "precreate tenant/api",
         "reconcile tenant/api",
@@ -11899,6 +11914,171 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
       expect(cloud.events).toEqual(["delete tenant/api"]);
       expect(cloud.owners.get("account/api")).toBe("Subject");
       expect(yield* getState("Subject")).toBeUndefined();
+    }),
+  );
+});
+
+describe("deploying a create the plan observed", { tags: ["unit", "local"] }, () => {
+  // `name` is the identity and always literal; `tag` comes from an upstream
+  // created in the same deploy, so the plan sees unresolved props and can
+  // only `observe` the identity. Apply checks it again once `tag` resolves.
+  interface Claimed extends Resource<
+    "Test.ApplyObserved",
+    { name: string; tag: string },
+    { name: string; tag?: string }
+  > {}
+  const Claimed = Resource<Claimed>("Test.ApplyObserved");
+  class Cloud extends Context.Service<
+    Cloud,
+    {
+      /** Physical name -> owning logical id. */
+      owners: Map<string, string>;
+      events: string[];
+      /** The `output` each reconcile received. */
+      outputs: Array<{ name: string; tag?: string } | undefined>;
+      /** `observe` can't check the identity yet. */
+      unresolved: boolean;
+    }
+  >()("ApplyObservationCloud") {}
+  const ownership = (cloud: Cloud["Service"], id: string, name: string) => {
+    const owner = cloud.owners.get(name);
+    if (owner === undefined) return undefined;
+    return owner === id ? { name, tag: "observed" } : Unowned({ name, tag: "observed" });
+  };
+  const providers = Provider.succeed(Claimed, {
+    observe: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`observe ${news.name}`);
+      if (cloud.unresolved) return Unresolved;
+      return ownership(cloud, id, news.name);
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const cloud = yield* Cloud;
+      const name = output?.name ?? olds?.name;
+      cloud.events.push(`read ${name}`);
+      return name === undefined ? undefined : ownership(cloud, id, name);
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`reconcile ${news.name}`);
+      cloud.outputs.push(output);
+      cloud.owners.set(news.name, id);
+      return { name: news.name, tag: news.tag };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      const cloud = yield* Cloud;
+      cloud.owners.delete(output.name);
+    }),
+  }).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        Cloud,
+        Effect.sync(() => ({
+          owners: new Map<string, string>(),
+          events: [] as string[],
+          outputs: [] as Array<{ name: string; tag?: string } | undefined>,
+          unresolved: false,
+        })),
+      ),
+    ),
+  );
+  const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
+
+  const subject = (opts: { adopt?: boolean } = {}) =>
+    Effect.gen(function* () {
+      const upstream = yield* TestResource("Tag", { string: "tag" });
+      const declared = Claimed("Subject", { name: "api", tag: upstream.string });
+      return yield* opts.adopt === undefined ? declared : declared.pipe(adopt(opts.adopt));
+    });
+
+  const reset = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    cloud.events.length = 0;
+    cloud.outputs.length = 0;
+    cloud.unresolved = false;
+    return cloud;
+  });
+
+  test.provider("an absent identity is created", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject());
+      // The plan observes; apply reads the resolved identity, finds nothing.
+      expect(cloud.events).toEqual(["observe api", "read api", "reconcile api"]);
+      expect(cloud.outputs).toEqual([undefined]);
+      expect((yield* getState("Subject")).status).toBe("created");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("an owned identity the plan labeled adopted is adopted", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      yield* stack.deploy(subject());
+      expect(cloud.events).toEqual(["observe api", "read api", "reconcile api"]);
+      // Reconcile converges the existing resource rather than creating one.
+      expect(cloud.outputs).toEqual([{ name: "api", tag: "observed" }]);
+      const state = yield* getState("Subject");
+      expect(state.status).toBe("created");
+      expect(state.attr).toEqual({ name: "api", tag: "tag" });
+      yield* stack.destroy();
+      expect(cloud.owners.has("api")).toBe(false);
+    }),
+  );
+
+  test.provider("a foreign identity the plan labeled a create is refused", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      const error = yield* stack.deploy(subject()).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "Subject" });
+      // Refused before reconcile touched it.
+      expect(cloud.events).toEqual(["observe api", "read api"]);
+      expect(cloud.owners.get("api")).toBe("SomeoneElse");
+      expect((yield* getState("Subject")).attr).toBeUndefined();
+      yield* stack.destroy();
+      expect(cloud.owners.get("api")).toBe("SomeoneElse");
+    }),
+  );
+
+  test.provider("a foreign identity the plan labeled adopted is taken over", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      yield* stack.deploy(subject({ adopt: true }));
+      expect(cloud.events).toEqual(["observe api", "read api", "reconcile api"]);
+      expect(cloud.outputs).toEqual([{ name: "api", tag: "observed" }]);
+      expect(cloud.owners.get("api")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("global adoption takes over a foreign identity", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      yield* stack.deploy(subject()).pipe(Effect.provideService(AdoptPolicy, true));
+      expect(cloud.outputs).toEqual([{ name: "api", tag: "observed" }]);
+      expect(cloud.owners.get("api")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("an identity the plan couldn't check is adopted once it resolves", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      cloud.unresolved = true;
+      const plan = yield* stack.plan(subject());
+      expect(Plan.displayAction(plan.resources.Subject!)).toBe("create");
+      yield* stack.deploy(subject());
+      // The plan's label was "create", but apply's check still adopts.
+      expect(cloud.events.slice(-2)).toEqual(["read api", "reconcile api"]);
+      expect(cloud.outputs).toEqual([{ name: "api", tag: "observed" }]);
+      yield* stack.destroy();
     }),
   );
 });

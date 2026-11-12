@@ -1,4 +1,6 @@
 import * as Axiom from "@distilled.cloud/axiom";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
@@ -169,6 +171,19 @@ export const DashboardProvider = () =>
         dashboard: current.dashboard,
       });
 
+      // Dashboard uids are server-assigned and names aren't unique, so the
+      // only way to find a dashboard we have no state for is by name. Adopt
+      // only an unambiguous match; with two or more, leave it to a create.
+      // Dashboards carry no ownership marker, so a match is `Unowned` and
+      // taking it over needs `--adopt`.
+      const findByName = (name: string) =>
+        listAll({}).pipe(
+          Effect.map((all) => all.filter((d) => d.dashboard?.name === name)),
+          Effect.map((matches) =>
+            matches.length === 1 ? Unowned(toAttrsFromGet(matches[0]!)) : undefined,
+          ),
+        );
+
       return {
         stables: ["uid", "id", "createdAt", "createdBy"],
         reconcile: Effect.fn(function* ({ news, output }) {
@@ -202,8 +217,16 @@ export const DashboardProvider = () =>
           );
         }),
 
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.uid) return undefined;
+        // The dashboard's name is its identity until it has a uid; check it as
+        // soon as it resolves, even while chart queries are still unresolved.
+        observe: Effect.fn(function* ({ news }) {
+          const name = news.dashboard?.name;
+          if (!isResolved(name)) return Unresolved;
+          return name ? yield* findByName(name) : undefined;
+        }),
+        read: Effect.fn(function* ({ output, olds }) {
+          if (!output?.uid)
+            return olds?.dashboard?.name ? yield* findByName(olds.dashboard.name) : undefined;
           return yield* get({ uid: output.uid }).pipe(
             Effect.map(toAttrsFromGet),
             Effect.catchTag("NotFound", () => Effect.undefined),

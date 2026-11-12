@@ -1,4 +1,5 @@
 import * as Axiom from "@distilled.cloud/axiom";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -145,12 +146,27 @@ export const ViewProvider = () =>
           );
         }),
 
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.id) return undefined;
-          return yield* get({ id: output.id }).pipe(
-            Effect.map((current) => ({ ...current, id: output.id })),
+        // Views carry no ownership marker, so one found by name without our
+        // state (`output`) is reported `Unowned`: taking it over needs
+        // `--adopt`.
+        read: Effect.fn(function* ({ output, olds }) {
+          const id = output?.id ?? olds?.name;
+          if (!id) return undefined;
+          const current = yield* get({ id }).pipe(
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
+          if (current === undefined) return undefined;
+          const attrs = { ...current, id };
+          return output === undefined ? Unowned(attrs) : attrs;
+        }),
+        // The view `name` is its identity; check it as soon as it resolves,
+        // even while the query still references unresolved datasets.
+        observe: Effect.fn(function* ({ news }) {
+          if (!isResolved(news.name)) return Unresolved;
+          const current = yield* get({ id: news.name }).pipe(
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return current === undefined ? undefined : Unowned({ ...current, id: news.name });
         }),
       };
     }),
