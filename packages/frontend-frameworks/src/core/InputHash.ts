@@ -55,26 +55,9 @@ export const sha256 = (input: string | Uint8Array): Effect.Effect<string> =>
     ),
   ).pipe(Effect.provide(Digest.layerWebCrypto));
 
-/** `value` with every plain object's keys sorted, so `JSON.stringify` is order-stable. */
-const stableValue = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, nested]) => [key, stableValue(nested)]),
-    );
-  }
-  return value;
-};
-
-/** sha256 of `value` as JSON with sorted keys, like alchemy's `Util/sha256`. */
+/** sha256 of `value` as JSON. Callers build `value` in a fixed key order. */
 export const sha256Object = (value: unknown): Effect.Effect<string> =>
-  sha256(JSON.stringify(stableValue(value)));
+  sha256(JSON.stringify(value));
 
 /** This package's version, salted into every input hash so an upgrade busts build memos. */
 export const packageVersion: Effect.Effect<string> = Effect.promise(

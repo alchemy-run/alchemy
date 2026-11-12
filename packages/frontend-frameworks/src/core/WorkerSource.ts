@@ -182,7 +182,8 @@ const maybeReadString = Effect.fn(function* (file: string) {
 /**
  * Read a client output directory into the manifest alchemy's asset upload
  * consumes: `sha256(content).slice(0, 32)` + size per `/`-prefixed posix
- * path. The aggregate hash covers only upload-affecting inputs.
+ * path. The aggregate hash covers the files only: `config` is a prop, which
+ * the Worker diff compares and the update sends whether or not files upload.
  */
 export const readClientAssets = Effect.fn(function* (
   directory: string,
@@ -236,7 +237,7 @@ export const readClientAssets = Effect.fn(function* (
     manifest: sortedManifest,
     _headers,
     _redirects,
-    hash: yield* sha256Object({ config, manifest: sortedManifest, _headers, _redirects }),
+    hash: yield* sha256Object({ manifest: sortedManifest, _headers, _redirects }),
   } satisfies AssetReadResult;
 });
 

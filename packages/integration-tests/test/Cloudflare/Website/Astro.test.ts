@@ -730,13 +730,16 @@ describe.concurrent(
             'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
           );
 
-          const program = (astro?: { trailingSlash: "always" }) =>
+          const program = (
+            astro?: { trailingSlash: "always" },
+            notFoundHandling: "404-page" | "none" = "404-page",
+          ) =>
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Astro("AstroStaticConfigSite", {
                 rootDir,
                 workersDev: { enabled: true, previewsEnabled: true },
                 compatibility: { date: "2026-03-10" },
-                assets: { notFoundHandling: "404-page" },
+                assets: { notFoundHandling },
                 astro,
               });
             });
@@ -761,10 +764,11 @@ describe.concurrent(
           expect(sessionNamespace).toBeUndefined();
 
           // Unchanged files and options plan nothing; changing only a source
-          // option plans a rebuild through the Worker's props diff.
+          // option or the assets config plans an update through the props diff.
           const actionOf = (plan: Plan.Plan) => plan.resources["AstroStaticConfigSite"]?.action;
           expect(actionOf(yield* stack.plan(program()))).toBe("noop");
           expect(actionOf(yield* stack.plan(program({ trailingSlash: "always" })))).toBe("update");
+          expect(actionOf(yield* stack.plan(program(undefined, "none")))).toBe("update");
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);
