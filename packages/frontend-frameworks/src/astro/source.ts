@@ -206,15 +206,6 @@ const makeAstroSourceProvider = (
     rootDir,
     memo: options.memo,
     outputDirs: [options.astro?.outDir ?? "dist", ".astro"],
-    hashOptions: {
-      main: options.main,
-      sessionKVBindingName: options.sessionKVBindingName,
-      sessions: options.sessions,
-      sessionDevKV: options.sessionDevKV,
-      prerenderEnvironment: options.prerenderEnvironment,
-      astro: options.astro,
-      config: options.config,
-    },
     buildConfig: (ctx, rootDir) =>
       ({
         rootDir,

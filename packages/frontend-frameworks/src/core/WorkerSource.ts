@@ -270,8 +270,6 @@ export interface WorkerSourceSpec<Config> {
   readonly memo: MemoOptions | undefined;
   /** Build output directories relative to the root, excluded from the input hash. */
   readonly outputDirs: ReadonlyArray<string>;
-  /** Build-affecting options that must bust the memo when they change. */
-  readonly hashOptions?: unknown;
   /** JSON config handed to `buildInChild` in the build child. */
   readonly buildConfig: (ctx: SourceContext, rootDir: string) => Config;
   /** Reject a build without server modules. @default true */
@@ -300,7 +298,6 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
       outputDirs: spec.outputDirs,
       memo: spec.memo,
       workspaces,
-      options: spec.hashOptions,
     });
 
   return {

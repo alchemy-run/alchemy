@@ -128,12 +128,6 @@ export const makeWakuSourceProvider = (
     rootDir,
     memo: options.memo,
     outputDirs: [options.distDir ?? "dist"],
-    hashOptions: {
-      main: options.main,
-      srcDir: options.srcDir,
-      distDir: options.distDir,
-      basePath: options.basePath,
-    },
     buildConfig: (ctx, rootDir) =>
       ({
         rootDir,

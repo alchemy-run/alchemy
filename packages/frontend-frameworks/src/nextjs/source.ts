@@ -17,11 +17,10 @@
  * of which are only known per call.
  */
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
-import { hashInput, sha256, type MemoOptions } from "../core/InputHash.ts";
+import { hashInput, type MemoOptions } from "../core/InputHash.ts";
 import {
   assetsConfigOf,
   bundleOf,
@@ -179,16 +178,15 @@ export const makeNextjsSourceProvider = (
   { rootDir: root }: SourceModuleContext,
 ): NextjsSourceProvider => {
   /**
-   * The shared input hash, plus the OpenNext config file (path and content)
-   * in the salt and the runtime directory, when under the root, among the
-   * excluded output directories.
+   * The shared input hash, with the OpenNext config file always hashed and
+   * the runtime directory, when under the root, among the excluded output
+   * directories.
    */
   const input = Effect.fn(function* (
     rootDir: string,
     dotAlchemy: string | undefined,
     workspaces: Iterable<string>,
   ) {
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const configPath = yield* Runner.resolveConfigPath({
       appDir: rootDir,
@@ -199,13 +197,6 @@ export const makeNextjsSourceProvider = (
           new SourceProviderError({ provider: PROVIDER, message: cause.message, cause: cause }),
       ),
     );
-    const config =
-      configPath === undefined
-        ? undefined
-        : {
-            path: path.relative(rootDir, configPath).replaceAll("\\", "/"),
-            hash: yield* sha256(yield* fs.readFile(configPath)),
-          };
     const runtimeDir =
       dotAlchemy === undefined ? undefined : path.relative(rootDir, path.resolve(dotAlchemy));
     const insideRoot =
@@ -219,14 +210,7 @@ export const makeNextjsSourceProvider = (
       outputDirs: insideRoot ? [...OUTPUT_DIRS, runtimeDir.replaceAll("\\", "/")] : OUTPUT_DIRS,
       memo: options.memo,
       workspaces,
-      options: {
-        config,
-        configPath: options.configPath,
-        cache: options.cache,
-        buildCommand: options.buildCommand,
-        skipNextBuild: options.skipNextBuild,
-        minify: options.minify,
-      },
+      files: configPath === undefined ? [] : [configPath],
     });
   });
 

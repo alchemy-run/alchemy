@@ -498,7 +498,6 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:",
     "esbuild": "catalog:",
-    "ohash": "catalog:",
     "rolldown": "catalog:",
     "srvx": "catalog:",
     "tinyglobby": "catalog:"

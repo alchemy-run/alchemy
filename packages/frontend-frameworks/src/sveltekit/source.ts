@@ -139,7 +139,6 @@ export const makeSvelteKitSource = (
     memo: options.memo,
     // kit's build tree; the adapter writes the client output to a temp dir.
     outputDirs: [".svelte-kit"],
-    hashOptions: { memo: options.memo, kit: options.kit, adapter: options.adapter },
     buildConfig: (ctx, rootDir) =>
       ({
         rootDir,

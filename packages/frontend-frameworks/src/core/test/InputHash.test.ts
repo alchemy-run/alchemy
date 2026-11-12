@@ -26,7 +26,7 @@ const makeMonorepo = async () => {
 };
 
 const hash = (rootDir: string, workspaces: Iterable<string>, memo?: MemoOptions) =>
-  run(hashInput({ rootDir, outputDirs: ["dist"], memo, workspaces, options: undefined }));
+  run(hashInput({ rootDir, outputDirs: ["dist"], memo, workspaces }));
 
 describe("hashInput workspaces", () => {
   it("an edit in a sibling workspace changes the hash (#744)", async () => {
@@ -114,6 +114,25 @@ describe("hashInput workspaces", () => {
 });
 
 describe("hashInput tree", () => {
+  it("hashes `files` even outside memo.include", async () => {
+    const { app } = await makeMonorepo();
+    const config = NodePath.join(app, "open-next.config.ts");
+    await NodeFsPromises.writeFile(config, "export default {};");
+    const hashWithConfig = () =>
+      run(
+        hashInput({
+          rootDir: app,
+          outputDirs: ["dist"],
+          memo: { include: ["src/**"] },
+          workspaces: [],
+          files: [config],
+        }),
+      );
+    const before = await hashWithConfig();
+    await NodeFsPromises.writeFile(config, "export default { minify: false };");
+    expect((await hashWithConfig()).hash).not.toBe(before.hash);
+  });
+
   it("hashes root .env files even when gitignored", async () => {
     const { app } = await makeMonorepo();
     await NodeFsPromises.writeFile(NodePath.join(app, ".gitignore"), ".env*\n");

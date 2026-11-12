@@ -12,7 +12,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import { serialize } from "ohash";
 import { glob } from "tinyglobby";
 
 /**
@@ -56,8 +55,26 @@ export const sha256 = (input: string | Uint8Array): Effect.Effect<string> =>
     ),
   ).pipe(Effect.provide(Digest.layerWebCrypto));
 
-/** sha256 of `value` serialized with `ohash`, so key order never changes the hash. */
-export const sha256Object = (value: unknown): Effect.Effect<string> => sha256(serialize(value));
+/** `value` with every plain object's keys sorted, so `JSON.stringify` is order-stable. */
+const stableValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, nested]) => [key, stableValue(nested)]),
+    );
+  }
+  return value;
+};
+
+/** sha256 of `value` as JSON with sorted keys, like alchemy's `Util/sha256`. */
+export const sha256Object = (value: unknown): Effect.Effect<string> =>
+  sha256(JSON.stringify(stableValue(value)));
 
 /** This package's version, salted into every input hash so an upgrade busts build memos. */
 export const packageVersion: Effect.Effect<string> = Effect.promise(
@@ -255,9 +272,9 @@ const ownPackageRoot = Effect.try(() =>
 
 /**
  * The `input` hash slot: the project tree, the workspaces it imports, the
- * lockfile, this package's version, and the integration's build-affecting
- * options. Deterministic for an unchanged tree and stable across `rootDir`
- * moves.
+ * lockfile and this package's version. Source options are props, which the
+ * Worker diff compares itself. Deterministic for an unchanged tree and
+ * stable across `rootDir` moves.
  *
  * `workspaces` are the auto-detected ones: from the build, or recorded by
  * the previous build. A recorded workspace that no longer exists (its
@@ -272,8 +289,8 @@ export const hashInput = Effect.fn(function* (params: {
   readonly memo: MemoOptions | undefined;
   /** Auto-detected workspace directories, absolute or relative to the root. */
   readonly workspaces: Iterable<string>;
-  /** The integration's build-affecting options. */
-  readonly options: unknown;
+  /** Files hashed whatever `memo` says, absolute or relative to the root. */
+  readonly files?: ReadonlyArray<string> | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -313,11 +330,17 @@ export const hashInput = Effect.fn(function* (params: {
     ],
     { concurrency: 4 },
   );
+  const files = yield* Effect.forEach(params.files ?? [], (file) =>
+    fs.readFile(path.resolve(params.rootDir, file)).pipe(
+      Effect.flatMap(sha256),
+      Effect.map((hash) => `${relative(path.resolve(params.rootDir, file))}:${hash}`),
+    ),
+  );
   return {
     hash: yield* sha256Object({
       version: yield* packageVersion,
-      options: params.options,
       root,
+      files: files.sort(),
       workspaces: workspaceHashes.sort(),
     }),
     workspaces: pinned !== undefined ? undefined : workspaces.map(({ dir }) => relative(dir)),

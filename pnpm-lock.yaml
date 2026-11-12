@@ -576,9 +576,6 @@ catalogs:
     octane:
       specifier: 0.16.0
       version: 0.16.0
-    ohash:
-      specifier: ^2.0.11
-      version: 2.0.12
     oxfmt:
       specifier: ^0.74.0
       version: 0.74.0
@@ -9708,9 +9705,6 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
-      ohash:
-        specifier: 'catalog:'
-        version: 2.0.12
       rolldown:
         specifier: 1.2.16
         version: 1.2.16

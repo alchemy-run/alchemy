@@ -404,7 +404,6 @@ export const makeVinextSourceProvider = (
     rootDir,
     memo: options.memo,
     outputDirs: ["dist"],
-    hashOptions: { main: options.main, viteEnvironments: options.viteEnvironments },
     buildConfig: (ctx, rootDir) =>
       ({
         rootDir,
