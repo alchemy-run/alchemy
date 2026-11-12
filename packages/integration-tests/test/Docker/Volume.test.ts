@@ -298,8 +298,6 @@ describe(
             "--rm",
             "--network",
             "none",
-            "--pull",
-            "never",
             "--mount",
             "type=volume,source=" + name + ",target=/data",
             "alpine:3.22",
@@ -324,8 +322,6 @@ describe(
             "--rm",
             "--network",
             "none",
-            "--pull",
-            "never",
             "--mount",
             "type=volume,source=" + name + ",target=/data,readonly",
             "alpine:3.22",
@@ -335,6 +331,42 @@ describe(
           expect(marker.stdout.trim()).toBe("preserve");
           expect((yield* docker.volume.inspect(name)).Labels?.version).toBe("old");
           yield* stack.destroy();
+        }),
+    );
+
+    test.provider(
+      "replaces a volume created before generation labels when its labels change",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const name = testVolumeName(stack.stage, "legacy-generation");
+          yield* stack.destroy();
+          const existing = yield* docker.volume
+            .inspect(name)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          expect(existing).toBeUndefined();
+          yield* Effect.addFinalizer(() => docker.volume.remove(name).pipe(Effect.ignore));
+
+          // Recreate the volume an older provider would have created: this
+          // stack's ownership labels, but no `alchemy::volume-instance`.
+          const resource = Docker.Volume("legacy-generation", { name, labels: { version: "1" } });
+          const current = yield* stack.deploy(resource);
+          yield* stack.destroy();
+          const { "alchemy::volume-instance": _, ...legacyLabels } = current.labels;
+          yield* docker.volume.create({ name, label: legacyLabels });
+          const legacy = yield* stack.deploy(resource);
+          expect(legacy.labels["alchemy::volume-instance"]).toBeUndefined();
+
+          const replaced = yield* stack.deploy(
+            Docker.Volume("legacy-generation", { name, labels: { version: "2" } }),
+          );
+          expect(replaced.labels.version).toBe("2");
+          expect(replaced.labels["alchemy::volume-instance"]).toMatch(/^[0-9a-f]{32}$/);
+          yield* stack.destroy();
+          const gone = yield* docker.volume
+            .inspect(name)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          expect(gone).toBeUndefined();
         }),
     );
 
@@ -357,8 +389,6 @@ describe(
           "--rm",
           "--network",
           "none",
-          "--pull",
-          "never",
           "--mount",
           "type=volume,source=" + name + ",target=/data",
           "alpine:3.22",
@@ -384,8 +414,6 @@ describe(
           "--rm",
           "--network",
           "none",
-          "--pull",
-          "never",
           "--mount",
           "type=volume,source=" + name + ",target=/data,readonly",
           "alpine:3.22",
@@ -435,8 +463,6 @@ describe(
             "--rm",
             "--network",
             "none",
-            "--pull",
-            "never",
             "--mount",
             "type=volume,source=" + original.name + ",target=/data",
             "alpine:3.22",
@@ -462,8 +488,6 @@ describe(
             "--rm",
             "--network",
             "none",
-            "--pull",
-            "never",
             "--mount",
             "type=volume,source=" + original.name + ",target=/data,readonly",
             "alpine:3.22",

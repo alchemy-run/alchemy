@@ -268,9 +268,12 @@ export const VolumeProvider = () =>
           // to delete data created by a different physical generation.
           // The internal stack tags alone do not establish ownership: an
           // explicitly adopted volume may carry the same stack and logical id.
+          // Volumes created before generation labels existed carry only the
+          // stack tags; `verify` above already matched their creation time.
+          const generation = output?.labels[VOLUME_INSTANCE_LABEL];
           const ownedGeneration =
             output !== undefined &&
-            output.labels[VOLUME_INSTANCE_LABEL] === instanceId &&
+            (generation === instanceId || generation === undefined) &&
             (yield* hasAlchemyTags(id, output.labels));
           const foreignOrigin = output !== undefined && current !== undefined && !ownedGeneration;
           if (!isResolved(news)) {
@@ -278,7 +281,7 @@ export const VolumeProvider = () =>
           }
           const args = yield* makeVolumeArgs(id, news, instanceId);
           if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
-            if (foreignOrigin) return yield* volumeConfigurationConflict(id, output.name);
+            if (foreignOrigin) return yield* adoptedVolumeReplacementConflict(id, output.name);
             return { action: "replace" as const, deleteFirst: true };
           }
           // Auto-generated names are engine-owned: the deployed name stays
@@ -288,8 +291,7 @@ export const VolumeProvider = () =>
           // Imported/legacy volumes may carry metadata Alchemy didn't
           // declare. A generation from another state/stack is also imported.
           // Omitted props do not request destructive replacement.
-          const imported =
-            output !== undefined && output.labels[VOLUME_INSTANCE_LABEL] !== instanceId;
+          const imported = output !== undefined && !ownedGeneration;
           const compareDriver =
             !imported || news?.driver !== undefined || olds?.driver !== undefined;
           const compareDriverOpts =
@@ -304,7 +306,7 @@ export const VolumeProvider = () =>
             // the observed volume but must not drive replacement.
             (compareLabels && !Equal.equals(stripInternalTags(output?.labels), args.label ?? {}))
           ) {
-            if (foreignOrigin) return yield* volumeConfigurationConflict(id, output.name);
+            if (foreignOrigin) return yield* adoptedVolumeReplacementConflict(id, output.name);
             return { action: "replace" as const, deleteFirst: true };
           }
           // A missing managed volume is recreated instead of retaining a
@@ -463,6 +465,20 @@ const volumeConfigurationConflict = (id: string, name: string) =>
         name +
         "' already exists with incompatible immutable settings. " +
         "Refusing to claim a successful create; replace or migrate it explicitly.",
+      resourceType: "Docker.Volume",
+      logicalId: id,
+      physicalName: name,
+    }),
+  );
+
+const adoptedVolumeReplacementConflict = (id: string, name: string) =>
+  Effect.fail(
+    new OwnedBySomeoneElse({
+      message:
+        "Docker volume '" +
+        name +
+        "' was adopted, not created by this resource. " +
+        "Refusing to delete it to apply changed immutable settings; migrate its data explicitly.",
       resourceType: "Docker.Volume",
       logicalId: id,
       physicalName: name,
