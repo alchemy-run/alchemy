@@ -29,6 +29,7 @@ export {
   ServiceFailed,
   ServiceLimitReached,
   ServiceNotReady,
+  SqlCallFailed,
   SystemRoleImmutable,
 } from "./Errors.ts";
 export * as Notifications from "./Notifications/index.ts";
