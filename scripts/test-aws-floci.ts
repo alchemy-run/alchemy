@@ -208,6 +208,7 @@ const flociFixedValues: Record<string, string> = {
   MPV2_SWEEP: "1",
   AWS_TEST_MEDICAL_IMAGING: "1",
   AWS_TEST_OMICS: "1",
+  AWS_TEST_PINPOINT_SMS: "1",
   AWS_TEST_GRAFANA: "1",
   AWS_TEST_HEALTHLAKE: "1",
   AWS_TEST_IOTFLEETWISE: "1",
