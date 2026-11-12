@@ -1098,12 +1098,23 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 
 Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
 
-- [Docker](https://alchemy.run/docker) — Images, containers, networks, volumes and Swarm services as Stack resources, driven through your active Docker CLI context.
-- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — the engine and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
-- [Setup](https://alchemy.run/docker/setup) — Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
-- [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
-- [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
-- [Docker Swarm](https://alchemy.run/docker/swarm) — Provision a swarm and deploy replicated services to it, from local dev to a remote VPS
+- [Docker](https://alchemy.run/docker) — Docker builds applications into images and runs them as isolated containers on a Docker engine, on your laptop, a CI runner or a server.
+- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — engines and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
+- [Setup](https://alchemy.run/docker/setup) — Install @alchemy.run/docker, register its providers, and point Alchemy at a Docker or Podman engine.
+- [Engines & contexts](https://alchemy.run/docker/engines-and-contexts) — How a Docker context chooses the engine a resource lands on — the CLI's current context, a Docker.Context over SSH or TCP, an existing context by lookup — and who can reach an engine.
+- [Registries & credentials](https://alchemy.run/docker/registries) — Give an image its registry credentials as a Redacted Config value, push without docker login, pull private base images, and read the password from a secrets manager per stage.
+- [Build images](https://alchemy.run/docker/build-images) — Build an image from a Dockerfile with Docker.Image — build args, multi-stage targets, platforms, build secrets — and know when a deploy rebuilds it.
+- [Build caches](https://alchemy.run/docker/build-caches) — Keep an image's build layers in a registry or GitHub Actions cache, so fresh CI runners skip the steps that didn't change.
+- [Pull & mirror images](https://alchemy.run/docker/remote-images) — Pull an existing image with Docker.RemoteImage, pin it so deploys stop re-pulling, and re-tag and push it into your own registry.
+- [Images on cloud runtimes](https://alchemy.run/docker/cloud-runtimes) — Hand a pushed image's reference or digest to ECS, Cloudflare Containers, Cloud Run or Kubernetes, let those runtimes build with your local Docker, and write Dockerfiles inline with Dockerfile.inline.
+- [Containers](https://alchemy.run/docker/containers) — Run an image as a Docker.Container — start it, publish ports, pass secrets through its environment, health-check it, reach the host — and know which changes recreate it.
+- [Networks](https://alchemy.run/docker/networks) — Connect containers on a Docker.Network so they reach each other by name, cut a network off from the internet, pin its subnet, and attach to networks you didn't create.
+- [Volumes](https://alchemy.run/docker/volumes) — Keep a container's data in a Docker.Volume so it survives the container being recreated, mount host directories, and know when a volume and its data are deleted.
+- [Limits & security](https://alchemy.run/docker/limits-and-security) — Cap a container's memory, CPU and processes, run it as an unprivileged user with a read-only filesystem and no capabilities, apply seccomp and AppArmor profiles, and rotate its logs.
+- [Swarms](https://alchemy.run/docker/swarm) — Turn an engine into a swarm with Docker.Swarm, locally or on a server over SSH, use a swarm you didn't create, and grow it to more nodes.
+- [Services](https://alchemy.run/docker/services) — Run replicated containers on a swarm with Docker.Service — publish ports through the routing mesh, roll out new images with automatic rollback, connect services on overlay networks, mount Swarm secrets, and place tasks on nodes.
+- [Effectful services](https://alchemy.run/docker/effectful-services) — Write a Swarm service as an Effect program in your own code — Alchemy bundles it into an image on the swarm's engine, serves its fetch handler, runs its background loops and gives it the Config it reads.
+- [Local Postgres](https://alchemy.run/docker/local-services) — Run Postgres for local development as Stack resources — a pinned image, a network and a volume, a Redacted password, and a health-checked container.
 
 ## Kubernetes
 
@@ -1228,4 +1239,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~256 KB) — only fetch it when you need to locate a specific resource's reference page.
