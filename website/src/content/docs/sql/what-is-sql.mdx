@@ -1,0 +1,62 @@
+---
+title: How SQL works in Alchemy
+description: The concepts behind SQL in Alchemy — databases and engines, clients, connections and pools, request scope, migrations and their history — and how they fit together on every cloud.
+---
+
+Alchemy works with SQL databases on every cloud: D1 and Durable Objects on Cloudflare, Aurora and DSQL on AWS, Cloud SQL and Spanner on GCP, Neon, PlanetScale, Turso, Prisma Postgres, and Postgres or MySQL you run yourself. Each is a different service, but the way your code uses them is the same. You declare the database, its schema changes are applied on deploy, and a client in your code queries it over a connection that lasts one request.
+
+Take one app: a Worker that queries Postgres with Drizzle, with migrations applied on every deploy. The deploy applies new migrations to the database. While the app runs, a client opens a connection per request and queries it.
+
+## Databases and engines
+
+A **database** is a resource like any other: `Cloudflare.D1.Database`, `Neon.Branch`, `AWS.RDS.Aurora`. Each speaks one of three **engines**: Postgres, MySQL, or SQLite and its variants, D1 and libSQL. The engine decides which SQL you write and which client drivers work.
+
+See [Databases](/sql/databases) to compare them.
+
+## Clients
+
+A **client** is the library your code queries with. **Effect SQL** writes SQL as tagged templates, with values parameterized for you and failures as typed errors. **Drizzle** adds a typed schema and a query builder on top. **Prisma ORM** generates a typed client from a schema contract.
+
+```typescript title="src/api.ts"
+const users = yield* sql`SELECT * FROM users WHERE id = ${id}`;
+```
+
+All three run on the same connections, so you can mix them in one app.
+
+## Connections and pools
+
+A client reaches the database over a **connection**. Opening one takes several round trips, so long-running servers keep a **pool** of open connections and reuse them.
+
+Serverless runtimes change this. A Worker or a Lambda environment may handle one request and stop, and a Worker's sockets belong to the request that opened them. So Alchemy's clients open their pool when a request first queries, and close it when the request ends. To avoid paying for a new connection on every request, put a pooler in front: Cloudflare Hyperdrive, RDS Proxy, or a provider's own pooled endpoint.
+
+See [Connection lifecycle](/sql/effect-sql/lifecycle).
+
+## Connections without a socket
+
+Some databases answer over HTTP instead: D1, the Aurora Data API, Cloud SQL's and AlloyDB's `executeSql`, Turso. There's no connection to open or pool, and no network route needed, at the cost of a little latency per query.
+
+## Migrations
+
+A **migration** is a file of SQL that changes the schema: create a table, add a column. Migrations are applied in order, once each, and the database remembers which have run.
+
+Every database resource takes a `migrations` directory. Each deploy applies the files that haven't run yet, after the database is ready and before anything that uses it:
+
+```typescript title="alchemy.run.ts"
+const db = yield* Neon.Branch("main", { project, migrations: "./migrations" });
+```
+
+Generate the files from your schema with drizzle-kit or Prisma, review them, and commit them. A deploy applies what's committed, never what it generated on the spot.
+
+See [Migrations](/sql/effect-sql/migrations).
+
+## Migration history
+
+The applied files are recorded, with a hash of each, in an `__alchemy_migrations` table in the database itself. A database already migrated by drizzle-kit, Prisma or wrangler has its history copied over once, so nothing runs twice.
+
+Because each file's hash is recorded, editing or deleting a file that already ran fails the deploy. Change the schema with a new migration instead.
+
+## How it fits together
+
+Each of these concepts is the same on every cloud. A database resource has a `migrations` prop, applied on deploy. A binding gives your runtime the connection details, and an Effect SQL, Drizzle or Prisma client queries over a connection scoped to the request. Moving to another database of the same engine changes the resource and the binding, not the queries.
+
+Next, pick your database in [Databases](/sql/databases), or your client: [Effect SQL](/sql/effect-sql/postgres), [Drizzle](/sql/drizzle/postgres) or [Prisma ORM](/sql/prisma/contracts).

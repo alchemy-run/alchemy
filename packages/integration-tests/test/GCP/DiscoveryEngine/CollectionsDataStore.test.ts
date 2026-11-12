@@ -6,6 +6,7 @@ import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -66,6 +67,14 @@ test.provider.skipIf(!runLifecycle)(
             disableCmek: true,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.CollectionsDataStore.lookup({
+          dataStoreId: created.dataStoreId,
+          location: created.location,
+          collection: created.collection,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/collections/");

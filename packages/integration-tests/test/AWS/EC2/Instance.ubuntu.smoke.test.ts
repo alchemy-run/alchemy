@@ -68,9 +68,13 @@ test.provider.skipIf(!!process.env.FAST)(
       const readTicks = getJson("/ticks").pipe(
         Effect.map((value) => (value as { ticks: number }).ticks),
       );
-      const first = yield* readTicks;
-      yield* Effect.sleep("3 seconds");
-      const second = yield* readTicks;
+      // A restart of the hosted process between the two reads resets the
+      // counter, so a pair that doesn't climb is read again.
+      const [first, second] = yield* Effect.gen(function* () {
+        const first = yield* readTicks;
+        yield* Effect.sleep("3 seconds");
+        return [first, yield* readTicks] as const;
+      }).pipe(Effect.repeat({ until: ([first, second]) => second > first, times: 5 }));
       expect(second).toBeGreaterThan(first);
 
       yield* stack.destroy();

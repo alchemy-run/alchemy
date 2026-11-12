@@ -1,0 +1,68 @@
+---
+title: "Part 5: Testing"
+description: Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the warm image and the user's files.
+sidebar:
+  order: 5
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Deploy once per test file
+
+```typescript title="test/integ.test.ts"
+import { expect } from "bun:test";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers()),
+  state: Alchemy.localState(),
+});
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+```
+
+The test deploys the Stack to a stage of its own, with its own environment and images, and destroys it afterwards.
+
+## Check a sandbox sees the warm image and the user's files
+
+```typescript title="test/integ.test.ts"
+test(
+  "starts each sandbox from the Warm image, with the user's files mounted",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    yield* Test.executeWhenReady(
+      HttpClientRequest.put(`${url}/users/ada/files/notes.md`).pipe(HttpClientRequest.bodyText("hello")),
+    );
+    const res = yield* HttpClient.execute(
+      HttpClientRequest.post(`${url}/users/ada/run`).pipe(
+        HttpClientRequest.bodyText("pnpm --version && cat /home/user/notes.md"),
+      ),
+    );
+    const body = (yield* res.json) as { exitCode: number; output: string };
+    expect(body.exitCode).toBe(0);
+    expect(body.output).toContain("hello");
+  }),
+  { timeout: 600_000 },
+);
+```
+
+`pnpm` is only there if the sandbox booted from `Warm`, and `hello` only if it mounted Ada's volume. Destroying the stage removes its environment, and the volumes in it.
+
+## Run it
+
+<PackageManagers script={`bun test`} />
+
+Set `NO_DESTROY=1` to keep the deployment, and its images, between runs while you iterate.
+
+## Next
+
+[Part 6](/modal/tutorial/part-6) deploys more copies, from CI.

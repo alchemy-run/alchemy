@@ -16,10 +16,12 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import MySQLApi, { Db, Site } from "./fixtures/mysql-api.ts";
+import { railwayApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -177,6 +179,14 @@ test.provider(
           return { project, environment, db };
         }),
       );
+      yield* expectFound(
+        Railway.MySQL.lookup({
+          projectId: created.db.projectId,
+          environmentId: created.db.environmentId,
+          serviceId: created.db.serviceId,
+        }),
+        created.db,
+      );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
       expect(created.db.serviceId.length).toBeGreaterThan(0);
@@ -311,6 +321,7 @@ describe(
   },
   () => {
     const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+      limit: railwayApi,
       providers: Railway.providers(),
     });
 

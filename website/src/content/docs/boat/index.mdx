@@ -1,0 +1,87 @@
+---
+title: Boat
+description: Run sandboxes on Boat with Alchemy. Declare sandboxes, snapshots, environments and webhooks in TypeScript, and create sandboxes from any Worker or Function.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Boat runs sandboxes: Linux machines with Docker, passwordless `sudo` and a desktop that start in under a second, stop on a timer with their disk saved, and resume, fork or snapshot from where they stopped. Declare sandboxes, snapshots, environments and webhooks in your Stack, and create sandboxes from any Worker or Function.
+
+**New to Boat?** Start with [What is Boat?](/boat/what-is-boat).
+
+## A quick example
+
+A snapshot is built once, at deploy: a sandbox with a repository cloned, saved under a name:
+
+```typescript title="src/Golden.ts"
+import * as Boat from "@alchemy.run/boat";
+
+export const Golden = Boat.Snapshot("Golden", {
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is ~/repo"],
+});
+```
+
+A Worker starts a sandbox from it on each request, with the repository already there, runs the command it was sent, and deletes the sandbox when the request ends:
+
+```typescript title="src/Api.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Golden } from "./Golden.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* Boat.CreateSandbox(Golden);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const sandbox = yield* Effect.acquireRelease(
+          sandboxes.create({ noEnv: true, autoStop: "5 minutes" }),
+          (sandbox) => Effect.ignore(sandbox.delete()),
+        );
+        const result = yield* sandbox.exec(yield* request.text, { cwd: "/home/user/repo" });
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.scoped, Effect.orDie),
+    };
+  }).pipe(Effect.provide(Boat.CreateSandboxHttp)),
+) {}
+```
+
+And the Stack deploys both:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Golden } from "./src/Golden.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const golden = yield* Golden;
+    const api = yield* Api;
+    return { snapshot: golden.name, url: api.url.as<string>() };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Start with [Setup](/boat/setup) to sign in to Boat, then the [tutorial](/boat/tutorial/part-1), which builds a code-running API one step at a time.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

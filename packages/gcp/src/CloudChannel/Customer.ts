@@ -116,8 +116,30 @@ export type Customer = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CustomerLookup
 >;
+
+/**
+ * Props for {@link Customer.lookup}: find a customer this stack doesn't
+ * manage by its identifiers.
+ */
+export interface CustomerLookup {
+  /**
+   * Primary domain. Must match `primaryContactInfo.email`'s domain.
+   */
+  domain: string;
+  /**
+   * Reseller Cloud Channel account. Full name `accounts/{account}` or the
+   * account id (typically `C` followed by digits).
+   */
+  parent: string;
+  /**
+   * Customer id (last segment of
+   * `accounts/{account}/customers/{customer}`).
+   */
+  customerId?: string;
+}
 
 /**
  * A Cloud Channel customer of a reseller or distributor.
@@ -171,6 +193,19 @@ export type Customer = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing customer
+ * `Customer.lookup` references a customer Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared customer.
+ *
+ * **Example:** Reference an existing customer
+ * ```typescript
+ * const customer = GCP.CloudChannel.Customer.lookup({
+ *   domain: "my-domain",
+ *   parent: "my-parent",
+ * });
+ * ```
+ *
  * @resource
  * @category CloudChannel
  */
@@ -194,6 +229,17 @@ export const CustomerProvider = () =>
         previousParent: previousParent !== undefined ? toAccountName(previousParent) : undefined,
         nextParent,
       });
+    }),
+
+    lookup: Effect.fn(function* ({ domain, parent: lookupParent, customerId }) {
+      const parent = toAccountName(lookupParent ?? "");
+      const name = toCustomerName(parent, customerId);
+      let existing = yield* getCustomer(name);
+      if (existing === undefined) {
+        existing = yield* findCustomerByDomain(parent, domain);
+      }
+      if (existing === undefined) return undefined;
+      return toCustomerAttrs(existing, parent);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

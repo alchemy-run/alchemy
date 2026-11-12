@@ -20,7 +20,10 @@
 // `.cache/build-timings.jsonl`.
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Console from "effect/Console";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -290,11 +293,11 @@ const writeStamp = Effect.fn(function* (packageDirectory: string, outDir: string
   const path = yield* Path.Path;
   const directory = path.join(packageDirectory, outDir);
   yield* fs.makeDirectory(directory, { recursive: true });
-  const at = yield* Effect.sync(() => new Date().toISOString());
+  const at = DateTime.formatIso(yield* DateTime.now);
   yield* fs.writeFileString(path.join(directory, stampFile), `${at}\n`);
 });
 
-const now = Effect.sync(() => Date.now());
+const now = Clock.currentTimeMillis;
 const formatSeconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
 
 /** Build the package whose `scripts/` directory is `scriptsDirectory` (pass `import.meta.dirname`). */
@@ -308,7 +311,10 @@ export const build = (scriptsDirectory: string, options: BuildOptions) =>
     ) as { name: string; version: string };
 
     // `scripts/sync-exports.ts` regenerates the export maps without building.
-    if (process.env.PACKAGE_BUILD_EXPORTS_ONLY === "1") {
+    const exportsOnly = yield* Config.String("PACKAGE_BUILD_EXPORTS_ONLY").pipe(
+      Config.withDefault(undefined),
+    );
+    if (exportsOnly === "1") {
       if (options.exports) yield* syncPublishExports(packageDirectory, options.exports);
       return;
     }
@@ -353,8 +359,12 @@ export const build = (scriptsDirectory: string, options: BuildOptions) =>
     yield* fs.makeDirectory(cacheDirectory, { recursive: true });
     yield* fs.writeFileString(
       path.join(cacheDirectory, "build-timings.jsonl"),
-      JSON.stringify({ at: new Date(startedAt).toISOString(), version, total, steps: timings }) +
-        "\n",
+      JSON.stringify({
+        at: DateTime.formatIso(DateTime.makeUnsafe(startedAt)),
+        version,
+        total,
+        steps: timings,
+      }) + "\n",
       { flag: "a" },
     );
   }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

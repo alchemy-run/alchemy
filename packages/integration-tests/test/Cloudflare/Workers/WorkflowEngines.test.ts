@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe } from "@alchemy.run/test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
 import type { Status } from "alchemy/Workflows";
@@ -25,12 +25,20 @@ const fetchText = (url: string, method: "GET" | "POST" = "GET") =>
   });
 
 describe.concurrent.each([
-  { engine: "durable-object", dev: true, stage: "durable-workflow-local" },
-  { engine: "durable-object", dev: false, stage: "durable-workflow-live" },
-  { engine: "durable-object-eu", dev: true, stage: "durable-workflow-eu-local" },
-  { engine: "durable-object-eu", dev: false, stage: "durable-workflow-eu-live" },
-  { engine: "native", dev: true, stage: "native-engine-local" },
-  { engine: "native", dev: false, stage: "native-engine-live" },
+  { engine: "durable-object", dev: true, stage: `${Test.defaultStage()}-durable-workflow-local` },
+  { engine: "durable-object", dev: false, stage: `${Test.defaultStage()}-durable-workflow-live` },
+  {
+    engine: "durable-object-eu",
+    dev: true,
+    stage: `${Test.defaultStage()}-durable-workflow-eu-local`,
+  },
+  {
+    engine: "durable-object-eu",
+    dev: false,
+    stage: `${Test.defaultStage()}-durable-workflow-eu-live`,
+  },
+  { engine: "native", dev: true, stage: `${Test.defaultStage()}-native-engine-local` },
+  { engine: "native", dev: false, stage: `${Test.defaultStage()}-native-engine-live` },
 ] as const)("Workflows on the $engine engine (dev: $dev)", ({ engine, dev, stage }) => {
   const state = dev ? inMemoryState() : Cloudflare.state();
   const Stack = makeStack(state, engine);
@@ -79,7 +87,40 @@ describe.concurrent.each([
     // 10 seconds, then the one-second sleep. Cloudflare Workflows retries a
     // step with its own policy.
     recoveryWithinMillis: engine === "native" ? undefined : 30_000,
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"],
     timeout: 90_000,
     unsupported: engine === "native" ? { raceAll: "aren't supported on Cloudflare Workflows" } : {},
   });
+
+  if (engine === "native") {
+    test(
+      "withStepConfig bounds an activity's step.do",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = url.replace(/\/+$/, "");
+        const id = `step-timeout-${crypto.randomUUID().slice(0, 8)}`;
+        const { executionId } = JSON.parse(
+          yield* fetchText(`${base}/step-timeout/${id}`, "POST"),
+        ) as { executionId: string };
+        // The activity sleeps 15 seconds under a 2-second step timeout and no
+        // retries: the run dies on the timeout instead of finishing.
+        const status = yield* Effect.gen(function* () {
+          const status = JSON.parse(
+            yield* fetchText(`${base}/step-timeout/${id}?executionId=${executionId}`),
+          ) as Status<unknown, unknown>;
+          if (status._tag === "Running" || status._tag === "NotStarted") {
+            return yield* new NotReady({ message: JSON.stringify(status) });
+          }
+          return status;
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 40 }));
+        expect(status._tag).toBe("Died");
+        // One attempt: `retries.limit: 0` reached `step.do` too.
+        expect(JSON.parse(yield* fetchText(`${base}/journal/${id}`))).toEqual(["slow"]);
+      }),
+      {
+        tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"],
+        timeout: 90_000,
+      },
+    );
+  }
 });

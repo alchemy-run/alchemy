@@ -1,7 +1,6 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import { hashDirectory } from "alchemy/Command/Memo";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -10,6 +9,8 @@ import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { type BuildCacheOptions, imageBuildCacheOptions } from "./BuildCache.ts";
+import { hashDockerBuildInputs } from "./BuildHash.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
@@ -30,6 +31,9 @@ import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
  *   ENTRYPOINT) and pushed as a derived image. `main` absent → the
  *   environment runs verbatim: `image` is mirrored (docker pull → tag →
  *   push, content-addressed on the ref), a Dockerfile builds as-is.
+ * - `main` absent and an {@link ImageAgent} requested → the environment
+ *   still runs verbatim, and the agent is pushed beside it as an image of
+ *   its own, for the platform to mount into the environment's container.
  *
  * Where images land is an {@link ImageRegistryTarget}: ECR supplies one that
  * auto-creates a private repository; a plain registry (a local `registry`
@@ -48,6 +52,13 @@ export interface BundledImageSource {
    * `import.meta.url` from an inline Effect program.
    */
   main: string;
+  /**
+   * @internal Dockerfile lines contributed by mount bindings (see
+   * `alchemy/Mount`), inserted after the environment preamble so a
+   * program change doesn't reinstall them. Hosts fold these in from their
+   * bindings; users don't set them.
+   */
+  install?: ReadonlyArray<string>;
   /**
    * Environment image: used as the generated Dockerfile's `FROM`. Any
    * registry ref works (private non-ECR registries require docker
@@ -79,16 +90,17 @@ export interface BundledImageSource {
    * Bundler configuration for the entrypoint. Unused code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
-   * `pure.packages`, or disable with `pure: false`.
+   * `pure.packages`, or disable with `pure: false`. `cache` configures the
+   * image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
 }
 
 /**
- * Build arguments and BuildKit secrets for an image built from the user's
- * own Dockerfile (`context` / `dockerfile`).
+ * Build arguments, BuildKit secrets and the layer cache for an image built
+ * from the user's own Dockerfile (`context` / `dockerfile`).
  */
-export interface DockerfileBuild {
+export interface DockerfileBuild extends BuildCacheOptions {
   /**
    * Docker build arguments (`--build-arg`), read by `ARG` instructions.
    * They are part of the image's content hash, so changing one rebuilds the
@@ -110,7 +122,7 @@ export interface DockerfileBuild {
 
 /** The `build` prop of a source built from the user's own Dockerfile. */
 export interface DockerfileBuildOptions {
-  /** Build arguments and BuildKit secrets for the Dockerfile build. */
+  /** Build arguments, BuildKit secrets and the layer cache for the Dockerfile build. */
   build?: DockerfileBuild;
 }
 
@@ -160,6 +172,8 @@ export interface ImageSourceLike {
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
+  /** @internal Mount-binding install lines (see {@link BundledImageSource.install}). */
+  install?: ReadonlyArray<string>;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -181,20 +195,25 @@ export const imageSourceKind = (source: ImageSourceLike): ImageSourceKind | unde
 
 /**
  * `build.args` or `build.secrets` set on an image that is not built from the
- * user's own Dockerfile: a `main` program or a pre-built `image`.
+ * user's own Dockerfile (a `main` program or a pre-built `image`), or
+ * `build.cache` set on a pre-built `image`, which is never built.
  */
 export class DockerfileBuildConflict extends Data.TaggedError("DockerfileBuildConflict")<{
   readonly id: string;
   readonly source: "main" | "image";
+  readonly option?: "cache";
 }> {
   override get message() {
-    return `'${this.id}': 'build.args' and 'build.secrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
+    return this.option === "cache"
+      ? `'${this.id}': 'build.cache' applies to an image Alchemy builds ('main' / 'context' / 'dockerfile'), not to a pre-built 'image'`
+      : `'${this.id}': 'build.args' and 'build.secrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
   }
 }
 
 /**
  * Dies with {@link DockerfileBuildConflict} when `build.args` or
- * `build.secrets` are set alongside `main` or `image`.
+ * `build.secrets` are set alongside `main` or `image`, or `build.cache`
+ * alongside `image`.
  */
 export const validateDockerfileBuild = (
   id: string,
@@ -208,7 +227,9 @@ export const validateDockerfileBuild = (
           source: source.main !== undefined ? "main" : "image",
         }),
       )
-    : Effect.void;
+    : source.main === undefined && source.image !== undefined && source.build?.cache
+      ? Effect.die(new DockerfileBuildConflict({ id, source: "image", option: "cache" }))
+      : Effect.void;
 
 /**
  * Validate environment-source exclusivity. Dies (plan-time defect) on
@@ -292,9 +313,94 @@ export interface ResolveContainerImageOptions {
    * generated entry module source.
    */
   bootstrap: (importPath: string) => string;
+  /**
+   * Publish an agent beside an image that has no `main`. See
+   * {@link ImageAgent}. Ignored for a `main` source, whose program serves the
+   * agent itself.
+   */
+  agent?: ImageAgent;
   /** Plan-status session used to emit build/push progress notes. */
   session: { note: (message: string) => Effect.Effect<void> };
 }
+
+/**
+ * A program the platform runs inside a container whose image has none of its
+ * own (`image` or `context`), so it can drive the container: a sandbox agent
+ * that runs commands and serves files inside it.
+ *
+ * The image itself is never changed. The agent is bundled and pushed as an
+ * image of its own, to the same repository, under an `agent-` tag. Run as a
+ * container, that image copies the agent and its Bun runtime into
+ * {@link IMAGE_AGENT_DIR} and exits. A platform mounts a volume there, shares
+ * it with the image's container, and starts that container with
+ * {@link imageAgentEntryPoint}.
+ */
+export interface ImageAgent {
+  /**
+   * Module that exports `bootstrap(): Promise<void>`, which runs the agent.
+   * A path or a `file:` URL.
+   */
+  main: string;
+}
+
+/**
+ * Where an {@link ImageAgent}'s image copies the agent and its runtime, and
+ * where the image's container finds them.
+ */
+export const IMAGE_AGENT_DIR = "/opt/alchemy/sandbox";
+
+/**
+ * The entry point that starts an {@link ImageAgent} from
+ * {@link IMAGE_AGENT_DIR}. Bun starts through the loader that came with it,
+ * so the image's own libc (glibc, another musl, or none) is never consulted
+ * and the image needs nothing installed. The container's command arrives as
+ * the agent's arguments.
+ */
+export const imageAgentEntryPoint: ReadonlyArray<string> = [
+  `${IMAGE_AGENT_DIR}/ld-musl.so.1`,
+  "--library-path",
+  `${IMAGE_AGENT_DIR}/lib`,
+  `${IMAGE_AGENT_DIR}/bun`,
+  `${IMAGE_AGENT_DIR}/index.mjs`,
+];
+
+/**
+ * The image the agent's runtime comes from. The musl build of Bun runs on any
+ * Linux image once its loader and C++ runtime come with it.
+ */
+const AGENT_RUNTIME_IMAGE = "oven/bun:1-alpine";
+
+/** Where the agent's bundle sits inside its own image. */
+const AGENT_BUNDLE_DIR = "/agent";
+
+/**
+ * The Dockerfile of an {@link ImageAgent}'s image: the runtime's image plus
+ * the agent's bundle. Its entry point copies the runtime, the loader, the
+ * C++ runtime and the bundle into {@link IMAGE_AGENT_DIR}, where the platform
+ * mounted a volume, and exits.
+ */
+const AGENT_DOCKERFILE = `${[
+  `FROM ${AGENT_RUNTIME_IMAGE}`,
+  `COPY index.mjs ${AGENT_BUNDLE_DIR}/index.mjs`,
+  `COPY *.js ${AGENT_BUNDLE_DIR}/`,
+  `ENTRYPOINT ${JSON.stringify([
+    "/bin/sh",
+    "-ec",
+    [
+      `mkdir -p ${IMAGE_AGENT_DIR}/lib`,
+      `cp /usr/local/bin/bun ${IMAGE_AGENT_DIR}/bun`,
+      `cp /lib/ld-musl-*.so.1 ${IMAGE_AGENT_DIR}/ld-musl.so.1`,
+      `cp /usr/lib/libstdc++.so.6 /usr/lib/libgcc_s.so.1 ${IMAGE_AGENT_DIR}/lib/`,
+      `cp ${AGENT_BUNDLE_DIR}/* ${IMAGE_AGENT_DIR}/`,
+      // The image's container may run as any user.
+      `chmod -R a+rX ${IMAGE_AGENT_DIR}`,
+    ].join(" && "),
+  ])}`,
+].join("\n")}\n`;
+
+/** The generated entry of an {@link ImageAgent}: import the module and run it. */
+const agentEntry = (importPath: string) =>
+  `import { bootstrap } from ${JSON.stringify(importPath)};\nawait bootstrap();\n`;
 
 /**
  * Resolve the Dockerfile path for a `context` source: always relative to the
@@ -356,21 +462,97 @@ export const computeStaticSourceHash = Effect.fn(function* (
         buildArgs: source.build?.args,
       })).slice(0, 16);
     }
-    const fs = yield* FileSystem.FileSystem;
     const { context, dockerfile } = yield* resolveContextPaths({
       context: source.context!,
       dockerfile: source.dockerfile,
     });
-    const contextHash = yield* hashDirectory({ cwd: context });
-    const dockerfileContent = yield* fs.readFileString(dockerfile);
-    return (yield* sha256Object({
-      contextHash,
-      dockerfile: dockerfileContent,
-      platform: platform ?? "linux/amd64",
-      buildArgs: source.build?.args,
-    })).slice(0, 16);
+    // Hash what Docker receives: the context `.dockerignore` keeps (never a
+    // lockfile above it), the Dockerfile, platform and build args.
+    return (yield* hashDockerBuildInputs(
+      {
+        context,
+        dockerfile,
+        platform: platform ?? "linux/amd64",
+        buildArgs: source.build?.args,
+      },
+      "effective",
+    )).slice(0, 16);
   }
   return undefined;
+});
+
+/**
+ * The exact rolldown input/output options `bundleMainProgram` hands to
+ * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
+ * `Bundle.watch` observes the identical module graph.
+ */
+export const mainBundleOptions = (
+  source: BundledImageSource,
+  entry: string,
+  cwd: string,
+  plugins?: rolldown.RolldownPluginOption,
+): {
+  inputOptions: rolldown.InputOptions;
+  outputOptions: rolldown.OutputOptions;
+} => ({
+  inputOptions: {
+    ...source.build?.input,
+    input: entry,
+    cwd,
+    platform: "node",
+    // The container runs on `bun`; keep `bun`/`bun:*` external (the
+    // runtime provides them) and resolve the `bun` export condition
+    // so `@effect/platform-bun` picks its Bun implementations.
+    external: ["bun", "bun:*", ...((source.build?.input?.external as string[] | undefined) ?? [])],
+    resolve: {
+      conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+      ...source.build?.input?.resolve,
+    },
+    plugins: [source.build?.input?.plugins, plugins],
+  },
+  outputOptions: {
+    ...source.build?.output,
+    format: "esm",
+    sourcemap: source.build?.output?.sourcemap ?? false,
+    minify: source.build?.output?.minify ?? false,
+    entryFileNames: "index.mjs",
+  },
+});
+
+/**
+ * Bundle the Effect program behind a `main` source: every emitted file
+ * (entry + shared chunks) and the bundle hash. Needs no Docker engine, so
+ * builders that are not Docker (`BuildPlan`) share it.
+ */
+export const bundleMainProgram = Effect.fn(function* (options: {
+  source: BundledImageSource;
+  isExternal?: boolean;
+  bootstrap: (importPath: string) => string;
+}) {
+  const { source } = options;
+  const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  const realMain = yield* resolveMainPath(source.main);
+  const cwd = yield* findCwdForBundle(realMain);
+
+  const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {
+    const opts = mainBundleOptions(source, entry, cwd, plugins);
+    return yield* Bundle.build(opts.inputOptions, opts.outputOptions, source.build);
+  });
+
+  const bundleOutput = options.isExternal
+    ? yield* buildBundle(realMain)
+    : yield* buildBundle(realMain, virtualEntryPlugin(options.bootstrap));
+
+  // Return every emitted file (entry + shared chunks). Dynamic imports in
+  // the Bun HTTP server / AWS SDK split into chunks; dropping any of them
+  // crashes the container with `Cannot find module './chunk-XXX.js'`.
+  const files = bundleOutput.files.map((file) => ({
+    path: file.path,
+    content:
+      typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
+  }));
+
+  return { files, hash: bundleOutput.hash };
 });
 
 /**
@@ -384,82 +566,6 @@ export const makeContainerImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-
-  /**
-   * The exact rolldown input/output options `bundleProgram` hands to
-   * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
-   * `Bundle.watch` observes the identical module graph.
-   */
-  const mainBundleOptions = (
-    source: BundledImageSource,
-    entry: string,
-    cwd: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ): {
-    inputOptions: rolldown.InputOptions;
-    outputOptions: rolldown.OutputOptions;
-  } => ({
-    inputOptions: {
-      ...source.build?.input,
-      input: entry,
-      cwd,
-      platform: "node",
-      // The container runs on `bun`; keep `bun`/`bun:*` external (the
-      // runtime provides them) and resolve the `bun` export condition
-      // so `@effect/platform-bun` picks its Bun implementations.
-      external: [
-        "bun",
-        "bun:*",
-        ...((source.build?.input?.external as string[] | undefined) ?? []),
-      ],
-      resolve: {
-        conditionNames: [...Bundle.BUN_CONDITION_NAMES],
-        ...source.build?.input?.resolve,
-      },
-      plugins: [source.build?.input?.plugins, plugins],
-    },
-    outputOptions: {
-      ...source.build?.output,
-      format: "esm",
-      sourcemap: source.build?.output?.sourcemap ?? false,
-      minify: source.build?.output?.minify ?? false,
-      entryFileNames: "index.mjs",
-    },
-  });
-
-  /** Bundle the Effect program behind a `main` source. */
-  const bundleProgram = Effect.fn(function* (options: {
-    source: BundledImageSource;
-    isExternal?: boolean;
-    bootstrap: (importPath: string) => string;
-  }) {
-    const { source } = options;
-    const realMain = yield* resolveMainPath(source.main);
-    const cwd = yield* findCwdForBundle(realMain);
-
-    const buildBundle = Effect.fn(function* (
-      entry: string,
-      plugins?: rolldown.RolldownPluginOption,
-    ) {
-      const opts = mainBundleOptions(source, entry, cwd, plugins);
-      return yield* Bundle.build(opts.inputOptions, opts.outputOptions, source.build);
-    });
-
-    const bundleOutput = options.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(options.bootstrap));
-
-    // Return every emitted file (entry + shared chunks). Dynamic imports in
-    // the Bun HTTP server / AWS SDK split into chunks; dropping any of them
-    // crashes the container with `Cannot find module './chunk-XXX.js'`.
-    const files = bundleOutput.files.map((file) => ({
-      path: file.path,
-      content:
-        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
-    }));
-
-    return { files, hash: bundleOutput.hash };
-  });
 
   /**
    * Bundle a `main` source and compute its content-addressed code hash.
@@ -477,7 +583,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
     port?: number;
     platform: string;
   }) {
-    const bundled = yield* bundleProgram({
+    const bundled = yield* bundleMainProgram({
       source: options.source,
       isExternal: options.isExternal,
       bootstrap: options.bootstrap,
@@ -491,14 +597,15 @@ export const makeContainerImageSource = Effect.gen(function* () {
     const isPathEnv = df !== undefined && !isInlineDockerfile(df);
     let envIdentity: Record<string, string> = {};
     if (isPathEnv) {
-      const fs = yield* FileSystem.FileSystem;
       const { context, dockerfile } = yield* resolveContextPaths({
         context: options.source.context!,
         dockerfile: df,
       });
       envIdentity = {
-        envContextHash: yield* hashDirectory({ cwd: context }),
-        envDockerfile: yield* fs.readFileString(dockerfile),
+        envContextHash: yield* hashDockerBuildInputs(
+          { context, dockerfile, platform: options.platform },
+          "effective",
+        ),
       };
     }
     const dockerfile = generateDockerfile(
@@ -532,6 +639,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [
       preamble,
+      ...(source.install ?? []),
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
       // Copy any additional rolldown chunks (`chunk-XXX.js`,
@@ -545,6 +653,30 @@ export const makeContainerImageSource = Effect.gen(function* () {
     lines.push(`ENTRYPOINT ["bun", "/app/index.mjs"]`);
     return `${lines.join("\n")}\n`;
   };
+
+  /**
+   * Bundle an {@link ImageAgent} and compute the content-addressed hash of
+   * its image: the bundle, the Dockerfile and the platform. `resolve` and
+   * `hash` share this, so the plan-time hash and the pushed tag agree.
+   */
+  const bundleAgent = Effect.fn(function* (agent: ImageAgent, platform: string) {
+    const bundled = yield* bundleMainProgram({
+      source: { main: agent.main },
+      isExternal: false,
+      bootstrap: agentEntry,
+    });
+    const hash = (yield* sha256Object({
+      bundleHash: bundled.hash,
+      dockerfile: AGENT_DOCKERFILE,
+      platform,
+    })).slice(0, 16);
+    return { bundled, hash };
+  });
+
+  /** One hash for an image and the agent published beside it. */
+  const hashWithAgent = Effect.fn(function* (environment: string, agent: string) {
+    return (yield* sha256Object({ environment, agent })).slice(0, 16);
+  });
 
   /**
    * Build (or mirror) and push an image to `target`, pushing with the
@@ -593,17 +725,18 @@ export const makeContainerImageSource = Effect.gen(function* () {
       platform: options.platform,
       "build-arg": options.build?.args,
       secrets: options.build?.secrets,
+      ...imageBuildCacheOptions(options.build, options.imageUri, credentials),
     });
     yield* push(options.imageUri, credentials, options.platform);
     return options.imageUri;
   });
 
   /**
-   * Resolve the image for a props bag: resolve the target repository,
+   * Resolve the image of a props bag's own source: resolve the target repository,
    * compute the content-addressed tag, then build/mirror + push only when
    * that exact tag is not already in the registry (crash-safe convergence).
    */
-  const resolve = Effect.fnUntraced(function* <R>(
+  const resolveSource = Effect.fnUntraced(function* <R>(
     options: ResolveContainerImageOptions,
     target: ImageRegistryTarget<R>,
   ) {
@@ -658,11 +791,18 @@ export const makeContainerImageSource = Effect.gen(function* () {
         });
         envFrom = `alchemy-env-${id.toLowerCase()}:${codeHash}`;
         yield* session.note(`Building environment image for ${id}...`);
+        // The user's Dockerfile holds the expensive steps, so the layer
+        // cache applies to this stage rather than the bundle layered on top.
         yield* docker.image.build({
           context: env.context,
           file: env.dockerfile,
           tag: envFrom,
           platform,
+          ...imageBuildCacheOptions(
+            source.build,
+            imageUri,
+            source.build?.cache ? yield* target.credentials : undefined,
+          ),
         });
       }
       const finalDockerfile =
@@ -687,6 +827,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
         imageUri,
         context: contextDir,
         platform,
+        build: envFrom === undefined ? { cache: source.build?.cache } : undefined,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryUri, codeHash };
@@ -777,6 +918,74 @@ export const makeContainerImageSource = Effect.gen(function* () {
   });
 
   /**
+   * Publish an {@link ImageAgent} as an image of its own, `agent-<hash>` in
+   * the target repository, unless that tag is already there.
+   */
+  const resolveAgent = Effect.fnUntraced(function* <R>(
+    options: {
+      id: string;
+      agent: ImageAgent;
+      platform: string;
+      repositoryUri: string;
+      session: ResolveContainerImageOptions["session"];
+    },
+    target: ImageRegistryTarget<R>,
+  ) {
+    const { id, platform, session } = options;
+    yield* session.note(`Bundling ${id} sandbox agent...`);
+    const { bundled, hash } = yield* bundleAgent(options.agent, platform);
+    const tag = `agent-${hash}`;
+    const imageUri = `${options.repositoryUri}:${tag}`;
+    if (yield* target.hasTag(tag)) {
+      return { imageUri, hash };
+    }
+    const contextDir = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-agent`);
+    yield* docker.materialize({
+      context: contextDir,
+      dockerfile: AGENT_DOCKERFILE,
+      files: bundled.files.map((file, index) => ({
+        path: index === 0 ? "index.mjs" : file.path,
+        content: file.content,
+      })),
+    });
+    yield* session.note(`Building sandbox agent image ${imageUri}...`);
+    yield* buildAndPush(target, { imageUri, context: contextDir, platform });
+    yield* session.note(`Pushed ${imageUri}`);
+    return { imageUri, hash };
+  });
+
+  /**
+   * Resolve the image for a props bag, and the {@link ImageAgent} published
+   * beside it when one is asked for. The image is the user's own, unchanged;
+   * `codeHash` then covers both images.
+   */
+  const resolve = Effect.fnUntraced(function* <R>(
+    options: ResolveContainerImageOptions,
+    target: ImageRegistryTarget<R>,
+  ) {
+    const image = yield* resolveSource(options, target);
+    if (options.agent === undefined || imageSourceKind(options.source) === "main") {
+      return { ...image, agent: undefined };
+    }
+    const published = yield* resolveAgent(
+      {
+        id: options.id,
+        agent: options.agent,
+        platform: options.platform ?? "linux/amd64",
+        repositoryUri: image.repositoryUri,
+        session: options.session,
+      },
+      target,
+    );
+    return {
+      imageUri: image.imageUri,
+      repositoryUri: image.repositoryUri,
+      codeHash: yield* hashWithAgent(image.codeHash, published.hash),
+      agent: { imageUri: published.imageUri },
+    };
+  });
+
+  /**
    * Content hash for ANY source kind without building or pushing an image.
    *
    * For `main` sources this runs the bundler (bootstrap entry included) so
@@ -792,9 +1001,19 @@ export const makeContainerImageSource = Effect.gen(function* () {
     port?: number;
     isExternal?: boolean;
     bootstrap: (importPath: string) => string;
+    agent?: ImageAgent;
   }) {
     const platform = options.platform ?? "linux/amd64";
-    if (imageSourceKind(options.source) === "main") {
+    const kind = imageSourceKind(options.source);
+    if (options.agent !== undefined && kind !== undefined && kind !== "main") {
+      // The image and its agent are two images. One hash covers both, so a
+      // new agent plans an update just as a new image does.
+      const environment = yield* computeStaticSourceHash(options.source, platform);
+      if (environment === undefined) return undefined;
+      const agent = yield* bundleAgent(options.agent, platform);
+      return yield* hashWithAgent(environment, agent.hash);
+    }
+    if (kind === "main") {
       // Unresolved inline environment content (an Output) can't be hashed
       // at plan time — return undefined so the diff defers to reconcile.
       const df = options.source.dockerfile;

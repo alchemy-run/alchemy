@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -142,8 +143,31 @@ export type ServiceConnectionMap = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceConnectionMapLookup
 >;
+
+/**
+ * Props for {@link ServiceConnectionMap.lookup}: find a service connection
+ * map this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ServiceConnectionMapLookup {
+  /**
+   * Map id (the `{service_connection_map}` segment).
+   */
+  serviceConnectionMapId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A PSC Service Connection Map that pairs producer service attachments
@@ -170,6 +194,19 @@ export type ServiceConnectionMap = Resource<
  *   serviceClass: "gcp-cloud-sql",
  *   description: "sql psc map v2",
  *   labels: { env: "prod", role: "psc" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing service connection map
+ * `ServiceConnectionMap.lookup` references a service connection map Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared service connection map.
+ *
+ * **Example:** Reference an existing service connection map
+ * ```typescript
+ * const serviceConnectionMap = GCP.NetworkConnectivity.ServiceConnectionMap.lookup({
+ *   serviceConnectionMapId: "my-service-connection-map",
  * });
  * ```
  *
@@ -289,6 +326,15 @@ export const ServiceConnectionMapProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceConnectionMapId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceConnectionMapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

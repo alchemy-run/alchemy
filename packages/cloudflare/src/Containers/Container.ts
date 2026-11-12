@@ -529,18 +529,43 @@ type ContainerShape<Shape> = {
  *
  * ```text
  * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
- * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
  * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
  * ```
  *
  * The build hash identifies the inputs; the manifest digest identifies the
  * published artifact. Applications and stages in the same account can use
- * `publish: { repository: "web" }` to reuse matching published builds. Changed
- * inputs produce another hash tag in the same repository. Builds targeting
- * that repository import reusable layers from its shared `:buildcache` tag,
- * including when full input hashes differ. This mutable tag points to the
- * latest exported inline cache, not a combined cache of every historical
- * image. Reusing a finished image does not move the layer-cache tag.
+ * `publish: { repository: "web" }` to reuse matching published builds without
+ * invoking Docker. Changed inputs produce another hash tag in the same
+ * repository.
+ *
+ * ### Caching Build Layers
+ * A changed build reuses the layers in the local BuildKit cache of the
+ * machine it runs on. A builder that has never built the image, such as a
+ * fresh CI runner, reruns every step. Set `build.cache: true` to keep every
+ * stage's layers at the repository's `:buildcache` tag, so fresh builders
+ * resume from the last unchanged step, including steps in earlier stages of
+ * a multi-stage Dockerfile.
+ *
+ * **Example:** Cache build layers in the registry
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: { cache: true },
+ * }) {}
+ * ```
+ *
+ * **Example:** Cache build layers in GitHub Actions
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=agent"],
+ *       to: ["type=gha,scope=agent,mode=max"],
+ *     },
+ *   },
+ * }) {}
+ * ```
  *
  * Pin base images and downloaded dependencies: changes outside the build
  * context cannot invalidate the input hash. Each stage still has its own

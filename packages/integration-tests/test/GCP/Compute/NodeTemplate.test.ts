@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -63,6 +64,13 @@ test.provider(
             description: "prod sole tenant",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.NodeTemplate.lookup({
+          nodeTemplateName: created.nodeTemplateName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.nodeTemplateName).toEqual(expect.any(String));

@@ -165,8 +165,18 @@ export type IssuingPersonalizationDesign = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  IssuingPersonalizationDesignLookup
 >;
+
+/**
+ * Props for {@link IssuingPersonalizationDesign.lookup}: find a personalization design this stack
+ * doesn't manage by its id.
+ */
+export interface IssuingPersonalizationDesignLookup {
+  /** Stripe personalization design id, e.g. `"pd_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Issuing Personalization Design — a physical bundle, optional
@@ -233,6 +243,16 @@ export type IssuingPersonalizationDesign = Resource<
  *   physicalBundle: "ics_Fiiwz3T83opOUd",
  *   name: "Metal Card",
  * });
+ * ```
+ *
+ * ### Looking up an existing personalization design
+ * `IssuingPersonalizationDesign.lookup` references a personalization design Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing personalization design
+ * ```typescript
+ * const ref = Stripe.IssuingPersonalizationDesign.lookup({ id: "pd_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -418,6 +438,11 @@ export const IssuingPersonalizationDesignProvider = () =>
     diff: Effect.fn(function* ({ news }) {
       if (!isResolved(news)) return undefined;
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

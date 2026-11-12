@@ -1,3 +1,4 @@
+import * as NodeZlib from "node:zlib";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
@@ -40,6 +41,7 @@ import { LinkedContainer } from "./fixtures/linked/container.ts";
 import LinkedFirst from "./fixtures/linked/first.ts";
 import {
   publicationApplications,
+  maxRegistryCacheApplication,
   sharedApplication,
   recoveryApplications,
   historyApplications,
@@ -62,13 +64,17 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 type Scratch = Parameters<Parameters<typeof test.provider>[1]>[0];
 
+/** A standalone container application from a remote `image`. */
+const imageProgram = (image: string) =>
+  Effect.gen(function* () {
+    return { app: yield* Cloudflare.Container("DigestReuse", { image }).Application };
+  });
+
 /** Deploy a standalone container application from a remote `image`. */
-const deployImage = (scratch: Scratch, image: string) =>
-  scratch.deploy(
-    Effect.gen(function* () {
-      return { app: yield* Cloudflare.Container("DigestReuse", { image }).Application };
-    }),
-  );
+const deployImage = (scratch: Scratch, image: string) => scratch.deploy(imageProgram(image));
+
+/** Plan a standalone container application from a remote `image`. */
+const planImage = (scratch: Scratch, image: string) => scratch.plan(imageProgram(image));
 
 /** The live (active) image reference + version of an application. */
 const live = (accountId: string, applicationId: string) =>
@@ -699,13 +705,12 @@ describe.concurrent(
     );
 
     registryCacheTest.provider(
-      "caches default publications and imports repository layers in a fresh builder",
+      "caches default publications without exporting a layer cache",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const docker = yield* Docker;
           const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-default-cache-" });
           yield* fs.writeFileString(
             path.join(context, "Dockerfile"),
@@ -727,8 +732,9 @@ describe.concurrent(
           const username = credentials.username ?? credentials.user;
           assert(username);
           const client = yield* HttpClient.HttpClient;
-          const cacheDigest = Effect.gen(function* () {
-            const response = yield* client.execute(
+          // A layer cache is opt-in (`build.cache`): nothing but the image is pushed.
+          const cacheStatus = client
+            .execute(
               HttpClientRequest.head(
                 `https://registry.cloudflare.com/v2/${first.app.accountId}/${first.app.applicationName}/manifests/buildcache`,
               ).pipe(
@@ -738,11 +744,9 @@ describe.concurrent(
                   "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
                 ),
               ),
-            );
-            expect(response.status).toBe(200);
-            return response.headers["docker-content-digest"];
-          });
-          expect(yield* cacheDigest).toBe(first.app.hash?.digest);
+            )
+            .pipe(Effect.map((response) => response.status));
+          expect(yield* cacheStatus).toBe(404);
           const layersOf = Effect.fn(function* (digest: string) {
             const response = yield* client.execute(
               HttpClientRequest.get(
@@ -775,38 +779,16 @@ describe.concurrent(
             const changed = yield* stack.deploy(program);
             const completed = (yield* buildHistory).filter((build) => build.status === "Completed");
             expect(completed).toHaveLength(1);
-            const log = yield* docker.run([
-              "buildx",
-              "history",
-              "logs",
-              completed[0]!.ref.split("/").at(-1)!,
-              "--progress",
-              "plain",
-            ]);
-            const text = `${log.stdout}\n${log.stderr}`;
-            expect(text).toContain(
-              `importing cache manifest from registry.cloudflare.com/${first.app.accountId}/${first.app.applicationName}:buildcache`,
-            );
             const changedLayers = yield* layersOf(changed.app.hash!.digest!);
-            // Re-executing RUN would create a different UUID and therefore a different layer.
-            expect(changedLayers.slice(0, -1)).toEqual(firstLayers.slice(0, -1));
-            expect(changedLayers.at(-1)).not.toBe(firstLayers.at(-1));
+            // Without a layer cache the fresh builder reruns RUN: a new UUID layer.
+            expect(changedLayers[0]).toBe(firstLayers[0]);
+            expect(changedLayers.slice(1, -1)).not.toEqual(firstLayers.slice(1, -1));
             return changed;
           }).pipe(withBuilder("alchemy-default-cache-changed", { attestations: false }));
           expect(changed.app.applicationId).toBe(first.app.applicationId);
           expect(changed.app.applicationName).toBe(first.app.applicationName);
           expect(changed.app.configuration.image).not.toBe(first.app.configuration.image);
-          // The registry keeps serving an overwritten tag's previous target
-          // for a while (observed ~25s), so wait for the new one.
-          expect(
-            yield* cacheDigest.pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("4 seconds"),
-                until: (digest) => digest === changed.app.hash?.digest,
-                times: 10,
-              }),
-            ),
-          ).toBe(changed.app.hash?.digest);
+          expect(yield* cacheStatus).toBe(404);
 
           yield* fs.writeFileString(path.join(context, "payload"), "first");
           const restored = yield* stack
@@ -815,8 +797,6 @@ describe.concurrent(
           expect(restored.app.applicationId).toBe(first.app.applicationId);
           expect(restored.app.configuration.image).toBe(first.app.configuration.image);
           expect(yield* buildHistory).toEqual(firstHistory);
-          // Reusing a finished image leaves the latest exported layer cache in place.
-          expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
           expect(
             (yield* waitForImage(
               restored.app.accountId,
@@ -838,6 +818,109 @@ describe.concurrent(
           );
           expect(gone).toBeUndefined();
         }).pipe(withBuilder("alchemy-default-cache", { attestations: false }), logLevel),
+      { timeout: 120_000 },
+    );
+
+    registryCacheTest.provider(
+      "a mode=max registry cache resumes an earlier build stage in a fresh builder",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-max-cache-" });
+          // `payload` changes between deploys and reaches the final stage only
+          // through the builder stage, after the step that must stay cached.
+          yield* fs.writeFileString(
+            path.join(context, "Dockerfile"),
+            [
+              "FROM alpine:3.19 AS builder",
+              "RUN cat /proc/sys/kernel/random/uuid > /expensive",
+              "COPY payload /payload",
+              "RUN cat /expensive /payload > /artifact",
+              "FROM alpine:3.19",
+              "COPY --from=builder /artifact /artifact",
+              'CMD ["sleep", "3600"]',
+              "",
+            ].join("\n"),
+          );
+          yield* fs.writeFileString(path.join(context, "payload"), "first");
+          const program = maxRegistryCacheApplication(context);
+          const first = yield* stack.deploy(program);
+
+          const credentials = yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
+          const username = credentials.username ?? credentials.user;
+          assert(username);
+          const client = yield* HttpClient.HttpClient;
+          const registryGet = (pathname: string, accept = "*/*") =>
+            client.execute(
+              HttpClientRequest.get(
+                `https://registry.cloudflare.com/v2/${first.app.accountId}/${first.app.applicationName}/${pathname}`,
+              ).pipe(
+                HttpClientRequest.basicAuth(username, credentials.password),
+                HttpClientRequest.setHeader("Accept", accept),
+              ),
+            );
+          const cacheManifest = yield* registryGet(
+            "manifests/buildcache",
+            "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
+          ).pipe(
+            Effect.tap((response) => Effect.sync(() => expect(response.status).toBe(200))),
+            Effect.flatMap((response) => response.text),
+          );
+          // A cache export (index or image-manifest form), not the published image.
+          expect(cacheManifest).toContain("application/vnd.buildkit.cacheconfig.v0");
+          // `/artifact` is the image's last layer: the builder's UUID, then `payload`.
+          const artifactOf = Effect.fn(function* (digest: string) {
+            const manifest = yield* registryGet(
+              `manifests/${digest}`,
+              "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+            ).pipe(
+              Effect.flatMap((response) => response.json),
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({ layers: Schema.Array(Schema.Struct({ digest: Schema.String })) }),
+                ),
+              ),
+            );
+            const blob = yield* registryGet(`blobs/${manifest.layers.at(-1)!.digest}`).pipe(
+              Effect.flatMap((response) => response.arrayBuffer),
+            );
+            const tar = NodeZlib.gunzipSync(new Uint8Array(blob));
+            for (let offset = 0; offset + 512 <= tar.length;) {
+              const name = tar.toString("utf8", offset, offset + 100).replace(/\0.*$/s, "");
+              const size =
+                Number.parseInt(tar.toString("utf8", offset + 124, offset + 136), 8) || 0;
+              if (name === "artifact") {
+                return tar.toString("utf8", offset + 512, offset + 512 + size).split("\n");
+              }
+              offset += 512 + Math.ceil(size / 512) * 512;
+            }
+            return assert.fail(`no /artifact in layer of ${digest}`);
+          });
+          const [firstUuid, firstPayload] = yield* artifactOf(first.app.hash!.digest!);
+          expect(firstPayload).toBe("first");
+
+          yield* fs.writeFileString(path.join(context, "payload"), "changed");
+          const changed = yield* Effect.gen(function* () {
+            // A new BuildKit instance cannot reuse the first builder's local layers.
+            expect(yield* buildHistory).toHaveLength(0);
+            return yield* stack.deploy(program);
+          }).pipe(withBuilder("alchemy-max-cache-changed", { attestations: false }));
+          expect(changed.app.applicationId).toBe(first.app.applicationId);
+          expect(changed.app.configuration.image).not.toBe(first.app.configuration.image);
+          const [changedUuid, changedPayload] = yield* artifactOf(changed.app.hash!.digest!);
+          // The builder step after the change ran again; the one before it did not:
+          // re-running it would have written a new UUID.
+          expect(changedPayload).toBe("changed");
+          expect(changedUuid).toBe(firstUuid);
+          yield* stack.destroy();
+        }).pipe(withBuilder("alchemy-max-cache", { attestations: false }), logLevel),
       { timeout: 120_000 },
     );
 
@@ -931,39 +1014,6 @@ describe.concurrent(
           const history = yield* buildHistory;
           expect(history.filter((build) => build.status === "Completed")).toHaveLength(1);
           expect(first.app.configuration.image).toContain(`/${repositoryName}@sha256:`);
-          const credentials = yield* Containers.createContainerRegistryCredentials({
-            accountId: first.app.accountId,
-            registryId: "registry.cloudflare.com",
-            permissions: ["pull"],
-            expirationMinutes: 15,
-          });
-          const username = credentials.username ?? credentials.user;
-          assert(username);
-          const http = yield* HttpClient.HttpClient;
-          // The registry keeps serving an overwritten tag's previous target
-          // for a while (observed ~25s), so wait for the new one.
-          const cached = yield* http
-            .execute(
-              HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
-              ).pipe(
-                HttpClientRequest.basicAuth(username, credentials.password),
-                HttpClientRequest.setHeader(
-                  "Accept",
-                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-                ),
-              ),
-            )
-            .pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("4 seconds"),
-                until: (response) =>
-                  response.headers["docker-content-digest"] === first.app.hash?.digest,
-                times: 10,
-              }),
-            );
-          expect(cached.status).toBe(200);
-          expect(cached.headers["docker-content-digest"]).toBe(first.app.hash?.digest);
 
           yield* stack.destroy();
           yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-second");
@@ -1180,19 +1230,6 @@ describe.concurrent(
             );
             expect(manifest.status).toBe(200);
             expect(manifest.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
-            const cache = yield* client.execute(
-              HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${repository}/manifests/buildcache`,
-              ).pipe(
-                HttpClientRequest.basicAuth(username, credentials.password),
-                HttpClientRequest.setHeader(
-                  "Accept",
-                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-                ),
-              ),
-            );
-            expect(cache.status).toBe(200);
-            expect(cache.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
             if (exported) {
               // BuildKit's registry exporter publishes an OCI index (with
               // attestations) carrying the requested platform.
@@ -1682,6 +1719,47 @@ describe.concurrent(
           expect(third.app.version).toBe(rolledOut.version);
           const afterRollout = yield* Drift.detect(scratch);
           expect(afterRollout.resources.DigestReuse?.action).toBe("unchanged");
+
+          // An out-of-band image update leaves the saved input and
+          // configuration hashes current. Neither may hide the live drift.
+          const driftedConfiguration = {
+            ...third.app.configuration,
+            image: first.app.configuration.image!,
+          };
+          yield* Containers.updateContainerApplication({
+            accountId,
+            applicationId: third.app.applicationId,
+            configuration: driftedConfiguration,
+          });
+          yield* Containers.createContainerApplicationRollout({
+            accountId,
+            applicationId: third.app.applicationId,
+            description: "out-of-band image drift",
+            strategy: "rolling",
+            kind: "full_auto",
+            stepPercentage: 100,
+            targetConfiguration: driftedConfiguration,
+          });
+          yield* waitForImage(accountId, third.app.applicationId, driftedConfiguration.image);
+          const drift = yield* Drift.detect(scratch);
+          expect(drift.resources.DigestReuse?.action).toBe("drifted");
+          // Unchanged inputs still plan the repair.
+          const repair = yield* planImage(scratch, "mendhak/http-https-echo:40");
+          expect(repair.resources.DigestReuse?.action).toBe("update");
+
+          const repaired = yield* deployImage(scratch, "mendhak/http-https-echo:40");
+          expect(repaired.app.hash?.image).toBe(third.app.hash?.image);
+          expect(repaired.app.hash?.digest).toBe(third.app.hash?.digest);
+          expect(repaired.app.configuration.image).toBe(third.app.configuration.image);
+          expect((yield* live(accountId, repaired.app.applicationId)).image).toBe(
+            third.app.configuration.image,
+          );
+          const settled = yield* deployImage(scratch, "mendhak/http-https-echo:40");
+          expect(settled.app.version).toBe(repaired.app.version);
+          // The live digest check does not plan an update once repaired.
+          const unchanged = yield* planImage(scratch, "mendhak/http-https-echo:40");
+          expect(unchanged.resources.DigestReuse?.action).toBe("noop");
+          expect((yield* Drift.detect(scratch)).resources.DigestReuse?.action).toBe("unchanged");
 
           yield* scratch.destroy();
         }).pipe(logLevel),

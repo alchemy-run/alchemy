@@ -1,11 +1,12 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, toResourceId } from "./names.ts";
 import {
@@ -54,8 +55,31 @@ export type Keyvaluemap = Resource<
     encrypted: boolean;
   },
   never,
-  Providers
+  Providers,
+  KeyvaluemapLookup
 >;
+
+/**
+ * Props for {@link Keyvaluemap.lookup}: find a keyvaluemap this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface KeyvaluemapLookup {
+  /**
+   * Key value map id (the `{keyvaluemap}` segment of
+   * `organizations/{org}/keyvaluemaps/{keyvaluemap}`).
+   */
+  mapId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Apigee key value map.
@@ -79,6 +103,17 @@ export type Keyvaluemap = Resource<
  *   mapId: "app-config",
  *   maskedValues: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing keyvaluemap
+ * `Keyvaluemap.lookup` references a keyvaluemap Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * keyvaluemap.
+ *
+ * **Example:** Reference an existing keyvaluemap
+ * ```typescript
+ * const keyvaluemap = GCP.Apigee.Keyvaluemap.lookup({ mapId: "my-map" });
  * ```
  *
  * @resource
@@ -153,7 +188,17 @@ export const KeyvaluemapProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ mapId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, mapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization);
+      return attrs;
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const mapId = yield* toResourceId(id, olds?.mapId, output?.mapId, MAX_NAME_LENGTH);
@@ -163,7 +208,9 @@ export const KeyvaluemapProvider = () =>
       const attrs = toAttrs(existing, organization);
       const entry = yield* getOwnershipEntry(attrs.name);
       const { labels } = parseOwnership(entry?.value);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

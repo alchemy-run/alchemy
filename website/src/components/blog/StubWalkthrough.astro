@@ -1216,9 +1216,16 @@
           let cls = "";
           let c: string | undefined;
           if (id === "c") cls = "c";
-          else if (id === "ixc") ((cls = "mem c"), (c = IX));
-          else if (id.startsWith("ix:")) ((cls = id.slice(3) === look ? "look" : "mem"), (c = IX));
-          else if (CHUNK[id]) ((cls = `mem${id === fresh ? " fresh" : ""}`), (c = CHUNK[id]!.c));
+          else if (id === "ixc") {
+            cls = "mem c";
+            c = IX;
+          } else if (id.startsWith("ix:")) {
+            cls = id.slice(3) === look ? "look" : "mem";
+            c = IX;
+          } else if (CHUNK[id]) {
+            cls = `mem${id === fresh ? " fresh" : ""}`;
+            c = CHUNK[id]!.c;
+          }
           let html = line(cls, t, undefined, c).replace('class="lz-ln', `data-id="${id}" class="lz-ln`);
           if (look) {
             if (!real && id === `ix:${look}` && t.trimStart().startsWith(`${look}:`)) {
@@ -1229,7 +1236,10 @@
               // Real code has no names to follow: mark the placeholder, or the index row it is found by.
               const tok = from === "stub" ? look : REAL_ROW[look];
               const hit = !markedFrom && !!tok && (from === "stub" ? t.includes(`${look}=$o()`) : id === `ix:${look}` && t.startsWith(tok));
-              if (hit) ((markedFrom = true), (html = mark(html, tok!)));
+              if (hit) {
+                markedFrom = true;
+                html = mark(html, tok!);
+              }
             } else {
               const isFrom = !markedFrom && (from === "stub" ? t.includes(`stub("${look}")`) : id === from && word(look).test(t));
               if (isFrom) markedFrom = true;
@@ -1301,8 +1311,13 @@
       el.className = `lz-slice${hot ? " hot" : ""}`;
       el.dataset.id = id;
       el.style.setProperty("--c", ch.c);
-      if (horiz) ((el.style.left = `${(100 * ch.at) / FILE}%`), (el.style.width = `${(100 * ch.bytes) / FILE}%`));
-      else ((el.style.top = `${(100 * ch.at) / FILE}%`), (el.style.height = `${(100 * ch.bytes) / FILE}%`));
+      if (horiz) {
+        el.style.left = `${(100 * ch.at) / FILE}%`;
+        el.style.width = `${(100 * ch.bytes) / FILE}%`;
+      } else {
+        el.style.top = `${(100 * ch.at) / FILE}%`;
+        el.style.height = `${(100 * ch.bytes) / FILE}%`;
+      }
       track.appendChild(el);
       return el;
     }
@@ -1417,8 +1432,15 @@
       let mem = 0;
       for (let i = 0; i < n; i++) {
         const st = STEPS[i]!;
-        if (st.stub && !stub) ((stub = true), (mem += STUB));
-        for (const r of st.reads ?? []) if (!loaded.has(r)) (loaded.add(r), (mem += CHUNK[r]!.bytes));
+        if (st.stub && !stub) {
+          stub = true;
+          mem += STUB;
+        }
+        for (const r of st.reads ?? []) {
+          if (loaded.has(r)) continue;
+          loaded.add(r);
+          mem += CHUNK[r]!.bytes;
+        }
       }
       return { loaded, stub, mem };
     }

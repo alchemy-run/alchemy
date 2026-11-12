@@ -52,6 +52,16 @@ prepare-release invoked you). The user merges; you never do.
    A longer timeout is the last resort, and only for work that is slow by
    nature. A test that fails because a call raced the cloud is not slow.
 
+   **Never widen a permission to make a test pass.** An IAM `Resource: ["*"]`,
+   a dropped `Condition`, a broader Cloudflare permission group or GCP role is
+   a security regression, not a fix. When a cloud's own check rejects a scoped
+   grant (Lambda checks a Kafka event source's ENI-delete permission with no
+   subnet in the request), find the scoping that passes the check and still
+   limits real calls: `ArnEqualsIfExists` / `StringEqualsIfExists` skip a key
+   the check leaves out and enforce it on every real request. Assert the
+   scoping out of band (`iam.simulatePrincipalPolicy`: allowed inside the
+   scope, denied outside it).
+
 4. **Verify each fix by rerunning the affected files, not the whole suite.**
    Rerun them several times when the failure was intermittent:
 
@@ -123,6 +133,17 @@ Each of these looked like a flaky test and was fixed in the provider:
   `ps -eo etime,command | grep alchemy-test` for other worktrees running
   suites against the same account; their live resources show up in your
   census. Leave them alone.
+- **Never run `pnpm` inside `submodules/distilled`** (`pnpm exec oxfmt`,
+  `pnpm exec tsrs`): it installs distilled's own workspace, a second `effect`
+  copy every alchemy type then mismatches ("Property '[NodeInspectSymbol]' is
+  missing"). Run every command from the repo root. If it happened, move
+  `submodules/distilled/node_modules` and `submodules/distilled/packages/*/node_modules`
+  aside, run `pnpm install` at the root, and type-check with
+  `pnpm exec tsrs -b --force` — a plain `-b` keeps the stale build state.
+- **Credentials expire mid-run.** A suite that also deploys to another cloud
+  (Cloudflare bindings on an AWS Lambda) fails its teardown when that cloud's
+  session expires, and leaks its resources. Refresh sessions (`aws sso login`)
+  before each round, and rerun the file to clean up.
 - **An error with an empty message hides the cause.** Give the tagged error a
   `message` getter naming what failed, so the next occurrence is diagnosable.
 

@@ -93,8 +93,14 @@ test("stops the Worker's stream when the client hangs up", async () => {
     let pulls = 0;
     export default {
       fetch(request) {
-        if (new URL(request.url).pathname === "/pulls") {
+        const { pathname } = new URL(request.url);
+        if (pathname === "/pulls") {
           return Response.json({ pulls });
+        }
+        // Only the test's own stream counts: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with \`GET /\`.
+        if (pathname !== "/events") {
+          return new Response("Not Found", { status: 404 });
         }
         return new Response(
           new ReadableStream({

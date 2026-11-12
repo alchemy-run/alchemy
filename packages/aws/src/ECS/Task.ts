@@ -4,6 +4,13 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
 import { isResolved } from "alchemy/Diff";
+import {
+  checkMountSupport,
+  collectMountCapabilities,
+  mountInstallLines,
+  MountUnsupported,
+  type MountCapability,
+} from "alchemy/Mount";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
@@ -16,6 +23,7 @@ import {
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import { moduleExtension } from "alchemy/Util/Node";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -23,12 +31,15 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { Credentials } from "../Credentials.ts";
 import {
+  IMAGE_AGENT_DIR,
+  imageAgentEntryPoint,
   makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
   type ImageSourceLike,
   type RegistryImageSource,
+  type ResolvedImageAgent,
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -68,6 +79,21 @@ export interface TaskBindingContract {
    * primary container.
    */
   mountPoints?: ecs.MountPoint[];
+  /**
+   * Filesystem clients bound by mount bindings (e.g. `Archil.MountDisk`):
+   * installed into the generated image, with `/dev/fuse` and `SYS_ADMIN`
+   * granted to the primary container. Needs the EC2 launch type; Fargate
+   * has no FUSE.
+   */
+  mounts?: ReadonlyArray<MountCapability>;
+  /**
+   * The task's runs are sandboxes (`AWS.ECS.CreateSandbox`). A task built
+   * from an `image` or a `context` has no program to serve the sandbox
+   * agent, so the agent is mounted into its container when a task starts
+   * and runs the image's own process. The image is not changed. A task
+   * with a `main` serves the agent itself and ignores this.
+   */
+  sandbox?: boolean;
 }
 
 /**
@@ -180,6 +206,29 @@ export interface TaskDefinitionConfig {
    * @default false
    */
   enableFaultInjection?: boolean;
+  /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM the AWS Nitro
+   * hypervisor isolates from every other task on the instance.
+   *
+   * `"isolated"` sets `trustedExecutionConfiguration` to `ISOLATED_SANDBOX`
+   * and `requiresCompatibilities` to `["MANAGED_INSTANCES"]`. The task then
+   * runs on a Managed Instances capacity provider with
+   * `nitroEnclavesEnabled`, never on Fargate.
+   * @default undefined (tasks share the instance's kernel)
+   */
+  isolation?: "isolated";
+  /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
+   * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
+   * needs an `attestationPolicy`.
+   *
+   * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
+   * Instances capacity provider with `nitroEnclavesEnabled`. `isolation:
+   * "isolated"` sets both for the common case.
+   * @default { isolationMode: "SHARED" }
+   */
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
   /**
    * Additional task definition overrides applied last (escape hatch for
    * fields not yet surfaced as first-class props).
@@ -391,6 +440,35 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const worker = yield* AWS.ECS.Task("Worker", {
+ *   context: "./worker",
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const worker = yield* AWS.ECS.Task("Worker", {
+ *   context: "./worker",
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=worker"],
+ *       to: ["type=gha,scope=worker,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -445,6 +523,61 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * ### Nitro Sandboxes
+ * `isolation: "isolated"` runs every task in its own Nitro Sandbox: a VM the
+ * Nitro hypervisor isolates from the instance and from every other task. Use
+ * it for code you do not trust. The task needs a Managed Instances capacity
+ * provider with `nitroEnclavesEnabled`, and does not run on Fargate. A
+ * sandbox has 20 GiB of storage.
+ *
+ * Isolation alone adds nothing to the task: its task definition holds the
+ * container you declare. Run it as an `AWS.ECS.Service` or start it with
+ * `AWS.ECS.RunTask`. `AWS.ECS.CreateSandbox` is the layer on top that drives
+ * a task through a handle.
+ *
+ * **Example:** An image that runs in a Nitro Sandbox
+ * ```typescript
+ * const job = yield* AWS.ECS.Task("MyJob", {
+ *   image: "python:3.12-slim",
+ *   command: ["python3", "-c", "print('hello from a sandbox')"],
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ * ```
+ *
+ * **Example:** A Task that runs in a Nitro Sandbox
+ * ```typescript
+ * const sandbox = yield* AWS.ECS.Task("MySandbox", {
+ *   main: import.meta.url,
+ *   port: 3000,
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ * ```
+ *
+ * **Example:** A sandbox class with typed methods
+ * `AWS.ECS.CreateSandbox(capacity, MySandbox)` starts one per call and hands back
+ * a handle with `exec`, `files` and the methods below.
+ * ```typescript
+ * export default class MySandbox extends AWS.ECS.Task<
+ *   MySandbox,
+ *   { hello: (name: string) => Effect.Effect<string> }
+ * >()(
+ *   "MySandbox",
+ *   { main: import.meta.url, port: 3000, cpu: 1024, memory: 2048, isolation: "isolated" },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
+ *       hello: Effect.fn(function* (name: string) {
+ *         return `hello ${name}`;
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
  * @resource
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> = Platform(
@@ -465,8 +598,83 @@ export const taskImagePlatform = (runtimePlatform?: ecs.RuntimePlatform) =>
   // platform 'linux/amd64'`.
   runtimePlatform?.cpuArchitecture === "ARM64" ? "linux/arm64" : "linux/amd64";
 
+/**
+ * The launch types a task definition is registered for: what the user set,
+ * else Managed Instances for a Nitro Sandbox task, else Fargate.
+ */
+export const taskCompatibilities = (
+  props: Pick<TaskDefinitionConfig, "requiresCompatibilities" | "isolation">,
+): ecs.Compatibility[] =>
+  props.requiresCompatibilities ??
+  (props.isolation === "isolated" ? ["MANAGED_INSTANCES"] : ["FARGATE"]);
+
 /** Keep image resolution, drift detection and dev watching on the same inputs. */
-export const taskImageInput = (props: TaskProps) => {
+/**
+ * The mount capabilities bound onto a task, checked against its launch
+ * types: FUSE needs EC2 (or EXTERNAL), not Fargate.
+ */
+export const taskMountCapabilities = (
+  id: string,
+  props: Pick<TaskProps, "requiresCompatibilities" | "isolation">,
+  bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>>,
+) => {
+  const capabilities = collectMountCapabilities(bindings);
+  if (capabilities.length > 0 && !(props as { main?: string }).main) {
+    return Effect.fail(
+      new MountUnsupported({
+        host: id,
+        capability: capabilities[0]!.id,
+        requirement: "image",
+        message: `Task ${id} can't install the ${capabilities.map((c) => c.id).join(", ")} mount client: it runs a pre-built image. Give it a \`main\`.`,
+      }),
+    );
+  }
+  const fuse = !taskCompatibilities(props).includes("FARGATE");
+  const unsupported = checkMountSupport(
+    id,
+    capabilities,
+    { fuse, nfs: true },
+    'Set `requiresCompatibilities: ["EC2"]` and run the task on an EC2 capacity provider.',
+  );
+  return unsupported ? Effect.fail(unsupported) : Effect.succeed(capabilities);
+};
+
+/** Fold mount install lines into a task's image source props. */
+export const withMountInstall = (
+  props: TaskProps,
+  capabilities: ReadonlyArray<MountCapability>,
+): TaskProps =>
+  capabilities.length === 0
+    ? props
+    : ({ ...props, install: mountInstallLines(capabilities) } as TaskProps);
+
+/**
+ * The sandbox agent's process entry, published as an image of its own beside
+ * the image of a task that has no program.
+ */
+const sandboxAgentMain = new URL(
+  `../Bootstrap/EcsSandbox${moduleExtension(import.meta.url)}`,
+  import.meta.url,
+).href;
+
+/**
+ * Whether a task's container gets the sandbox agent mounted: its runs are
+ * sandboxes and it has no program (`main`) to serve the agent itself.
+ */
+export const isImageSandbox = (
+  props: TaskProps,
+  bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined,
+) =>
+  (props as { main?: string }).main === undefined &&
+  (bindings ?? []).some(
+    (binding: ResourceBinding<TaskBindingContract> & { action?: string }) =>
+      binding.action !== "delete" && binding.data?.sandbox === true,
+  );
+
+export const taskImageInput = (
+  props: TaskProps,
+  bindings?: ReadonlyArray<ResourceBinding<TaskBindingContract>>,
+) => {
   const source = props as ImageSourceLike;
   return {
     source,
@@ -474,6 +682,7 @@ export const taskImageInput = (props: TaskProps) => {
     port: props.port,
     isExternal: props.isExternal,
     bootstrap: makeBunBootstrap(source.handler ?? "default"),
+    agent: isImageSandbox(props, bindings) ? { main: sandboxAgentMain } : undefined,
   };
 };
 
@@ -691,6 +900,55 @@ export const attachTaskBindings = Effect.fn(function* ({
   return { env, volumes, mountPoints };
 });
 
+/** The task volume the sandbox agent is copied into. */
+const SANDBOX_AGENT_VOLUME = "alchemy-sandbox-agent";
+
+/** The container that copies the sandbox agent into its volume, then exits. */
+const SANDBOX_AGENT_CONTAINER = "alchemy-sandbox-agent";
+
+/**
+ * Put the sandbox agent in front of a container whose image has no program
+ * of ours, without changing the image.
+ *
+ * The agent's own image runs first, as a container that copies the agent and
+ * its runtime into a task volume and exits. The primary container mounts that
+ * volume read-only and starts the agent as its entry point, with the image's
+ * own process as the agent's command, so what the image runs by itself still
+ * runs. As in any container definition, `command` replaces the image's `CMD`
+ * and `container.entryPoint` its `ENTRYPOINT`.
+ */
+const withSandboxAgent = (
+  primary: ecs.ContainerDefinition,
+  agent: ResolvedImageAgent,
+): ecs.ContainerDefinition[] => [
+  {
+    ...primary,
+    entryPoint: [...imageAgentEntryPoint],
+    command: [
+      ...(primary.entryPoint ?? agent.entryPoint),
+      // An entry point of the task's own drops the image's `CMD`, as Docker does.
+      ...(primary.command ?? (primary.entryPoint === undefined ? agent.command : [])),
+    ],
+    mountPoints: [
+      ...(primary.mountPoints ?? []),
+      { sourceVolume: SANDBOX_AGENT_VOLUME, containerPath: IMAGE_AGENT_DIR, readOnly: true },
+    ],
+    dependsOn: [
+      ...(primary.dependsOn ?? []),
+      { containerName: SANDBOX_AGENT_CONTAINER, condition: "SUCCESS" },
+    ],
+  },
+  {
+    name: SANDBOX_AGENT_CONTAINER,
+    image: agent.imageUri,
+    essential: false,
+    // The copy writes to a volume the container runtime owns.
+    user: "0",
+    mountPoints: [{ sourceVolume: SANDBOX_AGENT_VOLUME, containerPath: IMAGE_AGENT_DIR }],
+    logConfiguration: primary.logConfiguration,
+  },
+];
+
 /**
  * Register a new task definition revision from the shared
  * {@link TaskDefinitionConfig} surface.
@@ -705,6 +963,8 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   tags,
   bindingVolumes = [],
   bindingMountPoints = [],
+  fuse = false,
+  agent,
 }: {
   props: TaskDefinitionConfig;
   family: string;
@@ -717,6 +977,13 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   bindingVolumes?: ecs.Volume[];
   /** Primary-container mount points for binding-requested volumes. */
   bindingMountPoints?: ecs.MountPoint[];
+  /** Grant the primary container `/dev/fuse` and `SYS_ADMIN` (mount bindings). */
+  fuse?: boolean;
+  /**
+   * The sandbox agent to mount into the primary container, for an image with
+   * no program of its own. See {@link withSandboxAgent}.
+   */
+  agent?: ResolvedImageAgent;
 }) {
   const { region } = yield* AWSEnvironment.current;
   const containerName = props.container?.name ?? family;
@@ -745,7 +1012,8 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       options: {
         "awslogs-group": logGroupName,
         "awslogs-region": region,
-        "awslogs-stream-prefix": family,
+        // ECS caps the prefix at 200 characters; a generated family can be 255.
+        "awslogs-stream-prefix": family.slice(0, 200),
       },
     },
     ...props.container,
@@ -756,17 +1024,49 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
           mountPoints: [...(props.container?.mountPoints ?? []), ...bindingMountPoints],
         }
       : {}),
+    // Mount bindings (e.g. `Archil.MountDisk`) mount FUSE filesystems at run
+    // time; the container needs the device and the capability to mount.
+    ...(fuse
+      ? {
+          linuxParameters: {
+            ...props.container?.linuxParameters,
+            capabilities: {
+              ...props.container?.linuxParameters?.capabilities,
+              add: [
+                ...new Set([
+                  ...(props.container?.linuxParameters?.capabilities?.add ?? []),
+                  "SYS_ADMIN",
+                ]),
+              ],
+            },
+            devices: [
+              ...(props.container?.linuxParameters?.devices ?? []),
+              {
+                hostPath: "/dev/fuse",
+                containerPath: "/dev/fuse",
+                permissions: ["read", "write", "mknod"],
+              },
+            ],
+          },
+        }
+      : {}),
   };
   const response = yield* ecs.registerTaskDefinition({
     family,
     taskRoleArn,
     executionRoleArn,
     networkMode: props.networkMode ?? "awsvpc",
-    requiresCompatibilities: props.requiresCompatibilities ?? ["FARGATE"],
+    requiresCompatibilities: taskCompatibilities(props),
     cpu: String(props.cpu ?? 256),
     memory: String(props.memory ?? 512),
     volumes:
-      bindingVolumes.length > 0 ? [...(props.volumes ?? []), ...bindingVolumes] : props.volumes,
+      bindingVolumes.length > 0 || agent !== undefined
+        ? [
+            ...(props.volumes ?? []),
+            ...bindingVolumes,
+            ...(agent !== undefined ? [{ name: SANDBOX_AGENT_VOLUME }] : []),
+          ]
+        : props.volumes,
     placementConstraints: props.placementConstraints,
     runtimePlatform: props.runtimePlatform,
     ephemeralStorage: props.ephemeralStorage,
@@ -775,8 +1075,14 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     proxyConfiguration: props.proxyConfiguration,
     inferenceAccelerators: props.inferenceAccelerators,
     enableFaultInjection: props.enableFaultInjection,
+    trustedExecutionConfiguration:
+      props.trustedExecutionConfiguration ??
+      (props.isolation === "isolated" ? { isolationMode: "ISOLATED_SANDBOX" } : undefined),
     ...props.taskDefinition,
-    containerDefinitions: [primaryContainer, ...(props.sidecars ?? [])],
+    containerDefinitions:
+      agent === undefined
+        ? [primaryContainer, ...(props.sidecars ?? [])]
+        : [...withSandboxAgent(primaryContainer, agent), ...(props.sidecars ?? [])],
     tags: Object.entries(tags).map(([key, value]) => ({ key, value })),
   });
   const taskDefinition = response.taskDefinition;
@@ -1023,7 +1329,9 @@ export const TaskProvider = () =>
       const createRepositoryName = (id: string) =>
         createPhysicalName({
           id: `${id}-repo`,
-          maxLength: 256,
+          // ECS caps an image reference at 255 characters: the registry host,
+          // this name and a 64-character tag must all fit.
+          maxLength: 128,
           lowercase: true,
         });
 
@@ -1098,8 +1406,11 @@ export const TaskProvider = () =>
           "logGroupArn",
           "taskFamily",
         ],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (!isResolved(news)) return;
+        diff: Effect.fn(function* ({ id, olds, news: declared, output, newBindings }) {
+          if (!isResolved(declared)) return;
+          const news = isResolved(newBindings)
+            ? withMountInstall(declared, yield* taskMountCapabilities(id, declared, newBindings))
+            : declared;
           if ((yield* toTaskFamily(id, olds ?? {})) !== (yield* toTaskFamily(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
@@ -1111,7 +1422,13 @@ export const TaskProvider = () =>
           // and surface drift as an update; without this a bootstrap or
           // code-only change would silently no-op until `--force`.
           if (output) {
-            const hash = yield* imageSource.hash(taskImageInput(news));
+            // An image with no program gets the sandbox agent beside it when
+            // a binding asks for it, so its hash waits for the bindings.
+            const hash = isResolved(newBindings)
+              ? yield* imageSource.hash(taskImageInput(news, newBindings))
+              : (news as { main?: string }).main !== undefined
+                ? yield* imageSource.hash(taskImageInput(news))
+                : undefined;
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
@@ -1141,7 +1458,9 @@ export const TaskProvider = () =>
               output.port,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news: declared, bindings, output, session }) {
+          const mountCapabilities = yield* taskMountCapabilities(id, declared, bindings);
+          const news = withMountInstall(declared, mountCapabilities);
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts. (An
           // explicit taskName change arrives here as a fresh replacement
@@ -1216,7 +1535,7 @@ export const TaskProvider = () =>
           // AWS, so registering a new revision is the unit of "update" —
           // the superseded revision is reaped after registration below.
           const resolved = yield* imageSource.resolve({
-            ...taskImageInput(news),
+            ...taskImageInput(news, bindings),
             id,
             repositoryName,
             repositoryUri:
@@ -1244,6 +1563,8 @@ export const TaskProvider = () =>
             tags,
             bindingVolumes,
             bindingMountPoints,
+            fuse: mountCapabilities.some((c) => c.requires?.fuse),
+            agent: resolved.agent,
           });
 
           // Sync tags — task definition revisions carry tags at register

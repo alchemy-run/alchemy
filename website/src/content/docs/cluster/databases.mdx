@@ -1,0 +1,73 @@
+---
+title: Databases
+description: The Postgres an Effect Cluster coordinates through — what runners keep in it, and how to run one on any cloud or connect to one you have.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+Effect Cluster has no coordinator service. Runners coordinate through a Postgres **database**: each registers itself, takes locks on the shards it owns, and stores persisted messages and workflow state there.
+
+<DAG
+  nodes={[
+    { id: "r1", label: "Runner 1", type: "shards 1–150", layer: 0 },
+    { id: "r2", label: "Runner 2", type: "shards 151–300", layer: 0 },
+    { id: "db", label: "Database", type: "runners, locks, messages", tone: "accent", layer: 1 },
+  ]}
+  edges={[
+    { from: "r1", to: "db" },
+    { from: "r2", to: "db" },
+  ]}
+  caption="Runners never talk to a coordinator: the database is where they agree."
+/>
+
+## A database Layer
+
+Each cloud's `Database` is a Layer that runs Postgres on that cloud, on a private network its pools join:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterAWS.Database("Cluster");
+
+export const Default = ClusterAWS.EcsPool("Default").pipe(Layer.provide(Database));
+```
+
+Give it to every pool in the cluster. A pool on a different cloud than the database can't join its network, and the deploy says so.
+
+## One you already have
+
+`Cluster.Database.fromUrl` uses any Postgres the pool can reach:
+
+```typescript title="src/Cluster.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Config from "effect/Config";
+
+export const Database = Cluster.Database.fromUrl({
+  url: Config.Redacted("CLUSTER_DATABASE_URL"),
+});
+```
+
+## Credentials
+
+Each cloud's `Database` creates a random password for Postgres and keeps it in the Stack's state, so there's no password to choose or store. Every runner in a pool is given the database's full connection URL as `CLUSTER_DATABASE_URL`. Callers outside the pool are never given it: they reach the cluster through the gateway.
+
+With `fromUrl`, the URL is yours, read through `Config` like any other secret. Store it in your secrets provider, for each stage. See [Secret providers](/environments/secret-providers).
+
+## What each cloud runs
+
+| Cloud | Database |
+|---|---|
+| Docker | Postgres as a swarm service, on an overlay network |
+| AWS | RDS Postgres, in a VPC of its own |
+| GCP | Postgres on a Compute Engine instance with a persistent disk |
+| Kubernetes | Postgres as a Deployment behind a ClusterIP Service |
+| Fly | Postgres on a Fly Machine with a volume, on a private network |
+| Hetzner | Postgres on a Server with a Volume, on a private Network |
+| Cloudflare | none: each Durable Object keeps its own messages in its SQLite |
+
+The RDS database is built for production. The others keep one Postgres on one disk, which suits development and small clusters; for more, run a managed Postgres and pass its URL to `fromUrl`.
+
+## What's in it
+
+Effect Cluster creates its own tables on the first runner's start: registered runners, shard locks, messages and their replies. Workflow runs are messages too. Losing the database loses persisted messages, unfinished workflows and their history; running entities just restart.

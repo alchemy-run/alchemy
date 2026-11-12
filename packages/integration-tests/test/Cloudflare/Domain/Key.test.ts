@@ -1,18 +1,24 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/tours-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
 });
 
-const stack = beforeAll(deploy(Stack));
+// The deploy waits for a backfill on the account's shared Workflow and
+// Durable Object capacity. While the backfill benchmarks
+// (CatchUp.bench.test.ts) saturate it, the same deploy takes minutes instead
+// of seconds, as the other Domain suites' deploys do.
+const stack = beforeAll(deploy(Stack), { timeout: 420_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 /** A tours route answered with something other than 200. */
@@ -111,5 +117,5 @@ test(
     );
     expect(board).toEqual({ notes: [`t1-${run}`, `t2-${run}`, `t4-${run}`] });
   }),
-  { timeout: 180_000 },
+  { timeout: 180_000, tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
 );

@@ -1,0 +1,113 @@
+---
+title: What is Neon?
+description: The concepts behind Neon — organizations, projects, branches, computes, roles, connections, migrations, and the Functions, storage, Auth, Data API and AI Gateway around them — and how @alchemy.run/neon models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Neon is serverless Postgres. It keeps your data in storage separate from the **compute** that runs queries, which lets it do two things an ordinary database can't: start and stop compute with demand, down to nothing when idle, and **branch** a whole database, data included, in a second.
+
+Around the database, Neon also runs Functions, object storage, user sign-in, an HTTP Data API and an AI gateway, each attached to a branch.
+
+Take one small app: an upload service with a database, a bucket and a Function, branched per preview. A project holds a branch. The branch has a compute that serves Postgres, and the Function, bucket and Auth that belong to it.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization", icon: "brand:neon" },
+    { id: "project", label: "app-db", type: "project · aws-us-east-1", parent: "org", dashed: true, icon: "folder" },
+    { id: "main", label: "main", type: "branch", parent: "project", dashed: true, icon: "git-branch", areas: ["compute fn bucket"], phoneAreas: ["fn fn", "compute bucket"], colGap: 3.5 },
+    { id: "fn", label: "Api", type: "Function", parent: "main", tone: "accent", icon: "square-function" },
+    { id: "compute", label: "compute", type: "Postgres · autoscales", parent: "main", icon: "brand:postgresql" },
+    { id: "bucket", label: "Uploads", type: "Bucket", parent: "main", icon: "archive" },
+    { id: "pr", label: "pr-42", type: "branch · copy of main", parent: "project", dashed: true, icon: "git-branch", areas: ["compute2 fn2 bucket2"], phoneAreas: ["fn2 fn2", "compute2 bucket2"], colGap: 3.5 },
+    { id: "fn2", label: "Api", type: "Function", parent: "pr", icon: "square-function" },
+    { id: "compute2", label: "compute", type: "suspends when idle", parent: "pr", icon: "brand:postgresql" },
+    { id: "bucket2", label: "Uploads", type: "Bucket", parent: "pr", icon: "archive" },
+  ]}
+  links={[
+    { from: "fn", to: "compute", label: "SQL" },
+    { from: "fn", to: "bucket", label: "S3 API" },
+    { from: "fn2", to: "compute2", label: "SQL" },
+    { from: "fn2", to: "bucket2", label: "S3 API" },
+  ]}
+  caption="A project is one Postgres deployment in one region. Each branch has its own compute, Functions and Buckets, and a new branch starts as a copy of its parent."
+/>
+
+## Organizations and API keys
+
+An **organization** holds your projects, members and bill. An **API key** reaches the organization or a single project, and Alchemy deploys with the key in your profile.
+
+Connect it once, in [Setup](/neon/setup). Organization keys, member roles and spending limits can be declared too. See [Organization governance](/neon/governance).
+
+## Projects
+
+A **project** is one database deployment, in one region, like `aws-us-east-1`. Creating it creates a default branch, a role, a database and a compute endpoint:
+
+```typescript title="src/database.ts"
+export const Database = Neon.Project("app-db", { region: "aws-us-east-1" });
+```
+
+Use one project per app. Stages share it through branches.
+
+## Branches
+
+A **branch** is a copy of another branch, made by copy-on-write: it shares the parent's storage until either side writes, so creating one takes a second and costs nothing up front. A branch can copy the data or only the schema, start from a past point in time, and delete itself after a while.
+
+```typescript title="alchemy.run.ts"
+const branch = yield* Neon.Branch("preview", { project, migrations: "./migrations" });
+```
+
+Give each preview stage a branch, and every pull request gets its own database, with real data, gone when the stage is destroyed.
+
+See [Branching](/neon/data/branching).
+
+## Computes
+
+A branch serves queries through a **compute**: a Postgres server attached to its storage. It autoscales between the sizes you allow, and suspends after a period of inactivity, so an idle preview branch costs nothing. The first query after a suspend starts it again in a moment.
+
+## Roles and databases
+
+A **role** is a Postgres login on a branch, with a password Neon generates. Give your app and your migrations their own:
+
+```typescript title="alchemy.run.ts"
+const app = yield* Neon.Role("App", { branch });
+```
+
+See [Roles](/neon/data/roles).
+
+## Connections
+
+Every branch has two ways in. Its `origin` connects to the compute directly. Its `pooledOrigin` goes through Neon's connection pooler, which shares a small set of database connections among many clients. Use the pooled one from anything that opens many short connections, and the direct one behind a pooler of your own, like Cloudflare Hyperdrive.
+
+See [Connections](/neon/data/connections).
+
+## Migrations
+
+Point a project or branch at a folder of `.sql` files, and each deploy applies the new ones in order and records them. A new preview branch, copied from production, gets only the migrations its pull request adds.
+
+See [Migrations](/neon/data/migrations).
+
+## Functions, storage and events
+
+A **Function** runs your code on Neon, next to the database, and answers HTTP at a public URL. A **Bucket** stores files, through an S3-compatible API. A Function can subscribe to a bucket's uploads or to a schedule. All of them belong to a branch, so a preview branch has its own.
+
+```typescript title="alchemy.run.ts"
+const api = yield* Neon.Function("Api", { branch, main: "./src/api.ts" });
+```
+
+See the [upload tutorial](/neon/tutorial).
+
+## Auth, Data API and AI Gateway
+
+**Neon Auth** signs users in and keeps their sessions, with the users stored in your database. The **Data API** serves your tables over HTTP, with access decided per signed-in user. The **AI Gateway** gives a Function access to language models, billed through Neon.
+
+See [Production Auth](/neon/guides/production-auth) and [AI Gateway](/neon/guides/ai-gateway).
+
+## How @alchemy.run/neon models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your API key picks the organization, and `Neon.providers()` deploys into it. A project, its branches and roles are declarations, and migrations run on deploy. Functions, buckets, Auth and the AI Gateway are declared on a branch, and bindings give a Function typed access to them. A branch's connection details flow, as typed outputs, into whatever connects to it: a Neon Function, a Cloudflare Worker through Hyperdrive, a Lambda Function.
+
+Next, build one: the [upload tutorial](/neon/tutorial) puts these ideas to work. Or read the concepts in depth, starting with [Branching](/neon/data/branching).

@@ -20,8 +20,10 @@ import {
   SignKey,
   Site,
 } from "./fixtures/bindings-shared.ts";
+import { flyApi } from "./limit.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  limit: flyApi,
   providers: Fly.providers(),
 });
 
@@ -144,12 +146,13 @@ describe(
           appName?: string;
           secretName?: string;
           hasFlySecretMarkerEnv?: boolean;
-          hasToken?: boolean;
+          tokenKind?: string;
         };
         expect(body.ok).toEqual(true);
         expect(body.appName).toEqual(out.appName);
         expect(body.secretName).toEqual(out.secretName);
-        expect(body.hasToken).toEqual(true);
+        // Config unpacks the bound Redacted token to the raw FlyV1 macaroon.
+        expect(body.tokenKind).toEqual("flyv1");
         expect(body.hasFlySecretMarkerEnv).toEqual(false);
       }).pipe(logLevel),
       { timeout: 120_000 },

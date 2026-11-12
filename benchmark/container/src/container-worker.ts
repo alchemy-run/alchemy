@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -54,9 +55,9 @@ export default class ContainerWorker extends Cloudflare.Worker<ContainerWorker>(
         if (url.pathname === "/boot") {
           // Time the WHOLE thing: DO creation, then the container start and
           // readiness probe inside boot().
-          const start = yield* Effect.sync(() => Date.now());
+          const start = yield* Clock.currentTimeMillis;
           yield* objectFor(variant).getByName(name).boot();
-          const readyMs = (yield* Effect.sync(() => Date.now())) - start;
+          const readyMs = (yield* Clock.currentTimeMillis) - start;
           return yield* HttpServerResponse.json({ readyMs });
         }
         if (url.pathname === "/shutdown") {

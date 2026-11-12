@@ -15,6 +15,7 @@ Examples create billable infrastructure. Follow each README's cleanup commands.
 | Cloudflare Durable Objects | SQLite per object | Drizzle | [cloudflare-durable-object-sql](./cloudflare-durable-object-sql) |
 | Cloudflare Workers | PlanetScale Postgres through Hyperdrive | Drizzle | [cloudflare-planetscale-postgres-drizzle](./cloudflare-planetscale-postgres-drizzle) |
 | Cloudflare Workers | Turso, one database per tenant | Drizzle | [cloudflare-turso-drizzle](./cloudflare-turso-drizzle) |
+| Cloudflare Workers | Modal sandboxes, a volume per user | — | [cloudflare-modal-sandbox](./cloudflare-modal-sandbox) |
 | Cloudflare Workers | Convex, read and written through bindings | Convex | [cloudflare-convex-worker](./cloudflare-convex-worker) |
 | Cloudflare Workers | TanStack Start reading live data from Convex | Convex | [cloudflare-convex-tanstack-start](./cloudflare-convex-tanstack-start) |
 | AWS ECS | Self-hosted Convex, one shared platform per account | Convex | [aws-convex-self-hosted](./aws-convex-self-hosted) |

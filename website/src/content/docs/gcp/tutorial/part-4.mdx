@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import Terminal from "../../../../components/Terminal.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 In [Part 3](/gcp/tutorial/part-3) you tested a deployed Stack. So far
 everything lands in one environment. **Stages** are separate copies of
@@ -16,13 +17,11 @@ the same Stack: one per developer, per environment, and (in
 
 Without `--stage`, Alchemy deploys to `live_$USER`:
 
-```sh
-$ whoami
+<PackageManagers script={`$ whoami
 sam
 
-$ bun alchemy deploy
-# deploys to stage `live_sam`
-```
+$ {run} alchemy deploy
+# deploys to stage \`live_sam\``} />
 
 Every developer gets a personal copy with no setup. The stage comes
 from, in order:
@@ -33,9 +32,7 @@ from, in order:
 
 ## Deploy a second stage
 
-```sh
-bun alchemy deploy --stage staging
-```
+<PackageManagers run="alchemy deploy --stage staging" />
 
 <Terminal content={`[u]Plan[/u]: [g]2 to create[/g]
 [g]+[/g] [b]Api[/b] [d](GCP.Run.Service)[/d]
@@ -60,11 +57,11 @@ the same project.
 
 Deploying or destroying one stage never touches another:
 
-```sh
-bun alchemy deploy --stage prod
-bun alchemy deploy --stage pr-42
-bun alchemy destroy --stage pr-42   # only removes pr-42
-```
+<PackageManagers run="alchemy deploy --stage prod" />
+
+<PackageManagers run="alchemy deploy --stage pr-42" />
+
+<PackageManagers run="alchemy destroy --stage pr-42   # only removes pr-42" />
 
 Stage names must match `[a-z0-9][-_a-z0-9]*`.
 
@@ -99,9 +96,7 @@ stage scales to zero.
 
 ## Destroy a stage
 
-```sh
-bun alchemy destroy --stage staging
-```
+<PackageManagers run="alchemy destroy --stage staging" />
 
 The plan lists everything in `staging` for deletion, including the
 service account Alchemy created for the service.
@@ -129,10 +124,9 @@ Stages separate **what** is deployed. [Profiles](/environments/profiles)
 choose **where**: which GCP project and credentials. Pair a `prod`
 stage with a `prod` profile pointing at a separate project:
 
-```sh
-bun alchemy deploy --stage prod --profile prod
-bun alchemy deploy --stage pr-42 --profile default
-```
+<PackageManagers run="alchemy deploy --stage prod --profile prod" />
+
+<PackageManagers run="alchemy deploy --stage pr-42 --profile default" />
 
 ## Recap
 

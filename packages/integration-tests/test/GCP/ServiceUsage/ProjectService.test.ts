@@ -6,6 +6,7 @@ import * as serviceusage from "@distilled.cloud/gcp/serviceusage_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -39,6 +40,13 @@ test.provider(
         GCP.ServiceUsage.ProjectService("ServiceUsageApi", {
           service: "serviceusage.googleapis.com",
         }),
+      );
+      yield* expectFound(
+        GCP.ServiceUsage.ProjectService.lookup({
+          service: enabled.service,
+          disableOnDestroy: enabled.disableOnDestroy,
+        }),
+        enabled,
       );
 
       expect(enabled.project).toEqual(project);

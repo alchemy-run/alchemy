@@ -7,6 +7,7 @@ import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -25,7 +26,13 @@ export class FunctionDeploymentFailed extends Data.TaggedError("FunctionDeployme
 export class FunctionDeploymentNotReady extends Data.TaggedError("FunctionDeploymentNotReady")<{
   slug: string;
   deploymentId: number;
-}> {}
+  /** What Neon reported last: the current and active deployments' ids and statuses. */
+  observed: string;
+}> {
+  override get message() {
+    return `Neon Function ${this.slug} deployment ${this.deploymentId} is not active yet (${this.observed})`;
+  }
+}
 
 export const observeFunction = Effect.fn(function* (scope: ResolvedBranchScope, slug: string) {
   let cursor: string | undefined;
@@ -94,14 +101,19 @@ export const waitForFunctionDeployment = (
       fn.active_deployment.status !== "completed" ||
       !fn.invocation_url.startsWith("https://")
     ) {
-      return yield* new FunctionDeploymentNotReady({ slug, deploymentId });
+      return yield* new FunctionDeploymentNotReady({
+        slug,
+        deploymentId,
+        observed: `current ${fn.current_deployment?.id}:${fn.current_deployment?.status}, active ${fn.active_deployment?.id}:${fn.active_deployment?.status}, url ${fn.invocation_url || "none"}`,
+      });
     }
     return fn;
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "FunctionDeploymentNotReady",
+      // A large bundle (a Next.js server) can take over a minute to activate.
       schedule: Schedule.spaced("5 seconds"),
-      times: 9,
+      times: 18,
     }),
   );
 
@@ -118,13 +130,14 @@ export const FunctionLogs = Effect.fn(function* (
     return yield* new FunctionLogQueryError({ reason: "invalid-limit" });
   // https://neon.com/docs/introduction/monitor-logs documents this service identity.
   const service = `neon-function/${output.slug}`;
+  const endTime = DateTime.formatIso(yield* DateTime.now);
   const query = yield* Effect.sync(() => ({
     project_id: output.projectId,
     branch_id: output.branchId,
     source: "function" as const,
     service_name: service,
     ...(options.since ? { start_time: options.since.toISOString() } : { since: "1h" }),
-    end_time: new Date().toISOString(),
+    end_time: endTime,
     limit: Math.min(limit, 1000),
     sort_order: "desc" as const,
   }));
@@ -194,6 +207,14 @@ export const FunctionProviderLive = () =>
       const artifact = yield* buildFunctionArtifact(news);
       if (artifact.codeHash !== output?.codeHash) return { action: "update" };
     }),
+    lookup: Effect.fn(function* ({ projectId, branchId, slug }) {
+      const scope = yield* resolveBranchScope(
+        branchId === undefined ? { project: { projectId } } : { branch: { projectId, branchId } },
+      );
+      const found = yield* observeFunction(scope, slug);
+      return found === undefined ? undefined : attributes(scope, found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       if (
         !output &&

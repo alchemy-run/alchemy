@@ -75,13 +75,14 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
       ],
       { concurrency: 3 },
     );
-    expect({ exitCode, stderr, failure: exitCode === 0 ? "" : stdout }).toEqual({
+    expect({ exitCode, failure: exitCode === 0 ? "" : `${stdout}${stderr}` }).toEqual({
       exitCode: 0,
-      stderr: "",
       failure: "",
     });
+    // Printed views are results (stdout); status lines are progress (stderr).
     expect(stdout).toContain("Starting deployment");
-    expect(stdout).toContain("Deployment complete");
+    expect(stderr).toContain("Deployment complete");
+    expect(stdout).not.toContain("Deployment complete");
     expect(stdout).toContain(JSON.stringify({ cwd: yield* fs.realPath(project), args }));
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 

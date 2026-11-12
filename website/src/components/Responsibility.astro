@@ -1,0 +1,151 @@
+---
+/**
+ * `<Responsibility />` — who manages each layer of a runtime: you or the
+ * platform. One column per runtime, one row per layer, from your code at the
+ * top to the hardware at the bottom. Cells you manage are filled, so the
+ * columns read as a staircase from "the platform does almost everything" to
+ * "you do almost everything".
+ *
+ * Usage in MDX:
+ *   <Responsibility
+ *     platform="AWS"
+ *     columns={[{ label: "Lambda", type: "per invocation" }, { label: "EC2", type: "machines" }]}
+ *     rows={[
+ *       { label: "your program", you: [true, true] },
+ *       { label: "OS & patching", you: [false, true] },
+ *     ]}
+ *     caption="…"
+ *   />
+ */
+interface Props {
+  /** Who manages the cells you don't, e.g. "AWS". */
+  platform: string;
+  columns: { label: string; type?: string }[];
+  /** Top to bottom. `you[i]` is whether you manage this layer on column `i`. */
+  rows: { label: string; you: boolean[] }[];
+  caption?: string;
+}
+
+const { platform, columns, rows, caption } = Astro.props as Props;
+---
+
+<figure class="alc-resp not-content" data-nosnippet>
+  <div class="alc-resp__panel">
+  <div class="alc-resp__grid" style={`--cols: ${columns.length}`}>
+    <div class="alc-resp__corner" />
+    {
+      columns.map((c) => (
+        <div class="alc-resp__head">
+          <span class="alc-resp__label">{c.label}</span>
+          {c.type && <span class="alc-resp__type">{c.type}</span>}
+        </div>
+      ))
+    }
+    {
+      rows.map((r) => (
+        <>
+          <div class="alc-resp__row">{r.label}</div>
+          {r.you.map((you) => (
+            <div class:list={["alc-resp__cell", you ? "alc-resp__cell--you" : "alc-resp__cell--platform"]}>
+              {you ? "you" : platform}
+            </div>
+          ))}
+        </>
+      ))
+    }
+  </div>
+  </div>
+  {caption && <figcaption class="alc-resp__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-resp {
+    margin: 1.5rem 0;
+  }
+  .alc-resp__panel {
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: var(--alc-radius);
+    padding: 1.25rem;
+    overflow-x: auto;
+  }
+  .alc-resp__grid {
+    display: grid;
+    grid-template-columns: max-content repeat(var(--cols), minmax(0, 1fr));
+    gap: 0.375rem;
+    min-width: 36rem;
+    font-family: var(--alc-font-mono);
+  }
+  .alc-resp__head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 0.375rem;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .alc-resp__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--alc-fg-1, var(--alc-fg-2));
+  }
+  .alc-resp__type {
+    font-size: 0.6875rem;
+    color: var(--alc-fg-4);
+  }
+  .alc-resp__row {
+    display: flex;
+    align-items: center;
+    padding-right: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--alc-fg-2);
+    white-space: nowrap;
+  }
+  .alc-resp__cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    border-radius: 0.375rem;
+    font-size: 0.6875rem;
+  }
+  .alc-resp__cell--you {
+    background: color-mix(in srgb, var(--alc-accent) 28%, transparent);
+    border: 1px solid color-mix(in srgb, var(--alc-accent) 70%, transparent);
+    color: var(--alc-fg-1, var(--alc-fg-2));
+    font-weight: 600;
+  }
+  .alc-resp__cell--platform {
+    border: 1px dashed var(--alc-hairline-3);
+    color: var(--alc-fg-4);
+  }
+  /* On a phone, each layer's name sits on its own line above its cells, so
+     the cells get the full width and nothing scrolls. */
+  @media (max-width: 40rem) {
+    .alc-resp__panel {
+      padding: 0.75rem;
+    }
+    .alc-resp__grid {
+      grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+      min-width: 0;
+      row-gap: 0.25rem;
+    }
+    .alc-resp__corner {
+      display: none;
+    }
+    .alc-resp__head {
+      white-space: normal;
+    }
+    .alc-resp__row {
+      grid-column: 1 / -1;
+      padding: 0.375rem 0 0;
+    }
+  }
+  .alc-resp__caption {
+    margin-top: 0.625rem;
+    text-align: center;
+    font-family: var(--alc-font-sans);
+    font-size: 13px;
+    color: var(--alc-fg-3, var(--alc-fg-2));
+  }
+</style>

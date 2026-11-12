@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   logLevel,
   organization,
@@ -57,6 +58,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { posture, deployment };
         }),
+      );
+      yield* expectFound(
+        GCP.SecurityPosture.PostureDeployment.lookup({
+          postureDeploymentId: created.deployment.postureDeploymentId,
+          organization: created.deployment.organization,
+          location: created.deployment.location,
+        }),
+        created.deployment,
       );
 
       expect(created.posture.state).toEqual("ACTIVE");

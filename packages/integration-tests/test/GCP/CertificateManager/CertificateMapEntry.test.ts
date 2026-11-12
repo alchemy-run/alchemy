@@ -5,6 +5,7 @@ import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1"
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -103,6 +104,14 @@ test.provider(
           });
           return { map, certA, entry };
         }),
+      );
+      yield* expectFound(
+        GCP.CertificateManager.CertificateMapEntry.lookup({
+          certificateMapEntryId: created.entry.certificateMapEntryId,
+          certificateMap: created.entry.certificateMap,
+          location: created.entry.location,
+        }),
+        created.entry,
       );
 
       expect(created.entry.name).toContain("/certificateMapEntries/");

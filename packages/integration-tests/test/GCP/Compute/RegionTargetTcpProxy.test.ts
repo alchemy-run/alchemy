@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -84,6 +85,13 @@ test.provider(
           });
           return { check, backend, proxy };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionTargetTcpProxy.lookup({
+          targetTcpProxyName: created.proxy.targetTcpProxyName,
+          region: created.proxy.region,
+        }),
+        created.proxy,
       );
 
       expect(created.proxy.targetTcpProxyName).toEqual(expect.any(String));

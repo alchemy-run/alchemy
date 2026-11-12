@@ -7,12 +7,11 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilFloatingIpGone = (id: number) =>
   floatingIps.getFloatingIp({ id }).pipe(
@@ -36,7 +35,7 @@ const waitUntilServerGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create update replace and delete assignment",
   (stack) =>
     Effect.gen(function* () {
@@ -160,6 +159,5 @@ test.provider.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );

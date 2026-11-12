@@ -1,0 +1,507 @@
+---
+/**
+ * `<Boundaries />` — what's inside which boundary, and what crosses it. Zones
+ * are borders around their nodes (a private network, a provider's edge), and
+ * links say how traffic gets across: an ordinary `arrow`, a `tunnel` drawn as
+ * a pipe through a boundary, or a `blocked` attempt that stops at the wall.
+ * Use it when the point is reachability: a Cloudflare Tunnel from a network
+ * with no open ports, a private service behind a VPC, a database only a
+ * connector can reach.
+ *
+ *   <Boundaries
+ *     nodes={[
+ *       { id: "visitor", label: "visitor", col: 0 },
+ *       { id: "edge", label: "Cloudflare", type: "edge", col: 1 },
+ *       { id: "cfd", label: "cloudflared", col: 2 },
+ *     ]}
+ *     zones={[{ id: "net", label: "your network", nodes: ["cfd"], tone: "warn" }]}
+ *     links={[
+ *       { from: "visitor", to: "edge", label: "GET" },
+ *       { from: "edge", to: "cfd", kind: "tunnel", label: "tunnel" },
+ *       { from: "visitor", to: "net", kind: "blocked", label: "no open port" },
+ *     ]}
+ *   />
+ *
+ * A `blocked` link goes from a node to a zone, and ends with a cross at the
+ * zone's border.
+ */
+import "./diagram.css";
+
+interface Node {
+  id: string;
+  label: string;
+  type?: string;
+  col: number;
+  row?: number;
+  tone?: "default" | "accent";
+}
+interface Zone {
+  id: string;
+  label: string;
+  type?: string;
+  nodes: string[];
+  tone?: "default" | "warn";
+  /** Put the label at the right end of the top border, clear of a link entering on the left. */
+  labelAt?: "left" | "right";
+}
+interface Link {
+  from: string;
+  to: string;
+  label?: string;
+  kind?: "arrow" | "tunnel" | "blocked";
+}
+interface Props {
+  nodes: Node[];
+  zones?: Zone[];
+  links?: Link[];
+  caption?: string;
+  /** Internal: render only the phone layout's SVG, columns turned into rows, when narrower than `wideWidth`. */
+  narrow?: boolean;
+  wideWidth?: number;
+  /** Internal: the narrow layout stacks every node in one column. */
+  stacked?: boolean;
+}
+
+const props = Astro.props as Props;
+const { zones = [], links = [], caption, narrow = false, wideWidth = Infinity, stacked = false } = props;
+// On a phone the grid turns on its side (columns become rows), or, when that is
+// still too wide, stacks every node in one column, column by column.
+const byColumn = [...props.nodes].sort((a, b) => a.col - b.col || (a.row ?? 0) - (b.row ?? 0));
+const nodes = !narrow
+  ? props.nodes
+  : stacked
+    ? props.nodes.map((n) => ({ ...n, col: 0, row: byColumn.indexOf(n) }))
+    : props.nodes.map((n) => ({ ...n, col: n.row ?? 0, row: n.col }));
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+const NW = Math.max(132, ...nodes.map((n) => Math.max(n.label.length * 8, (n.type ?? "").length * 6.6) + 24));
+const NH = 48;
+// Gaps fit the longest label on a horizontal link, with room to clear the zone borders it crosses.
+const sameRow = (l: Link) => (nodes.find((n) => n.id === l.from)?.row ?? 0) === (nodes.find((n) => n.id === l.to)?.row ?? 0);
+const GAP_X = Math.max(narrow ? 48 : 76, ...links.filter((l) => l.kind !== "blocked" && (!narrow || sameRow(l))).map((l) => (l.label ?? "").length * 6.6 + 40));
+const ROW_H = NH + 96;
+const PAD = 16;
+const ZONE_PAD = 18;
+// On a phone a zone's type goes on a second line under its name, so a long one
+// doesn't widen the zone.
+const splitType = (z: Zone) => narrow && !!z.type && z.label.length * 7 + z.type.length * 6.6 + 32 > NW + 2 * ZONE_PAD;
+const ZONE_TOP = narrow && zones.some(splitType) ? 44 : 30;
+// Room for a zone's label above the first row, only when a zone starts there.
+const TOP = PAD + (zones.some((z) => z.nodes.some((id) => (nodes.find((n) => n.id === id)?.row ?? 0) === 0)) ? ZONE_TOP + 8 : 0);
+
+// A gap a tunnel runs through is wider, so the pipe reads as a pipe between the boundaries.
+const colOf = new Map(nodes.map((n) => [n.id, n.col]));
+const rowOf = new Map(nodes.map((n) => [n.id, n.row ?? 0]));
+const tunnels = links.filter((l) => l.kind === "tunnel");
+const tunnelAfterCol = new Set(tunnels.filter((l) => rowOf.get(l.from) === rowOf.get(l.to)).map((l) => Math.min(colOf.get(l.from)!, colOf.get(l.to)!)));
+const tunnelAfterRow = new Set(tunnels.filter((l) => colOf.get(l.from) === colOf.get(l.to)).map((l) => Math.min(rowOf.get(l.from)!, rowOf.get(l.to)!)));
+const maxCol = Math.max(...nodes.map((n) => n.col));
+const maxRow = Math.max(...nodes.map((n) => n.row ?? 0));
+const colX: number[] = [PAD + ZONE_PAD];
+for (let c = 1; c <= maxCol; c++) colX.push(colX[c - 1]! + NW + (tunnelAfterCol.has(c - 1) ? GAP_X * 2 : GAP_X));
+const rowY: number[] = [TOP];
+for (let r = 1; r <= maxRow; r++) rowY.push(rowY[r - 1]! + NH + (tunnelAfterRow.has(r - 1) ? 110 : narrow ? 100 : 84));
+const pos = new Map(nodes.map((n) => [n.id, { x: colX[n.col]!, y: rowY[n.row ?? 0]! }]));
+// A blocked link that arrives from the side needs room below the nodes to run along.
+const sideBlocked = (z: Zone) =>
+  links.some((l) => l.kind === "blocked" && l.to === z.id && z.nodes.some((id) => rowOf.get(id) === rowOf.get(l.from)));
+const zoneBox = (z: Zone) => {
+  const ps = z.nodes.map((id) => pos.get(id)!);
+  const x0 = Math.min(...ps.map((p) => p.x)) - ZONE_PAD;
+  // A zone is at least as wide as its own label.
+  const labelW = splitType(z) ? Math.max(z.label.length * 7, z.type!.length * 6.6) + 24 : z.label.length * 7 + (z.type ? z.type.length * 6.6 + 8 : 0) + 24;
+  const x1 = Math.max(Math.max(...ps.map((p) => p.x)) + NW + ZONE_PAD, x0 + labelW);
+  const y0 = Math.min(...ps.map((p) => p.y)) - ZONE_TOP;
+  const y1 = Math.max(...ps.map((p) => p.y)) + NH + ZONE_PAD + (sideBlocked(z) ? 44 : 0);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+};
+const boxes = new Map(zones.map((z) => [z.id, zoneBox(z)]));
+// The zone a tunnel pierces is the one around its target.
+const zoneOf = (id: string) => {
+  const z = zones.find((z) => z.nodes.includes(id));
+  return z ? { ...boxes.get(z.id)!, tone: z.tone } : undefined;
+};
+const BREACH = 22;
+// Trim to what's drawn: no zone border on the left of the first column means no room kept for one.
+const minX = Math.min(...[...pos.values()].map((p) => p.x), ...[...boxes.values()].map((b) => b.x));
+const shift = PAD - minX;
+for (const p of pos.values()) p.x += shift;
+for (const b of boxes.values()) b.x += shift;
+// Labels beside vertical links can run past the last column.
+const sideLabelRight = links
+  .filter((l) => l.kind !== "blocked" && l.label && colOf.get(l.from) === colOf.get(l.to))
+  .map((l) => pos.get(l.from)!.x + NW / 2 + 10 + l.label!.length * 6.6);
+// Stacked on a phone, a blocked link runs down a lane right of everything, so
+// it never crosses the nodes between it and its zone.
+const LANE_X = Math.max(...[...pos.values()].map((p) => p.x + NW), ...[...boxes.values()].map((b) => b.x + b.w)) + 16;
+const laneLabels = stacked ? links.filter((l) => l.kind === "blocked" && l.label).map((l) => LANE_X + 8 + l.label!.length * 6.6) : [];
+const W = Math.max(
+  ...laneLabels.map((x) => x + PAD),
+  ...(stacked && links.some((l) => l.kind === "blocked") ? [LANE_X + PAD] : []),
+  ...[...pos.values()].map((p) => p.x + NW + PAD),
+  ...[...boxes.values()].map((b) => b.x + b.w + PAD),
+  ...sideLabelRight.map((x) => x + PAD),
+);
+const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b.y + b.h + PAD));
+---
+
+{narrow && !stacked && W > 420 ? (
+  <Astro.self {...props} narrow stacked wideWidth={wideWidth} />
+) : narrow ? (W < wideWidth * 0.8 && (
+  <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Boundaries"}>
+    <defs>
+      <marker id={`alc-bd-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+
+    {
+      zones.map((z) => {
+        const b = boxes.get(z.id)!;
+        return (
+          <g>
+            <rect x={b.x} y={b.y} width={b.w} height={b.h} rx="12" class:list={["alc-bd__zone", z.tone === "warn" && "alc-bd__zone--warn"]} />
+          </g>
+        );
+      })
+    }
+
+    {
+      links.map((l) => {
+        const a = pos.get(l.from)!;
+        if (l.kind === "blocked" && stacked) {
+          const z = boxes.get(l.to)!;
+          const y = a.y + NH / 2;
+          const ty = z.y > y ? z.y + 22 : z.y + z.h - 22;
+          const wx = z.x + z.w;
+          return (
+            <g>
+              <path d={`M ${a.x + NW} ${y} H ${LANE_X} V ${ty} H ${wx + 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+              <path d={`M ${wx - 7} ${ty - 7} l 14 14 m 0 -14 l -14 14`} class="alc-bd__cross" />
+              {l.label && <text x={LANE_X + 8} y={(y + ty) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        if (l.kind === "blocked") {
+          const z = boxes.get(l.to)!;
+          // Straight down only when no other node sits below in the same column.
+          const columnClear = !nodes.some((n) => n.id !== l.from && n.col === colOf.get(l.from) && (n.row ?? 0) > rowOf.get(l.from)!);
+          if (z.y > a.y + NH && z.x > a.x + NW && columnClear) {
+            // The zone is below and to the right: straight down, then right into its side wall.
+            const sx = a.x + NW / 2;
+            const my = z.y + z.h / 2;
+            return (
+              <g>
+                <path d={`M ${sx} ${a.y + NH} V ${my} H ${z.x - 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+                <path d={`M ${z.x - 7} ${my - 7} l 14 14 m 0 -14 l -14 14`} class="alc-bd__cross" />
+                {l.label && <text x={sx + 10} y={(a.y + NH + my) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+              </g>
+            );
+          }
+          if (z.y > a.y + NH) {
+            // The zone is below: run right, then down to its top wall.
+            const tx = z.x + z.w - NW / 2 - ZONE_PAD;
+            const y = a.y + NH / 2;
+            return (
+              <g>
+                <path d={`M ${a.x + NW} ${y} H ${tx} V ${z.y - 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+                <path d={`M ${tx - 7} ${z.y - 7} l 14 14 m 0 -14 l -14 14`} class="alc-bd__cross" />
+                {l.label && <text x={tx + 10} y={(y + z.y) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+              </g>
+            );
+          }
+          const sx = a.x + NW / 2;
+          const y = a.y + NH + 46;
+          return (
+            <g>
+              <path d={`M ${sx} ${a.y + NH} V ${y} H ${z.x - 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+              <path d={`M ${z.x - 9} ${y - 7} l 12 14 m 0 -14 l -12 14`} class="alc-bd__cross" />
+              {l.label && <text x={(sx + z.x) / 2} y={y - 8} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        const b = pos.get(l.to)!;
+        if (a.x === b.x) {
+          // Vertical: down from a to b.
+          const x = a.x + NW / 2;
+          const y1 = a.y + NH;
+          const y2 = b.y;
+          const wall = l.kind === "tunnel" ? zoneOf(l.to) : undefined;
+          return l.kind === "tunnel" ? (
+            <g>
+              {wall && (
+                <g>
+                  <rect x={x - BREACH} y={wall.y - 3} width={BREACH * 2} height={6} class="alc-bd__gap" />
+                  <line x1={x - BREACH} y1={wall.y} x2={x + BREACH} y2={wall.y} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
+                </g>
+              )}
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line alc-bd__tunnel" marker-end={`url(#alc-bd-arrow-${uid})`} />
+              {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+            </g>
+          ) : (
+            <g>
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line" marker-end={`url(#alc-bd-arrow-${uid})`} />
+              {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        const y = a.y + NH / 2;
+        const x1 = a.x + NW;
+        const x2 = b.x;
+        if (l.kind === "tunnel") {
+          const wall = zoneOf(l.to);
+          return (
+            <g>
+              {wall && (
+                <g>
+                  <rect x={wall.x - 3} y={y - BREACH} width={6} height={BREACH * 2} class="alc-bd__gap" />
+                  <line x1={wall.x} y1={y - BREACH} x2={wall.x} y2={y + BREACH} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
+                </g>
+              )}
+              <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line alc-bd__tunnel" marker-end={`url(#alc-bd-arrow-${uid})`} />
+              {l.label && <text x={(x1 + x2) / 2} y={y + 28} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        return (
+          <g>
+            <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line" marker-end={`url(#alc-bd-arrow-${uid})`} />
+            {l.label && <text x={(x1 + x2) / 2} y={y - 8} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
+          </g>
+        );
+      })
+    }
+
+    {/* Zone names last, ringed in panel colour, so a link entering the zone never runs through them. */}
+    {
+      zones.map((z) => {
+        const b = boxes.get(z.id)!;
+        return (
+          <text
+            x={z.labelAt === "right" ? b.x + b.w - 12 : b.x + 12}
+            y={b.y + 19}
+            text-anchor={z.labelAt === "right" ? "end" : "start"}
+            class="alc-fig__strong alc-bd__zone-label"
+          >
+            {z.label}
+            {z.type && (splitType(z) ? <tspan class="alc-fig__type" x={z.labelAt === "right" ? b.x + b.w - 12 : b.x + 12} dy="14">{z.type}</tspan> : <tspan class="alc-fig__type" dx="8">{z.type}</tspan>)}
+          </text>
+        );
+      })
+    }
+    {
+      nodes.map((n) => {
+        const p = pos.get(n.id)!;
+        return (
+          <g>
+            <rect x={p.x} y={p.y} width={NW} height={NH} rx="8" class:list={["alc-fig__box", n.tone === "accent" && "alc-fig__box--accent"]} />
+            <text x={p.x + NW / 2} y={p.y + (n.type ? 21 : 29)} text-anchor="middle" class="alc-fig__label">{n.label}</text>
+            {n.type && <text x={p.x + NW / 2} y={p.y + 37} text-anchor="middle" class="alc-fig__type">{n.type}</text>}
+          </g>
+        );
+      })
+    }
+  </svg>
+)) : (
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Boundaries"}>
+    <defs>
+      <marker id={`alc-bd-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+
+    {
+      zones.map((z) => {
+        const b = boxes.get(z.id)!;
+        return (
+          <g>
+            <rect x={b.x} y={b.y} width={b.w} height={b.h} rx="12" class:list={["alc-bd__zone", z.tone === "warn" && "alc-bd__zone--warn"]} />
+          </g>
+        );
+      })
+    }
+
+    {
+      links.map((l) => {
+        const a = pos.get(l.from)!;
+        if (l.kind === "blocked" && stacked) {
+          const z = boxes.get(l.to)!;
+          const y = a.y + NH / 2;
+          const ty = z.y > y ? z.y + 22 : z.y + z.h - 22;
+          const wx = z.x + z.w;
+          return (
+            <g>
+              <path d={`M ${a.x + NW} ${y} H ${LANE_X} V ${ty} H ${wx + 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+              <path d={`M ${wx - 7} ${ty - 7} l 14 14 m 0 -14 l -14 14`} class="alc-bd__cross" />
+              {l.label && <text x={LANE_X + 8} y={(y + ty) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        if (l.kind === "blocked") {
+          const z = boxes.get(l.to)!;
+          // Straight down only when no other node sits below in the same column.
+          const columnClear = !nodes.some((n) => n.id !== l.from && n.col === colOf.get(l.from) && (n.row ?? 0) > rowOf.get(l.from)!);
+          if (z.y > a.y + NH && z.x > a.x + NW && columnClear) {
+            // The zone is below and to the right: straight down, then right into its side wall.
+            const sx = a.x + NW / 2;
+            const my = z.y + z.h / 2;
+            return (
+              <g>
+                <path d={`M ${sx} ${a.y + NH} V ${my} H ${z.x - 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+                <path d={`M ${z.x - 7} ${my - 7} l 14 14 m 0 -14 l -14 14`} class="alc-bd__cross" />
+                {l.label && <text x={sx + 10} y={(a.y + NH + my) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+              </g>
+            );
+          }
+          if (z.y > a.y + NH) {
+            // The zone is below: run right, then down to its top wall.
+            const tx = z.x + z.w - NW / 2 - ZONE_PAD;
+            const y = a.y + NH / 2;
+            return (
+              <g>
+                <path d={`M ${a.x + NW} ${y} H ${tx} V ${z.y - 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+                <path d={`M ${tx - 7} ${z.y - 7} l 14 14 m 0 -14 l -14 14`} class="alc-bd__cross" />
+                {l.label && <text x={tx + 10} y={(y + z.y) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+              </g>
+            );
+          }
+          const sx = a.x + NW / 2;
+          const y = a.y + NH + 46;
+          return (
+            <g>
+              <path d={`M ${sx} ${a.y + NH} V ${y} H ${z.x - 4}`} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+              <path d={`M ${z.x - 9} ${y - 7} l 12 14 m 0 -14 l -12 14`} class="alc-bd__cross" />
+              {l.label && <text x={(sx + z.x) / 2} y={y - 8} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        const b = pos.get(l.to)!;
+        if (a.x === b.x) {
+          // Vertical: down from a to b.
+          const x = a.x + NW / 2;
+          const y1 = a.y + NH;
+          const y2 = b.y;
+          const wall = l.kind === "tunnel" ? zoneOf(l.to) : undefined;
+          return l.kind === "tunnel" ? (
+            <g>
+              {wall && (
+                <g>
+                  <rect x={x - BREACH} y={wall.y - 3} width={BREACH * 2} height={6} class="alc-bd__gap" />
+                  <line x1={x - BREACH} y1={wall.y} x2={x + BREACH} y2={wall.y} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
+                </g>
+              )}
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line alc-bd__tunnel" marker-end={`url(#alc-bd-arrow-${uid})`} />
+              {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+            </g>
+          ) : (
+            <g>
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line" marker-end={`url(#alc-bd-arrow-${uid})`} />
+              {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        const y = a.y + NH / 2;
+        const x1 = a.x + NW;
+        const x2 = b.x;
+        if (l.kind === "tunnel") {
+          const wall = zoneOf(l.to);
+          return (
+            <g>
+              {wall && (
+                <g>
+                  <rect x={wall.x - 3} y={y - BREACH} width={6} height={BREACH * 2} class="alc-bd__gap" />
+                  <line x1={wall.x} y1={y - BREACH} x2={wall.x} y2={y + BREACH} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
+                </g>
+              )}
+              <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line alc-bd__tunnel" marker-end={`url(#alc-bd-arrow-${uid})`} />
+              {l.label && <text x={(x1 + x2) / 2} y={y + 28} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
+            </g>
+          );
+        }
+        return (
+          <g>
+            <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line" marker-end={`url(#alc-bd-arrow-${uid})`} />
+            {l.label && <text x={(x1 + x2) / 2} y={y - 8} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
+          </g>
+        );
+      })
+    }
+
+    {/* Zone names last, ringed in panel colour, so a link entering the zone never runs through them. */}
+    {
+      zones.map((z) => {
+        const b = boxes.get(z.id)!;
+        return (
+          <text
+            x={z.labelAt === "right" ? b.x + b.w - 12 : b.x + 12}
+            y={b.y + 19}
+            text-anchor={z.labelAt === "right" ? "end" : "start"}
+            class="alc-fig__strong alc-bd__zone-label"
+          >
+            {z.label}
+            {z.type && (splitType(z) ? <tspan class="alc-fig__type" x={z.labelAt === "right" ? b.x + b.w - 12 : b.x + 12} dy="14">{z.type}</tspan> : <tspan class="alc-fig__type" dx="8">{z.type}</tspan>)}
+          </text>
+        );
+      })
+    }
+    {
+      nodes.map((n) => {
+        const p = pos.get(n.id)!;
+        return (
+          <g>
+            <rect x={p.x} y={p.y} width={NW} height={NH} rx="8" class:list={["alc-fig__box", n.tone === "accent" && "alc-fig__box--accent"]} />
+            <text x={p.x + NW / 2} y={p.y + (n.type ? 21 : 29)} text-anchor="middle" class="alc-fig__label">{n.label}</text>
+            {n.type && <text x={p.x + NW / 2} y={p.y + 37} text-anchor="middle" class="alc-fig__type">{n.type}</text>}
+          </g>
+        );
+      })
+    }
+  </svg>
+  <Astro.self {...props} narrow wideWidth={W} />
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+)}
+
+<style>
+  .alc-bd__zone-label {
+    paint-order: stroke;
+    stroke: var(--alc-bg-elev-1);
+    stroke-width: 5px;
+    stroke-linejoin: round;
+  }
+  .alc-bd__zone {
+    fill: color-mix(in srgb, var(--alc-hairline) 35%, transparent);
+    stroke: var(--alc-accent-40);
+    stroke-width: 1.5;
+  }
+  .alc-bd__zone--warn {
+    fill: color-mix(in srgb, var(--alc-warn) 6%, transparent);
+    stroke: color-mix(in srgb, var(--alc-warn) 70%, transparent);
+    stroke-width: 2;
+  }
+  /* A tunnel is a plain arrow; the wall it passes through opens into a dotted gap. */
+  .alc-bd__tunnel {
+    stroke-width: 2;
+  }
+  .alc-bd__gap {
+    fill: var(--alc-bg-elev-1);
+  }
+  .alc-bd__breach {
+    stroke: var(--alc-accent-40);
+    stroke-width: 2;
+    stroke-dasharray: 2 4;
+    stroke-linecap: round;
+  }
+  .alc-bd__breach--warn {
+    stroke: color-mix(in srgb, var(--alc-warn) 70%, transparent);
+  }
+  .alc-bd__cross {
+    stroke: var(--alc-danger);
+    stroke-width: 2.5;
+    fill: none;
+  }
+</style>

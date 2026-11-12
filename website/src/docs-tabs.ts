@@ -19,11 +19,15 @@
 export interface DocsTab {
   label: string;
   href: string;
-  /** URL path prefixes this tab owns (matched on segment boundaries). */
+  /** URL path prefixes this tab owns (matched on segment boundaries). A hub
+   * with none is only a link in its dropdown, to a page another tab owns. */
   prefixes: string[];
   slot: "start" | "hub" | "end";
   /** Dropdown category (required for slot: "hub"). */
   category?: DocsCategory;
+  /** Further dropdowns that also list the hub. Its own `category` stays
+   * the one underlined while you're in it. */
+  alsoIn?: DocsCategory[];
   /** One-line scope hint shown in the dropdown. */
   hint?: string;
 }
@@ -31,7 +35,9 @@ export interface DocsTab {
 /** Hub categories, in header order. */
 export const DOCS_CATEGORIES = [
   "Clouds",
+  "Actors",
   "Containers",
+  "Sandboxes",
   "Databases",
   "Auth",
   "Payments",
@@ -47,12 +53,14 @@ const hub = (
   category: DocsCategory,
   hint: string,
   extraPrefixes: string[] = [],
+  alsoIn?: DocsCategory[],
 ): DocsTab => ({
   label,
   href: `/${slug}`,
   prefixes: [`/${slug}`, ...extraPrefixes],
   slot: "hub",
   category,
+  alsoIn,
   hint,
 });
 
@@ -102,6 +110,29 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Kubernetes", "kubernetes", "Containers", "deployments · jobs · manifests · helm", [
     "/providers/kubernetes",
   ]),
+
+  hub("E2B", "e2b", "Sandboxes", "sandboxes · templates · volumes", ["/providers/e2b"]),
+  hub("Daytona", "daytona", "Sandboxes", "sandboxes · snapshots · volumes", ["/providers/daytona"]),
+  hub("Modal", "modal", "Sandboxes", "sandboxes · functions · images · volumes", [
+    "/providers/modal",
+  ]),
+  hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
+  hub("Boat", "boat", "Sandboxes", "sandboxes · snapshots · environments", ["/providers/boat"]),
+  // A page of the AWS hub, listed with the sandbox providers. It owns no
+  // prefix, so the page keeps the AWS tab and its sidebar.
+  {
+    label: "AWS Nitro",
+    href: "/aws/compute/nitro-sandboxes",
+    prefixes: [],
+    slot: "hub",
+    category: "Sandboxes",
+    hint: "sandboxes · ECS · EKS · EC2",
+  },
+
+  hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
+  hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [
+    "/providers/cluster",
+  ]),
   hub("Git", "git", "Source & CI", "self-hosted git · clone · push · pull requests", [
     "/providers/git",
   ]),
@@ -132,12 +163,16 @@ export interface DocsTabGroup {
   sections: DocsTabSection[];
 }
 
+/** Categories that get their own dropdown even with a single hub. */
+const OWN_DROPDOWN: ReadonlySet<DocsCategory> = new Set(["Sandboxes"]);
+
 const alphabetically = (a: string, b: string) => a.localeCompare(b, "en", { sensitivity: "base" });
 
 /**
  * Hub tabs grouped into header dropdowns, in header order. A category with
  * a single hub doesn't earn its own dropdown: it folds into a trailing
- * "More" (under its category sub-heading) until a second hub joins it.
+ * "More" (under its category sub-heading) until a second hub joins it,
+ * unless it is in `OWN_DROPDOWN`.
  * Hubs within a dropdown sort alphabetically, and so do the single-hub
  * sections inside "More" (by hub name); `DOCS_TABS` keeps its order for
  * prefix matching.
@@ -145,13 +180,15 @@ const alphabetically = (a: string, b: string) => a.localeCompare(b, "en", { sens
 export const DOCS_TAB_GROUPS: DocsTabGroup[] = (() => {
   const sections = DOCS_CATEGORIES.map((category) => ({
     heading: category,
-    tabs: DOCS_TABS.filter((tab) => tab.category === category).sort((a, b) =>
-      alphabetically(a.label, b.label),
-    ),
+    tabs: DOCS_TABS.filter(
+      (tab) => tab.category === category || tab.alsoIn?.includes(category),
+    ).sort((a, b) => alphabetically(a.label, b.label)),
   })).filter((section) => section.tabs.length > 0);
-  const own = sections.filter((section) => section.tabs.length > 1);
+  const ownsDropdown = (section: (typeof sections)[number]) =>
+    section.tabs.length > 1 || OWN_DROPDOWN.has(section.heading);
+  const own = sections.filter(ownsDropdown);
   const more = sections
-    .filter((section) => section.tabs.length === 1)
+    .filter((section) => !ownsDropdown(section))
     .sort((a, b) => alphabetically(a.tabs[0]!.label, b.tabs[0]!.label));
   return [
     ...own.map(({ heading, tabs }) => ({ label: heading, sections: [{ tabs }] })),

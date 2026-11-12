@@ -1,0 +1,61 @@
+---
+title: Setup
+description: Log in to Modal, or give Alchemy a Modal token.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Sign up at [modal.com](https://modal.com). Alchemy talks to Modal with a workspace token: a token id (`ak-…`) and a secret (`as-…`).
+
+## Add the provider
+
+Install `@alchemy.run/modal`:
+
+<PackageManagers add="@alchemy.run/modal" />
+
+Then add `Modal.providers()` next to your cloud's providers:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  { providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers()) },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+## Log in
+
+```sh
+alchemy profile edit --add Modal
+```
+
+Pick **Browser login**. Alchemy opens modal.com, you approve the login, and Modal creates a token that Alchemy saves in the profile. It is the same flow as `modal token new`. See [Profiles](/environments/profiles) to learn how profiles work.
+
+Modal tokens don't expire, so there is nothing to refresh. If you revoke the token, run `alchemy profile edit --reconfigure Modal` to log in again.
+
+## Use an existing token
+
+Pick **Token** instead to paste a token you created in [Settings → API Tokens](https://modal.com/settings/tokens), or the `token_id` and `token_secret` from `~/.modal.toml` if you use the `modal` CLI. Scripts can pass it with flags:
+
+```sh
+alchemy profile edit --add Modal --method stored --set tokenId=ak-... --set tokenSecret=env:MODAL_TOKEN_SECRET
+```
+
+## Deploy from CI
+
+Set `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`, the same variables the `modal` CLI reads:
+
+```sh
+MODAL_TOKEN_ID=ak-... MODAL_TOKEN_SECRET=as-... alchemy deploy
+```
+
+A Modal token acts on the whole workspace. Use a separate workspace for tests.

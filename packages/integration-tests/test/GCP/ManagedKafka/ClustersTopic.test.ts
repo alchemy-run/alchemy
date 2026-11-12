@@ -6,6 +6,7 @@ import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -69,6 +70,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { cluster, topic };
         }),
+      );
+      yield* expectFound(
+        GCP.ManagedKafka.ClustersTopic.lookup({
+          topicId: created.topic.topicId,
+          location: created.topic.location,
+          cluster: created.topic.cluster,
+        }),
+        created.topic,
       );
 
       expect(created.topic.name).toContain("/topics/");

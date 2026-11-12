@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,31 @@ export type RegionBackendBucket = Resource<
     id: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionBackendBucketLookup
 >;
+
+/**
+ * Props for {@link RegionBackendBucket.lookup}: find a region backend
+ * bucket this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionBackendBucketLookup {
+  /**
+   * Name of the backend bucket.
+   */
+  name: string;
+  /**
+   * Region the backend bucket lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine backend bucket that fronts a Cloud Storage
@@ -139,6 +163,19 @@ export type RegionBackendBucket = Resource<
  *   bucketName: assets.bucketName,
  *   enableCdn: true,
  *   compressionMode: "AUTOMATIC",
+ * });
+ * ```
+ *
+ * ### Looking up an existing region backend bucket
+ * `RegionBackendBucket.lookup` references a region backend bucket Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared region backend bucket.
+ *
+ * **Example:** Reference an existing region backend bucket
+ * ```typescript
+ * const regionBackendBucket = GCP.Compute.RegionBackendBucket.lookup({
+ *   name: "my-name",
  * });
  * ```
  *
@@ -236,6 +273,14 @@ export const RegionBackendBucketProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ name, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

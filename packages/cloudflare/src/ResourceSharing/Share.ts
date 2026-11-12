@@ -77,8 +77,10 @@ export type ShareProps = {
    */
   name?: string;
   /**
-   * Recipients of the share. The create API requires at least one. Changes
-   * are reconciled via the recipient sub-API (add/remove deltas). Do not mix
+   * Recipients of the share. The create API requires at least one. Account
+   * changes are reconciled via the recipient sub-API (add/remove deltas);
+   * changing the organization recipients replaces the share, because
+   * Cloudflare takes them only at creation. Do not mix
    * with standalone `ShareRecipient` resources on the same share — the Share
    * provider treats this list as the full desired set.
    */
@@ -132,7 +134,26 @@ export type ShareAttributes = {
   modified: string;
 };
 
-export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Providers>;
+export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Providers, ShareLookup>;
+
+/**
+ * Props for {@link Share.lookup}: find a share this account sent and this
+ * stack doesn't manage, by its id or its name.
+ */
+export type ShareLookup =
+  | {
+      /**
+       * The id of the existing share.
+       */
+      shareId: string;
+    }
+  | {
+      /**
+       * The name of the existing share. Names are not unique; the first share
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare resource share — shares account-level configuration (gateway
@@ -172,6 +193,21 @@ export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Provide
  * });
  * ```
  *
+ * ### Looking up an existing share
+ * `Share.lookup` references a share this account sent that Alchemy doesn't
+ * manage (created in the dashboard or by another stack), found by `shareId`
+ * or `name`. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Add a recipient to an existing share
+ * ```typescript
+ * const share = Cloudflare.ResourceSharing.Share.lookup({ name: "security-baseline" });
+ * yield* Cloudflare.ResourceSharing.ShareRecipient("Partner", {
+ *   shareId: share.shareId,
+ *   accountId: "<recipient-account-id>",
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/fundamentals/manage-account-resources/
  *
  * @resource
@@ -208,13 +244,26 @@ export const ShareProvider = () =>
           ),
         );
     }),
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
+      // Cloudflare takes organization recipients only when it creates the
+      // share; the recipient API adds accounts.
+      if (olds !== undefined && organizationRecipients(olds) !== organizationRecipients(news)) {
+        return { action: "replace" } as const;
+      }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "shareId" in props
+          ? yield* getShare(accountId, props.shareId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -288,6 +337,8 @@ export const ShareProvider = () =>
         (r) => r.associationStatus !== "disassociated",
       );
       for (const desired of desiredRecipients) {
+        // Organization recipients are set when the share is created.
+        if (desired.accountId === undefined) continue;
         const match = liveRecipients.find(
           (r) => r.accountId === (desired.accountId ?? desired.organizationId),
         );
@@ -296,7 +347,6 @@ export const ShareProvider = () =>
             accountId: acct,
             shareId: observed.id,
             recipientAccountId: desired.accountId,
-            organizationId: desired.organizationId,
           });
         }
       }
@@ -406,6 +456,13 @@ const findByName = (accountId: string, name: string) =>
         .at(0),
     ),
   );
+
+/** The share's organization recipients as one comparable key. */
+const organizationRecipients = (props: { recipients: readonly ShareRecipientInput[] }) =>
+  props.recipients
+    .flatMap((r) => (r.organizationId === undefined ? [] : [r.organizationId]))
+    .sort()
+    .join(",");
 
 const createShareName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

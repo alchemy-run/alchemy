@@ -91,7 +91,7 @@ layer(PlatformServices)("runtime directory", (it) => {
   );
 
   it.effect(
-    "ignores runtime watch events using the caller base rather than the watched directory",
+    "ignores runtime watch events and unchanged bundles",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -100,15 +100,22 @@ layer(PlatformServices)("runtime directory", (it) => {
         const runtime = path.join(root, "runtime");
         const main = path.join(root, "worker.py");
         yield* fs.writeFileString(main, "class Default: pass");
-        for (const [eventPath, expected] of [
-          ["runtime/state.json", ["Success"]],
-          ["worker.py", ["Success", "Start", "Success"]],
+        for (const [eventPath, hashes, expected] of [
+          ["runtime/state.json", ["a", "b"], ["Success"]],
+          ["worker.py", ["a", "b"], ["Success", "Start", "Success"]],
+          // A watch event that leaves the bundle unchanged (e.g. macOS's late
+          // event for a just-created directory) does not re-serve it (#3214).
+          ["worker.py", ["a", "a"], ["Success"]],
         ] as const) {
+          let reads = 0;
           const events = yield* watchBundleDirectory({
             main,
-            read: Effect.succeed({
-              files: [{ path: "worker.py", content: "class Default: pass", hash: "test" }],
-              hash: "test",
+            read: Effect.sync(() => {
+              const hash = hashes[Math.min(reads++, hashes.length - 1)];
+              return {
+                files: [{ path: "worker.py", content: "class Default: pass", hash }],
+                hash,
+              };
             }),
           }).pipe(
             Stream.runCollect,

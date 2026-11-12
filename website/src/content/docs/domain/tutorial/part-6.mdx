@@ -4,15 +4,13 @@ description: A browser app that signs in with a cookie, opens an account, deposi
 sidebar:
   order: 6
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Build a browser app with [foldkit](https://foldkit.dev): sign in, open your account, deposit, and see the balance change as it happens.
 
 ## Install
 
-```sh
-bun add foldkit @effect/platform-browser
-bun add -d vite @foldkit/vite-plugin
-```
+<PackageManagers add="foldkit @effect/platform-browser" dev="vite @foldkit/vite-plugin" />
 
 ## Add the browser's types
 
@@ -47,7 +45,7 @@ The foldkit plugin builds the app. `include` pre-bundles the Effect modules fold
 ## Add the page
 
 ```html
-// index.html
+<!-- index.html -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -148,7 +146,7 @@ export const sessionClient = (customerId: string) =>
 
 ```diff lang="typescript"
 // src/BankWorker.ts
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
@@ -467,15 +465,11 @@ The app's Worker serves the built page and forwards `/api` to the bank. Sharing 
 
 ## Run it
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Open the `app` URL it prints, with `?customer=c-2`: Part 5's script already gave `c-1` an account. Open your account, deposit, and the balance updates as the bank records it. Open a second tab with the same customer: both update together.
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 You've built a bank: an account that keeps its own rules, views that answer questions, a policy that reacts, an Api that checks who's asking, and an app that watches it live.
 

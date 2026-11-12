@@ -112,7 +112,7 @@ export const CountersLive = Counters.layer(Layer.mergeAll(StartMirrorLive, Mirro
  * its view, `/echo/:id` for what the saga wrote, and `/platform` for which
  * platform the deployed version runs on.
  */
-export const serve = (platform: "eu" | "unrestricted") =>
+export const serve = (platform: "eu" | "unrestricted" | "wnam") =>
   Effect.gen(function* () {
     const counters = yield* Counter;
     const echoes = yield* Echo;
@@ -127,15 +127,15 @@ export const serve = (platform: "eu" | "unrestricted") =>
             return yield* HttpServerResponse.json({ platform });
           case "increment":
             yield* counters.send(counter, new Increment({ by: 2 })).pipe(Effect.orDie);
-            return yield* HttpServerResponse.json(yield* counters.state(counter));
+            return yield* HttpServerResponse.json(yield* counters.get(counter));
           case "total": {
-            const total = yield* totals.query(Counter.ref(counter)).pipe(Effect.orDie);
+            const total = yield* totals.get(Counter.ref(counter)).pipe(Effect.orDie);
             return yield* HttpServerResponse.json(Option.getOrElse(total, () => ({ total: 0 })));
           }
           case "echo":
-            return yield* HttpServerResponse.json(yield* echoes.state(counter));
+            return yield* HttpServerResponse.json(yield* echoes.get(counter));
           default:
-            return yield* HttpServerResponse.json(yield* counters.state(counter));
+            return yield* HttpServerResponse.json(yield* counters.get(counter));
         }
       }),
     };

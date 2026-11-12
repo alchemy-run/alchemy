@@ -12,6 +12,7 @@ import {
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
+import { hashDockerBuildInputs, selectDockerBuildContext } from "@alchemy.run/docker/BuildHash";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import {
   Artifacts as AlchemyArtifacts,
@@ -25,10 +26,10 @@ import { unwrapRedacted } from "alchemy/Util";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { LogAnnotation } from "alchemy/Util/LogAnnotation";
 import { makeResourceLogger, makeResourceOutput } from "alchemy/Util/ResourceOutput";
-import { sha256 } from "alchemy/Util/sha256";
-import { ANSI_RESET, ansiFg, colorsEnabled } from "alchemy/Util/Terminal";
+import { terminalStyle } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -81,18 +82,14 @@ type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
 };
 
 const workerStartedMessage = (elapsed: number, url: URL): string => {
+  const style = terminalStyle();
   const duration = `${Math.round(elapsed)}ms`;
-  if (!colorsEnabled()) {
-    return `Started in ${duration} → ${url}`;
-  }
-  return `Started in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET} → ${ansiFg(theme.color.info)}\x1b[4m${url}${ANSI_RESET}`;
+  return `Started in ${style.hex(theme.color.success)(duration)} → ${style.hex(theme.color.info).underline(String(url))}`;
 };
 
 const workerUpdatedMessage = (elapsed: number): string => {
   const duration = `${Math.round(elapsed)}ms`;
-  return colorsEnabled()
-    ? `Updated in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET}`
-    : `Updated in ${duration}`;
+  return `Updated in ${terminalStyle().hex(theme.color.success)(duration)}`;
 };
 
 // Hosts that bind every interface — the dev server is then reachable at
@@ -571,14 +568,6 @@ export const LocalWorkerProvider = () =>
            */
           edgeDomain:
             typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
-          /**
-           * The zone outbound `fetch()`es report in `CF-Worker`: the custom
-           * domain, else the first route's zone, as Wrangler derives it.
-           */
-          zone:
-            (typeof props.domain === "string" ? props.domain : props.domain?.name) ??
-            props.routes?.[0]?.zoneName ??
-            (props.routes?.[0] ? routePatternHost(props.routes[0].pattern.trim()) : undefined),
         };
       });
 
@@ -668,6 +657,9 @@ export const LocalWorkerProvider = () =>
        * serve produced DUPLICATES whose simultaneous restarts storm the
        * instance until the DO's container link breaks.
        */
+      /** Directory names the container-context watcher never looks into. */
+      const WATCH_SKIPPED_NAMES = [".git", "node_modules"];
+
       const containerWatchers = new Map<string, { key: string; fiber: Fiber.Fiber<void> }>();
 
       const stopContainerWatcher = (id: string) =>
@@ -691,9 +683,10 @@ export const LocalWorkerProvider = () =>
        * rewrites its bundle there on every plan, which would loop; that
        * variant reloads through the config's `containerHashes` instead.
        *
-       * Events are debounced and gated on a content fingerprint
-       * (`node_modules`/`.git` skipped), so editor double-saves and
-       * metadata-only churn don't bounce the instance.
+       * Events are debounced and gated on the Docker build hash
+       * (`.dockerignore` applied; `.alchemy`, `.git` and `node_modules`
+       * skipped), so editor double-saves, ignored files, git, installs and
+       * Alchemy's own state/log writes don't bounce the instance.
        */
       const ensureContainerWatcher = (
         worker: RunnableWorkerConfig,
@@ -732,37 +725,70 @@ export const LocalWorkerProvider = () =>
           }
           if (watched.size === 0) return;
 
-          const fingerprint = Effect.gen(function* () {
-            const hashes: string[] = [];
-            const walk = (dir: string): Effect.Effect<void, any> =>
-              Effect.gen(function* () {
-                const entries = yield* fs.readDirectory(dir);
-                for (const entry of entries.sort()) {
-                  if (entry === "node_modules" || entry === ".git") continue;
-                  const file = path.join(dir, entry);
-                  const stat = yield* fs.stat(file);
-                  if (stat.type === "Directory") {
-                    yield* walk(file);
-                  } else {
-                    hashes.push(`${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`);
-                  }
-                }
-              });
-            for (const [context, { dockerfile }] of watched) {
-              yield* walk(context);
-              if (dockerfile !== undefined && !dockerfile.startsWith(context)) {
-                hashes.push(
-                  `${dockerfile}:${yield* fs.readFile(dockerfile).pipe(Effect.flatMap(sha256))}`,
-                );
-              }
-            }
-            return yield* sha256(hashes.join("\n"));
-          }).pipe(Effect.orElseSucceed(() => undefined));
+          // Fingerprint what Docker receives — the same hash the container
+          // provider tags the image with — so `.dockerignore`d paths and
+          // Alchemy's own `.alchemy` writes (logs, local state) inside a
+          // `context: "."` never restart the instance. `.git` and
+          // `node_modules` (at any depth) are left out too, as the watcher
+          // always did: git rewrites its index on every `git status` an
+          // editor runs, and re-hashing installed dependencies on every edit
+          // costs far more than it catches — a dependency change also
+          // changes a manifest or lockfile, and the next plan's image hash
+          // (which keeps Docker's semantics) still sees it.
+          const fingerprint = Effect.forEach([...watched.entries()], ([context, { dockerfile }]) =>
+            hashDockerBuildInputs(
+              {
+                context,
+                dockerfile: dockerfile ?? path.join(context, "Dockerfile"),
+                platform: "local",
+              },
+              "effective",
+              { excludeNames: WATCH_SKIPPED_NAMES },
+            ),
+          ).pipe(
+            Effect.map((hashes) => hashes.join("\n")),
+            Effect.orElseSucceed(() => undefined),
+          );
 
+          // Drop events for paths the fingerprint skips before they reach
+          // the debounce, so a stream of `.alchemy` log writes never
+          // re-hashes the context.
+          const contextEvents = (context: string, dockerfile: string | undefined) =>
+            fs.watch(context, { recursive: true }).pipe(
+              Stream.filterEffect((event) => {
+                const changed = path.resolve(context, event.path);
+                if (
+                  isPathWithin(dotAlchemy, changed, runtimeBase) ||
+                  path
+                    .relative(context, changed)
+                    .split(path.sep)
+                    .some((segment) => WATCH_SKIPPED_NAMES.includes(segment))
+                ) {
+                  return Effect.succeed(false);
+                }
+                return selectDockerBuildContext({
+                  context,
+                  dockerfile: dockerfile ?? path.join(context, "Dockerfile"),
+                }).pipe(
+                  Effect.map((selection) => selection.includes(path.relative(context, changed))),
+                  Effect.orElseSucceed(() => true),
+                );
+              }),
+            );
+          const dockerfileEvents = (dockerfile: string) =>
+            fs
+              .watch(path.dirname(dockerfile))
+              .pipe(
+                Stream.filter((event) =>
+                  [dockerfile, `${dockerfile}.dockerignore`].includes(
+                    path.resolve(path.dirname(dockerfile), event.path),
+                  ),
+                ),
+              );
           const streams = [...watched.entries()].flatMap(([context, { dockerfile }]) => [
-            fs.watch(context, { recursive: true }),
-            ...(dockerfile !== undefined && !dockerfile.startsWith(context)
-              ? [fs.watch(path.dirname(dockerfile))]
+            contextEvents(context, dockerfile),
+            ...(dockerfile !== undefined && !isPathWithin(context, dockerfile, runtimeBase)
+              ? [dockerfileEvents(dockerfile)]
               : []),
           ]);
           const watchLoop = Effect.gen(function* () {
@@ -921,7 +947,6 @@ export const LocalWorkerProvider = () =>
                       },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
-                      zone: worker.zone,
                       // `dev.access` populates the Worker's native `ctx.access`.
                       access: worker.dev.access,
                       // Stream preview and Images variant URLs use the stable URL
@@ -1089,7 +1114,7 @@ export const LocalWorkerProvider = () =>
         proxy: WorkerProxy.WorkerProxyInstance,
         bundles: Stream.Stream<Bundle.BundleWatchEvent, E, R>,
       ) {
-        let start = Date.now();
+        let start = yield* Clock.currentTimeMillis;
         let status: "start" | "update" = "start";
         // Resolved once the first bundle is served (or its build or serve
         // failed): the instance's `start` returns at readiness, so a restart
@@ -1097,53 +1122,57 @@ export const LocalWorkerProvider = () =>
         // serve (`latestServes`) that restart hooks re-serve.
         const firstServe = yield* Deferred.make<void>();
         yield* bundles.pipe(
-          Stream.tap((event) => {
-            if (event._tag === "Start") {
-              start = Date.now();
-              if (status === "update") {
-                return Effect.all([
-                  Effect.log(`Rebuilding`),
-                  // Tells the proxy to queue requests until the updated
-                  // worker is ready.
-                  proxy.unset(),
+          Stream.tap((event) =>
+            Effect.gen(function* () {
+              if (event._tag === "Start") {
+                start = yield* Clock.currentTimeMillis;
+                if (status === "update") {
+                  yield* Effect.all([
+                    Effect.log(`Rebuilding`),
+                    // Tells the proxy to queue requests until the updated
+                    // worker is ready.
+                    proxy.unset(),
+                  ]);
+                }
+              } else if (event._tag === "Error") {
+                yield* Effect.all([
+                  Effect.logError(`Bundle error`, event.error),
+                  // No updated worker is coming from this build: answer
+                  // parked requests with the error now instead of after the
+                  // pending timeout.
+                  proxy.fail(event.error.message),
+                  Deferred.succeed(firstServe, undefined),
                 ]);
               }
-            } else if (event._tag === "Error") {
-              return Effect.all([
-                Effect.logError(`Bundle error`, event.error),
-                // No updated worker is coming from this build: answer
-                // parked requests with the error now instead of after the
-                // pending timeout.
-                proxy.fail(event.error.message),
-                Deferred.succeed(firstServe, undefined),
-              ]);
-            }
-            return Effect.void;
-          }),
+            }),
+          ),
           Stream.filterMap((event) =>
             event._tag === "Success" ? Result.succeed(event.output) : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
             serveWith(worker, bundle, proxy).pipe(
               Effect.exit,
-              Effect.tap((exit) => {
-                if (exit._tag === "Success") {
-                  // URL on first start only — vite-banner style; rebuild
-                  // lines stay compact.
-                  const message = Effect.log(
-                    status === "update"
-                      ? workerUpdatedMessage(Date.now() - start)
-                      : workerStartedMessage(Date.now() - start, proxy.url),
-                  );
-                  status = "update";
-                  return message;
-                } else {
-                  return Effect.all([
-                    Effect.logError(`Error`, Cause.squash(exit.cause)),
-                    proxy.fail(Cause.pretty(exit.cause)),
-                  ]);
-                }
-              }),
+              Effect.tap((exit) =>
+                Effect.gen(function* () {
+                  if (exit._tag === "Success") {
+                    const elapsed = (yield* Clock.currentTimeMillis) - start;
+                    // URL on first start only — vite-banner style; rebuild
+                    // lines stay compact.
+                    const message = Effect.log(
+                      status === "update"
+                        ? workerUpdatedMessage(elapsed)
+                        : workerStartedMessage(elapsed, proxy.url),
+                    );
+                    status = "update";
+                    yield* message;
+                  } else {
+                    yield* Effect.all([
+                      Effect.logError(`Error`, Cause.squash(exit.cause)),
+                      proxy.fail(Cause.pretty(exit.cause)),
+                    ]);
+                  }
+                }),
+              ),
               Effect.ensuring(Deferred.succeed(firstServe, undefined)),
             ),
           ),
@@ -1174,10 +1203,12 @@ export const LocalWorkerProvider = () =>
       };
 
       const runAssetsOnly = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        const start = Date.now();
+        const start = yield* Clock.currentTimeMillis;
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
-        yield* Effect.log(workerStartedMessage(Date.now() - start, proxy.url));
+        yield* Effect.log(
+          workerStartedMessage((yield* Clock.currentTimeMillis) - start, proxy.url),
+        );
         return proxy.url;
       });
 
@@ -1288,7 +1319,6 @@ export const LocalWorkerProvider = () =>
                         cache: worker.dev.cache,
                         cf: worker.dev.cf,
                         workerd: worker.dev.workerd,
-                        zone: worker.zone,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
@@ -1347,7 +1377,7 @@ export const LocalWorkerProvider = () =>
         invalidate: Effect.Effect<void>,
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
-        const start = Date.now();
+        const start = yield* Clock.currentTimeMillis;
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
         const url = new URL(proxy.url);
@@ -1355,7 +1385,7 @@ export const LocalWorkerProvider = () =>
         // The programmatic vite API never prints the CLI's URL banner — and
         // vite's own URL is the internal (port-shuffled) server behind the
         // stable proxy, so advertise the proxy instead.
-        yield* Effect.log(workerStartedMessage(Date.now() - start, url));
+        yield* Effect.log(workerStartedMessage((yield* Clock.currentTimeMillis) - start, url));
         return url;
       });
 
@@ -1413,7 +1443,6 @@ export const LocalWorkerProvider = () =>
               streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
               cache: worker.dev.cache,
               cf: worker.dev.cf,
-              zone: worker.zone,
               access: worker.dev.access,
               workerd: worker.dev.workerd,
             },

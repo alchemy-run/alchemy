@@ -2,10 +2,10 @@ import * as eks from "@distilled.cloud/aws/eks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -175,13 +175,6 @@ export const AddonProvider = () =>
   Provider.effect(
     Addon,
     Effect.gen(function* () {
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       return {
         stables: ["addonArn"],
         // Add-ons are keyed by (clusterName, addonName) and `listAddons`
@@ -207,6 +200,8 @@ export const AddonProvider = () =>
                       { concurrency: 5 },
                     ),
                   ),
+                  // A cluster deleted after the listing has nothing left to list.
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 5 },
             );
@@ -244,6 +239,7 @@ export const AddonProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const addonName = news.addonName;
           const desiredTags = {
@@ -256,6 +252,10 @@ export const AddonProvider = () =>
             clusterName,
             addonName,
           });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForAddonActive({ clusterName, addonName });
+          }
 
           // Ensure — create if missing. Tolerate `ResourceInUseException`
           // as a race with a peer reconciler: re-read and continue with
@@ -272,7 +272,7 @@ export const AddonProvider = () =>
                 podIdentityAssociations: news.podIdentityAssociations,
                 namespaceConfig: news.namespaceConfig,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
@@ -302,7 +302,7 @@ export const AddonProvider = () =>
               resolveConflicts: news.resolveConflicts,
               configurationValues: news.configurationValues,
               podIdentityAssociations: news.podIdentityAssociations,
-              clientRequestToken: yield* toClientRequestToken(id, "update"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             state = yield* waitForAddonActive({
               clusterName,
@@ -388,7 +388,7 @@ const waitForAddonActive = Effect.fn(function* ({
       }),
     ),
     Effect.retry({
-      while: (error) => error instanceof AddonNotReady,
+      while: (error) => error._tag === "AddonNotReady",
       // Flat 5s polls, ~20 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
       // Node-bound addons (e.g. HyperPod task governance) stay DEGRADED
@@ -414,7 +414,7 @@ const waitForAddonDeleted = Effect.fn(function* ({
       addon ? Effect.fail(new AddonStillExists({ clusterName, addonName })) : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error instanceof AddonStillExists,
+      while: (error) => error._tag === "AddonStillExists",
       // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
       schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),

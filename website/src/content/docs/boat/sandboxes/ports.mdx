@@ -1,0 +1,77 @@
+---
+title: Ports & URLs
+description: Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+A server listening on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev` once Boat hosts the port. A hosted port is **protected** by default: requests need its token. A **public** port answers anyone.
+
+## A port is protected by its token
+
+Without the token, the port's URL refuses the request:
+
+<Boundaries
+  nodes={[
+    { id: "anyone", label: "anyone", type: "no token", col: 0, row: 0 },
+    { id: "worker", label: "Api", type: "Worker · getTcpPort(3000)", col: 0, row: 1 },
+    { id: "server", label: ":3000", type: "npm run dev", col: 1, row: 1, tone: "accent" },
+  ]}
+  zones={[{ id: "port", label: "box-node-…-3000.on.boat.dev", type: "protected", nodes: ["server"], tone: "warn" }]}
+  links={[
+    { from: "worker", to: "server", label: "_port_auth cookie" },
+    { from: "anyone", to: "port", kind: "blocked", label: "403" },
+  ]}
+  caption="The port's URL refuses requests without its token. getTcpPort gets the token from Boat and sends it as the _port_auth cookie on every request."
+/>
+
+## Call a port with its token
+
+`getTcpPort` hosts the port and returns its URL and token. Its `fetch` sends a request there with the token:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+The request's path, query, method, headers and body are kept, and bodies stream both ways.
+
+## Proxy a Worker's request to it
+
+Pass the Worker's own request to `fetch` to forward it to the sandbox, and return the response:
+
+```typescript
+fetch: Effect.gen(function* () {
+  const port = yield* devBox.getTcpPort(3000);
+  return yield* port.fetch(yield* HttpServerRequest);
+});
+```
+
+## Open a port to anyone
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000, { public: true });
+```
+
+Anyone with the URL can call it. For a program, set `public: true` on its `Boat.Sandbox`.
+
+## Reach a server bound to localhost
+
+Boat relays to a server bound to `0.0.0.0`. For one that listens on `127.0.0.1` only, pass `localhost: true`:
+
+```typescript
+const port = yield* sandbox.getTcpPort(5173, { localhost: true });
+```
+
+## Hand the URL to a browser
+
+The token works on the `_token` query parameter as well, which answers with a redirect that sets the cookie, so a browser can open the URL:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const link = `${port.url}?_token=${Redacted.value(port.token!)}`;
+```
+
+The token is the same every time for one sandbox and port. Treat it as a secret.
+
+To hear when sandboxes start and stop, see [Lifecycle events](/boat/sandboxes/lifecycle-events).

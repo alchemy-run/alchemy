@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -49,6 +50,11 @@ test.provider(
       yield* expectUrlContains(`${url}/rpc?id=local-rpc`, "native-did-rpc:do-ok");
       yield* expectUrlContains(`${url}/enqueue?id=local-queue`, "local-queue");
       yield* expectUrlContains(`${url}/sampled`, "native-did-sample");
+      // Effect code run inside a JavaScript AsyncLocalStorage store sees it.
+      const als = yield* HttpClient.get(`${url}/als?id=local-als`).pipe(
+        Effect.flatMap((res) => res.json),
+      );
+      expect(als).toMatchObject({ direct: "from-middleware", child: "from-middleware" });
 
       yield* stack.destroy();
     }).pipe(logLevel),
