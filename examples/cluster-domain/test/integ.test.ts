@@ -38,7 +38,7 @@ const stack = beforeAll(destroy(Stack).pipe(Effect.andThen(deploy(Stack))), {
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 600_000 });
 
 /** The deployed Api's URL; a deploy that printed none fails the test. */
-const bankUrl = Effect.flatMap(stack, ({ url }) =>
+const deployedUrl = Effect.flatMap(stack, ({ url }) =>
   url ? Effect.succeed(url) : Effect.die(new Error("the stack printed no url")),
 );
 
@@ -67,8 +67,28 @@ const call = (
       body === undefined ? withCustomer : withCustomer.pipe(HttpClientRequest.bodyJsonUnsafe(body));
     const response = yield* HttpClient.execute(request);
     const text = yield* response.text;
-    return { status: response.status, body: text ? JSON.parse(text) : null } as Answer;
+    // Not JSON (a fresh workers.dev URL's HTML placeholder): keep the text.
+    const parsed = text
+      ? yield* Effect.try(() => JSON.parse(text) as unknown).pipe(Effect.orElseSucceed(() => text))
+      : null;
+    return { status: response.status, body: parsed } as Answer;
   }).pipe(Effect.provide(FetchHttpClient.layer));
+
+/**
+ * The Api's URL once it answers. A fresh workers.dev URL serves an HTML
+ * placeholder for a few seconds, and a fresh swarm service refuses
+ * connections, so every test waits for `/openapi.json` to answer JSON.
+ */
+const bankUrl = Effect.gen(function* () {
+  const url = yield* deployedUrl;
+  yield* call(url, "GET", "/openapi.json").pipe(
+    Effect.flatMap((answer) =>
+      answer.status === 200 && typeof answer.body === "object" ? Effect.void : Effect.fail(answer),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }),
+  );
+  return url;
+}).pipe(Effect.cached, Effect.runSync);
 
 /** Each command in this file has its own id: one id sent twice is one command, replayed. */
 let commands = 0;
@@ -95,13 +115,7 @@ test(
   "the deployed bank serves its Api reference and OpenAPI document",
   Effect.gen(function* () {
     const url = yield* bankUrl;
-    // A fresh workers.dev URL or swarm service takes a few seconds to answer.
-    const docs = yield* call(url, "GET", "/openapi.json").pipe(
-      Effect.flatMap((answer) =>
-        answer.status === 200 ? Effect.succeed(answer) : Effect.fail(answer),
-      ),
-      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
-    );
+    const docs = yield* call(url, "GET", "/openapi.json");
     expect(Object.keys(docs.body.paths)).toContain("/OpenAccount");
     const page = yield* HttpClient.get(`${url}/`).pipe(Effect.provide(FetchHttpClient.layer));
     expect(page.status).toBe(200);
