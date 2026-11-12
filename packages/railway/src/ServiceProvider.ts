@@ -51,11 +51,13 @@ import {
   findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
+import { readServiceIpv6Egress, syncServiceIpv6Egress } from "./ServiceIpv6Egress.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
+export { ServiceIpv6EgressNotApplied } from "./ServiceIpv6Egress.ts";
 export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({
@@ -831,6 +833,7 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  ipv6Egress: boolean | undefined;
 }): Service["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -846,6 +849,7 @@ const toAttrs = (input: {
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   rootDirectory: input.instance?.rootDirectory ?? undefined,
   region: input.region,
+  ipv6Egress: input.ipv6Egress,
   port: input.port,
   url: input.domain?.url,
   domain: input.domain?.domain,
@@ -956,6 +960,14 @@ export const ServiceProvider = () =>
                   legacy: instance?.region,
                 })
               : undefined;
+          const ipv6Egress =
+            resolvedEnvId.length > 0
+              ? yield* readServiceIpv6Egress({
+                  environmentId: resolvedEnvId,
+                  projectId: resolvedProjectId,
+                  serviceId: found.id,
+                })
+              : undefined;
           const attrs = toAttrs({
             service: found,
             instance,
@@ -966,6 +978,7 @@ export const ServiceProvider = () =>
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
             region,
+            ipv6Egress,
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -1001,6 +1014,7 @@ export const ServiceProvider = () =>
                       codeHash: "",
                       rpcToken: "",
                       region: undefined,
+                      ipv6Egress: undefined,
                     }),
                   ),
               ),
@@ -1033,6 +1047,7 @@ export const ServiceProvider = () =>
             cronSchedule: undefined,
             rootDirectory: undefined,
             region: undefined,
+            ipv6Egress: undefined,
             port,
             url: undefined,
             domain: undefined,
@@ -1264,6 +1279,14 @@ export const ServiceProvider = () =>
               fallbackReplicas: instance?.numReplicas,
             });
           let region = yield* placeRegion();
+          const placeIpv6Egress = () =>
+            syncServiceIpv6Egress({
+              environmentId,
+              projectId,
+              serviceId,
+              enabled: props.ipv6Egress,
+            });
+          let ipv6Egress = yield* placeIpv6Egress();
 
           if (sourceRepo !== undefined) {
             const branchChanged = yield* syncBranch({
@@ -1382,6 +1405,7 @@ export const ServiceProvider = () =>
           }
 
           region = yield* placeRegion();
+          ipv6Egress = yield* placeIpv6Egress();
 
           return toAttrs({
             service: current,
@@ -1393,6 +1417,7 @@ export const ServiceProvider = () =>
             codeHash,
             rpcToken,
             region,
+            ipv6Egress,
           });
         }),
 
