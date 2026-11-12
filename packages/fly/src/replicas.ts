@@ -1189,7 +1189,17 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           skip_launch: input.skipLaunch === true ? true : undefined,
           min_secrets_version: input.minSecretsVersion,
         })
-        .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+        .pipe(
+          // A storage host out of capacity may still have made the Machine;
+          // names are unique per App, so a retry that made it before hits
+          // Conflict and the listing below finds it.
+          Effect.retry({
+            while: (error) => error._tag === "StorageHostCapacity",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 6,
+          }),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
       current =
         created ??
         (yield* listMachinesByApp(input.appName).pipe(

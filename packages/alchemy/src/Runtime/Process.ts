@@ -10,6 +10,8 @@ import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
 import { packEnvValue, unpackEnvValue, type BaseRuntimeContext } from "../RuntimeContext.ts";
+import { serveSandboxAgent, type SandboxAgentConfig } from "../SandboxAgent.ts";
+import { SANDBOX_IDLE_TIMEOUT_ENV, SANDBOX_TOKEN_ENV } from "../SandboxAgentClient.ts";
 import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
 
 export type ProcessServices = ChildProcessSpawner | FileSystem | Path | Stdio | Terminal;
@@ -128,11 +130,17 @@ export const createHostRuntimeContext =
  * context so an impl shape's `run` effect is registered as a one-shot runner
  * (the container exits when it completes) and the HTTP server only boots when
  * the impl actually declares a `fetch` handler.
+ *
+ * A container started as a sandbox (its environment carries a sandbox token,
+ * set by a binding such as `AWS.ECS.CreateSandbox`) always serves: the
+ * program's methods and the sandbox agent's `exec`, `files` and `pty` answer
+ * as RPC on the program's port, and each call needs the token.
  */
 export const createContainerRuntimeContext =
   (type: string) =>
   (id: string): HostRuntimeContext => {
     const base = createHostRuntimeContext(type)(id);
+    const sandbox = sandboxAgentConfig();
     // Capture the host serve BEFORE Object.assign overwrites `base.serve`
     // with the wrapper below — calling `base.serve` inside the wrapper would
     // resolve to the wrapper itself (property lookup happens at call time)
@@ -146,6 +154,18 @@ export const createContainerRuntimeContext =
           // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
           yield* base.run(run as Effect.Effect<void, never, any>);
         }
+        if (sandbox !== undefined) {
+          const { run: _run, fetch: _fetch, ...methods } = shape ?? {};
+          // The agent is built by the running program, where the platform's
+          // process and filesystem services are in context.
+          yield* base.run(
+            Effect.flatMap(
+              serveSandboxAgent(sandbox, methods, Http.safeHttpEffect(handler)),
+              Http.serve,
+            ),
+          );
+          return;
+        }
         // Boot the HTTP server only for an impl that declared `fetch` — a
         // pure one-shot `{ run }` program must exit when `run` completes
         // rather than parking behind the 404 fallback server forever.
@@ -153,5 +173,23 @@ export const createContainerRuntimeContext =
           yield* serveBase(handler, options);
         }
       }) as Effect.Effect<void, never, never>;
-    return Object.assign(base, { serve });
+    // A sandbox serves the agent even when its program returns nothing.
+    return Object.assign(base, { serve }, sandbox !== undefined ? { alwaysServe: true } : {});
   };
+
+/**
+ * The sandbox settings a binding passed this container when it started it.
+ * Only a running container has them: a plan or deploy never serves the agent.
+ */
+const sandboxAgentConfig = (): SandboxAgentConfig | undefined => {
+  if (!globalThis.__ALCHEMY_RUNTIME__) return undefined;
+  // The token arrives as a plain per-task environment override, so it is read
+  // from the process, not through Config.
+  const token = process.env[SANDBOX_TOKEN_ENV];
+  if (token === undefined || token === "") return undefined;
+  const idleTimeoutMs = Number(process.env[SANDBOX_IDLE_TIMEOUT_ENV]);
+  return {
+    token,
+    idleTimeoutMs: Number.isFinite(idleTimeoutMs) && idleTimeoutMs > 0 ? idleTimeoutMs : undefined,
+  };
+};

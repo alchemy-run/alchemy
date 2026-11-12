@@ -25,6 +25,13 @@ export const runMerchantReviewLifecycle =
 export const runProductReviewLifecycle =
   !process.env.FAST && !!accountId && !!productReviewDataSource;
 
+/**
+ * Google retired Merchant API Reviews `v1beta`, the version this SDK is
+ * generated from: every call now answers an HTML 404 page (seen 2026-11-09).
+ * The probes stay off until the resources move to `v1`.
+ */
+export const reviewsV1betaRetired = true;
+
 export const probeAccount = accountId ?? "1";
 
 export const probeDataSource = (dataSource: string | undefined) =>
