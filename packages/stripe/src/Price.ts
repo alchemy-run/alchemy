@@ -120,8 +120,9 @@ export interface PriceProps {
   tiersMode?: PriceTiersMode;
   /**
    * Whether the price's amounts include tax (`inclusive`) or Stripe Tax
-   * adds it on top (`exclusive`). Create-only — changing it replaces the
-   * price.
+   * adds it on top (`exclusive`). An `unspecified` price takes a new value
+   * in place; changing an `inclusive` or `exclusive` price replaces it.
+   * If omitted, the price keeps its current tax behavior.
    */
   taxBehavior?: PriceTaxBehavior;
   /**
@@ -199,9 +200,9 @@ export interface PriceLookup {
 
 /**
  * A Stripe Price — the unit cost attached to a Product. Currency, amount,
- * product, recurring interval, tiers, and tax behavior are immutable
- * (changing them replaces the price). Nickname, metadata, lookup key, and
- * `active` update in place. Prices cannot be deleted; destroy deactivates
+ * product, recurring interval, and tiers are immutable (changing them
+ * replaces the price). Nickname, metadata, lookup key, and `active` update
+ * in place, and so does tax behavior while it is still `unspecified`. Prices cannot be deleted; destroy deactivates
  * them (`active=false`).
  *
  * @see https://docs.stripe.com/api/prices
@@ -441,6 +442,11 @@ const recurringEqual = (
   return true;
 };
 
+// Stripe sets `tax_behavior` once: `unspecified` can become `inclusive` or
+// `exclusive` in place, but a set behavior can never change again.
+const isTaxBehaviorSet = (taxBehavior: PriceTaxBehavior | undefined) =>
+  taxBehavior === "inclusive" || taxBehavior === "exclusive";
+
 const shouldReplace = (news: PriceProps, output: Price["Attributes"] | undefined) => {
   if (output === undefined) return false;
   if (alchemyProductId(news.product) !== output.product) return true;
@@ -454,7 +460,13 @@ const shouldReplace = (news: PriceProps, output: Price["Attributes"] | undefined
   if (!recurringEqual(news.recurring, output.recurring)) return true;
   if (!tiersEqual(news.tiers, output.tiers)) return true;
   if (news.tiersMode !== undefined && news.tiersMode !== output.tiersMode) return true;
-  if (news.taxBehavior !== undefined && news.taxBehavior !== output.taxBehavior) return true;
+  if (
+    news.taxBehavior !== undefined &&
+    news.taxBehavior !== output.taxBehavior &&
+    isTaxBehaviorSet(output.taxBehavior)
+  ) {
+    return true;
+  }
   return false;
 };
 
@@ -579,8 +591,16 @@ export const PriceProvider = () =>
       const activeChanged = current.active !== desiredActive;
       const nicknameChanged = (current.nickname ?? "") !== desiredNickname;
       const lookupKeyChanged = (current.lookup_key ?? "") !== desiredLookupKey;
+      const taxBehaviorChanged =
+        news.taxBehavior !== undefined && news.taxBehavior !== (current.tax_behavior ?? undefined);
 
-      if (!activeChanged && !nicknameChanged && !lookupKeyChanged && !metadataChanged) {
+      if (
+        !activeChanged &&
+        !nicknameChanged &&
+        !lookupKeyChanged &&
+        !taxBehaviorChanged &&
+        !metadataChanged
+      ) {
         return toAttrs(current);
       }
 
@@ -590,6 +610,7 @@ export const PriceProvider = () =>
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
         ...(lookupKeyChanged ? { lookup_key: desiredLookupKey, transfer_lookup_key: true } : {}),
+        ...(taxBehaviorChanged ? { tax_behavior: news.taxBehavior } : {}),
         ...(metadataChanged
           ? {
               metadata: {

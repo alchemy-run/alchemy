@@ -317,3 +317,50 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "set an unspecified tax behavior in place and replace a set one",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Tax Behavior Price Product",
+      });
+
+      const deployPrice = (taxBehavior?: Stripe.PriceTaxBehavior) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Price("TaxBehaviorPrice", {
+              product: product.id,
+              currency: "usd",
+              unitAmount: 900,
+              ...(taxBehavior !== undefined ? { taxBehavior } : {}),
+            });
+          }),
+        );
+
+      const created = yield* deployPrice();
+      expect(created.taxBehavior).toEqual("unspecified");
+
+      const exclusive = yield* deployPrice("exclusive");
+      expect(exclusive.id).toEqual(created.id);
+      expect(exclusive.taxBehavior).toEqual("exclusive");
+      expect((yield* GetPrice({ price: created.id })).tax_behavior).toEqual("exclusive");
+
+      const inclusive = yield* deployPrice("inclusive");
+      expect(inclusive.id).not.toEqual(created.id);
+      expect(inclusive.taxBehavior).toEqual("inclusive");
+      expect((yield* GetPrice({ price: created.id })).active).toEqual(false);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(inclusive.id)).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
