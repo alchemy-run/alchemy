@@ -24,7 +24,8 @@ export interface ConnectionProps {
  * control plane that is still starting: it refuses connections for a few
  * seconds, then reports healthy about a minute before its storage accepts
  * commands (`StorageOverloaded`), and times storage commands out while its
- * engines find each other (`CommandDeadlineElapsed`). Behind a load balancer the same window
+ * engines find each other (`CommandDeadlineElapsed`) or its storage host is
+ * short of capacity (`StorageCommandCapacity`). Behind a load balancer the same window
  * shows up as 502/503/504 until its instances boot and pass health checks,
  * which takes several minutes on fresh instances (a three-engine cluster forms
  * after its engines boot). A resource reconciled
@@ -36,7 +37,8 @@ export const withConnection =
     options: {
       /**
        * How long to wait out a control plane that answers but is still
-       * forming (`StorageOverloaded`, `CommandDeadlineElapsed`, 429).
+       * forming (`StorageOverloaded`, `CommandDeadlineElapsed`,
+       * `StorageCommandCapacity`, 429).
        * @default "10 minutes"
        */
       readonly wait?: Duration.Input;
@@ -70,6 +72,7 @@ export const withConnection =
         while: (error) =>
           error._tag === "StorageOverloaded" ||
           error._tag === "CommandDeadlineElapsed" ||
+          error._tag === "StorageCommandCapacity" ||
           error._tag === "TooManyRequests",
         schedule: Schedule.spaced("5 seconds").pipe(
           Schedule.upTo({ duration: options.wait ?? "10 minutes" }),

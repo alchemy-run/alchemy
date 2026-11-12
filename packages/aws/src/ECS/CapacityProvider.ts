@@ -1199,14 +1199,16 @@ export const CapacityProviderProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusterArns ?? [])),
             );
+            // DescribeCapacityProviders takes a cluster name, not its ARN.
+            const clusterNames = clusterArns.map((arn) => arn.split("/").pop()!);
             const perCluster = yield* Effect.forEach(
-              clusterArns,
-              (clusterArn) =>
-                collect(clusterArn).pipe(
+              clusterNames,
+              (clusterName) =>
+                collect(clusterName).pipe(
                   Effect.map((providers) =>
                     providers
                       .filter((p) => p.type === "MANAGED_INSTANCES")
-                      .map((p) => ({ ...p, cluster: p.cluster ?? clusterArn.split("/").pop() })),
+                      .map((p) => ({ ...p, cluster: p.cluster ?? clusterName })),
                   ),
                   Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([])),
                 ),

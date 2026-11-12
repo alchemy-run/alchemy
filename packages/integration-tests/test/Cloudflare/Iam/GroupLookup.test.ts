@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as iam from "@distilled.cloud/cloudflare/iam";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { expectDeployFails, missingName } from "../../lookup.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -45,6 +46,21 @@ const TargetStack = Alchemy.Stack(
   }).pipe(Effect.orDie),
 );
 
+// Cloudflare lists a new group by name a moment after creating it, so wait
+// for it before a test looks it up by name.
+const listedByName = <A, E extends { readonly _tag: string }, R>(names: Stream.Stream<A, E, R>) =>
+  names.pipe(
+    Stream.runHead,
+    Effect.flatMap((found) =>
+      found._tag === "Some" ? Effect.void : Effect.fail({ _tag: "NotListedYet" } as const),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "NotListedYet",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 20,
+    }),
+  );
+
 const target = beforeAll(deploy(TargetStack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(TargetStack));
 
@@ -65,6 +81,7 @@ test.provider(
       yield* stack.destroy();
       const { accountId } = yield* yield* CloudflareEnvironment;
       const { resourceGroupId, resourceGroupName } = yield* target;
+      yield* listedByName(iam.listResourceGroups.items({ accountId, name: resourceGroupName }));
       const permissionGroupId = yield* findPermissionGroupId(accountId);
 
       const program = Effect.gen(function* () {
@@ -106,6 +123,7 @@ test.provider(
       yield* stack.destroy();
       const { accountId } = yield* yield* CloudflareEnvironment;
       const { userGroupId, userGroupName } = yield* target;
+      yield* listedByName(iam.listUserGroups.items({ accountId, name: userGroupName }));
 
       const program = Effect.gen(function* () {
         const byName = Cloudflare.Iam.UserGroup.lookup({ name: userGroupName });

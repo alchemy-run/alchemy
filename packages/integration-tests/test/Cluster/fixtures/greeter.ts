@@ -5,4 +5,6 @@ import * as Schema from "effect/Schema";
 
 export class Greeters extends Cluster.Entity<Greeters>()("Greeter", [
   Rpc.make("Greet", { payload: { name: Schema.String }, success: Schema.String }),
+  /** Calls the counter's `Hang` and gives up after a second. */
+  Rpc.make("HangCounter", { payload: { id: Schema.String }, success: Schema.String }),
 ]) {}

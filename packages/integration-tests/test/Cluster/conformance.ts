@@ -159,4 +159,96 @@ export const conformanceTests = (
     }),
     options,
   );
+
+  test(
+    "a handler that returns Rpc.fork runs while another holds the instance",
+    Effect.gen(function* () {
+      expect((yield* get(`${baseUrl()}/fork/conf-fork-${Date.now()}`)).value).toBe("released");
+    }),
+    options,
+  );
+
+  test(
+    "a defect restarts the instance and runs its message again",
+    Effect.gen(function* () {
+      const id = `conf-flaky-${Date.now()}`;
+      expect((yield* get(`${baseUrl()}/increment/${id}/3`)).value).toBe(3);
+      // The rebuilt instance answers, with its state started over.
+      expect((yield* get(`${baseUrl()}/flaky/${id}`)).value).toBe(0);
+      expect((yield* get(`${baseUrl()}/get/${id}`)).value).toBe(0);
+    }),
+    options,
+  );
+
+  test(
+    "interrupting a caller interrupts its handler",
+    Effect.gen(function* () {
+      const id = `conf-hang-${Date.now()}`;
+      expect((yield* get(`${baseUrl()}/hang/${id}`)).value).toBe("timed out");
+      const interrupted = yield* get(`${baseUrl()}/interrupted/${id}`).pipe(
+        Effect.map((body) => body.value as boolean),
+        Effect.repeat({ schedule: Schedule.spaced("500 millis"), until: (b) => b, times: 20 }),
+      );
+      expect(interrupted).toBe(true);
+    }),
+    options,
+  );
+
+  test(
+    "a persisted message with DeliverAt runs at its time, not before",
+    Effect.gen(function* () {
+      const id = `conf-later-${Date.now()}`;
+      const sentAt = Date.now();
+      expect((yield* get(`${baseUrl()}/later/${id}/5000`)).value).toBe("sent");
+      expect((yield* get(`${baseUrl()}/get/${id}`)).value).toBe(0);
+      const value = yield* get(`${baseUrl()}/get/${id}`).pipe(
+        Effect.map((body) => body.value as number),
+        Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (n) => n === 5, times: 60 }),
+      );
+      expect(value).toBe(5);
+      expect(Date.now() - sentAt).toBeGreaterThanOrEqual(4_000);
+    }),
+    options,
+  );
+
+  test(
+    "duplicates of a persisted message sent at once run it once",
+    Effect.gen(function* () {
+      const body = yield* get(`${baseUrl()}/credit-race/conf-race-${Date.now()}`);
+      expect(body.values).toEqual([10, 10, 10, 10, 10]);
+      expect(body.balance).toBe(10);
+    }),
+    options,
+  );
+
+  test(
+    "a discarded persisted message with a primary key runs once",
+    Effect.gen(function* () {
+      const id = `conf-add-forget-${Date.now()}`;
+      expect((yield* get(`${baseUrl()}/add-forget/${id}/op-1`)).value).toBe("sent");
+      const value = yield* get(`${baseUrl()}/get/${id}`).pipe(
+        Effect.map((body) => body.value as number),
+        Effect.repeat({ schedule: Schedule.spaced("500 millis"), until: (n) => n > 0, times: 20 }),
+      );
+      expect(value).toBe(5);
+      yield* Effect.sleep("2 seconds");
+      expect((yield* get(`${baseUrl()}/get/${id}`)).value).toBe(5);
+    }),
+    options,
+  );
+
+  test(
+    "an idle instance stops after its maxIdleTime, unless kept alive",
+    Effect.gen(function* () {
+      const id = `conf-idle-${Date.now()}`;
+      yield* get(`${baseUrl()}/remember/${id}-held/7`);
+      yield* get(`${baseUrl()}/pin/${id}-held`);
+      yield* get(`${baseUrl()}/remember/${id}-idle/7`);
+      // The ledger's maxIdleTime is five seconds.
+      yield* Effect.sleep("20 seconds");
+      expect((yield* get(`${baseUrl()}/recall/${id}-held`)).value).toBe(7);
+      expect((yield* get(`${baseUrl()}/recall/${id}-idle`)).value).toBe(0);
+    }),
+    options,
+  );
 };
