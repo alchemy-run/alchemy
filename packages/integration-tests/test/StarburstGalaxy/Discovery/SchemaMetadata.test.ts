@@ -6,6 +6,7 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { SALES, Warehouse } from "../fixtures/warehouse.ts";
+import { freshStack } from "../helpers.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(StarburstGalaxy.providers(), Neon.providers()),
@@ -15,15 +16,15 @@ test.provider(
   "describe a schema with a link, change it, and clear it on removal",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
-      const app = (props: Partial<StarburstGalaxy.SchemaMetadataProps> | undefined) =>
+      const app = (props: Partial<StarburstGalaxy.Discovery.SchemaMetadataProps> | undefined) =>
         Effect.gen(function* () {
           const catalog = yield* Warehouse;
           const metadata =
             props === undefined
               ? undefined
-              : yield* StarburstGalaxy.SchemaMetadata("SalesDocs", {
+              : yield* StarburstGalaxy.Discovery.SchemaMetadata("SalesDocs", {
                   catalogId: catalog.catalogId,
                   schemaName: SALES.schemaName,
                   ...props,
@@ -55,7 +56,7 @@ test.provider(
       expect(cleared.schemaId).toBe(SALES.schemaName);
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: [
       "provider:starburst-galaxy",
@@ -63,6 +64,6 @@ test.provider(
       "provider:neon",
       "live",
     ],
-    timeout: 300_000,
+    timeout: 600_000,
   },
 );

@@ -42,7 +42,7 @@ export interface BigQueryCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type BigQueryCatalog = Resource<
-  "StarburstGalaxy.BigQueryCatalog",
+  "StarburstGalaxy.Catalog.BigQueryCatalog",
   BigQueryCatalogProps,
   BigQueryCatalogAttributes,
   never,
@@ -69,11 +69,11 @@ export type BigQueryCatalog = Resource<
  * **Example:** A catalog over a service account's BigQuery project
  * ```typescript
  * const credentialsKey = yield* Config.Redacted("BIGQUERY_SERVICE_ACCOUNT_JSON");
- * const warehouse = yield* StarburstGalaxy.BigQueryCatalog("Warehouse", {
+ * const warehouse = yield* StarburstGalaxy.Catalog.BigQueryCatalog("Warehouse", {
  *   credentialsKey,
  *   readOnly: true,
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "gcp-us-east1",
  *   catalogs: [warehouse.catalogId],
  * });
@@ -83,7 +83,7 @@ export type BigQueryCatalog = Resource<
  * **Example:** Expose one project's datasets, billed to another
  * ```typescript
  * const credentialsKey = yield* Config.Redacted("BIGQUERY_SERVICE_ACCOUNT_JSON");
- * yield* StarburstGalaxy.BigQueryCatalog("Public", {
+ * yield* StarburstGalaxy.Catalog.BigQueryCatalog("Public", {
  *   credentialsKey,
  *   projectId: "bigquery-public-data",
  *   parentProjectId: "my-billing-project",
@@ -93,13 +93,13 @@ export type BigQueryCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const warehouse = StarburstGalaxy.BigQueryCatalog.lookup({ name: "warehouse" });
+ * const warehouse = StarburstGalaxy.Catalog.BigQueryCatalog.lookup({ name: "warehouse" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const BigQueryCatalog = Resource<BigQueryCatalog>("StarburstGalaxy.BigQueryCatalog");
+export const BigQueryCatalog = Resource<BigQueryCatalog>("StarburstGalaxy.Catalog.BigQueryCatalog");
 
 /** The non-secret settings, as Galaxy names them. */
 const settingsOf = (name: string, props: BigQueryCatalogProps) => ({

@@ -93,7 +93,7 @@ export interface PolicyAttributes {
 }
 
 export type Policy = Resource<
-  "StarburstGalaxy.Policy",
+  "StarburstGalaxy.Governance.Policy",
   PolicyProps,
   PolicyAttributes,
   never,
@@ -119,9 +119,9 @@ export type Policy = Resource<
  * ### Granting through a policy
  * **Example:** Analysts may read every table of a catalog
  * ```typescript
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * const sales = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "sales" });
- * yield* StarburstGalaxy.Policy("AnalystsRead", {
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * const sales = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "sales" });
+ * yield* StarburstGalaxy.Governance.Policy("AnalystsRead", {
  *   role: analysts.roleId,
  *   predicate: "true",
  *   scopes: [
@@ -140,14 +140,14 @@ export type Policy = Resource<
  * ### Filtering rows and masking columns
  * **Example:** EU analysts see EU rows, with emails hashed
  * ```typescript
- * const eu = yield* StarburstGalaxy.Role("EuAnalysts", {});
- * const euOnly = yield* StarburstGalaxy.RowFilter("EuOnly", { expression: "region = 'EU'" });
- * const hashed = yield* StarburstGalaxy.ColumnMask("HashEmail", {
+ * const eu = yield* StarburstGalaxy.Role.Role("EuAnalysts", {});
+ * const euOnly = yield* StarburstGalaxy.Governance.RowFilter("EuOnly", { expression: "region = 'EU'" });
+ * const hashed = yield* StarburstGalaxy.Governance.ColumnMask("HashEmail", {
  *   expression: "to_hex(sha256(to_utf8(\"@column\")))",
  *   type: "Varchar",
  * });
- * const crm = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "crm" });
- * yield* StarburstGalaxy.Policy("EuCustomers", {
+ * const crm = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "crm" });
+ * yield* StarburstGalaxy.Governance.Policy("EuCustomers", {
  *   role: eu.roleId,
  *   predicate: "true",
  *   scopes: [
@@ -173,7 +173,7 @@ export type Policy = Resource<
  * @resource
  * @product Access
  */
-export const Policy = Resource<Policy>("StarburstGalaxy.Policy");
+export const Policy = Resource<Policy>("StarburstGalaxy.Governance.Policy");
 
 /** Galaxy accepted a policy create but the policy could not be read back. */
 export class PolicyNotResolved extends Data.TaggedError("StarburstGalaxy.PolicyNotResolved")<{
@@ -231,10 +231,10 @@ export const PolicyProvider = () =>
     nuke: {
       // Policies name roles, filters, masks and catalogs: they go first.
       dependsOn: [
-        "StarburstGalaxy.Role",
-        "StarburstGalaxy.RowFilter",
-        "StarburstGalaxy.ColumnMask",
-        "StarburstGalaxy.*Catalog",
+        "StarburstGalaxy.Role.Role",
+        "StarburstGalaxy.Governance.RowFilter",
+        "StarburstGalaxy.Governance.ColumnMask",
+        "StarburstGalaxy.Catalog.*",
       ],
     },
 

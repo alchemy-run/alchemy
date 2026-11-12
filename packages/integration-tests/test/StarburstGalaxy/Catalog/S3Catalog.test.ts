@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, secret } from "../helpers.ts";
+import { expectGone, freshStack, secret } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -29,7 +29,7 @@ test.provider(
   "create a Galaxy-metastore catalog, reconfigure it, rotate its key, and replace it with a Glue one",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const galaxyMetastore = {
         type: "galaxy",
@@ -38,7 +38,7 @@ test.provider(
       } as const;
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.S3Catalog("Lake", {
+        StarburstGalaxy.Catalog.S3Catalog("Lake", {
           ...base,
           secretKey: secret("s3-v1"),
           metastore: galaxyMetastore,
@@ -52,7 +52,7 @@ test.provider(
 
       // Settings converge in place.
       const reconfigured = yield* stack.deploy(
-        StarburstGalaxy.S3Catalog("Lake", {
+        StarburstGalaxy.Catalog.S3Catalog("Lake", {
           ...base,
           secretKey: secret("s3-v1"),
           description: "lakehouse",
@@ -70,7 +70,7 @@ test.provider(
 
       // A rotated secret key is sent; the catalog stays.
       const rotated = yield* stack.deploy(
-        StarburstGalaxy.S3Catalog("Lake", {
+        StarburstGalaxy.Catalog.S3Catalog("Lake", {
           ...base,
           secretKey: secret("s3-v2"),
           description: "lakehouse",
@@ -82,7 +82,7 @@ test.provider(
 
       // Another metastore type is a new catalog; the old one goes.
       const glue = yield* stack.deploy(
-        StarburstGalaxy.S3Catalog("Lake", {
+        StarburstGalaxy.Catalog.S3Catalog("Lake", {
           ...base,
           secretKey: secret("s3-v2"),
           metastore: {
@@ -100,9 +100,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(glue.catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

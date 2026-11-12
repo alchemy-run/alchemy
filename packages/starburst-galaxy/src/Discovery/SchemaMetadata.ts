@@ -47,7 +47,7 @@ export interface SchemaMetadataAttributes {
 }
 
 export type SchemaMetadata = Resource<
-  "StarburstGalaxy.SchemaMetadata",
+  "StarburstGalaxy.Discovery.SchemaMetadata",
   SchemaMetadataProps,
   SchemaMetadataAttributes,
   never,
@@ -68,8 +68,8 @@ export type SchemaMetadata = Resource<
  * ### Documenting a schema
  * **Example:** A description and a runbook link
  * ```typescript
- * const shop = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "shop" });
- * yield* StarburstGalaxy.SchemaMetadata("SalesDocs", {
+ * const shop = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "shop" });
+ * yield* StarburstGalaxy.Discovery.SchemaMetadata("SalesDocs", {
  *   catalogId: shop.catalogId,
  *   schemaName: "sales",
  *   description: "Orders and refunds, loaded hourly",
@@ -80,7 +80,7 @@ export type SchemaMetadata = Resource<
  * @resource
  * @product Discovery
  */
-export const SchemaMetadata = Resource<SchemaMetadata>("StarburstGalaxy.SchemaMetadata");
+export const SchemaMetadata = Resource<SchemaMetadata>("StarburstGalaxy.Discovery.SchemaMetadata");
 
 const toAttributes = (catalogId: string, schema: Schema): SchemaMetadataAttributes => ({
   catalogId,

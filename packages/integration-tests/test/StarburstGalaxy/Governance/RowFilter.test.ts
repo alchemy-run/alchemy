@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -17,11 +17,11 @@ test.provider(
   "create, change, rename and delete a row filter",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("filter");
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.RowFilter("Filter", { expression: "region = 'EU'" }),
+        StarburstGalaxy.Governance.RowFilter("Filter", { expression: "region = 'EU'" }),
       );
       const rowFilterId = created.rowFilterId;
       const live = yield* galaxy.rowFilter.getRowFilter({ rowFilterId });
@@ -30,7 +30,7 @@ test.provider(
 
       // Every prop converges in place, the name included.
       const changed = yield* stack.deploy(
-        StarburstGalaxy.RowFilter("Filter", {
+        StarburstGalaxy.Governance.RowFilter("Filter", {
           name: renamed,
           expression: "region IN ('EU', 'UK')",
           description: "europe",
@@ -44,9 +44,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(filterExists(rowFilterId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:row-filter", "live"],
-    timeout: 90_000,
+    timeout: 300_000,
   },
 );

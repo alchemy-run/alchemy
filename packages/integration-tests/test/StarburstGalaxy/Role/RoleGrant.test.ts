@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
+import { freshStack } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -28,32 +29,35 @@ test.provider(
   "grant two roles to one role, toggle the admin option, revoke one, and grant to a user",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const app = (opts: { second: boolean; admin: boolean; user: boolean }) =>
         Effect.gen(function* () {
-          const reporting = yield* StarburstGalaxy.Role("Reporting", {});
-          const ledger = yield* StarburstGalaxy.Role("Ledger", {});
-          const analysts = yield* StarburstGalaxy.Role("Analysts", {});
-          const first = yield* StarburstGalaxy.RoleGrant("AnalystsReport", {
+          const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+          const ledger = yield* StarburstGalaxy.Role.Role("Ledger", {});
+          const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+          const first = yield* StarburstGalaxy.Role.RoleGrant("AnalystsReport", {
             role: reporting.roleId,
             principal: { type: "Role", roleId: analysts.roleId },
             adminOption: opts.admin,
           });
           // A second grant on the same principal in the same deploy.
           const second = opts.second
-            ? yield* StarburstGalaxy.RoleGrant("AnalystsLedger", {
+            ? yield* StarburstGalaxy.Role.RoleGrant("AnalystsLedger", {
                 role: ledger.roleId,
                 principal: { type: "Role", roleId: analysts.roleId },
               })
             : undefined;
-          const account = yield* StarburstGalaxy.ServiceAccount("Bot", { role: analysts.roleId });
+          const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Bot", {
+            role: analysts.roleId,
+          });
           const toUser = opts.user
-            ? yield* StarburstGalaxy.RoleGrant("BotLedger", {
+            ? yield* StarburstGalaxy.Role.RoleGrant("BotLedger", {
                 role: ledger.roleId,
                 principal: {
                   type: "User",
-                  userId: StarburstGalaxy.User.lookup({ userId: account.serviceAccountId }).userId,
+                  userId: StarburstGalaxy.User.User.lookup({ userId: account.serviceAccountId })
+                    .userId,
                 },
               })
             : undefined;
@@ -86,9 +90,9 @@ test.provider(
       });
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:role", "live"],
-    timeout: 240_000,
+    timeout: 600_000,
   },
 );

@@ -38,7 +38,7 @@ export interface MySQLSshTunnelConnection {
 /** Galaxy connects to the MySQL server through a PrivateLink connection. */
 export interface MySQLPrivateLinkConnection {
   readonly type: "privateLink";
-  /** ID of the Galaxy PrivateLink connection (see `StarburstGalaxy.PrivateLink`). */
+  /** ID of the Galaxy PrivateLink connection (see `StarburstGalaxy.Network.PrivateLink`). */
   readonly privateLinkId: string;
 }
 
@@ -84,7 +84,7 @@ export interface MySQLCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type MySQLCatalog = Resource<
-  "StarburstGalaxy.MySQLCatalog",
+  "StarburstGalaxy.Catalog.MySQLCatalog",
   MySQLCatalogProps,
   MySQLCatalogAttributes,
   never,
@@ -113,12 +113,12 @@ export type MySQLCatalog = Resource<
  * **Example:** A catalog over a MySQL server reachable from the internet
  * ```typescript
  * const password = yield* Config.Redacted("SHOP_DB_PASSWORD");
- * const shop = yield* StarburstGalaxy.MySQLCatalog("Shop", {
+ * const shop = yield* StarburstGalaxy.Catalog.MySQLCatalog("Shop", {
  *   connection: { type: "direct", host: "shop.cluster-abc.us-east-1.rds.amazonaws.com" },
  *   username: "galaxy",
  *   password,
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [shop.catalogId],
  * });
@@ -128,7 +128,7 @@ export type MySQLCatalog = Resource<
  * **Example:** Through a Galaxy SSH tunnel
  * ```typescript
  * const password = yield* Config.Redacted("SHOP_DB_PASSWORD");
- * yield* StarburstGalaxy.MySQLCatalog("Shop", {
+ * yield* StarburstGalaxy.Catalog.MySQLCatalog("Shop", {
  *   connection: { type: "sshTunnel", sshTunnelId: "st-1234567890", host: "10.0.4.12" },
  *   username: "galaxy",
  *   password,
@@ -139,13 +139,13 @@ export type MySQLCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const shop = StarburstGalaxy.MySQLCatalog.lookup({ name: "shop" });
+ * const shop = StarburstGalaxy.Catalog.MySQLCatalog.lookup({ name: "shop" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const MySQLCatalog = Resource<MySQLCatalog>("StarburstGalaxy.MySQLCatalog");
+export const MySQLCatalog = Resource<MySQLCatalog>("StarburstGalaxy.Catalog.MySQLCatalog");
 
 const connectionOf = (shape: MySQLCatalogShape): MySQLConnection =>
   shape.connectionType === "direct"

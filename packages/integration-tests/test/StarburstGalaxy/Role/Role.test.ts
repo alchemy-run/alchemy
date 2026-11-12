@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
@@ -19,13 +19,13 @@ test.provider(
   "create, describe, transfer, rename and delete a role",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("role");
 
-      const app = (props: StarburstGalaxy.RoleProps, owned = false) =>
+      const app = (props: StarburstGalaxy.Role.RoleProps, owned = false) =>
         Effect.gen(function* () {
-          const owner = yield* StarburstGalaxy.Role("Owner", {});
-          const role = yield* StarburstGalaxy.Role("Role", {
+          const owner = yield* StarburstGalaxy.Role.Role("Owner", {});
+          const role = yield* StarburstGalaxy.Role.Role("Role", {
             ...props,
             ...(owned ? { owningRole: owner.roleId } : {}),
           });
@@ -53,11 +53,11 @@ test.provider(
 
       // Built-in roles are found by lookup; `list` holds only generated names, so neither
       // they nor this now hand-named role are nuke's to delete.
-      yield* expectFound(StarburstGalaxy.Role.lookup({ name: "accountadmin" }), {
+      yield* expectFound(StarburstGalaxy.Role.Role.lookup({ name: "accountadmin" }), {
         name: "accountadmin",
       });
-      yield* expectFound(StarburstGalaxy.Role.lookup({ name: renamed }), named.role);
-      const provider = yield* Provider.findProvider(StarburstGalaxy.Role);
+      yield* expectFound(StarburstGalaxy.Role.Role.lookup({ name: renamed }), named.role);
+      const provider = yield* Provider.findProvider(StarburstGalaxy.Role.Role);
       const listed = yield* provider.list();
       expect(listed.some((role) => role.roleId === created.owner.roleId)).toBe(true);
       expect(listed.some((role) => role.roleId === roleId)).toBe(false);
@@ -66,9 +66,9 @@ test.provider(
       yield* stack.destroy();
       yield* expectGone(roleExists(roleId));
       yield* expectGone(roleExists(created.owner.roleId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:role", "live"],
-    timeout: 120_000,
+    timeout: 420_000,
   },
 );

@@ -1,8 +1,11 @@
 import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { deepEqual } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 /**
@@ -123,3 +126,43 @@ export const hasChanges = (delta: object) => Object.keys(delta).length > 0;
 /** Order-insensitive equality of id lists Galaxy may return in any order. */
 export const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && [...a].sort().join("\u0000") === [...b].sort().join("\u0000");
+
+/** An object did not reach the state a wait asked for within its budget. */
+export class StateTimeout extends Data.TaggedError("StarburstGalaxy.StateTimeout")<{
+  /** What was waited for, e.g. `cluster analytics to be enabled`. */
+  readonly waitingFor: string;
+  /** The last state Galaxy reported. */
+  readonly lastState: string;
+}> {
+  override get message() {
+    return `Timed out waiting for ${this.waitingFor} (last state: ${this.lastState || "unknown"})`;
+  }
+}
+
+/**
+ * The provider's one waiter: poll `observe` every `interval` until `done`,
+ * for up to `budget`, and return the settled value (typed by `done`).
+ * `observe` fails fast on a state the object cannot leave; running out of
+ * budget fails with {@link StateTimeout} naming the last state seen.
+ */
+export const waitForState = <A, B extends A, E, R>(
+  observe: Effect.Effect<A, E, R>,
+  options: {
+    readonly waitingFor: string;
+    readonly done: (value: A) => value is B;
+    readonly stateOf: (value: A) => string;
+    readonly interval: Duration.Input;
+    readonly budget: Duration.Input;
+  },
+) =>
+  observe.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(options.interval).pipe(Schedule.upTo({ duration: options.budget })),
+      until: options.done,
+    }),
+    Effect.filterOrFail(
+      options.done,
+      (last) =>
+        new StateTimeout({ waitingFor: options.waitingFor, lastState: options.stateOf(last) }),
+    ),
+  );

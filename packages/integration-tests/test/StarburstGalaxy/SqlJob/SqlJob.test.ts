@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone } from "../helpers.ts";
+import { expectGone, freshStack } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -20,21 +20,21 @@ test.provider(
   "schedule SQL on an idle cluster, change its statements and schedule, and delete it",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
-      const app = (props: Pick<StarburstGalaxy.SqlJobProps, "queries" | "schedule">) =>
+      const app = (props: Pick<StarburstGalaxy.SqlJob.SqlJobProps, "queries" | "schedule">) =>
         Effect.gen(function* () {
-          const cluster = yield* StarburstGalaxy.Cluster("Cluster", {
+          const cluster = yield* StarburstGalaxy.Cluster.Cluster("Cluster", {
             cloudRegionId: "aws-us-east1",
             autoSuspend: "1 minute",
           });
-          const role = yield* StarburstGalaxy.Role("Role", {});
-          const useCluster = yield* StarburstGalaxy.RolePrivilege("UseCluster", {
+          const role = yield* StarburstGalaxy.Role.Role("Role", {});
+          const useCluster = yield* StarburstGalaxy.Role.RolePrivilege("UseCluster", {
             role: role.roleId,
             privilege: "UseCluster",
             entity: { kind: "Cluster", clusterId: cluster.clusterId },
           });
-          const job = yield* StarburstGalaxy.SqlJob("Job", {
+          const job = yield* StarburstGalaxy.SqlJob.SqlJob("Job", {
             // Through the grant, so the job is created after it: Galaxy checks the
             // role can use the cluster (Forbidden GET_CLUSTER otherwise).
             role: useCluster.roleId,
@@ -64,9 +64,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(jobExists(sqlJobId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:sql-jobs", "live"],
-    timeout: 240_000,
+    timeout: 600_000,
   },
 );

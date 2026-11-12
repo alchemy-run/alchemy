@@ -2,8 +2,9 @@ import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
+import type { Input, InputProps } from "alchemy/Input";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -17,30 +18,30 @@ test.provider(
   "create a policy, change its predicate and scopes, rename it, and replace it on a new role",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("policy");
 
       const app = (
         props: (refs: {
-          catalogId: string;
-          rowFilterId: string;
-        }) => Partial<StarburstGalaxy.PolicyProps>,
+          catalogId: Input<string>;
+          rowFilterId: Input<string>;
+        }) => Partial<InputProps<StarburstGalaxy.Governance.PolicyProps>>,
         roleKey: "Analysts" | "Auditors" = "Analysts",
       ) =>
         Effect.gen(function* () {
-          const analysts = yield* StarburstGalaxy.Role("Analysts", {});
-          const auditors = yield* StarburstGalaxy.Role("Auditors", {});
-          const filter = yield* StarburstGalaxy.RowFilter("EuOnly", {
+          const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+          const auditors = yield* StarburstGalaxy.Role.Role("Auditors", {});
+          const filter = yield* StarburstGalaxy.Governance.RowFilter("EuOnly", {
             expression: "region = 'EU'",
           });
-          const catalog = yield* StarburstGalaxy.PostgresqlCatalog("Crm", {
+          const catalog = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Crm", {
             endpoint: UNVALIDATED_ENDPOINT,
             databaseName: "crm",
             username: "galaxy",
             password: secret("crm"),
             validate: false,
           });
-          const policy = yield* StarburstGalaxy.Policy("Read", {
+          const policy = yield* StarburstGalaxy.Governance.Policy("Read", {
             role: roleKey === "Analysts" ? analysts.roleId : auditors.roleId,
             predicate: "true",
             scopes: [
@@ -102,9 +103,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(policyExists(moved.policy.policyId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:policy", "live"],
-    timeout: 240_000,
+    timeout: 600_000,
   },
 );

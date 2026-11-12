@@ -9,7 +9,7 @@ import { getUser } from "./User.ts";
 
 export interface UserDefaultRoleProps {
   /**
-   * ID of the user (`u-…`), e.g. from `StarburstGalaxy.User.lookup` or a
+   * ID of the user (`u-…`), e.g. from `StarburstGalaxy.User.User.lookup` or a
    * `ServiceAccount`'s `serviceAccountId`. Changing it replaces the
    * resource: the old user's default role is restored.
    */
@@ -34,7 +34,7 @@ export interface UserDefaultRoleAttributes {
 }
 
 export type UserDefaultRole = Resource<
-  "StarburstGalaxy.UserDefaultRole",
+  "StarburstGalaxy.User.UserDefaultRole",
   UserDefaultRoleProps,
   UserDefaultRoleAttributes,
   never,
@@ -61,7 +61,7 @@ export class UserNotFound extends Data.TaggedError("StarburstGalaxy.UserNotFound
  * new one.
  *
  * Galaxy only accepts a role the user already holds: grant it first with
- * `StarburstGalaxy.RoleGrant` (or as a service account's role) and pass the
+ * `StarburstGalaxy.Role.RoleGrant` (or as a service account's role) and pass the
  * grant's `roleId`, so the default is set after the grant.
  *
  * @see https://docs.starburst.io/starburst-galaxy/security-and-compliance/manage-galaxy-access/manage-users-roles-and-tags/roles.html
@@ -69,13 +69,13 @@ export class UserNotFound extends Data.TaggedError("StarburstGalaxy.UserNotFound
  * ### Setting a default role
  * **Example:** A service account starts its sessions as its reporting role
  * ```typescript
- * const etl = yield* StarburstGalaxy.Role("Etl", {});
- * const reporting = yield* StarburstGalaxy.Role("Reporting", {});
- * const account = yield* StarburstGalaxy.ServiceAccount("Pipeline", {
+ * const etl = yield* StarburstGalaxy.Role.Role("Etl", {});
+ * const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+ * const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Pipeline", {
  *   role: etl.roleId,
  *   additionalRoles: [reporting.roleId],
  * });
- * yield* StarburstGalaxy.UserDefaultRole("PipelineDefault", {
+ * yield* StarburstGalaxy.User.UserDefaultRole("PipelineDefault", {
  *   user: account.serviceAccountId,
  *   role: reporting.roleId,
  * });
@@ -83,13 +83,13 @@ export class UserNotFound extends Data.TaggedError("StarburstGalaxy.UserNotFound
  *
  * **Example:** A person's default role, granted in the same stack
  * ```typescript
- * const ada = StarburstGalaxy.User.lookup({ email: "ada@example.com" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * const grant = yield* StarburstGalaxy.RoleGrant("AdaIsAnalyst", {
+ * const ada = StarburstGalaxy.User.User.lookup({ email: "ada@example.com" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * const grant = yield* StarburstGalaxy.Role.RoleGrant("AdaIsAnalyst", {
  *   role: analysts.roleId,
  *   principal: { type: "User", userId: ada.userId },
  * });
- * yield* StarburstGalaxy.UserDefaultRole("AdaDefault", {
+ * yield* StarburstGalaxy.User.UserDefaultRole("AdaDefault", {
  *   user: ada.userId,
  *   role: grant.roleId,
  * });
@@ -98,7 +98,7 @@ export class UserNotFound extends Data.TaggedError("StarburstGalaxy.UserNotFound
  * @resource
  * @product Access
  */
-export const UserDefaultRole = Resource<UserDefaultRole>("StarburstGalaxy.UserDefaultRole");
+export const UserDefaultRole = Resource<UserDefaultRole>("StarburstGalaxy.User.UserDefaultRole");
 
 const setDefaultRole = (userId: string, roleId: string) =>
   galaxy.user.updateUser({ userId, roleId });

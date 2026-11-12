@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { expectGone, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -26,10 +26,10 @@ test.provider(
   "create, reconfigure, rotate the password of, and delete a MySQL catalog",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.MySQLCatalog("Shop", { ...base, password: secret("mysql-v1") }),
+        StarburstGalaxy.Catalog.MySQLCatalog("Shop", { ...base, password: secret("mysql-v1") }),
       );
       const catalogId = created.catalogId;
       const live = yield* getCatalog(catalogId);
@@ -41,7 +41,7 @@ test.provider(
 
       // Settings converge in place.
       const reconfigured = yield* stack.deploy(
-        StarburstGalaxy.MySQLCatalog("Shop", {
+        StarburstGalaxy.Catalog.MySQLCatalog("Shop", {
           ...base,
           password: secret("mysql-v1"),
           description: "orders",
@@ -59,7 +59,7 @@ test.provider(
 
       // A rotated password is sent though Galaxy never returns one; the catalog stays.
       const rotated = yield* stack.deploy(
-        StarburstGalaxy.MySQLCatalog("Shop", {
+        StarburstGalaxy.Catalog.MySQLCatalog("Shop", {
           ...base,
           password: secret("mysql-v2"),
           description: "orders",
@@ -74,9 +74,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

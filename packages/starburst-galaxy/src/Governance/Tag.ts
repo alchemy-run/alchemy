@@ -50,7 +50,7 @@ export interface TagLookup {
 }
 
 export type Tag = Resource<
-  "StarburstGalaxy.Tag",
+  "StarburstGalaxy.Governance.Tag",
   TagProps,
   TagAttributes,
   never,
@@ -61,7 +61,7 @@ export type Tag = Resource<
 /**
  * A Starburst Galaxy tag: a named, colored label for catalogs, schemas,
  * tables and columns (data classification such as PII). Apply it with
- * `StarburstGalaxy.TagAssignment`.
+ * `StarburstGalaxy.Governance.TagAssignment`.
  *
  * Every prop updates in place, the name included. Tags have no labels of
  * their own: a tag Alchemy created is recognized by its generated name.
@@ -71,7 +71,7 @@ export type Tag = Resource<
  * ### Creating a tag
  * **Example:** A tag for personal data
  * ```typescript
- * const pii = yield* StarburstGalaxy.Tag("Pii", {
+ * const pii = yield* StarburstGalaxy.Governance.Tag("Pii", {
  *   color: "#FF0000",
  *   description: "Personally identifiable information",
  * });
@@ -80,9 +80,9 @@ export type Tag = Resource<
  * ### Tagging a catalog
  * **Example:** Mark a whole catalog as PII
  * ```typescript
- * const catalog = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "customers" });
- * const pii = yield* StarburstGalaxy.Tag("Pii", { color: "#FF0000" });
- * yield* StarburstGalaxy.TagAssignment("CustomersPii", {
+ * const catalog = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "customers" });
+ * const pii = yield* StarburstGalaxy.Governance.Tag("Pii", { color: "#FF0000" });
+ * yield* StarburstGalaxy.Governance.TagAssignment("CustomersPii", {
  *   tag: pii.tagId,
  *   catalog: catalog.catalogId,
  * });
@@ -91,13 +91,13 @@ export type Tag = Resource<
  * ### Looking up an existing tag
  * **Example:** Reference a tag created in the Galaxy console
  * ```typescript
- * const finance = StarburstGalaxy.Tag.lookup({ name: "finance" });
+ * const finance = StarburstGalaxy.Governance.Tag.lookup({ name: "finance" });
  * ```
  *
  * @resource
  * @product Data governance
  */
-export const Tag = Resource<Tag>("StarburstGalaxy.Tag");
+export const Tag = Resource<Tag>("StarburstGalaxy.Governance.Tag");
 
 /** Galaxy accepted a tag create but the tag could not be read back. */
 export class TagNotResolved extends Data.TaggedError("StarburstGalaxy.TagNotResolved")<{

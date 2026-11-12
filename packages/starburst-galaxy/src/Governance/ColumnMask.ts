@@ -58,7 +58,7 @@ export interface ColumnMaskAttributes {
 }
 
 export type ColumnMask = Resource<
-  "StarburstGalaxy.ColumnMask",
+  "StarburstGalaxy.Governance.ColumnMask",
   ColumnMaskProps,
   ColumnMaskAttributes,
   never,
@@ -79,7 +79,7 @@ export type ColumnMask = Resource<
  * ### Creating a column mask
  * **Example:** Show only the last four digits of a social security number
  * ```typescript
- * const ssnMask = yield* StarburstGalaxy.ColumnMask("SsnMask", {
+ * const ssnMask = yield* StarburstGalaxy.Governance.ColumnMask("SsnMask", {
  *   type: "Varchar",
  *   expression: "'XXX-XX-' || substr(ssn, -4)",
  *   description: "Mask SSNs for everyone but HR",
@@ -88,7 +88,7 @@ export type ColumnMask = Resource<
  *
  * **Example:** Null out a numeric column
  * ```typescript
- * yield* StarburstGalaxy.ColumnMask("SalaryMask", {
+ * yield* StarburstGalaxy.Governance.ColumnMask("SalaryMask", {
  *   type: "Integer",
  *   expression: "CAST(NULL AS integer)",
  * });
@@ -97,7 +97,7 @@ export type ColumnMask = Resource<
  * @resource
  * @product Data governance
  */
-export const ColumnMask = Resource<ColumnMask>("StarburstGalaxy.ColumnMask");
+export const ColumnMask = Resource<ColumnMask>("StarburstGalaxy.Governance.ColumnMask");
 
 /** Galaxy accepted a column mask create but the mask could not be read back. */
 export class ColumnMaskNotResolved extends Data.TaggedError(

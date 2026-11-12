@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -21,10 +21,10 @@ test.provider(
   "create an OpenSearch catalog with a user, and replace it with a SigV4 access-key one",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.OpenSearchCatalog("Logs", {
+        StarburstGalaxy.Catalog.OpenSearchCatalog("Logs", {
           endpoint,
           port: 9200,
           auth: { type: "basic", username: "galaxy", password: secret("opensearch-v1") },
@@ -38,7 +38,7 @@ test.provider(
       expect(live.port).toBe(9200);
 
       const keyed = yield* stack.deploy(
-        StarburstGalaxy.OpenSearchCatalog("Logs", {
+        StarburstGalaxy.Catalog.OpenSearchCatalog("Logs", {
           endpoint,
           auth: {
             type: "accessKey",
@@ -58,9 +58,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(keyed.catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

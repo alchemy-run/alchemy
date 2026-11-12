@@ -60,7 +60,7 @@ export interface ServiceAccountLookup {
 }
 
 export type ServiceAccount = Resource<
-  "StarburstGalaxy.ServiceAccount",
+  "StarburstGalaxy.ServiceAccount.ServiceAccount",
   ServiceAccountProps,
   ServiceAccountAttributes,
   never,
@@ -72,7 +72,7 @@ export type ServiceAccount = Resource<
  * A Starburst Galaxy service account: a non-human principal that Trino
  * clients (BI tools, jobs, applications) log in as. Its access is the
  * privileges of its roles; its credentials are
- * `StarburstGalaxy.ServiceAccountPassword`s, which rotate independently
+ * `StarburstGalaxy.ServiceAccount.ServiceAccountPassword`s, which rotate independently
  * of the account.
  *
  * The account is created without an initial password. Roles update in
@@ -85,11 +85,11 @@ export type ServiceAccount = Resource<
  * ### Creating a service account
  * **Example:** A reporting login with its own role and password
  * ```typescript
- * const reporting = yield* StarburstGalaxy.Role("Reporting", {});
- * const account = yield* StarburstGalaxy.ServiceAccount("Reporter", {
+ * const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+ * const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", {
  *   role: reporting.roleId,
  * });
- * const password = yield* StarburstGalaxy.ServiceAccountPassword("ReporterPassword", {
+ * const password = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
  *   serviceAccount: account.serviceAccountId,
  * });
  * // Log in to the cluster's trinoUri as account.userName with password.trinoPassword.
@@ -98,9 +98,9 @@ export type ServiceAccount = Resource<
  * ### Holding several roles
  * **Example:** A default role plus roles to switch to
  * ```typescript
- * const reader = yield* StarburstGalaxy.Role("Reader", {});
- * const writer = yield* StarburstGalaxy.Role("Writer", {});
- * yield* StarburstGalaxy.ServiceAccount("Etl", {
+ * const reader = yield* StarburstGalaxy.Role.Role("Reader", {});
+ * const writer = yield* StarburstGalaxy.Role.Role("Writer", {});
+ * yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Etl", {
  *   role: reader.roleId,
  *   additionalRoles: [writer.roleId],
  * });
@@ -109,13 +109,15 @@ export type ServiceAccount = Resource<
  * ### Looking up an existing service account
  * **Example:** Reference an account created in the Galaxy console
  * ```typescript
- * const bi = StarburstGalaxy.ServiceAccount.lookup({ name: "bi_tool" });
+ * const bi = StarburstGalaxy.ServiceAccount.ServiceAccount.lookup({ name: "bi_tool" });
  * ```
  *
  * @resource
  * @product Access control
  */
-export const ServiceAccount = Resource<ServiceAccount>("StarburstGalaxy.ServiceAccount");
+export const ServiceAccount = Resource<ServiceAccount>(
+  "StarburstGalaxy.ServiceAccount.ServiceAccount",
+);
 
 /** Galaxy accepted a service account create but the account could not be read back. */
 export class ServiceAccountNotResolved extends Data.TaggedError(
@@ -167,7 +169,7 @@ export const ServiceAccountProvider = () =>
 
     nuke: {
       // The account names its roles; delete accounts before roles.
-      dependsOn: ["StarburstGalaxy.Role"],
+      dependsOn: ["StarburstGalaxy.Role.Role"],
     },
 
     diff: Effect.fn(function* ({ news, output }) {

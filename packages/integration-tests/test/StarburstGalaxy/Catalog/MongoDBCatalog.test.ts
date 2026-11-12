@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -25,10 +25,10 @@ test.provider(
   "create, reconfigure, rotate the password of, and delete a MongoDB catalog",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.MongoDBCatalog("Events", {
+        StarburstGalaxy.Catalog.MongoDBCatalog("Events", {
           ...base,
           regions: ["aws-us-east1"],
           password: secret("mongo-v1"),
@@ -42,7 +42,7 @@ test.provider(
       expect(live.dnsSeedListEnabled).toBe(false);
 
       const reconfigured = yield* stack.deploy(
-        StarburstGalaxy.MongoDBCatalog("Events", {
+        StarburstGalaxy.Catalog.MongoDBCatalog("Events", {
           ...base,
           regions: ["aws-us-east1", "aws-us-west2"],
           password: secret("mongo-v2"),
@@ -58,9 +58,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

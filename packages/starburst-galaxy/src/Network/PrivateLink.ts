@@ -28,7 +28,7 @@ export interface PrivateLinkAttributes {
 }
 
 export type PrivateLink = Resource<
-  "StarburstGalaxy.PrivateLink",
+  "StarburstGalaxy.Network.PrivateLink",
   PrivateLinkLookup,
   PrivateLinkAttributes,
   never,
@@ -43,7 +43,7 @@ export type PrivateLink = Resource<
  *
  * PrivateLink connections are only looked up. Starburst provisions them
  * with you through support; Galaxy's API can read them but not create or
- * delete one. Declaring `StarburstGalaxy.PrivateLink(...)` in a stack fails
+ * delete one. Declaring `StarburstGalaxy.Network.PrivateLink(...)` in a stack fails
  * with `StarburstGalaxy.LookupOnlyResource`.
  *
  * @see https://docs.starburst.io/starburst-galaxy/security-and-compliance/manage-cluster-connectivity/private-connections/aws-privatelink.html
@@ -51,9 +51,9 @@ export type PrivateLink = Resource<
  * ### Looking up a connection
  * **Example:** A PostgreSQL catalog reached over PrivateLink
  * ```typescript
- * const link = StarburstGalaxy.PrivateLink.lookup({ name: "rds-orders" });
+ * const link = StarburstGalaxy.Network.PrivateLink.lookup({ name: "rds-orders" });
  * const password = yield* Config.Redacted("ORDERS_READER_PASSWORD");
- * yield* StarburstGalaxy.PostgresqlCatalog("Orders", {
+ * yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Orders", {
  *   privateLinkId: link.privateLinkId,
  *   databaseName: "orders",
  *   username: "galaxy_reader",
@@ -64,7 +64,7 @@ export type PrivateLink = Resource<
  * @resource
  * @product Network
  */
-export const PrivateLink = Resource<PrivateLink>("StarburstGalaxy.PrivateLink");
+export const PrivateLink = Resource<PrivateLink>("StarburstGalaxy.Network.PrivateLink");
 
 const toAttributes = (link: Privatelink): PrivateLinkAttributes => ({
   privateLinkId: link.privatelinkId,
@@ -75,7 +75,7 @@ const toAttributes = (link: Privatelink): PrivateLinkAttributes => ({
 export const PrivateLinkProvider = () =>
   Provider.succeed(PrivateLink, {
     ...lookupOnlyLifecycle(
-      "StarburstGalaxy.PrivateLink",
+      "StarburstGalaxy.Network.PrivateLink",
       "Starburst provisions PrivateLink connections through support; Galaxy's API has no write operation for them",
     ),
     lookup: Effect.fn(function* (key) {

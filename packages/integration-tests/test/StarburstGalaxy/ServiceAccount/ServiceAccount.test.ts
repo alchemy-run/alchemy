@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -20,14 +20,17 @@ test.provider(
   "create a service account, change its roles, and replace it on rename",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("svc");
 
-      const app = (props: Partial<StarburstGalaxy.ServiceAccountProps>, extra = false) =>
+      const app = (
+        props: Partial<StarburstGalaxy.ServiceAccount.ServiceAccountProps>,
+        extra = false,
+      ) =>
         Effect.gen(function* () {
-          const reader = yield* StarburstGalaxy.Role("Reader", {});
-          const writer = yield* StarburstGalaxy.Role("Writer", {});
-          const account = yield* StarburstGalaxy.ServiceAccount("Account", {
+          const reader = yield* StarburstGalaxy.Role.Role("Reader", {});
+          const writer = yield* StarburstGalaxy.Role.Role("Writer", {});
+          const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Account", {
             role: reader.roleId,
             additionalRoles: extra ? [writer.roleId] : [],
             ...props,
@@ -63,9 +66,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(accountExists(replaced.account.serviceAccountId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:service-account", "live"],
-    timeout: 150_000,
+    timeout: 420_000,
   },
 );

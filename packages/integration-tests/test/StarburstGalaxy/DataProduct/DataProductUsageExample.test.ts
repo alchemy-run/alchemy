@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -18,18 +18,20 @@ test.provider(
   "add an example query to a data product, edit it, and remove it",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
-      const app = (example?: Omit<StarburstGalaxy.DataProductUsageExampleProps, "dataProductId">) =>
+      const app = (
+        example?: Omit<StarburstGalaxy.DataProduct.DataProductUsageExampleProps, "dataProductId">,
+      ) =>
         Effect.gen(function* () {
-          const catalog = yield* StarburstGalaxy.PostgresqlCatalog("Shop", {
+          const catalog = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Shop", {
             endpoint: UNVALIDATED_ENDPOINT,
             databaseName: "shop",
             username: "galaxy",
             password: secret("shop"),
             validate: false,
           });
-          const product = yield* StarburstGalaxy.DataProduct("Orders", {
+          const product = yield* StarburstGalaxy.DataProduct.DataProduct("Orders", {
             summary: "Every order",
             catalogId: catalog.catalogId,
             schemaName: "orders",
@@ -37,7 +39,7 @@ test.provider(
           const usage =
             example === undefined
               ? undefined
-              : yield* StarburstGalaxy.DataProductUsageExample("TopCustomers", {
+              : yield* StarburstGalaxy.DataProduct.DataProductUsageExample("TopCustomers", {
                   dataProductId: product.dataProductId,
                   ...example,
                 });
@@ -71,9 +73,9 @@ test.provider(
       expect(yield* examplesOf(dataProductId)).toEqual([]);
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:data-product", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

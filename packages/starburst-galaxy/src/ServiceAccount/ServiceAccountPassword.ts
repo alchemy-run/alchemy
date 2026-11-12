@@ -5,8 +5,6 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import { isGeneratedName } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ServiceAccountPasswordProps {
@@ -44,7 +42,7 @@ export interface ServiceAccountPasswordAttributes {
 }
 
 export type ServiceAccountPassword = Resource<
-  "StarburstGalaxy.ServiceAccountPassword",
+  "StarburstGalaxy.ServiceAccount.ServiceAccountPassword",
   ServiceAccountPasswordProps,
   ServiceAccountPasswordAttributes,
   never,
@@ -68,8 +66,8 @@ export type ServiceAccountPassword = Resource<
  * ### Creating a password
  * **Example:** A password for a service account
  * ```typescript
- * const account = yield* StarburstGalaxy.ServiceAccount("Reporter", {});
- * const password = yield* StarburstGalaxy.ServiceAccountPassword("ReporterPassword", {
+ * const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", {});
+ * const password = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
  *   serviceAccount: account.serviceAccountId,
  *   description: "BI dashboard",
  * });
@@ -78,8 +76,8 @@ export type ServiceAccountPassword = Resource<
  * ### Rotating a password
  * **Example:** Bump the description to replace the password on the next deploy
  * ```typescript
- * const account = yield* StarburstGalaxy.ServiceAccount("Reporter", {});
- * yield* StarburstGalaxy.ServiceAccountPassword("ReporterPassword", {
+ * const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", {});
+ * yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
  *   serviceAccount: account.serviceAccountId,
  *   description: "BI dashboard (rotated 2026-11)",
  * });
@@ -88,8 +86,8 @@ export type ServiceAccountPassword = Resource<
  * ### Using the password
  * **Example:** Hand the credential to a Worker as a secret
  * ```typescript
- * const account = yield* StarburstGalaxy.ServiceAccount("Reporter", {});
- * const password = yield* StarburstGalaxy.ServiceAccountPassword("ReporterPassword", {
+ * const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", {});
+ * const password = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
  *   serviceAccount: account.serviceAccountId,
  * });
  * const secret = yield* Cloudflare.SecretsStore.Secret("TrinoPassword", {
@@ -101,7 +99,7 @@ export type ServiceAccountPassword = Resource<
  * @product Access control
  */
 export const ServiceAccountPassword = Resource<ServiceAccountPassword>(
-  "StarburstGalaxy.ServiceAccountPassword",
+  "StarburstGalaxy.ServiceAccount.ServiceAccountPassword",
 );
 
 /** Galaxy created a password but returned no secret for it. */
@@ -142,7 +140,7 @@ export const ServiceAccountPasswordProvider = () =>
     ],
 
     nuke: {
-      dependsOn: ["StarburstGalaxy.ServiceAccount"],
+      dependsOn: ["StarburstGalaxy.ServiceAccount.ServiceAccount"],
     },
 
     diff: Effect.fn(function* ({ news, olds, output }) {
@@ -205,23 +203,6 @@ export const ServiceAccountPasswordProvider = () =>
     }),
 
     // A listed password's secret is no longer returned by Galaxy.
-    list: () =>
-      galaxy.serviceAccount.listServiceAccounts.items({}).pipe(
-        Stream.filter((account) => isGeneratedName(account.userName.split("@")[0])),
-        Stream.flatMap((account) =>
-          Stream.fromIterable(
-            account.passwords.map((password): ServiceAccountPasswordAttributes => ({
-              serviceAccountId: account.serviceAccountId,
-              serviceAccountPasswordId: password.serviceAccountPasswordId,
-              description: password.description,
-              trinoPassword: Redacted.make(""),
-              passwordPrefix: redacted(password.passwordPrefix),
-              password: Redacted.make(""),
-              created: password.created,
-            })),
-          ),
-        ),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      ),
+    // Passwords belong to their account: deleting an account Alchemy created removes them.
+    list: () => Effect.succeed([]),
   });

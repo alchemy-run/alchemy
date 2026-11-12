@@ -32,7 +32,7 @@ export interface GroupAttributes {
 }
 
 export type Group = Resource<
-  "StarburstGalaxy.Group",
+  "StarburstGalaxy.User.Group",
   GroupLookup,
   GroupAttributes,
   never,
@@ -43,11 +43,11 @@ export type Group = Resource<
 /**
  * A group of users in a Starburst Galaxy account, provisioned by an
  * identity provider over SCIM (Okta, Microsoft Entra ID, …). Grant a
- * stack-owned role to every member with `StarburstGalaxy.RoleGrant`.
+ * stack-owned role to every member with `StarburstGalaxy.Role.RoleGrant`.
  *
  * Groups are only looked up: Galaxy's API cannot create or delete one,
  * since the identity provider owns them. Declaring
- * `StarburstGalaxy.Group(...)` in a stack fails with
+ * `StarburstGalaxy.User.Group(...)` in a stack fails with
  * `StarburstGalaxy.LookupOnlyResource`.
  *
  * @see https://docs.starburst.io/starburst-galaxy/security-and-compliance/manage-galaxy-access/manage-sso-integration/groups.html
@@ -55,9 +55,9 @@ export type Group = Resource<
  * ### Looking up a group
  * **Example:** Give every analyst a stack-owned role
  * ```typescript
- * const analystsGroup = StarburstGalaxy.Group.lookup({ name: "analysts" });
- * const reporting = yield* StarburstGalaxy.Role("Reporting", {});
- * yield* StarburstGalaxy.RoleGrant("AnalystsReport", {
+ * const analystsGroup = StarburstGalaxy.User.Group.lookup({ name: "analysts" });
+ * const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+ * yield* StarburstGalaxy.Role.RoleGrant("AnalystsReport", {
  *   role: reporting.roleId,
  *   principal: { type: "Group", groupId: analystsGroup.groupId },
  * });
@@ -66,7 +66,7 @@ export type Group = Resource<
  * @resource
  * @product Access
  */
-export const Group = Resource<Group>("StarburstGalaxy.Group");
+export const Group = Resource<Group>("StarburstGalaxy.User.Group");
 
 const toAttributes = (group: GroupShape): GroupAttributes => ({
   groupId: group.groupId,
@@ -83,7 +83,7 @@ export const findGroup = (groupId: string) =>
 export const GroupProvider = () =>
   Provider.succeed(Group, {
     ...lookupOnlyLifecycle(
-      "StarburstGalaxy.Group",
+      "StarburstGalaxy.User.Group",
       "groups come from the identity provider over SCIM; Galaxy's API cannot create one",
     ),
     lookup: Effect.fn(function* (key) {

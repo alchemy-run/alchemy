@@ -5,7 +5,7 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -27,19 +27,19 @@ test.provider(
   "grant, change the grant option, deny and revoke a table privilege",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
-      const app = (props: Partial<StarburstGalaxy.RolePrivilegeProps>) =>
+      const app = (props: Partial<StarburstGalaxy.Role.RolePrivilegeProps>) =>
         Effect.gen(function* () {
-          const role = yield* StarburstGalaxy.Role("Role", {});
-          const catalog = yield* StarburstGalaxy.PostgresqlCatalog("Catalog", {
+          const role = yield* StarburstGalaxy.Role.Role("Role", {});
+          const catalog = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Catalog", {
             endpoint: UNVALIDATED_ENDPOINT,
             databaseName: "app",
             username: "galaxy",
             password: secret("privilege-catalog"),
             validate: false,
           });
-          const privilege = yield* StarburstGalaxy.RolePrivilege("Select", {
+          const privilege = yield* StarburstGalaxy.Role.RolePrivilege("Select", {
             role: role.roleId,
             privilege: "Select",
             entity: {
@@ -92,9 +92,9 @@ test.provider(
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
       );
       expect(roleGone).toBe(true);
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:privilege", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

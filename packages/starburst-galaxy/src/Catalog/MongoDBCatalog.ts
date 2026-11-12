@@ -38,7 +38,7 @@ export interface MongoDBSshTunnelConnection {
 /** Galaxy connects through a PrivateLink connection (MongoDB Atlas). */
 export interface MongoDBPrivateLinkConnection {
   readonly type: "privateLink";
-  /** ID of the Galaxy PrivateLink connection (see `StarburstGalaxy.PrivateLink`). */
+  /** ID of the Galaxy PrivateLink connection (see `StarburstGalaxy.Network.PrivateLink`). */
   readonly privateLinkId: string;
 }
 
@@ -105,7 +105,7 @@ export interface MongoDBCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type MongoDBCatalog = Resource<
-  "StarburstGalaxy.MongoDBCatalog",
+  "StarburstGalaxy.Catalog.MongoDBCatalog",
   MongoDBCatalogProps,
   MongoDBCatalogAttributes,
   never,
@@ -133,14 +133,14 @@ export type MongoDBCatalog = Resource<
  * **Example:** A MongoDB Atlas cluster through its SRV record
  * ```typescript
  * const password = yield* Config.Redacted("ATLAS_PASSWORD");
- * const events = yield* StarburstGalaxy.MongoDBCatalog("Events", {
+ * const events = yield* StarburstGalaxy.Catalog.MongoDBCatalog("Events", {
  *   connection: { type: "direct", hosts: "events.abcde.mongodb.net" },
  *   dnsSeedListEnabled: true,
  *   regions: ["aws-us-east1"],
  *   username: "galaxy",
  *   password,
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [events.catalogId],
  * });
@@ -149,13 +149,13 @@ export type MongoDBCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const events = StarburstGalaxy.MongoDBCatalog.lookup({ name: "events" });
+ * const events = StarburstGalaxy.Catalog.MongoDBCatalog.lookup({ name: "events" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const MongoDBCatalog = Resource<MongoDBCatalog>("StarburstGalaxy.MongoDBCatalog");
+export const MongoDBCatalog = Resource<MongoDBCatalog>("StarburstGalaxy.Catalog.MongoDBCatalog");
 
 const connectionOf = (shape: MongoDBCatalogShape): MongoDBConnection =>
   shape.connectionType === "direct"

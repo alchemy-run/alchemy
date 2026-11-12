@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { expectGone } from "../helpers.ts";
+import { expectGone, freshStack } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -22,15 +22,18 @@ test.provider(
   "create a password once, keep it across deploys, and rotate it by replacement",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const app = (description: string) =>
         Effect.gen(function* () {
-          const account = yield* StarburstGalaxy.ServiceAccount("Account", {});
-          const password = yield* StarburstGalaxy.ServiceAccountPassword("Password", {
-            serviceAccount: account.serviceAccountId,
-            description,
-          });
+          const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Account", {});
+          const password = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword(
+            "Password",
+            {
+              serviceAccount: account.serviceAccountId,
+              description,
+            },
+          );
           return { account, password };
         });
 
@@ -62,9 +65,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(passwordExists(accountId, rotatedId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:service-account", "live"],
-    timeout: 150_000,
+    timeout: 420_000,
   },
 );

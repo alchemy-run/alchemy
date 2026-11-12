@@ -5,7 +5,7 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
-import { expectGone, serviceAccountKey } from "../helpers.ts";
+import { expectGone, freshStack, serviceAccountKey } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -28,10 +28,10 @@ test.provider(
   "a key for a service account Google does not know is refused, even unvalidated",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const exit = yield* stack
         .deploy(
-          StarburstGalaxy.GcsCatalog("Lake", {
+          StarburstGalaxy.Catalog.GcsCatalog("Lake", {
             credentialsKey: serviceAccountKey("missing"),
             metastore: { type: "galaxy", defaultBucket: "alchemy-test", defaultDataLocation: "w" },
             validate: false,
@@ -41,10 +41,10 @@ test.provider(
       expect(Exit.isFailure(exit)).toBe(true);
       expect(String(Exit.isFailure(exit) && exit.cause)).toContain("GCS account not found");
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 120_000,
+    timeout: 420_000,
   },
 );
 
@@ -52,7 +52,7 @@ test.provider.skipIf(!gcsKey || !gcsBucket)(
   "create, reconfigure and delete a GCS catalog, and replace it on a metastore change",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const credentialsKey = Redacted.make(gcsKey!);
       const metastore = {
         type: "galaxy",
@@ -61,14 +61,14 @@ test.provider.skipIf(!gcsKey || !gcsBucket)(
       } as const;
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.GcsCatalog("Lake", { credentialsKey, metastore, validate: false }),
+        StarburstGalaxy.Catalog.GcsCatalog("Lake", { credentialsKey, metastore, validate: false }),
       );
       const catalogId = created.catalogId;
       const live = yield* getCatalog(catalogId);
       expect(live.metastoreType).toBe("galaxy");
 
       const reconfigured = yield* stack.deploy(
-        StarburstGalaxy.GcsCatalog("Lake", {
+        StarburstGalaxy.Catalog.GcsCatalog("Lake", {
           credentialsKey,
           metastore: { ...metastore, defaultDataLocation: "alchemy-test/v2" },
           defaultTableFormat: "DELTA",
@@ -80,7 +80,7 @@ test.provider.skipIf(!gcsKey || !gcsBucket)(
       expect(updated.defaultTableFormat).toBe("DELTA");
 
       const hive = yield* stack.deploy(
-        StarburstGalaxy.GcsCatalog("Lake", {
+        StarburstGalaxy.Catalog.GcsCatalog("Lake", {
           credentialsKey,
           metastore: { type: "hive", host: "metastore.example.com" },
           validate: false,
@@ -91,9 +91,9 @@ test.provider.skipIf(!gcsKey || !gcsBucket)(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(hive.catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

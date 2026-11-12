@@ -35,7 +35,7 @@ export interface DataProductProps {
   /** Schema in the catalog the product publishes. Changing it replaces the product. */
   readonly schemaName: string;
   /**
-   * ID of the data domain the product belongs to (see `StarburstGalaxy.DataDomain`).
+   * ID of the data domain the product belongs to (see `StarburstGalaxy.DataProduct.DataDomain`).
    * @default the account's default domain
    */
   readonly dataDomainId?: string;
@@ -85,7 +85,7 @@ export interface DataProductAttributes {
 }
 
 export type DataProduct = Resource<
-  "StarburstGalaxy.DataProduct",
+  "StarburstGalaxy.DataProduct.DataProduct",
   DataProductProps,
   DataProductAttributes,
   never,
@@ -108,7 +108,7 @@ export class DataProductNotResolved extends Data.TaggedError(
  *
  * Everything but the catalog and schema updates in place (the name
  * included); moving the product to another catalog or schema replaces it.
- * Add example queries with `StarburstGalaxy.DataProductUsageExample`.
+ * Add example queries with `StarburstGalaxy.DataProduct.DataProductUsageExample`.
  *
  * Data products have no labels or tags in Galaxy: a product Alchemy
  * created is recognized by its generated name.
@@ -118,9 +118,9 @@ export class DataProductNotResolved extends Data.TaggedError(
  * ### Publishing a schema
  * **Example:** The orders schema of a catalog, in its own domain
  * ```typescript
- * const sales = yield* StarburstGalaxy.DataDomain("Sales", { description: "Sales data" });
- * const shop = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "shop" });
- * yield* StarburstGalaxy.DataProduct("Orders", {
+ * const sales = yield* StarburstGalaxy.DataProduct.DataDomain("Sales", { description: "Sales data" });
+ * const shop = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "shop" });
+ * yield* StarburstGalaxy.DataProduct.DataProduct("Orders", {
  *   name: "Orders",
  *   summary: "Every order placed in the shop",
  *   catalogId: shop.catalogId,
@@ -133,9 +133,9 @@ export class DataProductNotResolved extends Data.TaggedError(
  * ### Naming a contact
  * **Example:** The person who owns the data
  * ```typescript
- * const owner = StarburstGalaxy.User.lookup({ email: "ada@example.com" });
- * const shop = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "shop" });
- * yield* StarburstGalaxy.DataProduct("Orders", {
+ * const owner = StarburstGalaxy.User.User.lookup({ email: "ada@example.com" });
+ * const shop = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "shop" });
+ * yield* StarburstGalaxy.DataProduct.DataProduct("Orders", {
  *   summary: "Every order placed in the shop",
  *   catalogId: shop.catalogId,
  *   schemaName: "orders",
@@ -146,7 +146,7 @@ export class DataProductNotResolved extends Data.TaggedError(
  * @resource
  * @product Data products
  */
-export const DataProduct = Resource<DataProduct>("StarburstGalaxy.DataProduct");
+export const DataProduct = Resource<DataProduct>("StarburstGalaxy.DataProduct.DataProduct");
 
 const toAttributes = (product: DataProductV2): DataProductAttributes => ({
   dataProductId: product.dataProductId,
@@ -186,7 +186,7 @@ export const DataProductProvider = () =>
 
     nuke: {
       // Products sit in a domain and on a catalog: delete them first.
-      dependsOn: ["StarburstGalaxy.DataDomain", "StarburstGalaxy.*Catalog"],
+      dependsOn: ["StarburstGalaxy.DataProduct.DataDomain", "StarburstGalaxy.Catalog.*"],
     },
 
     diff: Effect.fn(function* ({ news, olds }) {

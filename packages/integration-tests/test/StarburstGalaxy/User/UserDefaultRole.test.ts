@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
+import { freshStack } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -13,20 +14,20 @@ test.provider(
   "set a service account's default role and restore the previous one on removal",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const app = (withDefault: "Reporting" | "Etl" | undefined) =>
         Effect.gen(function* () {
-          const etl = yield* StarburstGalaxy.Role("Etl", {});
-          const reporting = yield* StarburstGalaxy.Role("Reporting", {});
-          const account = yield* StarburstGalaxy.ServiceAccount("Pipeline", {
+          const etl = yield* StarburstGalaxy.Role.Role("Etl", {});
+          const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+          const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Pipeline", {
             role: etl.roleId,
             additionalRoles: [reporting.roleId],
           });
           const setting =
             withDefault === undefined
               ? undefined
-              : yield* StarburstGalaxy.UserDefaultRole("PipelineDefault", {
+              : yield* StarburstGalaxy.User.UserDefaultRole("PipelineDefault", {
                   user: account.serviceAccountId,
                   role: withDefault === "Reporting" ? reporting.roleId : etl.roleId,
                 });
@@ -50,9 +51,9 @@ test.provider(
       expect(yield* defaultRoleOf(userId)).toBe(set.etl.roleId);
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:user", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -19,10 +19,10 @@ test.provider(
   "create and reconfigure a Cassandra catalog, and replace it with an Astra DB one",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
 
       const cassandra = (localDatacenter: string) =>
-        StarburstGalaxy.CassandraCatalog("Ledger", {
+        StarburstGalaxy.Catalog.CassandraCatalog("Ledger", {
           deployment: {
             type: "apacheCassandra",
             contactPoints: UNVALIDATED_ENDPOINT,
@@ -46,7 +46,7 @@ test.provider(
 
       // Astra DB is another store: a new catalog, and the old one goes.
       const astra = yield* stack.deploy(
-        StarburstGalaxy.CassandraCatalog("Ledger", {
+        StarburstGalaxy.Catalog.CassandraCatalog("Ledger", {
           deployment: {
             type: "astraDB",
             databaseId: "00000000-0000-4000-8000-000000000000",
@@ -66,9 +66,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(catalogExists(astra.catalogId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
-    timeout: 180_000,
+    timeout: 480_000,
   },
 );

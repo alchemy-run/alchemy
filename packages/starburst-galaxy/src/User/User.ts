@@ -44,7 +44,7 @@ export interface UserAttributes {
 }
 
 export type User = Resource<
-  "StarburstGalaxy.User",
+  "StarburstGalaxy.User.User",
   UserLookup,
   UserAttributes,
   never,
@@ -59,7 +59,7 @@ export type User = Resource<
  *
  * Users are only looked up. Galaxy's API can invite a user by email but has
  * no operation to remove one, so a user Alchemy invited would outlive every
- * `destroy`. Declaring `StarburstGalaxy.User(...)` in a stack fails with
+ * `destroy`. Declaring `StarburstGalaxy.User.User(...)` in a stack fails with
  * `StarburstGalaxy.LookupOnlyResource`.
  *
  * @see https://docs.starburst.io/starburst-galaxy/security-and-compliance/manage-galaxy-access/manage-users-roles-and-tags/manage-users-without-sso.html
@@ -67,9 +67,9 @@ export type User = Resource<
  * ### Looking up a user
  * **Example:** Grant a stack-owned role to an existing person
  * ```typescript
- * const ada = StarburstGalaxy.User.lookup({ email: "ada@example.com" });
- * const analysts = yield* StarburstGalaxy.Role("Analysts", {});
- * yield* StarburstGalaxy.RoleGrant("AdaIsAnalyst", {
+ * const ada = StarburstGalaxy.User.User.lookup({ email: "ada@example.com" });
+ * const analysts = yield* StarburstGalaxy.Role.Role("Analysts", {});
+ * yield* StarburstGalaxy.Role.RoleGrant("AdaIsAnalyst", {
  *   role: analysts.roleId,
  *   principal: { type: "User", userId: ada.userId },
  * });
@@ -77,14 +77,14 @@ export type User = Resource<
  *
  * **Example:** A service account, by ID
  * ```typescript
- * const etl = yield* StarburstGalaxy.ServiceAccount("Etl", { role: analystsRoleId });
- * const etlUser = StarburstGalaxy.User.lookup({ userId: etl.serviceAccountId });
+ * const etl = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Etl", { role: analystsRoleId });
+ * const etlUser = StarburstGalaxy.User.User.lookup({ userId: etl.serviceAccountId });
  * ```
  *
  * @resource
  * @product Access
  */
-export const User = Resource<User>("StarburstGalaxy.User");
+export const User = Resource<User>("StarburstGalaxy.User.User");
 
 /** A user's attributes from Galaxy's shape. */
 export const userAttributes = (user: UserShape): UserAttributes => ({
@@ -107,7 +107,7 @@ export const getUser = (userId: string) =>
 export const UserProvider = () =>
   Provider.succeed(User, {
     ...lookupOnlyLifecycle(
-      "StarburstGalaxy.User",
+      "StarburstGalaxy.User.User",
       "Galaxy has no operation to remove a user, so an invited user would outlive the stack",
     ),
     lookup: Effect.fn(function* (key) {

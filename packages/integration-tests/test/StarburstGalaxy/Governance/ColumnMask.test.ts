@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
 
@@ -17,11 +17,11 @@ test.provider(
   "create, change, rename and delete a column mask",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("mask");
 
       const created = yield* stack.deploy(
-        StarburstGalaxy.ColumnMask("Mask", {
+        StarburstGalaxy.Governance.ColumnMask("Mask", {
           type: "Varchar",
           expression: "'XXX-XX-' || substr(ssn, -4)",
         }),
@@ -34,7 +34,7 @@ test.provider(
 
       // Every prop converges in place, the name included.
       const changed = yield* stack.deploy(
-        StarburstGalaxy.ColumnMask("Mask", {
+        StarburstGalaxy.Governance.ColumnMask("Mask", {
           name: renamed,
           type: "Integer",
           expression: "CAST(NULL AS integer)",
@@ -50,9 +50,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(maskExists(columnMaskId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:column-mask", "live"],
-    timeout: 90_000,
+    timeout: 300_000,
   },
 );

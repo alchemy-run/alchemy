@@ -3,7 +3,7 @@
  * needs both the ID and the email of the user.
  */
 export interface Contact {
-  /** The user's ID (see `StarburstGalaxy.User`). */
+  /** The user's ID (see `StarburstGalaxy.User.User`). */
   readonly userId: string;
   /** The user's email. */
   readonly email: string;

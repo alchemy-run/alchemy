@@ -2,7 +2,6 @@ import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import type { Validate } from "@distilled.cloud/starburst-galaxy/catalog";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
-import type { ProviderError } from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -57,7 +56,7 @@ export interface CatalogBaseProps {
    * Have Galaxy connect with the given settings on every create and update,
    * and check the stored catalog with Galaxy's validation after each deploy.
    * A catalog that fails the check fails the deploy with
-   * `StarburstGalaxy.CatalogValidationFailed`, and stays in Galaxy so a fixed
+   * `StarburstGalaxy.Catalog.CatalogValidationFailed`, and stays in Galaxy so a fixed
    * configuration updates it in place.
    * @default true
    */
@@ -128,7 +127,7 @@ export class CatalogNotResolved extends Data.TaggedError("StarburstGalaxy.Catalo
   }
 }
 
-type Op<A> = Effect.Effect<A, ProviderError, galaxy.StarburstGalaxyOpContext>;
+type Op<A, E> = Effect.Effect<A, E, galaxy.StarburstGalaxyOpContext>;
 
 /**
  * One catalog kind: its distilled operations and the pure mappings between
@@ -141,21 +140,22 @@ export interface CatalogKind<
   Attrs extends CatalogBaseAttributes,
   Create,
   Patch,
+  E,
 > {
   /** Galaxy's name for the kind, for messages: `"PostgreSQL"`. */
   readonly kind: string;
   /** `get<Kind>Catalog`; `undefined` when Galaxy reports `NotFound`. */
-  readonly get: (catalogId: string) => Op<Shape | undefined>;
+  readonly get: (catalogId: string) => Op<Shape | undefined, E>;
   /** `create<Kind>Catalog`; `undefined` when the name is taken (`Conflict`). */
-  readonly create: (request: Create) => Op<Shape | undefined>;
+  readonly create: (request: Create) => Op<Shape | undefined, E>;
   /** `update<Kind>Catalog` (PATCH: only the fields present change). */
-  readonly update: (catalogId: string, patch: Patch) => Op<Shape>;
+  readonly update: (catalogId: string, patch: Patch) => Op<Shape, E>;
   /** `validate<Kind>Catalog`: `GET …/catalog/{id}/validate` on a stored catalog. */
-  readonly validate: (catalogId: string) => Op<Validate>;
+  readonly validate: (catalogId: string) => Op<Validate, E>;
   /** `delete<Kind>Catalog`; succeeds when Galaxy reports `NotFound`. */
-  readonly delete: (catalogId: string) => Op<void>;
+  readonly delete: (catalogId: string) => Op<void, E>;
   /** `list<Kind>Catalogs`, every page. */
-  readonly list: Stream.Stream<Shape, ProviderError, galaxy.StarburstGalaxyOpContext>;
+  readonly list: Stream.Stream<Shape, E, galaxy.StarburstGalaxyOpContext>;
   /** The create request for `props` under the physical `name`. */
   readonly toCreate: (name: string, props: Props) => Create;
   /**
@@ -193,8 +193,9 @@ export const catalogLifecycle = <
   Attrs extends CatalogBaseAttributes,
   Create,
   Patch,
+  E,
 >(
-  def: CatalogKind<Props, Shape, Attrs, Create, Patch>,
+  def: CatalogKind<Props, Shape, Attrs, Create, Patch, E>,
 ) => {
   /**
    * By id when one is known, else by name. `listCatalogs` covers every

@@ -77,7 +77,7 @@ export interface PostgresqlCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type PostgresqlCatalog = Resource<
-  "StarburstGalaxy.PostgresqlCatalog",
+  "StarburstGalaxy.Catalog.PostgresqlCatalog",
   PostgresqlCatalogProps,
   PostgresqlCatalogAttributes,
   never,
@@ -105,13 +105,13 @@ export type PostgresqlCatalog = Resource<
  * **Example:** A catalog over a Neon project, attached to a cluster
  * ```typescript
  * const project = yield* Neon.Project("app");
- * const pg = yield* StarburstGalaxy.PostgresqlCatalog("App", {
+ * const pg = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("App", {
  *   endpoint: project.origin.host,
  *   databaseName: project.origin.database,
  *   username: project.origin.user,
  *   password: project.origin.password,
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [pg.catalogId],
  * });
@@ -120,7 +120,7 @@ export type PostgresqlCatalog = Resource<
  * **Example:** A read-only catalog with an explicit name
  * ```typescript
  * const password = yield* Config.Redacted("ORDERS_READER_PASSWORD");
- * const pg = yield* StarburstGalaxy.PostgresqlCatalog("Orders", {
+ * const pg = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Orders", {
  *   name: "orders",
  *   description: "Orders replica",
  *   readOnly: true,
@@ -135,7 +135,7 @@ export type PostgresqlCatalog = Resource<
  * **Example:** A new password value is a change the next deploy sends to Galaxy
  * ```typescript
  * const password = yield* Config.Redacted("ORDERS_READER_PASSWORD_V2");
- * yield* StarburstGalaxy.PostgresqlCatalog("Orders", {
+ * yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Orders", {
  *   endpoint: "orders.example.com",
  *   databaseName: "orders",
  *   username: "galaxy_reader",
@@ -146,7 +146,7 @@ export type PostgresqlCatalog = Resource<
  * ### Storing a catalog without checking it
  * **Example:** Skip Galaxy's connection check
  * ```typescript
- * yield* StarburstGalaxy.PostgresqlCatalog("Later", {
+ * yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Later", {
  *   endpoint: "db.internal.example.com",
  *   databaseName: "app",
  *   username: "galaxy",
@@ -158,13 +158,15 @@ export type PostgresqlCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const sales = StarburstGalaxy.PostgresqlCatalog.lookup({ name: "sales" });
+ * const sales = StarburstGalaxy.Catalog.PostgresqlCatalog.lookup({ name: "sales" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const PostgresqlCatalog = Resource<PostgresqlCatalog>("StarburstGalaxy.PostgresqlCatalog");
+export const PostgresqlCatalog = Resource<PostgresqlCatalog>(
+  "StarburstGalaxy.Catalog.PostgresqlCatalog",
+);
 
 const toAttributes = (shape: PostgresqlCatalogShape): PostgresqlCatalogAttributes => ({
   catalogId: shape.catalogId,

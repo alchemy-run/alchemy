@@ -38,7 +38,7 @@ export interface OpenSearchAccessKeyAuth {
   readonly region: string;
 }
 
-/** SigV4 signing as a cross-account IAM role (see `StarburstGalaxy.CrossAccountIamRole`). */
+/** SigV4 signing as a cross-account IAM role (see `StarburstGalaxy.CloudAccess.CrossAccountIamRole`). */
 export interface OpenSearchRoleAuth {
   readonly type: "role";
   /** ARN of the IAM role registered with Galaxy. */
@@ -78,7 +78,7 @@ export interface OpenSearchCatalogAttributes extends CatalogBaseAttributes {
 }
 
 export type OpenSearchCatalog = Resource<
-  "StarburstGalaxy.OpenSearchCatalog",
+  "StarburstGalaxy.Catalog.OpenSearchCatalog",
   OpenSearchCatalogProps,
   OpenSearchCatalogAttributes,
   never,
@@ -105,7 +105,7 @@ export type OpenSearchCatalog = Resource<
  * ### Creating a catalog
  * **Example:** An Amazon OpenSearch Service domain, signed with an IAM role
  * ```typescript
- * const logs = yield* StarburstGalaxy.OpenSearchCatalog("Logs", {
+ * const logs = yield* StarburstGalaxy.Catalog.OpenSearchCatalog("Logs", {
  *   endpoint: "https://search-logs-abc123.us-east-1.es.amazonaws.com",
  *   auth: {
  *     type: "role",
@@ -114,7 +114,7 @@ export type OpenSearchCatalog = Resource<
  *   },
  *   readOnly: true,
  * });
- * yield* StarburstGalaxy.Cluster("Analytics", {
+ * yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
  *   cloudRegionId: "aws-us-east1",
  *   catalogs: [logs.catalogId],
  * });
@@ -124,7 +124,7 @@ export type OpenSearchCatalog = Resource<
  * **Example:** Fine-grained access control's internal user
  * ```typescript
  * const password = yield* Config.Redacted("OPENSEARCH_PASSWORD");
- * yield* StarburstGalaxy.OpenSearchCatalog("Logs", {
+ * yield* StarburstGalaxy.Catalog.OpenSearchCatalog("Logs", {
  *   endpoint: "https://logs.example.com",
  *   auth: { type: "basic", username: "galaxy", password },
  * });
@@ -133,13 +133,15 @@ export type OpenSearchCatalog = Resource<
  * ### Looking up an existing catalog
  * **Example:** Reference a catalog created in the Galaxy console
  * ```typescript
- * const logs = StarburstGalaxy.OpenSearchCatalog.lookup({ name: "logs" });
+ * const logs = StarburstGalaxy.Catalog.OpenSearchCatalog.lookup({ name: "logs" });
  * ```
  *
  * @resource
  * @product Catalogs
  */
-export const OpenSearchCatalog = Resource<OpenSearchCatalog>("StarburstGalaxy.OpenSearchCatalog");
+export const OpenSearchCatalog = Resource<OpenSearchCatalog>(
+  "StarburstGalaxy.Catalog.OpenSearchCatalog",
+);
 
 /** The auth's non-secret settings, as Galaxy names them. */
 const authSettingsOf = (auth: OpenSearchAuth) =>

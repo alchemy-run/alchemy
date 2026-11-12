@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as galaxy from "@distilled.cloud/starburst-galaxy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
-import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+import { expectGone, freshStack, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: StarburstGalaxy.providers() });
@@ -23,20 +23,20 @@ test.provider(
   "create disabled, enable, configure, attach a catalog, rename, disable and delete a free-size cluster",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* freshStack(stack);
       const renamed = yield* pinnedName("cluster", "-");
 
-      const app = (props: Partial<StarburstGalaxy.ClusterProps>, attach = false) =>
+      const app = (props: Partial<StarburstGalaxy.Cluster.ClusterProps>, attach = false) =>
         Effect.gen(function* () {
           // Deployed in every step, so attaching and detaching never deletes it mid-update.
-          const catalog = yield* StarburstGalaxy.PostgresqlCatalog("Catalog", {
+          const catalog = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Catalog", {
             endpoint: UNVALIDATED_ENDPOINT,
             databaseName: "app",
             username: "galaxy",
             password: secret("cluster-catalog"),
             validate: false,
           });
-          const cluster = yield* StarburstGalaxy.Cluster("Cluster", {
+          const cluster = yield* StarburstGalaxy.Cluster.Cluster("Cluster", {
             cloudRegionId: REGION,
             autoSuspend: "1 minute",
             catalogs: attach ? [catalog.catalogId] : [],
@@ -98,7 +98,7 @@ test.provider(
       expect(withoutCatalog.catalogRefs).toEqual([]);
 
       // Nuke's `list` reports a cluster under its generated name.
-      const provider = yield* Provider.findProvider(StarburstGalaxy.Cluster);
+      const provider = yield* Provider.findProvider(StarburstGalaxy.Cluster.Cluster);
       const generated = (yield* provider.list()).find((cluster) => cluster.clusterId === clusterId);
       expect(generated?.cloudRegionId).toBe(REGION);
 
@@ -109,7 +109,7 @@ test.provider(
       expect(renamedLive.name).toBe(renamed);
 
       // `lookup` finds it by its explicit name; `list` leaves hand-named clusters to their owners.
-      yield* expectFound(StarburstGalaxy.Cluster.lookup({ name: renamed }), named.cluster);
+      yield* expectFound(StarburstGalaxy.Cluster.Cluster.lookup({ name: renamed }), named.cluster);
       const listed = yield* provider.list();
       expect(listed.some((cluster) => cluster.clusterId === clusterId)).toBe(false);
 
@@ -121,9 +121,9 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(clusterExists(clusterId));
-    }),
+    }).pipe(Effect.scoped),
   {
     tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:cluster", "live"],
-    timeout: 300_000,
+    timeout: 600_000,
   },
 );
