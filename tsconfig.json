@@ -410,6 +410,12 @@
       "path": "./examples/boat-program/tsconfig.json"
     },
     {
+      "path": "./examples/starburst-galaxy-governance/tsconfig.json"
+    },
+    {
+      "path": "./examples/starburst-galaxy-postgres/tsconfig.json"
+    },
+    {
       "path": "./examples/e2b-program-async/tsconfig.json"
     },
     {

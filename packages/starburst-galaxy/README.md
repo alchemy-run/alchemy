@@ -23,33 +23,33 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const password = yield* Config.Redacted("ORDERS_READER_PASSWORD");
-    const orders = yield* StarburstGalaxy.PostgresqlCatalog("Orders", {
+    const orders = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Orders", {
       endpoint: "orders.example.com",
       databaseName: "orders",
       username: "galaxy_reader",
       password,
     });
 
-    const cluster = yield* StarburstGalaxy.Cluster("Analytics", {
+    const cluster = yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
       cloudRegionId: "aws-us-east1",
       catalogs: [orders.catalogId],
       autoSuspend: "5 minutes",
     });
 
-    const reporting = yield* StarburstGalaxy.Role("Reporting", {});
-    yield* StarburstGalaxy.RolePrivilege("ReportingUseCluster", {
+    const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+    yield* StarburstGalaxy.Role.RolePrivilege("ReportingUseCluster", {
       role: reporting.roleId,
       privilege: "UseCluster",
       entity: { kind: "Cluster", clusterId: cluster.clusterId },
     });
-    yield* StarburstGalaxy.RolePrivilege("ReportingSelect", {
+    yield* StarburstGalaxy.Role.RolePrivilege("ReportingSelect", {
       role: reporting.roleId,
       privilege: "Select",
       entity: { kind: "Table", catalogId: orders.catalogId, schemaName: "public", tableName: "*" },
     });
 
-    const account = yield* StarburstGalaxy.ServiceAccount("Reporter", { role: reporting.roleId });
-    const login = yield* StarburstGalaxy.ServiceAccountPassword("ReporterPassword", {
+    const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", { role: reporting.roleId });
+    const login = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
       serviceAccount: account.serviceAccountId,
     });
 
@@ -60,7 +60,11 @@ export default Alchemy.Stack(
 
 Connect any Trino client to `trinoUri` as `user` with `password`.
 
+Beyond catalogs, clusters and roles, the provider covers governance (column masks, row filters, tags, policies), data products, data quality checks and schedules, catalog metadata, SQL jobs and streaming ingestion, plus bindings that call Galaxy from a Worker or any other host.
+
 ## Learn more
 
 - [Starburst Galaxy on alchemy.run](https://alchemy.run/starburst-galaxy)
 - [Setup](https://alchemy.run/starburst-galaxy/setup)
+- [Tutorial](https://alchemy.run/starburst-galaxy/tutorial)
+- [Credentials & bindings](https://alchemy.run/starburst-galaxy/credentials)
