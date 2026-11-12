@@ -80,6 +80,25 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
   );
 
   test(
+    "GetUsageCost and GetCreditBalances read the last week's cost and the credits left",
+    Effect.gen(function* () {
+      const body = yield* get<{
+        grandTotal: number;
+        costEntities: string[];
+        remaining: number;
+        balances: number;
+      }>("/billing");
+      // The test organization runs services, so the week has a cost; it
+      // is a trial, so it has a credit balance.
+      expect(body.grandTotal).toBeGreaterThan(0);
+      expect(body.costEntities).toContain("service");
+      expect(body.remaining).toBeGreaterThan(0);
+      expect(body.balances).toBeGreaterThanOrEqual(1);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
     "each binding's role allows only view permissions on the organization",
     Effect.gen(function* () {
       const { organizationId } = yield* stack;
@@ -88,7 +107,7 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
         (r) => r.type === "custom" && (r.name ?? "").startsWith(ROLE_PREFIX),
       );
       // One role per binding the Worker holds.
-      expect(scoped.length).toEqual(5);
+      expect(scoped.length).toEqual(7);
       for (const role of scoped) {
         expect(role.policies?.length).toEqual(1);
         const [policy] = role.policies ?? [];

@@ -31,6 +31,7 @@
     ".": "./src/index.ts",
     "./ApiKeys": "./src/ApiKeys/index.ts",
     "./Backup": "./src/Backup/index.ts",
+    "./Billing": "./src/Billing/index.ts",
     "./ClickPipes": "./src/ClickPipes/index.ts",
     "./ClickStack": "./src/ClickStack/index.ts",
     "./Notifications": "./src/Notifications/index.ts",
@@ -66,6 +67,12 @@
         "bun": "./src/Backup/index.ts",
         "worker": "./src/Backup/index.ts",
         "default": "./lib/Backup/index.js"
+      },
+      "./Billing": {
+        "types": "./lib/Billing/index.d.ts",
+        "bun": "./src/Billing/index.ts",
+        "worker": "./src/Billing/index.ts",
+        "default": "./lib/Billing/index.js"
       },
       "./ClickPipes": {
         "types": "./lib/ClickPipes/index.d.ts",

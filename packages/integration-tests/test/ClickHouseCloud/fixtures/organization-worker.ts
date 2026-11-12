@@ -16,6 +16,8 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
     const listQuotas = yield* ClickHouseCloud.Organization.ListOrganizationQuotas(Org);
     const getQuota = yield* ClickHouseCloud.Organization.GetOrganizationQuota(Org);
     const discover = yield* ClickHouseCloud.Prometheus.GetOrganizationPrometheusDiscovery(Org);
+    const getUsageCost = yield* ClickHouseCloud.Billing.GetUsageCost(Org);
+    const getCreditBalances = yield* ClickHouseCloud.Billing.GetCreditBalances(Org);
 
     return {
       fetch: Effect.gen(function* () {
@@ -51,6 +53,19 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
           });
         }
 
+        if (url.pathname === "/billing") {
+          const today = new Date().toISOString().slice(0, 10);
+          const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+          const usage = yield* getUsageCost({ fromDate: weekAgo, toDate: today });
+          const credits = yield* getCreditBalances();
+          return yield* HttpServerResponse.json({
+            grandTotal: usage.grandTotalCHC ?? null,
+            costEntities: (usage.costs ?? []).map((c) => c.entityType ?? null),
+            remaining: credits.totalRemainingCredits ?? null,
+            balances: (credits.balances ?? []).length,
+          });
+        }
+
         // Not 404: a fresh workers.dev URL answers 404 until it propagates.
         return HttpServerResponse.text("no such route", { status: 400 });
       }).pipe(
@@ -68,6 +83,8 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
         ClickHouseCloud.Organization.ListOrganizationQuotasHttp,
         ClickHouseCloud.Organization.GetOrganizationQuotaHttp,
         ClickHouseCloud.Prometheus.GetOrganizationPrometheusDiscoveryHttp,
+        ClickHouseCloud.Billing.GetUsageCostHttp,
+        ClickHouseCloud.Billing.GetCreditBalancesHttp,
       ),
     ),
   ),
