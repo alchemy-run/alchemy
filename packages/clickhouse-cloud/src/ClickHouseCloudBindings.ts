@@ -28,7 +28,27 @@ import * as Layer from "effect/Layer";
 import { ApiKey } from "./ApiKeys/ApiKey.ts";
 import type { Organization } from "./Organization/Organization.ts";
 import { Role } from "./RoleManagement/Role.ts";
-import type { Service } from "./Service/Service.ts";
+
+/**
+ * Group permissions by the scope they act in (`control-plane:service`,
+ * `sql-console:database`, …): a policy may hold permissions of one scope
+ * only ("All permissions in a policy must target the same resource scope").
+ */
+const byScope = (permissions: readonly string[]) => {
+  const groups = new Map<string, string[]>();
+  for (const permission of permissions) {
+    const scope = permission.split(":").slice(0, 2).join(":");
+    groups.set(scope, [...(groups.get(scope) ?? []), permission]);
+  }
+  return [...groups.values()];
+};
+
+/** A resource that lives in one service: a service, a ClickPipe, a saved query, …. */
+export interface ServiceScoped {
+  readonly LogicalId: string;
+  readonly serviceId: Output.Output<string, never>;
+  readonly organizationId: Output.Output<string, never>;
+}
 
 /** Runs ClickHouse Cloud SDK effects with the host's own API key. */
 export type Run<Ids> = <A, E>(
@@ -63,7 +83,11 @@ export const BindKey = Effect.gen(function* () {
     const hostId = host?.LogicalId ?? "";
     const prefix = `${hostId}${binding}${target.LogicalId}`;
     const role = yield* Grant(`${prefix}Role`, {
-      policies: [{ allowDeny: "ALLOW", permissions: [...permissions], resources: [scope] }],
+      policies: byScope(permissions).map((group) => ({
+        allowDeny: "ALLOW" as const,
+        permissions: group,
+        resources: [scope],
+      })),
     });
     const key = yield* Key(`${prefix}Key`, { assignedRoleIds: [role.roleId] });
     return {
@@ -119,7 +143,11 @@ export const Bind = Effect.gen(function* () {
  */
 export const BindService = Effect.gen(function* () {
   const bind = yield* Bind;
-  return Effect.fn(function* (binding: string, target: Service, permissions: readonly string[]) {
+  return Effect.fn(function* (
+    binding: string,
+    target: ServiceScoped,
+    permissions: readonly string[],
+  ) {
     const { authorize } = yield* bind(
       binding,
       target,

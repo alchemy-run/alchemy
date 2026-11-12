@@ -1,4 +1,5 @@
 import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+import * as Effect from "effect/Effect";
 
 /** The smallest service: one 8 GB replica that idles after 5 minutes. */
 export const small = {
@@ -31,3 +32,26 @@ export const stationsSource = {
   url: STATIONS_CSV,
   isContinuous: false,
 } as const;
+
+/** A one-shot pipe into the bound service, bound by GetClickPipe and UpdateClickPipeState. */
+export const StationsPipe = Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  return yield* ClickHouseCloud.ClickPipes.ClickPipe("BindingsStations", {
+    serviceId: analytics.serviceId,
+    source: { objectStorage: stationsSource },
+    destination: {
+      database: "default",
+      table: "bindings_stations",
+      managedTable: true,
+      tableDefinition: { engine: { type: "MergeTree" }, sortingKey: ["station"] },
+      columns: [
+        { name: "station", type: "String" },
+        { name: "avg", type: "Float64" },
+      ],
+    },
+    fieldMappings: [
+      { sourceField: "station", destinationField: "station" },
+      { sourceField: "avg", destinationField: "avg" },
+    ],
+  });
+});

@@ -309,6 +309,20 @@ export const RoleProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (output.type === "system") return;
+          // Live: deleting a role that still holds a `sql-console:` policy
+          // answers 500 `Internal error`; dropping those policies first lets
+          // the delete through.
+          const sqlConsole = (p: RolePolicy) =>
+            p.permissions.some((permission) => permission.startsWith("sql-console:"));
+          if (output.policies.some(sqlConsole)) {
+            yield* roles
+              .updateOrganizationRole({
+                organizationId: output.organizationId,
+                roleId: output.roleId,
+                policies: output.policies.filter((p) => !sqlConsole(p)),
+              })
+              .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          }
           yield* roles
             .deleteOrganizationRole({
               organizationId: output.organizationId,
