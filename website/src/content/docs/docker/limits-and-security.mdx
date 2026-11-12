@@ -1,0 +1,97 @@
+---
+title: Limits & security
+description: Cap a container's memory, CPU and processes, run it as an unprivileged user with a read-only filesystem and no capabilities, apply seccomp and AppArmor profiles, and rotate its logs.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Containers share the host's kernel. Without limits, one container can use all the host's memory and CPU, and its processes run as root with a set of Linux **capabilities** that let them change files and settings the image owns. Both are defaults you can tighten per container: limits cap what it can use, and dropping privileges shrinks what a compromised process could do.
+
+<Tree
+  nodes={[
+    { id: "c", label: "restricted-worker", type: "container", icon: "box", areas: ["proc root", "proc tmp"], colGap: 4 },
+    { id: "proc", label: "worker process", type: "your program", parent: "c", tone: "accent", icon: "cpu", specs: [["user", "1000:1000"], ["capabilities", "none"], ["memory", "256m"], ["cpus", "0.5"]] },
+    { id: "root", label: "root filesystem", type: "read-only", parent: "c", tone: "muted", icon: "lock" },
+    { id: "tmp", label: "/tmp", type: "tmpfs · 32m · writable", parent: "c", icon: "hard-drive" },
+  ]}
+  links={[
+    { from: "proc", to: "root", label: "reads" },
+    { from: "proc", to: "tmp", label: "writes" },
+  ]}
+  caption="The process runs as an ordinary user with no capabilities, inside fixed memory and CPU limits. It can read the image, but it can write only to the paths you mount."
+/>
+
+## Cap memory, CPU and processes
+
+```typescript
+const worker = yield* Docker.Container("worker", {
+  image: "ghcr.io/acme/worker:latest",
+  memory: "256m",
+  memorySwap: "256m",
+  memoryReservation: "128m",
+  cpus: 0.5,
+  pidsLimit: 128,
+  start: true,
+});
+```
+
+`memory` is a hard limit: when the container goes over it, the kernel kills a process inside. `memorySwap` caps memory **plus** swap, so setting it equal to `memory` turns swap off. `memoryReservation` is a softer target Docker holds the container to when the host runs short. `cpus: 0.5` allows half a core, and `pidsLimit` caps processes and threads, which stops a fork bomb.
+
+`sharedMemorySize` sizes `/dev/shm`, which Postgres uses for parallel queries; Docker's default is 64 MB. It counts separately from `memory`. A container that shares another's IPC namespace uses that namespace's `/dev/shm`, so it can't set one.
+
+## Drop privileges
+
+```typescript
+const worker = yield* Docker.Container("restricted-worker", {
+  image: "ghcr.io/acme/worker:latest",
+  user: "1000:1000",
+  capDrop: ["ALL"],
+  noNewPrivileges: true,
+  readOnlyRootFilesystem: true,
+  tmpfs: [{ path: "/tmp", size: "32m", mode: 0o1777 }],
+  init: true,
+  start: true,
+});
+```
+
+`user` runs the process as that user and group instead of root. `capDrop: ["ALL"]` removes every capability, and `capAdd` gives back only the ones the program needs, like `NET_BIND_SERVICE` to listen on port 80. `noNewPrivileges` stops a process gaining privileges through a setuid binary.
+
+`readOnlyRootFilesystem` is Docker's `--read-only`. The program can then write only where you mount something: a `tmpfs` for scratch space that lives in memory, or a [Volume](/docker/volumes) for data that must last. `init` runs a small init process that forwards signals and cleans up child processes.
+
+Check what your image needs before you apply these. Many images expect to run as root or write to their own directories, and fail at startup without that.
+
+## Apply seccomp and AppArmor profiles
+
+```typescript
+const worker = yield* Docker.Container("profiled-worker", {
+  image: "ghcr.io/acme/worker:latest",
+  seccompProfile: "./security/worker-seccomp.json",
+  appArmorProfile: "worker-profile",
+  start: true,
+});
+```
+
+A **seccomp** profile lists the system calls the container may make. `seccompProfile` is a JSON file on your machine, and editing it recreates the container, even when the path stays the same. An **AppArmor** profile limits which files and resources it can touch. It must already be loaded on the engine's host, and only Linux hosts with AppArmor have it. Leave both unset to keep Docker's defaults, and avoid `"unconfined"`, which turns them off.
+
+`groupAdd` adds supplementary groups, `ulimits` sets per-process limits like open files (`{ nofile: { soft: 1024, hard: 4096 } }`), and `devices` exposes a host device. `userNamespace: "host"` opts out of the engine's user remapping, which weakens isolation rather than strengthening it.
+
+`gpuDevices: "all"` (or `"device=0"`) hands GPUs to the container, on a host with the NVIDIA container runtime. `privileged: true` gives the container nearly every power the host has; reserve it for tools like Docker-in-Docker.
+
+## Rotate logs and stop cleanly
+
+```typescript
+const worker = yield* Docker.Container("logged-worker", {
+  image: "ghcr.io/acme/worker:latest",
+  logDriver: "local",
+  logOptions: { "max-size": "10m", "max-file": "3" },
+  stopSignal: "SIGTERM",
+  stopTimeout: "15 seconds",
+  start: true,
+});
+```
+
+Docker keeps everything a container prints, and by default never trims it. `logDriver: "local"` with `max-size` and `max-file` keeps at most three 10 MB files. `stopSignal` is the signal Docker sends to stop the container, and `stopTimeout` is how long it waits before killing it. `oomScoreAdjustment` makes the kernel more or less likely to pick this container when the host runs out of memory. It doesn't turn the OOM killer off.
+
+## What a change does
+
+Every setting on this page is fixed when the container is created, so changing one recreates it, removing the old container first. Invalid combinations, like `memorySwap` without `memory`, fail with `InvalidContainerOptions` before anything is removed. [Swarm services](/docker/services) don't take these props. See the [Container API reference](/providers/docker/reference/container) for every prop.

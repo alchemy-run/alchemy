@@ -314,7 +314,7 @@ export declare namespace Container {
     /** Default gateway preference for this attachment. @default 0 */
     gatewayPriority?: number;
     /** Driver options for this endpoint, not the underlying Docker.Network. */
-    endpointDriverOpts?: Record<string, string>;
+    driverOpts?: Record<string, string>;
   }
   type NetworkMode = string | { container: string };
   interface DeviceMapping {
@@ -766,7 +766,7 @@ export const ContainerProvider = () =>
           ip: network.ipv4Address,
           ip6: network.ipv6Address,
           "gw-priority": network.gatewayPriority,
-          "driver-opt": network.endpointDriverOpts,
+          "driver-opt": network.driverOpts,
           context,
         });
 
@@ -891,7 +891,7 @@ export const ContainerProvider = () =>
           ipv4Address: previous.IPAMConfig?.IPv4Address || undefined,
           ipv6Address: previous.IPAMConfig?.IPv6Address || undefined,
           gatewayPriority: previous.GwPriority,
-          endpointDriverOpts: previous.DriverOpts ?? undefined,
+          driverOpts: previous.DriverOpts ?? undefined,
         };
         yield* docker.network.disconnect({ network: network.name, container: live.Id, context });
         yield* connectNetwork(network, live.Id, context).pipe(
@@ -961,6 +961,20 @@ export const ContainerProvider = () =>
           Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
         );
 
+      // A different container under the managed name is ours only when it
+      // carries this resource's Alchemy labels, e.g. after a recreate whose
+      // state write was lost. Anything else is a foreign replacement.
+      const verifyIdentity = Effect.fn(function* (
+        id: string,
+        name: string,
+        expectedId: string,
+        live: Docker.Container,
+      ) {
+        if (live.Id === expectedId) return;
+        if (yield* hasAlchemyTags(id, live.Config.Labels ?? undefined)) return;
+        return yield* containerOwnershipConflict(id, name, expectedId, live.Id);
+      });
+
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         lookup: Effect.fn(function* ({ name, context }) {
@@ -981,9 +995,7 @@ export const ContainerProvider = () =>
             olds.image !== undefined ? normalizeImageRef(olds.image) : info.Config.Image,
           );
           if (output) {
-            if (info.Id !== output.id) {
-              return yield* containerOwnershipConflict(id, name, output.id, info.Id);
-            }
+            yield* verifyIdentity(id, name, output.id, info);
             return attrs;
           }
           // Without prior state, only adopt a container that carries our
@@ -1015,9 +1027,7 @@ export const ContainerProvider = () =>
           let live: Docker.Container | undefined;
           if (output) {
             live = yield* inspect(output.name, dockerContextName(olds.context));
-            if (live && live.Id !== output.id) {
-              return yield* containerOwnershipConflict(id, output.name, output.id, live.Id);
-            }
+            if (live) yield* verifyIdentity(id, output.name, output.id, live);
             if (!live && !mustReplace) return { action: "update" as const };
           }
           // An Output-valued `image` doesn't survive a `creating`-state
@@ -1094,11 +1104,11 @@ export const ContainerProvider = () =>
             output && (output.name !== args.name || oldContext !== context)
               ? yield* inspect(output.name, oldContext)
               : undefined;
-          if (output && desiredLive && desiredLive.Id !== output.id) {
-            return yield* containerOwnershipConflict(id, args.name, output.id, desiredLive.Id);
+          if (output && desiredLive) {
+            yield* verifyIdentity(id, args.name, output.id, desiredLive);
           }
-          if (output && previous && previous.Id !== output.id) {
-            return yield* containerOwnershipConflict(id, output.name, output.id, previous.Id);
+          if (output && previous) {
+            yield* verifyIdentity(id, output.name, output.id, previous);
           }
           if (previous) {
             yield* remove(previous.Id, oldContext);
@@ -1195,7 +1205,20 @@ export const ContainerProvider = () =>
             .inspect(current.Id, context)
             .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
         }),
-        delete: Effect.fn(({ olds, output }) => remove(output.id, dockerContextName(olds.context))),
+        delete: Effect.fn(function* ({ id, olds, output }) {
+          const context = dockerContextName(olds.context);
+          // Remove the recorded container, plus a successor under the same
+          // name that carries this resource's labels. Never a foreign one.
+          const live = yield* inspect(output.name, context);
+          if (
+            live &&
+            live.Id !== output.id &&
+            (yield* hasAlchemyTags(id, live.Config.Labels ?? undefined))
+          ) {
+            yield* remove(live.Id, context);
+          }
+          yield* remove(output.id, context);
+        }),
       });
     }),
   );
@@ -1446,11 +1469,11 @@ const matchesNetworkEndpoint = (
   }
   if ((entry.GwPriority ?? 0) !== (desired.gatewayPriority ?? 0)) return false;
   const currentOpts = entry.DriverOpts ?? {};
-  for (const [key, value] of Object.entries(desired.endpointDriverOpts ?? {})) {
+  for (const [key, value] of Object.entries(desired.driverOpts ?? {})) {
     if (currentOpts[key] !== value) return false;
   }
-  for (const key of Object.keys(previous?.endpointDriverOpts ?? {})) {
-    if (!(key in (desired.endpointDriverOpts ?? {})) && key in currentOpts) return false;
+  for (const key of Object.keys(previous?.driverOpts ?? {})) {
+    if (!(key in (desired.driverOpts ?? {})) && key in currentOpts) return false;
   }
   return true;
 };
@@ -1714,10 +1737,10 @@ const validateContainerNetworks = (news: ContainerProps) => {
     if (network.gatewayPriority !== undefined && !Number.isSafeInteger(network.gatewayPriority)) {
       return invalidContainerOption(`${field}.gatewayPriority`, "must be an integer");
     }
-    const invalidDriverOption = invalidContainerMapEntry(network.endpointDriverOpts);
+    const invalidDriverOption = invalidContainerMapEntry(network.driverOpts);
     if (invalidDriverOption) {
       return invalidContainerOption(
-        `${field}.endpointDriverOpts`,
+        `${field}.driverOpts`,
         `contains an invalid entry: ${invalidDriverOption[0]}`,
       );
     }

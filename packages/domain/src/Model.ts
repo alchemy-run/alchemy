@@ -21,13 +21,14 @@ import {
   MissingWorkflowEngine,
   UnvalidatedRead,
 } from "./DefinitionError.ts";
-import { matches } from "./Filter.ts";
+import { type Filter, matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import {
   type Accepted,
   type AggregateStore,
   type Delivery,
+  type ListRange,
   type ModelHost,
   Platform,
   type PolicyStore,
@@ -954,30 +955,64 @@ const viewHost = (
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(Aggregate.targetId(key)).pipe(
-        Effect.flatMap((stored) => {
-          const desc = options?.order === "desc";
-          const after = options?.after;
-          return Effect.forEach(
-            (desc ? [...stored].reverse() : stored).filter(
-              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
-            ),
-            (row) =>
-              Effect.map(kernel.decodeViewEntry(view, row), (entry) => ({ seq: row.seq, entry })),
-          );
-        }),
-        Effect.map((decoded) => {
-          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
-          const take = options?.take ?? rows.length;
-          const page = rows.slice(0, take);
-          return {
-            entries: page.map((row) => row.entry),
-            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
-          };
-        }),
+      listPage(
+        (range) => store.list(Aggregate.targetId(key), range),
+        (row) => kernel.decodeViewEntry(view, row),
+        options,
       ),
   };
 };
+
+/** How many entries a filtered `list` reads at a time, at least. */
+const LIST_BATCH = 128;
+
+/**
+ * A page of a key's entries. Order, cursor and size go to the store, so it
+ * reads the page and one entry more (to know there is a next page), not the
+ * whole key. A filter reads in batches until it has them.
+ */
+const listPage = <Row extends { readonly seq: number }, E, A extends { readonly event: E }>(
+  read: (range: ListRange) => Effect.Effect<ReadonlyArray<Row>>,
+  decode: (row: Row) => Effect.Effect<A>,
+  options:
+    | {
+        readonly where?: Filter<E>;
+        readonly order?: "asc" | "desc";
+        readonly take?: number;
+        readonly after?: number;
+      }
+    | undefined,
+): Effect.Effect<View.Page<A>> =>
+  Effect.gen(function* () {
+    const take = options?.take === undefined ? undefined : Math.max(0, options.take);
+    const where = options?.where;
+    const limit =
+      take === undefined
+        ? undefined
+        : where === undefined
+          ? take + 1
+          : Math.max(take + 1, LIST_BATCH);
+    const page: Array<A> = [];
+    let last: number | null = null;
+    let after = options?.after;
+    for (;;) {
+      const rows = yield* read({
+        ...(options?.order === undefined ? {} : { order: options.order }),
+        ...(after === undefined ? {} : { after }),
+        ...(limit === undefined ? {} : { limit }),
+      });
+      for (const row of rows) {
+        const entry = yield* decode(row);
+        if (!matches(where, entry.event)) continue;
+        // One more match than the page: there is a next page, after the page's last entry.
+        if (page.length === take) return { entries: page, cursor: page.length > 0 ? last : null };
+        page.push(entry);
+        last = row.seq;
+      }
+      if (limit === undefined || rows.length < limit) return { entries: page, cursor: null };
+      after = rows[rows.length - 1]!.seq;
+    }
+  });
 
 /** Wait until a progress check passes, retrying every 25ms up to `timeout`. */
 const waitUntil = <A>(
@@ -1049,27 +1084,7 @@ const streamHost = (
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(Aggregate.targetId(key)).pipe(
-        Effect.flatMap((stored) => {
-          const desc = options?.order === "desc";
-          const after = options?.after;
-          return Effect.forEach(
-            (desc ? [...stored].reverse() : stored).filter(
-              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
-            ),
-            (row) => Effect.map(decode(row), (entry) => ({ seq: row.seq, entry })),
-          );
-        }),
-        Effect.map((decoded) => {
-          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
-          const take = options?.take ?? rows.length;
-          const page = rows.slice(0, take);
-          return {
-            entries: page.map((row) => row.entry),
-            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
-          };
-        }),
-      ),
+      listPage((range) => store.list(Aggregate.targetId(key), range), decode, options),
     append: (origin, ...events) =>
       Effect.suspend(() => {
         const meta = (origin as unknown as Record<symbol, Kernel.InputMetaValue | undefined>)[

@@ -90,6 +90,12 @@ export default Room.make(
 
 An instance held with `Entity.keepAlive(true)` doesn't stop when idle. If its object restarts, the alarm starts the instance again.
 
+## A deploy reaches an instance when its object restarts
+
+A deploy gives the pool's Worker a new version. An object that is asleep starts on the new version at its next call. An object that is awake keeps its instance, its in-memory state and the version it started on until Cloudflare restarts it, which can take several minutes.
+
+So after a deploy, an instance you hold with `Entity.keepAlive(true)` may answer with the old code for a while. Persisted messages, delayed messages and cron times are in the object's SQLite, so they are delivered whichever version the object is on.
+
 ## Handlers run as on runners
 
 Each instance runs its handlers behind Effect's own RPC server, the way Effect Cluster's runners do. RPC middleware, `concurrency`, `Rpc.fork` and `Rpc.uninterruptible` all work as they do on runners. When a caller is interrupted, its handler is interrupted too.

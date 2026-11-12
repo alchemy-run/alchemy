@@ -132,6 +132,11 @@ const matchValue = (expected: any, actual: any): boolean => {
     return expected.some((value) => matchValue(value, actual));
   }
 
+  // EventBridge matches an array in the event when any of its values matches.
+  if (Array.isArray(actual)) {
+    return actual.some((value) => matchValue(expected, value));
+  }
+
   if (expected && typeof expected === "object") {
     if (actual === null || typeof actual !== "object") {
       return false;

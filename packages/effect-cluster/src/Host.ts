@@ -31,3 +31,38 @@ export class RunnerHost extends Context.Service<
     ) => Effect.Effect<void>;
   }
 >()("Cluster.RunnerHost") {}
+
+/** Options for {@link InstanceStorage}'s `list`. Keys come back in order. */
+export interface InstanceStorageListOptions {
+  /** Only keys that start with this prefix. */
+  readonly prefix?: string;
+  /** Only keys at or after this key. */
+  readonly start?: string;
+  /** Only keys after this key. */
+  readonly startAfter?: string;
+  /** Only keys before this key. */
+  readonly end?: string;
+  /** At most this many entries. */
+  readonly limit?: number;
+}
+
+/**
+ * The key-value storage of the object an entity instance runs on, on pools
+ * that give every instance an object of its own
+ * (`ClusterCloudflare.DurableObjectPool`: the instance's Durable Object).
+ * Values are structured-cloneable; writes inside `transaction` commit
+ * together, or not at all. The pool provides it to every instance it runs;
+ * on pools that share one database, the service is absent.
+ */
+export class InstanceStorage extends Context.Service<
+  InstanceStorage,
+  {
+    get<T>(key: string): Effect.Effect<T | undefined>;
+    put<T>(key: string, value: T): Effect.Effect<void>;
+    put<T>(entries: Record<string, T>): Effect.Effect<void>;
+    delete(key: string): Effect.Effect<boolean>;
+    delete(keys: ReadonlyArray<string>): Effect.Effect<number>;
+    list<T>(options?: InstanceStorageListOptions): Effect.Effect<Map<string, T>>;
+    transaction<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+  }
+>()("Cluster.InstanceStorage") {}

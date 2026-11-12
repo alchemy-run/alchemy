@@ -1,6 +1,6 @@
 /**
- * What crosses between a caller and an entity's Durable Object: each call
- * as JSON, its reply as JSON. Workers RPC hides a thrown error's type, so
+ * What crosses between a caller and an entity's object: each call as JSON,
+ * its reply as JSON. A host's object RPC hides a thrown error's type, so
  * failures of the object itself come back as data too.
  *
  * @internal

@@ -4,7 +4,6 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Action } from "alchemy/Action";
 import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
-import * as Provider from "alchemy/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -633,92 +632,66 @@ test.provider(
 );
 
 test.provider(
-  "diff replaces a container when its image changes",
-  () =>
+  "replaces a container when its image, labels or stop timeout change",
+  (stack) =>
     Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
-        id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: { name: "web", image: "nginx:alpine" },
-        news: { name: "web", image: "nginx:1.27-alpine" },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
-      });
-      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
-  { tags: ["provider:docker", "provider:docker:container", "local"] },
-);
-
-test.provider(
-  "diff replaces a container when its Docker context changes",
-  () =>
-    Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
-        id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: { name: "web", image: "nginx:alpine", context: "default" },
-        news: { name: "web", image: "nginx:alpine", context: "remote-build" },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
-      });
-      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
-    }),
-  { tags: ["provider:docker", "provider:docker:container", "local"] },
-);
-
-test.provider(
-  "diff replaces a container when its labels or stop timeout change",
-  () =>
-    Effect.gen(function* () {
-      const containerProvider = yield* Provider.findProvider(Docker.Container);
-      const containerDiff = yield* containerProvider.diff!({
-        id: "web",
-        fqn: "web",
-        instanceId: "instance",
-        olds: {
-          name: "web",
-          image: "nginx:alpine",
+      yield* stack.destroy();
+      yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+      const resource = (props: Partial<Docker.ContainerProps> = {}) =>
+        Docker.Container("replaced-on-change", { image: "nginx:alpine", ...props });
+      yield* stack.deploy(
+        resource({ labels: { "traefik.enable": "true" }, stopTimeout: "10 seconds" }),
+      );
+      for (const props of [
+        {
+          image: "nginx:1.27-alpine",
           labels: { "traefik.enable": "true" },
           stopTimeout: "10 seconds",
         },
-        news: {
-          name: "web",
-          image: "nginx:alpine",
-          labels: { "traefik.enable": "false" },
-          stopTimeout: "30 seconds",
-        },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "web",
-          name: "web",
-          status: "created",
-          createdAt: 0,
-          imageRef: "nginx:alpine",
-          ports: {},
-        },
+        { labels: { "traefik.enable": "false" }, stopTimeout: "10 seconds" },
+        { labels: { "traefik.enable": "true" }, stopTimeout: "30 seconds" },
+      ] satisfies Partial<Docker.ContainerProps>[]) {
+        expect((yield* stack.plan(resource(props))).resources["replaced-on-change"]).toMatchObject({
+          action: "replace",
+          deleteFirst: true,
+        });
+      }
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "replaces a container when its Docker context changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const context = `alchemy-test-container-context-${stack.stage}`;
+      const { stdout: host } = yield* docker.run([
+        "context",
+        "inspect",
+        "--format",
+        "{{.Endpoints.docker.Host}}",
+      ]);
+      yield* docker.context.remove(context, true).pipe(Effect.ignore);
+      yield* docker.context.create({ name: context, docker: `host=${host.trim()}` });
+      yield* Effect.addFinalizer(() => docker.context.remove(context, true).pipe(Effect.ignore));
+      yield* stack.destroy();
+      yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+
+      const resource = (context?: string) =>
+        Docker.Container("context-switch", { image: "nginx:alpine", context });
+      const first = yield* stack.deploy(resource());
+      expect((yield* stack.plan(resource(context))).resources["context-switch"]).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
       });
-      expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
+      const second = yield* stack.deploy(resource(context));
+      expect(second.id).not.toBe(first.id);
+      yield* stack.destroy();
+      expect((yield* docker.container.inspect(second.id).pipe(Effect.flip)).reason._tag).toBe(
+        "NotFound",
+      );
     }),
   { tags: ["provider:docker", "provider:docker:container", "local"] },
 );
@@ -1085,7 +1058,7 @@ describe(
             const network = yield* Docker.Network("endpoint-options-network");
             const container = yield* Docker.Container("endpoint-options-container", {
               image: "nginx:alpine",
-              networks: [{ name: network.name, endpointDriverOpts: options }],
+              networks: [{ name: network.name, driverOpts: options }],
             });
             return { container, network };
           });
@@ -1968,7 +1941,7 @@ describe(
       ],
       [
         "invalid endpoint driver options",
-        { networks: [{ name: "bridge", endpointDriverOpts: { "": "value" } }] },
+        { networks: [{ name: "bridge", driverOpts: { "": "value" } }] },
       ],
       ["empty network alias", { networks: [{ name: "bridge", aliases: [""] }] }],
       ["invalid DNS server", { dns: ["not-an-ip"] }],
@@ -2396,6 +2369,43 @@ describe(
 
         yield* docker.container.remove(foreignId, true);
         yield* stack.destroy();
+      }),
+    );
+
+    test.provider("keeps managing a successor container that carries its own labels", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = `alchemy-test-container-successor-${stack.stage}`;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Docker.Container("successor-container", { name, image: "alpine:3.22" });
+        const original = yield* stack.deploy(resource);
+        // A recreate whose state write was lost leaves a container with a new
+        // ID but this resource's labels under the managed name.
+        const labels = (yield* docker.container.inspect(original.id)).Config.Labels ?? {};
+        yield* docker.container.remove(original.id, true);
+        const { stdout } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+          "alpine:3.22",
+        ]);
+        const successorId = stdout.trim();
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(successorId, true).pipe(Effect.ignore),
+        );
+
+        // Neither plan nor deploy refuses it as a foreign replacement, and
+        // destroy removes it rather than leaking it under the managed name.
+        expect((yield* stack.plan(resource)).resources["successor-container"]?.action).toBe("noop");
+        yield* stack.deploy(resource);
+        expect((yield* docker.container.inspect(name)).Id).toBe(successorId);
+        yield* stack.destroy();
+        expect((yield* docker.container.inspect(name).pipe(Effect.flip)).reason._tag).toBe(
+          "NotFound",
+        );
       }),
     );
 
