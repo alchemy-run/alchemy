@@ -16,6 +16,8 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
     const listQuotas = yield* ClickHouseCloud.Organization.ListOrganizationQuotas(Org);
     const getQuota = yield* ClickHouseCloud.Organization.GetOrganizationQuota(Org);
     const discover = yield* ClickHouseCloud.Prometheus.GetOrganizationPrometheusDiscovery(Org);
+    const postgresMetrics =
+      yield* ClickHouseCloud.Prometheus.GetOrganizationPostgresPrometheusMetrics(Org);
     const getUsageCost = yield* ClickHouseCloud.Billing.GetUsageCost(Org);
     const getCreditBalances = yield* ClickHouseCloud.Billing.GetCreditBalances(Org);
     const listNotifications = yield* ClickHouseCloud.Notifications.ListNotifications(Org);
@@ -53,6 +55,11 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
           return yield* HttpServerResponse.json({
             orgIds: groups.map((g) => g.labels?.clickhouse_org_id ?? null),
           });
+        }
+
+        if (url.pathname === "/postgres-metrics") {
+          const text = yield* postgresMetrics();
+          return yield* HttpServerResponse.json({ isText: typeof text === "string" });
         }
 
         if (url.pathname === "/billing") {
@@ -94,6 +101,7 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
         ClickHouseCloud.Organization.ListOrganizationQuotasHttp,
         ClickHouseCloud.Organization.GetOrganizationQuotaHttp,
         ClickHouseCloud.Prometheus.GetOrganizationPrometheusDiscoveryHttp,
+        ClickHouseCloud.Prometheus.GetOrganizationPostgresPrometheusMetricsHttp,
         ClickHouseCloud.Billing.GetUsageCostHttp,
         ClickHouseCloud.Billing.GetCreditBalancesHttp,
         ClickHouseCloud.Notifications.ListNotificationsHttp,
