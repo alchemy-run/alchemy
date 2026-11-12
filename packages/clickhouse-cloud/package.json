@@ -35,6 +35,7 @@
     "./Organization": "./src/Organization/index.ts",
     "./Prometheus": "./src/Prometheus/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
+    "./SavedQueries": "./src/SavedQueries/index.ts",
     "./Service": "./src/Service/index.ts",
     "./Snapshot": "./src/Snapshot/index.ts",
     "./UserManagement": "./src/UserManagement/index.ts",
@@ -84,6 +85,12 @@
         "bun": "./src/RoleManagement/index.ts",
         "worker": "./src/RoleManagement/index.ts",
         "default": "./lib/RoleManagement/index.js"
+      },
+      "./SavedQueries": {
+        "types": "./lib/SavedQueries/index.d.ts",
+        "bun": "./src/SavedQueries/index.ts",
+        "worker": "./src/SavedQueries/index.ts",
+        "default": "./lib/SavedQueries/index.js"
       },
       "./Service": {
         "types": "./lib/Service/index.d.ts",

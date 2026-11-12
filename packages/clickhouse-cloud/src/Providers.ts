@@ -19,6 +19,7 @@ import {
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
+import { SavedQuery, SavedQueryProvider } from "./SavedQueries/SavedQuery.ts";
 import { ClickHouseSetting, ClickHouseSettingProvider } from "./Service/ClickHouseSetting.ts";
 import { JwtProvider, JwtProviderProvider } from "./Service/JwtProvider.ts";
 import { PrivateEndpoint, PrivateEndpointProvider } from "./Service/PrivateEndpoint.ts";
@@ -69,6 +70,7 @@ export const providers = () =>
       PrivateEndpoint,
       QueryEndpoint,
       Role,
+      SavedQuery,
       ScalingSchedule,
       Service,
       SnapshotConfiguration,
@@ -91,6 +93,7 @@ export const providers = () =>
         PrivateEndpointProvider(),
         QueryEndpointProvider(),
         RoleProvider(),
+        SavedQueryProvider(),
         ScalingScheduleProvider(),
         ServiceProvider(),
         SnapshotConfigurationProvider(),
