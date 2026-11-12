@@ -79,6 +79,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/infisical/src",
   },
   {
+    srcRoot: "packages/1password/src",
+    providerPrefix: "1Password",
+    sourceDisplayPrefix: "packages/1password/src",
+  },
+  {
     srcRoot: "packages/archil/src",
     providerPrefix: "Archil",
     sourceDisplayPrefix: "packages/archil/src",
