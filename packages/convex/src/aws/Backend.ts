@@ -450,12 +450,15 @@ export const Backend = (id: string, props: BackendProps) =>
           tags,
         });
         const fileSystem = yield* EFS.FileSystem("Data", { encrypted: true, tags });
-        const mount = yield* EFS.MountTarget("DataMount", {
+        yield* EFS.MountTarget("DataMount", {
           fileSystemId: fileSystem.fileSystemId,
           subnetId: platform.subnetId as never,
           securityGroups: [efsSecurityGroup.groupId],
         });
-        volumes = [{ efs: { fileSystemId: mount.fileSystemId }, path: "/convex/data" }];
+        // The volume names the file system, not the mount target, so the image
+        // mirror runs while the mount target comes up (about a minute and a
+        // half). A task that starts first fails to mount and ECS starts another.
+        volumes = [{ efs: { fileSystemId: fileSystem.fileSystemId }, path: "/convex/data" }];
       } else {
         const value =
           url !== undefined
