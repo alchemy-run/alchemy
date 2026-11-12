@@ -24,6 +24,7 @@ import { PrivateEndpoint, PrivateEndpointProvider } from "./Service/PrivateEndpo
 import { QueryEndpoint, QueryEndpointProvider } from "./Service/QueryEndpoint.ts";
 import { ScalingSchedule, ScalingScheduleProvider } from "./Service/ScalingSchedule.ts";
 import { Service, ServiceProvider } from "./Service/Service.ts";
+import { UpgradeWindow, UpgradeWindowProvider } from "./Service/UpgradeWindow.ts";
 import { Invitation, InvitationProvider } from "./UserManagement/Invitation.ts";
 import { Member, MemberProvider } from "./UserManagement/Member.ts";
 
@@ -64,6 +65,7 @@ export const providers = () =>
       Role,
       ScalingSchedule,
       Service,
+      UpgradeWindow,
     ]),
   ).pipe(
     Layer.provide(
@@ -83,6 +85,7 @@ export const providers = () =>
         RoleProvider(),
         ScalingScheduleProvider(),
         ServiceProvider(),
+        UpgradeWindowProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
