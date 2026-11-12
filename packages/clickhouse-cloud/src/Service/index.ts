@@ -1,6 +1,7 @@
 export * from "./ClickHouseSetting.ts";
 export * from "./GetService.ts";
 export * from "./GetServiceHttp.ts";
+export * from "./JwtProvider.ts";
 export * from "./PrivateEndpoint.ts";
 export * from "./QueryEndpoint.ts";
 export * from "./ScalingSchedule.ts";
