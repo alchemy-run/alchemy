@@ -1,3 +1,4 @@
+export * from "./AnyCatalog.ts";
 export * from "./BigQueryCatalog.ts";
 export * from "./CassandraCatalog.ts";
 export * from "./CatalogKind.ts";
