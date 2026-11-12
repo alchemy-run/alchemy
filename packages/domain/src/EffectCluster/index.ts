@@ -139,7 +139,7 @@ const objectStorage = (sql: SqlClient, object: string, gate: InputGateShape): Ob
         typeof keyOrKeys === "string" ? Effect.map(deleted, (n) => n > 0) : deleted,
       );
     }) as ObjectStorage["delete"],
-    list: <T>({ prefix, start, startAfter, end, limit }: ListOptions = {}) =>
+    list: <T>({ prefix, start, startAfter, end, limit, reverse }: ListOptions = {}) =>
       run(
         sql<{ key: string; value: string }>`SELECT key, value FROM ${sql(TABLE)}
           WHERE object = ${object}
@@ -147,7 +147,7 @@ const objectStorage = (sql: SqlClient, object: string, gate: InputGateShape): Ob
           ${start !== undefined ? sql`AND key >= ${start}` : sql``}
           ${startAfter !== undefined ? sql`AND key > ${startAfter}` : sql``}
           ${end !== undefined ? sql`AND key < ${end}` : sql``}
-          ORDER BY key
+          ${reverse ? sql`ORDER BY key DESC` : sql`ORDER BY key`}
           ${limit !== undefined ? sql`LIMIT ${Math.max(0, limit | 0)}` : sql``}`.pipe(
           Effect.map((rows) => new Map(rows.map((row) => [row.key, decode<T>(row.value)]))),
         ),
