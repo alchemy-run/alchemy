@@ -8,7 +8,9 @@ export {
   fromAuthProvider,
   fromClientCredentials,
 } from "./Credentials.ts";
+export * from "./DataProduct/index.ts";
 export * from "./Governance/index.ts";
 export * from "./Providers.ts";
 export * from "./Role/index.ts";
 export * from "./ServiceAccount/index.ts";
+export * from "./SqlJob/index.ts";

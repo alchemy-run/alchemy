@@ -31,9 +31,11 @@
     ".": "./src/index.ts",
     "./Catalog": "./src/Catalog/index.ts",
     "./Cluster": "./src/Cluster/index.ts",
+    "./DataProduct": "./src/DataProduct/index.ts",
     "./Governance": "./src/Governance/index.ts",
     "./Role": "./src/Role/index.ts",
     "./ServiceAccount": "./src/ServiceAccount/index.ts",
+    "./SqlJob": "./src/SqlJob/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -57,6 +59,12 @@
         "worker": "./src/Cluster/index.ts",
         "default": "./lib/Cluster/index.js"
       },
+      "./DataProduct": {
+        "types": "./lib/DataProduct/index.d.ts",
+        "bun": "./src/DataProduct/index.ts",
+        "worker": "./src/DataProduct/index.ts",
+        "default": "./lib/DataProduct/index.js"
+      },
       "./Governance": {
         "types": "./lib/Governance/index.d.ts",
         "bun": "./src/Governance/index.ts",
@@ -74,6 +82,12 @@
         "bun": "./src/ServiceAccount/index.ts",
         "worker": "./src/ServiceAccount/index.ts",
         "default": "./lib/ServiceAccount/index.js"
+      },
+      "./SqlJob": {
+        "types": "./lib/SqlJob/index.d.ts",
+        "bun": "./src/SqlJob/index.ts",
+        "worker": "./src/SqlJob/index.ts",
+        "default": "./lib/SqlJob/index.js"
       },
       "./internal": null,
       "./*": {
