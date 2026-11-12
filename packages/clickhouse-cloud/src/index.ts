@@ -30,6 +30,7 @@ export * as Organization from "./Organization/index.ts";
 export * as Prometheus from "./Prometheus/index.ts";
 export * from "./Providers.ts";
 export * as RoleManagement from "./RoleManagement/index.ts";
+export * as SavedQueries from "./SavedQueries/index.ts";
 export * as Service from "./Service/index.ts";
 export * as Snapshot from "./Snapshot/index.ts";
 export * as UserManagement from "./UserManagement/index.ts";
