@@ -1,17 +1,23 @@
 import { RpcCallError } from "alchemy/Rpc";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as HttpHeaders from "effect/http/Headers";
 import type { HttpClientError } from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { HttpServerError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import type * as Scope from "effect/Scope";
 import { AWAITING_HEADER, awaitingHeader } from "./Calls.ts";
 
 /** A native fetch entry point: a RivetKit actor handle's `fetch`. */
 export interface NativeFetcher {
   fetch(input: Request | string | URL, init?: RequestInit): Promise<Response>;
+  /** Carry the WebSocket upgrade `request` asks for to the actor. */
+  upgrade?(
+    request: HttpServerRequest.HttpServerRequest,
+  ): Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError, Scope.Scope>;
 }
 
 /** Effect HTTP access without unsupported TCP or stub-transfer operations. */
@@ -40,6 +46,23 @@ export const fromNativeFetcher = (raw: NativeFetcher): Fetcher => {
   ) =>
     Effect.gen(function* () {
       const client = HttpClientRequest.isHttpClientRequest(request);
+      // A WebSocket upgrade crosses as a socket, not a request.
+      if (
+        !client &&
+        raw.upgrade !== undefined &&
+        request.headers.upgrade?.toLowerCase() === "websocket"
+      ) {
+        const awaiting = yield* awaitingHeader;
+        return yield* Effect.scoped(
+          raw.upgrade(
+            awaiting === undefined
+              ? request
+              : request.modify({
+                  headers: HttpHeaders.set(request.headers, AWAITING_HEADER, awaiting),
+                }),
+          ),
+        );
+      }
       const built = client
         ? yield* HttpClientRequest.toWeb(request).pipe(
             Effect.mapError((cause) => new RpcCallError({ method: "fetch", cause })),

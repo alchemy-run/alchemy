@@ -178,6 +178,13 @@ export class Conformance extends Domain.Model("Conformance", {
   sagas: [MirrorFirst],
 }) {}
 
+/** The model's Api: its counter and view, served at the front's `/api`. */
+export class ConformanceApi extends Domain.Api("ConformanceApi", {
+  model: Conformance,
+  commands: ["Increment"],
+  views: ["CounterTotal"],
+}) {}
+
 /** The model's Layer, given the platform it runs on. */
 export const ConformanceLive = Conformance.layer(
   Layer.mergeAll(StartMirrorLive, MirrorFirstLive, HoldDeadlineLive),
