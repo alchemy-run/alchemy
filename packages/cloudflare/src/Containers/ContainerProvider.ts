@@ -1706,14 +1706,25 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
-          // A `dev:` applicationId only exists locally — there is no live
-          // application to delete on Cloudflare.
-          if (!output.applicationId || !isLiveId(output.applicationId)) return;
+        delete: Effect.fn(function* ({ olds, output }) {
+          let applicationId = output.applicationId;
+          // A Durable Object Container records no application: its Durable
+          // Object class owns it.
+          if (!applicationId) return;
+          // A `dev:` applicationId is precreate's placeholder: a deploy
+          // interrupted after precreate may still have created the
+          // application under its generated name. An explicit name never
+          // establishes ownership, so only a generated one is deleted.
+          if (!isLiveId(applicationId)) {
+            if (nameOf(olds) !== undefined) return;
+            const found = yield* findApplicationByName(output.applicationName);
+            if (found === undefined) return;
+            applicationId = found.id;
+          }
           yield* Effect.logInfo(`Cloudflare Container delete: deleting ${output.applicationName}`);
           yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
-            applicationId: output.applicationId,
+            applicationId,
           }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ id, olds, output, previous }) {

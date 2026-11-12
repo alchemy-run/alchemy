@@ -1556,6 +1556,95 @@ describe.concurrent(
       { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
     );
 
+    // A crash after precreate leaves a `creating` row holding precreate's
+    // placeholder: a `dev:` id with the application's real name. A crash after
+    // reconcile created the application leaves the same row. Redeploying from
+    // either converges on one attached application, and destroy from the
+    // second still deletes it.
+    test.provider(
+      "redeploys and destroys a Worker and Container cycle interrupted after precreate",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* RemoteContainerWorker;
+            const app = yield* RemoteContainer.Application;
+            return { url: worker.url.as<string>(), app };
+          });
+          const key = { stack: scratch.name, stage: scratch.stage, fqn: "RemoteContainer" };
+          const interruptAfterPrecreate = Effect.gen(function* () {
+            const state = yield* yield* State;
+            const row = yield* state.get(key);
+            assert(row?.status === "created" || row?.status === "updated");
+            yield* state.set({
+              ...key,
+              value: {
+                ...row,
+                status: "creating",
+                attr: {
+                  ...row.attr,
+                  applicationId: "dev:interrupted-precreate",
+                  instances: undefined,
+                  maxInstances: undefined,
+                  configuration: {},
+                  durableObjects: undefined,
+                  createdAt: "",
+                  version: undefined,
+                },
+              },
+            });
+          }).pipe(Effect.provide(scratch.state));
+          const applicationsNamed = (name: string) =>
+            Containers.listContainerApplications({ accountId }).pipe(
+              Effect.map((apps) =>
+                apps.filter((item) => item.name === name).map((item) => item.id),
+              ),
+            );
+
+          const first = yield* scratch.deploy(program);
+          const namespaceId = first.app.durableObjects?.namespaceId;
+          expect(namespaceId).toBeDefined();
+
+          // Crashed between precreate and reconcile: no application exists.
+          yield* Containers.deleteContainerApplication({
+            accountId,
+            applicationId: first.app.applicationId,
+          });
+          expect(
+            yield* waitForApplicationDeleted(accountId, first.app.applicationId),
+          ).toBeUndefined();
+          yield* interruptAfterPrecreate;
+          const recreated = yield* scratch.deploy(program);
+          expect(isLiveId(recreated.app.applicationId)).toBe(true);
+          expect(recreated.app.applicationId).not.toBe(first.app.applicationId);
+          expect(recreated.app.durableObjects).toEqual({ namespaceId });
+          expect(yield* applicationsNamed(recreated.app.applicationName)).toEqual([
+            recreated.app.applicationId,
+          ]);
+
+          // Crashed after reconcile created the application, before state
+          // recorded it: the redeploy takes it over instead of creating another.
+          yield* interruptAfterPrecreate;
+          const resumed = yield* scratch.deploy(program);
+          expect(resumed.app.applicationId).toBe(recreated.app.applicationId);
+          expect(resumed.app.durableObjects).toEqual({ namespaceId });
+          expect(yield* applicationsNamed(resumed.app.applicationName)).toEqual([
+            recreated.app.applicationId,
+          ]);
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          // The same interruption, then destroy: the application is deleted.
+          yield* interruptAfterPrecreate;
+          yield* scratch.destroy();
+          expect(
+            yield* waitForApplicationDeleted(accountId, recreated.app.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
     // Placement constraints pass through to Cloudflare unchanged and read back
     // stable, so an unchanged redeploy plans no update. Whether an instance
     // lands in the jurisdiction depends on account capacity; this pins the API
