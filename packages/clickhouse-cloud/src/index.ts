@@ -24,6 +24,7 @@ export {
   PreviewNotOffered,
   QueryApiEndpointUserOwned,
   ResultMissing,
+  RunQueryApiEndpointFailed,
   ServiceDeletionProtected,
   ServiceFailed,
   ServiceLimitReached,

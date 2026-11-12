@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { bindingTags as tags, getJson, noCloudflare } from "../fixtures/bindings.ts";
-import { Analytics, StationsPipe } from "../fixtures/resources.ts";
+import { Analytics, NumbersEndpoint, StationsPipe } from "../fixtures/resources.ts";
 import ClickHouseServiceWorker from "../fixtures/service-worker.ts";
 
 // Deploys its own service (minutes to create, billed compute), so it also
@@ -30,12 +30,14 @@ const Stack = Alchemy.Stack(
   Effect.gen(function* () {
     const analytics = yield* Analytics;
     const pipe = yield* StationsPipe;
+    const endpoint = yield* NumbersEndpoint;
     const worker = yield* ClickHouseServiceWorker;
     return {
       url: worker.url.as<string>(),
       serviceId: analytics.serviceId,
       organizationId: analytics.organizationId,
       clickPipeId: pipe.clickPipeId,
+      endpointId: endpoint.endpointId,
     };
   }),
 );
@@ -47,6 +49,7 @@ const stack = beforeAll(
         serviceId: "",
         organizationId: "",
         clickPipeId: "",
+        endpointId: "",
       })
     : deploy(Stack),
   { timeout: 3_600_000 },
@@ -146,6 +149,15 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
   );
 
   test(
+    "RunQueryApiEndpoint runs the endpoint with the host's key and query variables",
+    Effect.gen(function* () {
+      const { rows } = yield* get<{ rows: unknown[] }>("/numbers?n=3");
+      expect(rows).toEqual([{ number: 0 }, { number: 1 }, { number: 2 }]);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
     "each binding's role is scoped to the one service; only the state and ClickPipes bindings may manage",
     Effect.gen(function* () {
       const { organizationId, serviceId } = yield* stack;
@@ -177,7 +189,7 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
         "manage-clickpipes",
         "manage-clickpipes",
         "manage-clickpipes",
-        ...Array.from({ length: 4 }, () => "view"),
+        ...Array.from({ length: 5 }, () => "view"),
       ]);
     }).pipe(outOfBand),
     { tags, timeout: 120_000 },

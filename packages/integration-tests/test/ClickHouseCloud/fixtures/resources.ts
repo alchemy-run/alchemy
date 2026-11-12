@@ -55,3 +55,15 @@ export const StationsPipe = Effect.gen(function* () {
     ],
   });
 });
+
+/** A Query API endpoint on the bound service, run by RunQueryApiEndpoint. */
+export const NumbersEndpoint = Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  return yield* ClickHouseCloud.QueryApiEndpoints.QueryApiEndpoint("BindingsNumbers", {
+    serviceId: analytics.serviceId,
+    database: "default",
+    sql: "SELECT number FROM system.numbers LIMIT {n:UInt8}",
+    parameters: { n: "2" },
+    roles: ["default_role"],
+  });
+});

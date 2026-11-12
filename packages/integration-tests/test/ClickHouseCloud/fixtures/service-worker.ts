@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { Analytics, StationsPipe, stationsSource } from "./resources.ts";
+import { Analytics, NumbersEndpoint, StationsPipe, stationsSource } from "./resources.ts";
 
 export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHouseServiceWorker>()(
   "ClickHouseServiceWorker",
@@ -19,6 +19,8 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
     const discover = yield* ClickHouseCloud.ClickPipes.DiscoverClickPipeSchema(Analytics);
     const getPipe = yield* ClickHouseCloud.ClickPipes.GetClickPipe(StationsPipe);
     const updatePipeState = yield* ClickHouseCloud.ClickPipes.UpdateClickPipeState(StationsPipe);
+    const runNumbers =
+      yield* ClickHouseCloud.QueryApiEndpoints.RunQueryApiEndpoint(NumbersEndpoint);
 
     return {
       fetch: Effect.gen(function* () {
@@ -74,6 +76,13 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
           return yield* HttpServerResponse.json({ id: pipe.id, state: pipe.state });
         }
 
+        if (url.pathname === "/numbers") {
+          const n = Number(url.searchParams.get("n") ?? "2");
+          return yield* HttpServerResponse.json({
+            rows: yield* runNumbers({ queryVariables: { n } }),
+          });
+        }
+
         // Not 404: a fresh workers.dev URL answers 404 until it propagates.
         return HttpServerResponse.text("no such route", { status: 400 });
       }).pipe(
@@ -94,6 +103,7 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
         ClickHouseCloud.ClickPipes.DiscoverClickPipeSchemaHttp,
         ClickHouseCloud.ClickPipes.GetClickPipeHttp,
         ClickHouseCloud.ClickPipes.UpdateClickPipeStateHttp,
+        ClickHouseCloud.QueryApiEndpoints.RunQueryApiEndpointHttp,
       ),
     ),
   ),
