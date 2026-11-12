@@ -8,12 +8,22 @@
  * - `/counter/:id`, `/echo/:id`, `/total/:id` read the counter, what the saga wrote, the view
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
+ * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  */
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
-import { Counter, CounterTotal, Echo, Hold, Increment, PlaceHold, ReleaseHold } from "./model.ts";
+import {
+  ConformanceApi,
+  Counter,
+  CounterTotal,
+  Echo,
+  Hold,
+  Increment,
+  PlaceHold,
+  ReleaseHold,
+} from "./model.ts";
 
 /** The front's `fetch`, built once the model's services are provided. */
 export const app = Effect.gen(function* () {
@@ -21,6 +31,7 @@ export const app = Effect.gen(function* () {
   const echoes = yield* Echo;
   const totals = yield* CounterTotal;
   const holds = yield* Hold;
+  const api = yield* ConformanceApi;
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://front");
@@ -33,6 +44,8 @@ export const app = Effect.gen(function* () {
         Effect.catchTag("TooBig", (rejection) => Effect.succeed({ rejected: rejection._tag })),
       );
     switch (action) {
+      case "api":
+        return yield* api.fetch;
       case "ready":
         return HttpServerResponse.text("ok");
       case "increment":

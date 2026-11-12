@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { FRONT_PORT } from "./fixtures/cluster.ts";
@@ -306,6 +307,74 @@ describe.skipIf(!!process.env.FAST)(
       }),
       { timeout: 120_000 },
     );
+
+    describe("WebSockets", () => {
+      /** A WebSocket to `path` on the front, read one JSON frame at a time. */
+      const connect = (path: string) =>
+        Effect.gen(function* () {
+          const socket = yield* Socket.makeWebSocket(`ws://localhost:${FRONT_PORT}${path}`);
+          const { pull } = yield* socket.reader;
+          const writer = yield* socket.writer;
+          const frames: Array<unknown> = [];
+          const next = Effect.gen(function* () {
+            while (frames.length === 0) {
+              for (const frame of yield* pull) {
+                frames.push(
+                  JSON.parse(typeof frame === "string" ? frame : new TextDecoder().decode(frame)),
+                );
+              }
+            }
+            return frames.shift();
+          }).pipe(Effect.timeout("20 seconds"));
+          return { next, send: (text: string) => writer.write(text) };
+        }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal));
+      const count = (room: string) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const res = yield* client.get(`${baseUrl}/socket-count/${room}`);
+          return ((yield* res.json) as { sockets: number }).sockets;
+        });
+
+      test(
+        "a Durable Object accepts WebSockets through the gateway and pushes to them",
+        Effect.gen(function* () {
+          const room = crypto.randomUUID();
+          const a = yield* connect(`/socket/${room}?user=a`).pipe(
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          );
+          // The instance sees the caller's path, query and headers.
+          expect(yield* a.next).toEqual({ welcome: "a", path: `/socket/${room}`, header: room });
+          const b = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const b = yield* connect(`/socket/${room}?user=b`);
+              expect(yield* b.next).toEqual({
+                welcome: "b",
+                path: `/socket/${room}`,
+                header: room,
+              });
+              expect(yield* count(room)).toBe(2);
+              // A message reaches `webSocketMessage`, which pushes to every socket.
+              yield* a.send("hello");
+              expect(yield* a.next).toEqual({ from: "a", text: "hello" });
+              expect(yield* b.next).toEqual({ from: "a", text: "hello" });
+              return b;
+            }),
+          );
+          expect(b).toBeDefined();
+          // b's socket closed with its scope; the room lets it go.
+          yield* count(room).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              until: (n) => n === 1,
+              times: 20,
+            }),
+          );
+          yield* a.send("still here");
+          expect(yield* a.next).toEqual({ from: "a", text: "still here" });
+        }).pipe(Effect.scoped),
+        { timeout: 120_000 },
+      );
+    });
 
     describe("Durable Streams", { tags: ["provider:rivet:durable-stream"] }, () => {
       // GET a stream case on a fresh stream; a retried attempt starts over.

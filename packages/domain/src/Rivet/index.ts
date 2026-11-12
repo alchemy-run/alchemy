@@ -11,6 +11,8 @@ import {
 } from "@alchemy.run/rivet/DurableObjectState";
 import { NodeHost, type PoolHost } from "@alchemy.run/rivet/Host";
 import type { Providers } from "@alchemy.run/rivet/Providers";
+import { upgrade } from "@alchemy.run/rivet/WebSocket";
+import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
@@ -20,6 +22,8 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -31,6 +35,7 @@ import type { WorkflowEngine } from "effect/workflow";
  */
 import {
   alarmCallbacks,
+  type Attachment,
   className,
   type Host,
   type ListOptions,
@@ -42,8 +47,9 @@ import {
   type ObjectStorage,
   parseMultiplexedName,
   type Stub,
+  SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
-import type { Platform } from "../Platform.ts";
+import type { Platform, Subscription } from "../Platform.ts";
 
 /** Built for one instance: an object's methods. */
 type InstanceBuild = Effect.Effect<
@@ -142,7 +148,34 @@ const objectState = (
   // The instance's input gate, held across the whole section.
   exclusive: (effect) => gateExclusive(effect),
   waitUntil: (effect) => state.waitUntil(effect),
+  // Live reads hold the WebSockets the gateway carries to the instance.
+  sockets: {
+    accept: () => upgrade(),
+    all: () => state.getWebSockets(),
+  },
 });
+
+/**
+ * Forward a live read's WebSocket upgrade (the current request) to the
+ * instance that owns `key`, carrying the subscription. The caller sets the
+ * header, overwriting any a client sent, so the instance can trust it.
+ */
+const connectTo = (namespace: Namespace, key: string, subscription: Subscription): HttpEffect =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext, which the caller's runtime provides at call time
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const forwarded = request.modify({
+      headers: Headers.set(
+        request.headers,
+        SUBSCRIPTION_HEADER,
+        JSON.stringify({ key, subscription } satisfies Attachment),
+      ),
+    });
+    const stub = namespace.getByName(key) as unknown as ReturnType<
+      DurableObjectNamespace<{}>["getByName"]
+    >;
+    return yield* stub.fetch(forwarded).pipe(Effect.orDie);
+  }) as HttpEffect;
 
 /** What a Domain host class's instance returns. */
 export interface DomainShape {
@@ -183,6 +216,7 @@ const multiplexed = (
         return remote(className(modelName, cls));
       }),
     lookup: ({ modelName }, cls) => remote(className(modelName, cls)),
+    connect: connectTo,
     claimKey: Effect.succeed(claimOf(name)),
   };
   // Sagas run on the workflow engine over the same class: each execution
@@ -255,15 +289,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
         Effect.provideService(EngineState, engineState(state)),
         Effect.provideService(RuntimeContext, { ...runtime, makeCallback: callbacks.makeCallback }),
       );
-      // Rivet 3 holds no WebSockets: live reads poll.
-      const {
-        fetch: _fetch,
-        webSocketMessage: _m,
-        webSocketClose: _c,
-        webSocketError: _e,
-        ...methods
-      } = record;
-      return { ...methods, alarm: () => callbacks.fire } satisfies DomainShape;
+      return { ...record, alarm: () => callbacks.fire } satisfies DomainShape;
     });
   });
 
@@ -282,9 +308,11 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  * Commands to one aggregate instance run one at a time. Events, state and
  * the outbox commit together in the instance's SQLite, and deliveries to
  * views, projections and policies are at least once and in order per source.
- * Scheduled commands and retries are the instance's alarm. Live reads are
- * streamed responses that poll the owning instance: Rivet 3 has no
- * hibernatable WebSockets.
+ * Scheduled commands and retries are the instance's alarm. Over
+ * `Domain.protocolWebSocket`, a live read's WebSocket travels through the
+ * control plane's gateway to the instance that owns the key, which pushes
+ * every commit down it. Over `Domain.protocolHttp`, live reads are streamed
+ * responses that poll the owning instance.
  *
  * ### Hosting a model on Rivet
  * **Example:** The model's Layer, served from a Worker
