@@ -18,6 +18,7 @@ import {
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
+import { ScalingSchedule, ScalingScheduleProvider } from "./Service/ScalingSchedule.ts";
 import { Service, ServiceProvider } from "./Service/Service.ts";
 import { Invitation, InvitationProvider } from "./UserManagement/Invitation.ts";
 import { Member, MemberProvider } from "./UserManagement/Member.ts";
@@ -53,6 +54,7 @@ export const providers = () =>
       Organization,
       PreviewFeature,
       Role,
+      ScalingSchedule,
       Service,
     ]),
   ).pipe(
@@ -67,6 +69,7 @@ export const providers = () =>
         OrganizationProvider(),
         PreviewFeatureProvider(),
         RoleProvider(),
+        ScalingScheduleProvider(),
         ServiceProvider(),
       ),
     ),
