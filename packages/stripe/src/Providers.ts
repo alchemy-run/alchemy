@@ -13,6 +13,7 @@ import { Alert, AlertProvider } from "./Alert.ts";
 import { ApplePayDomain, ApplePayDomainProvider } from "./ApplePayDomain.ts";
 import { AppsSecret, AppsSecretProvider } from "./AppsSecret.ts";
 import { StripeAuth } from "./AuthProvider.ts";
+import { BalanceSettings, BalanceSettingsProvider } from "./BalanceSettings.ts";
 import { BillingMeter, BillingMeterProvider } from "./BillingMeter.ts";
 import {
   BillingPortalConfiguration,
@@ -148,6 +149,7 @@ export const providers = () =>
       Alert,
       ApplePayDomain,
       AppsSecret,
+      BalanceSettings,
       BillingMeter,
       BillingPortalConfiguration,
       Coupon,
@@ -190,6 +192,7 @@ export const providers = () =>
         AlertProvider(),
         ApplePayDomainProvider(),
         AppsSecretProvider(),
+        BalanceSettingsProvider(),
         BillingMeterProvider(),
         BillingPortalConfigurationProvider(),
         CouponProvider(),

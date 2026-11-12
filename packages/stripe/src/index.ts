@@ -5,6 +5,7 @@ export * from "./Alert.ts";
 export * from "./ApplePayDomain.ts";
 export * from "./AppsSecret.ts";
 export * from "./AuthProvider.ts";
+export * from "./BalanceSettings.ts";
 export * from "./BillingMeter.ts";
 export * from "./BillingPortalConfiguration.ts";
 export * from "./ConsumeEvents.ts";

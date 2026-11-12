@@ -1,5 +1,4 @@
 import { unwrapRedactedDeep } from "@distilled.cloud/core/protocol-rest";
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   CreateCoreEventDestination,
   CreateCoreEventDestinationDisable,
@@ -19,6 +18,7 @@ import { tagRecord } from "alchemy/Tags";
 import { arrayEquals } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { atSpecApiVersion } from "./internal/version.ts";
 import {
   alchemyMetadataKeys,
   createInternalMetadata,
@@ -34,7 +34,7 @@ const LIST_MAX_PAGES = 100;
 const NAME_MAX_LENGTH = 100;
 
 /** The v2 API rejects calls without an explicit version. */
-const atV2ApiVersion = withRequestOptions({ apiVersion: "2026-10-28.endive" });
+const atV2ApiVersion = atSpecApiVersion;
 
 /** `snapshot` delivers full objects; `thin` delivers ids you fetch yourself. */
 export type EventDestinationPayload = "snapshot" | "thin";
