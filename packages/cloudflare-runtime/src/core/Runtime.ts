@@ -1,8 +1,8 @@
-import * as NodeFs from "node:fs";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
@@ -43,6 +43,7 @@ export const RuntimeLive = Layer.effect(
   Runtime,
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
+    const fs = yield* FileSystem.FileSystem;
     const storage = yield* Storage.Storage;
     const docker = yield* Docker.Docker;
     const plugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
@@ -234,14 +235,9 @@ export const RuntimeLive = Layer.effect(
         // process scopes, this runs after they kill workerd.
         const { entrySocketPath } = worker;
         if (entrySocketPath !== undefined) {
+          // Best effort: the next start clears the path anyway.
           yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
-              try {
-                NodeFs.rmSync(entrySocketPath, { force: true });
-              } catch {
-                // Best effort: the next start clears the path anyway.
-              }
-            }),
+            fs.remove(entrySocketPath, { force: true }).pipe(Effect.ignore),
           );
         }
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();

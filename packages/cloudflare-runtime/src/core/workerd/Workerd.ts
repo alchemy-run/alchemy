@@ -1,8 +1,8 @@
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
@@ -144,6 +144,7 @@ const withV8Flags = (config: Config, flags: Array<string>): Config =>
   flags.length === 0 ? config : { ...config, v8Flags: [...flags, ...(config.v8Flags ?? [])] };
 
 const make = (
+  fs: FileSystem.FileSystem,
   spawn: (
     command: string,
     args: Array<string>,
@@ -194,16 +195,13 @@ const make = (
         // workerd never removes a Unix socket file it listened on, and the
         // file left by an earlier process (a crash, or an attempt this retry
         // replaces) fails the next bind with "Address already in use".
-        yield* Effect.sync(() => {
-          for (const address of configuredAddresses) {
-            if (!address.startsWith("unix:")) continue;
-            try {
-              NodeFs.rmSync(address.slice("unix:".length), { force: true });
-            } catch {
-              // workerd's bind reports whatever is wrong with the path.
-            }
-          }
-        });
+        // Errors are ignored: workerd's bind reports whatever is wrong with the path.
+        yield* Effect.forEach(
+          configuredAddresses.filter((address) => address.startsWith("unix:")),
+          (address) =>
+            fs.remove(address.slice("unix:".length), { force: true }).pipe(Effect.ignore),
+          { discard: true },
+        );
         const handle = yield* spawn(
           // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
           options?.bin || process.env[PATH_ENV] || workerd.bin,
@@ -323,8 +321,8 @@ const externalEnv = (extra: Record<string, string> | undefined) => {
   return { ...env, ...extra };
 };
 
-const makeBun = () =>
-  make((command, args, config, configuredAddresses, env) =>
+const makeBun = (fs: FileSystem.FileSystem) =>
+  make(fs, (command, args, config, configuredAddresses, env) =>
     // `Bun.spawn` throws when the binary is missing or not executable; type
     // it like the Node path so a failed start (or restart) is reported.
     Effect.try({
@@ -414,8 +412,8 @@ const makeBun = () =>
     ),
   );
 
-const makeNode = () =>
-  make((command, args, config, configuredAddresses, env) => {
+const makeNode = (fs: FileSystem.FileSystem) =>
+  make(fs, (command, args, config, configuredAddresses, env) => {
     const stderrTail = makeTail();
     return Effect.try({
       try: () =>
@@ -596,8 +594,14 @@ const makeNode = () =>
 // (EBADF) can read, so the `--control-fd=3` listen events never arrive and
 // `serve` waits forever. Bun's `node:child_process` implementation handles
 // stdio[3] correctly on Windows, so route Windows through the Node spawn path.
-export const WorkerdLive = Layer.sync(Workerd, () =>
-  typeof globalThis.Bun !== "undefined" && process.platform !== "win32" ? makeBun() : makeNode(),
+export const WorkerdLive = Layer.effect(
+  Workerd,
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return typeof globalThis.Bun !== "undefined" && process.platform !== "win32"
+      ? makeBun(fs)
+      : makeNode(fs);
+  }),
 );
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
