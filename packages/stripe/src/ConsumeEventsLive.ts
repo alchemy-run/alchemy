@@ -15,7 +15,7 @@ import {
   type ConsumeEventsProps,
   type EventSourceService,
 } from "./ConsumeEvents.ts";
-import type { StripeEventClass, StripeEventInstance } from "./Events.ts";
+import type { StripeEventClass, StripeEventInstance, StripeEventMeta } from "./Events.ts";
 import { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
 /** A host that accepts environment bindings, such as a Cloudflare Worker. */
@@ -120,6 +120,19 @@ const asWebhookSecret = (raw: unknown): Redacted.Redacted<string> | undefined =>
   return undefined;
 };
 
+/** The envelope fields of a verified event, as {@link StripeEventMeta}. */
+const eventMeta = (parsed: {
+  readonly id?: string;
+  readonly created?: number;
+  readonly livemode?: boolean;
+  readonly api_version?: string | null;
+}): StripeEventMeta => ({
+  id: parsed.id ?? "",
+  created: parsed.created ?? 0,
+  livemode: parsed.livemode ?? false,
+  ...(parsed.api_version ? { apiVersion: parsed.api_version } : {}),
+});
+
 const handleDelivery = <Req>(
   request: Request,
   secret: Effect.Effect<unknown>,
@@ -157,6 +170,6 @@ const handleDelivery = <Req>(
       typeof parsed.data === "object" && parsed.data !== null && "object" in parsed.data
         ? (parsed.data as { object: unknown }).object
         : parsed.data;
-    yield* process(new Ctor(data as never)).pipe(Effect.orDie);
+    yield* process(new Ctor(data as never, eventMeta(parsed))).pipe(Effect.orDie);
     return new Response(null, { status: 200 });
   });
