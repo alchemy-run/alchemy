@@ -29,6 +29,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Catalog": "./src/Catalog/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -40,6 +41,13 @@
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
       },
+      "./Catalog": {
+        "types": "./lib/Catalog/index.d.ts",
+        "bun": "./src/Catalog/index.ts",
+        "worker": "./src/Catalog/index.ts",
+        "default": "./lib/Catalog/index.js"
+      },
+      "./internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

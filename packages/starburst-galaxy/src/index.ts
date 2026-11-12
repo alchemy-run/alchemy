@@ -1,4 +1,5 @@
 export * as Auth from "./AuthProvider.ts";
+export * from "./Catalog/index.ts";
 export {
   Credentials,
   CredentialsFromEnv,

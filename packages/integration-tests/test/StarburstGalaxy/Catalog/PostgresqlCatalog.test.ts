@@ -1,0 +1,149 @@
+import * as Neon from "@alchemy.run/neon";
+import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as galaxy from "@distilled.cloud/starburst-galaxy";
+import * as Provider from "alchemy/Provider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { expectGone, pinnedName, secret, UNVALIDATED_ENDPOINT } from "../helpers.ts";
+
+const { test } = Test.make({ providers: StarburstGalaxy.providers() });
+const withNeon = Test.make({
+  providers: Layer.mergeAll(StarburstGalaxy.providers(), Neon.providers()),
+});
+
+const getCatalog = (catalogId: string) => galaxy.catalog.getPostgresqlCatalog({ catalogId });
+
+const catalogExists = (catalogId: string) =>
+  getCatalog(catalogId).pipe(
+    Effect.as(true),
+    Effect.catchTag("NotFound", () => Effect.succeed(false)),
+  );
+
+const unreachable = {
+  endpoint: UNVALIDATED_ENDPOINT,
+  databaseName: "app",
+  username: "galaxy",
+  validate: false,
+} as const;
+
+test.provider(
+  "create, reconfigure, rotate the password, rename, look up and delete a catalog",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const renamed = yield* pinnedName("pg");
+
+      const created = yield* stack.deploy(
+        StarburstGalaxy.PostgresqlCatalog("Pg", { ...unreachable, password: secret("v1") }),
+      );
+      const catalogId = created.catalogId;
+      const live = yield* getCatalog(catalogId);
+      expect(live.name).toBe(created.name);
+      expect(live.endpoint).toBe(unreachable.endpoint);
+      expect(live.databaseName).toBe("app");
+      expect(live.username).toBe("galaxy");
+      expect(live.readOnly).toBe(false);
+      // Generated names are SQL identifiers.
+      expect(created.name).toMatch(/^[a-z0-9_]+$/);
+
+      // Settings converge in place.
+      const reconfigured = yield* stack.deploy(
+        StarburstGalaxy.PostgresqlCatalog("Pg", {
+          ...unreachable,
+          password: secret("v1"),
+          description: "replica",
+          readOnly: true,
+          port: 6543,
+        }),
+      );
+      expect(reconfigured.catalogId).toBe(catalogId);
+      const updated = yield* getCatalog(catalogId);
+      expect(updated.description).toBe("replica");
+      expect(updated.readOnly).toBe(true);
+      expect(updated.port).toBe(6543);
+
+      // A new password is sent though Galaxy never returns one; the catalog stays.
+      const rotated = yield* stack.deploy(
+        StarburstGalaxy.PostgresqlCatalog("Pg", {
+          ...unreachable,
+          password: secret("v2"),
+          description: "replica",
+          readOnly: true,
+          port: 6543,
+        }),
+      );
+      expect(rotated.catalogId).toBe(catalogId);
+
+      // A rename keeps the catalog id.
+      const named = yield* stack.deploy(
+        StarburstGalaxy.PostgresqlCatalog("Pg", {
+          ...unreachable,
+          name: renamed,
+          password: secret("v2"),
+        }),
+      );
+      expect(named.catalogId).toBe(catalogId);
+      const renamedLive = yield* getCatalog(catalogId);
+      expect(renamedLive.name).toBe(renamed);
+      expect(renamedLive.readOnly).toBe(false);
+      expect(renamedLive.description ?? "").toBe("");
+
+      // `lookup` finds it by name; `list` reports it.
+      const provider = yield* Provider.findProvider(StarburstGalaxy.PostgresqlCatalog);
+      const found = yield* provider.lookup!({ name: renamed });
+      expect(found?.catalogId).toBe(catalogId);
+      const listed = yield* provider.list();
+      expect(listed.find((catalog) => catalog.catalogId === catalogId)?.name).toBe(renamed);
+
+      yield* stack.destroy();
+      yield* expectGone(catalogExists(catalogId));
+    }),
+  {
+    tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:catalog", "live"],
+    timeout: 180_000,
+  },
+);
+
+withNeon.test.provider.skipIf(!process.env.STARBURST_GALAXY_TEST_NEON)(
+  "a catalog over a Neon project passes Galaxy's validation, and a wrong password fails it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const app = (password?: Redacted.Redacted<string>) =>
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("Project");
+          return yield* StarburstGalaxy.PostgresqlCatalog("Neon", {
+            endpoint: project.origin.host,
+            databaseName: project.origin.database,
+            username: project.origin.user,
+            password: password ?? project.origin.password,
+          });
+        });
+
+      const catalog = yield* stack.deploy(app());
+      const validation = yield* galaxy.catalog.validatePostgresqlCatalog({
+        catalogId: catalog.catalogId,
+      });
+      expect(validation.validationSuccessful).toBe(true);
+
+      const wrong = yield* stack.deploy(app(secret("wrong-password"))).pipe(Effect.exit);
+      expect(Exit.isFailure(wrong)).toBe(true);
+
+      yield* stack.destroy();
+      yield* expectGone(catalogExists(catalog.catalogId));
+    }),
+  {
+    tags: [
+      "provider:starburst-galaxy",
+      "provider:starburst-galaxy:catalog",
+      "provider:neon",
+      "live",
+    ],
+    timeout: 240_000,
+  },
+);
