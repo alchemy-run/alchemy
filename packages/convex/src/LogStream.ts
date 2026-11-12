@@ -157,7 +157,10 @@ export const LogStreamProvider = () =>
         yield* onDeployment(
           output.deploymentUrl,
           deployment.deleteIntegration({ id: output.logStreamId }),
-        ).pipe(Effect.catchTag(GONE, () => Effect.void));
+        ).pipe(
+          Effect.catchTag("InvalidLogStreamId", () => Effect.void),
+          Effect.catchTag(GONE, () => Effect.void),
+        );
       }),
     }),
   );
