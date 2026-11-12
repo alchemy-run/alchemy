@@ -1,0 +1,91 @@
+{
+  "name": "@alchemy.run/clickhouse-cloud",
+  "version": "2.0.0-beta.85",
+  "description": "ClickHouse Cloud services, backups, API keys and roles for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "clickhouse",
+    "clickhouse-cloud",
+    "effect",
+    "infrastructure-as-code",
+    "olap"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/clickhouse-cloud"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./ApiKeys": "./src/ApiKeys/index.ts",
+    "./RoleManagement": "./src/RoleManagement/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./ApiKeys": {
+        "types": "./lib/ApiKeys/index.d.ts",
+        "bun": "./src/ApiKeys/index.ts",
+        "worker": "./src/ApiKeys/index.ts",
+        "default": "./lib/ApiKeys/index.js"
+      },
+      "./RoleManagement": {
+        "types": "./lib/RoleManagement/index.d.ts",
+        "bun": "./src/RoleManagement/index.ts",
+        "worker": "./src/RoleManagement/index.ts",
+        "default": "./lib/RoleManagement/index.js"
+      },
+      "./internal/*": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@distilled.cloud/clickhouse-cloud": "workspace:*",
+    "@distilled.cloud/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/clickhouse-cloud/Contributions"
+    ]
+  }
+}

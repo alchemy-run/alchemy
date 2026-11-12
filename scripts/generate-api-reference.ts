@@ -84,6 +84,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/archil/src",
   },
   {
+    srcRoot: "packages/clickhouse-cloud/src",
+    providerPrefix: "ClickHouseCloud",
+    sourceDisplayPrefix: "packages/clickhouse-cloud/src",
+  },
+  {
     srcRoot: "packages/boat/src",
     providerPrefix: "Boat",
     sourceDisplayPrefix: "packages/boat/src",

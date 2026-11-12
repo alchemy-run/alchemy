@@ -9198,6 +9198,28 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  packages/clickhouse-cloud:
+    dependencies:
+      '@distilled.cloud/clickhouse-cloud':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/clickhouse-cloud
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
   packages/cloudflare:
     dependencies:
       '@alchemy.run/acme':
@@ -10700,6 +10722,9 @@ importers:
       '@alchemy.run/boat':
         specifier: workspace:*
         version: link:../boat
+      '@alchemy.run/clickhouse-cloud':
+        specifier: workspace:*
+        version: link:../clickhouse-cloud
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
@@ -10802,6 +10827,9 @@ importers:
       '@distilled.cloud/boat-dev':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/boat-dev
+      '@distilled.cloud/clickhouse-cloud':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/clickhouse-cloud
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/cloudflare
@@ -11608,6 +11636,9 @@ importers:
       '@alchemy.run/boat':
         specifier: workspace:*
         version: link:../packages/boat
+      '@alchemy.run/clickhouse-cloud':
+        specifier: workspace:*
+        version: link:../packages/clickhouse-cloud
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../packages/cloudflare
