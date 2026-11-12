@@ -18,6 +18,8 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
     const discover = yield* ClickHouseCloud.Prometheus.GetOrganizationPrometheusDiscovery(Org);
     const getUsageCost = yield* ClickHouseCloud.Billing.GetUsageCost(Org);
     const getCreditBalances = yield* ClickHouseCloud.Billing.GetCreditBalances(Org);
+    const listNotifications = yield* ClickHouseCloud.Notifications.ListNotifications(Org);
+    const listNotificationTypes = yield* ClickHouseCloud.Notifications.ListNotificationTypes(Org);
 
     return {
       fetch: Effect.gen(function* () {
@@ -66,6 +68,15 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
           });
         }
 
+        if (url.pathname === "/notifications") {
+          const types = yield* listNotificationTypes();
+          const feed = yield* listNotifications({ resourceType: "organization" });
+          return yield* HttpServerResponse.json({
+            typeNames: types.map((t) => t.name),
+            feedResourceTypes: [...new Set(feed.map((n) => n.resourceType))],
+          });
+        }
+
         // Not 404: a fresh workers.dev URL answers 404 until it propagates.
         return HttpServerResponse.text("no such route", { status: 400 });
       }).pipe(
@@ -85,6 +96,8 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
         ClickHouseCloud.Prometheus.GetOrganizationPrometheusDiscoveryHttp,
         ClickHouseCloud.Billing.GetUsageCostHttp,
         ClickHouseCloud.Billing.GetCreditBalancesHttp,
+        ClickHouseCloud.Notifications.ListNotificationsHttp,
+        ClickHouseCloud.Notifications.ListNotificationTypesHttp,
       ),
     ),
   ),

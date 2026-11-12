@@ -99,6 +99,18 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
   );
 
   test(
+    "ListNotificationTypes and ListNotifications: the catalog, and a feed filtered to the organization",
+    Effect.gen(function* () {
+      const body = yield* get<{ typeNames: string[]; feedResourceTypes: string[] }>(
+        "/notifications",
+      );
+      expect(body.typeNames).toContain("billing_credit_passed_90pc_threshold");
+      expect(body.feedResourceTypes.filter((t) => t !== "organization")).toEqual([]);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
     "each binding's role allows only view permissions on the organization",
     Effect.gen(function* () {
       const { organizationId } = yield* stack;
@@ -107,7 +119,7 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
         (r) => r.type === "custom" && (r.name ?? "").startsWith(ROLE_PREFIX),
       );
       // One role per binding the Worker holds.
-      expect(scoped.length).toEqual(7);
+      expect(scoped.length).toEqual(9);
       for (const role of scoped) {
         expect(role.policies?.length).toEqual(1);
         const [policy] = role.policies ?? [];
