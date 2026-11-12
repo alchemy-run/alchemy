@@ -27,6 +27,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import { ApiKey } from "./ApiKeys/ApiKey.ts";
 import type { Organization } from "./Organization/Organization.ts";
+import type { Service as PostgresService } from "./Postgres/Service.ts";
 import { Role } from "./RoleManagement/Role.ts";
 
 /**
@@ -187,6 +188,35 @@ export const BindOrganization = Effect.gen(function* () {
     const run: Run<{ organizationId: string }> = (call) =>
       Effect.gen(function* () {
         const ids = { organizationId: yield* organizationId };
+        return yield* authorize(call(ids));
+      });
+    return run;
+  });
+});
+
+/**
+ * Bind to one Postgres service: grants `permissions` on
+ * `postgres/<postgresId>` and returns a runner that receives the Postgres
+ * service's IDs.
+ */
+export const BindPostgres = Effect.gen(function* () {
+  const bind = yield* Bind;
+  return Effect.fn(function* (
+    binding: string,
+    target: PostgresService,
+    permissions: readonly string[],
+  ) {
+    const { authorize } = yield* bind(
+      binding,
+      target,
+      Output.interpolate`postgres/${target.postgresId}`,
+      permissions,
+    );
+    const postgresId = yield* target.postgresId;
+    const organizationId = yield* target.organizationId;
+    const run: Run<{ organizationId: string; postgresId: string }> = (call) =>
+      Effect.gen(function* () {
+        const ids = { organizationId: yield* organizationId, postgresId: yield* postgresId };
         return yield* authorize(call(ids));
       });
     return run;

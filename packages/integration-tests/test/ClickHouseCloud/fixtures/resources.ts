@@ -67,3 +67,13 @@ export const NumbersEndpoint = Effect.gen(function* () {
     roles: ["default_role"],
   });
 });
+
+/** The smallest Postgres service, bound by the Postgres bindings. */
+export const BindingsDb = ClickHouseCloud.Postgres.Service("BindingsDb", {
+  provider: "aws",
+  region: "us-east-1",
+  postgresVersion: "17",
+  size: "r6gd.medium",
+  // The test runner connects with what Connect hands the Worker.
+  ipAccessList: [{ source: "0.0.0.0/0", portRange: "5432", description: "bindings test" }],
+});
