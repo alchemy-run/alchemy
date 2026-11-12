@@ -6,8 +6,17 @@ import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { StarburstGalaxyAuth } from "./AuthProvider.ts";
+import { BigQueryCatalog, BigQueryCatalogProvider } from "./Catalog/BigQueryCatalog.ts";
+import { CassandraCatalog, CassandraCatalogProvider } from "./Catalog/CassandraCatalog.ts";
+import { GcsCatalog, GcsCatalogProvider } from "./Catalog/GcsCatalog.ts";
+import { MongoDBCatalog, MongoDBCatalogProvider } from "./Catalog/MongoDBCatalog.ts";
+import { MySQLCatalog, MySQLCatalogProvider } from "./Catalog/MySQLCatalog.ts";
+import { OpenSearchCatalog, OpenSearchCatalogProvider } from "./Catalog/OpenSearchCatalog.ts";
 import { PostgresqlCatalog, PostgresqlCatalogProvider } from "./Catalog/PostgresqlCatalog.ts";
+import { RedshiftCatalog, RedshiftCatalogProvider } from "./Catalog/RedshiftCatalog.ts";
 import { S3Catalog, S3CatalogProvider } from "./Catalog/S3Catalog.ts";
+import { SnowflakeCatalog, SnowflakeCatalogProvider } from "./Catalog/SnowflakeCatalog.ts";
+import { SqlServerCatalog, SqlServerCatalogProvider } from "./Catalog/SqlServerCatalog.ts";
 import { Cluster, ClusterProvider } from "./Cluster/Cluster.ts";
 import * as Credentials from "./Credentials.ts";
 import { DataDomain, DataDomainProvider } from "./DataProduct/DataDomain.ts";
@@ -66,34 +75,52 @@ export const providers = () =>
   Layer.effect(
     Providers,
     Provider.collection([
+      BigQueryCatalog,
+      CassandraCatalog,
       Cluster,
       ColumnMask,
       DataDomain,
+      GcsCatalog,
+      MongoDBCatalog,
+      MySQLCatalog,
+      OpenSearchCatalog,
       PostgresqlCatalog,
+      RedshiftCatalog,
       Role,
       RolePrivilege,
       RowFilter,
       S3Catalog,
       ServiceAccount,
       ServiceAccountPassword,
+      SnowflakeCatalog,
       SqlJob,
+      SqlServerCatalog,
       Tag,
       TagAssignment,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        BigQueryCatalogProvider(),
+        CassandraCatalogProvider(),
         ClusterProvider(),
         ColumnMaskProvider(),
         DataDomainProvider(),
+        GcsCatalogProvider(),
+        MongoDBCatalogProvider(),
+        MySQLCatalogProvider(),
+        OpenSearchCatalogProvider(),
         PostgresqlCatalogProvider(),
+        RedshiftCatalogProvider(),
         RoleProvider(),
         RolePrivilegeProvider(),
         RowFilterProvider(),
         S3CatalogProvider(),
         ServiceAccountProvider(),
         ServiceAccountPasswordProvider(),
+        SnowflakeCatalogProvider(),
         SqlJobProvider(),
+        SqlServerCatalogProvider(),
         TagProvider(),
         TagAssignmentProvider(),
       ),
