@@ -410,6 +410,9 @@
       "path": "./examples/boat-program/tsconfig.json"
     },
     {
+      "path": "./examples/clickhouse-cloud-usage/tsconfig.json"
+    },
+    {
       "path": "./examples/e2b-program-async/tsconfig.json"
     },
     {
