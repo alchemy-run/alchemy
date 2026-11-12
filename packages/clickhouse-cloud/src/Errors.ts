@@ -207,3 +207,13 @@ export class RunQueryApiEndpointFailed extends Data.TaggedError(
     return `Running the ClickHouse Cloud Query API endpoint failed (${this.status}): ${this.body}`;
   }
 }
+
+/** A SQL call over the ClickHouse HTTP interface failed. */
+export class SqlCallFailed extends Data.TaggedError("ClickHouseCloud.SqlCallFailed")<{
+  readonly operation: string;
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `ClickHouse ${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
+  }
+}

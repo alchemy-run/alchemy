@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import { bindingTags as tags, getJson, noCloudflare } from "../fixtures/bindings.ts";
 import { Analytics, NumbersEndpoint, StationsPipe } from "../fixtures/resources.ts";
 import ClickHouseServiceWorker from "../fixtures/service-worker.ts";
+import ClickHouseSqlWorker from "../fixtures/sql-worker.ts";
 
 // Deploys its own service (minutes to create, billed compute), so it also
 // needs CLICKHOUSE_CLOUD_TEST_SLOW=1 and a free service slot.
@@ -32,8 +33,10 @@ const Stack = Alchemy.Stack(
     const pipe = yield* StationsPipe;
     const endpoint = yield* NumbersEndpoint;
     const worker = yield* ClickHouseServiceWorker;
+    const sqlWorker = yield* ClickHouseSqlWorker;
     return {
       url: worker.url.as<string>(),
+      sqlUrl: sqlWorker.url.as<string>(),
       serviceId: analytics.serviceId,
       organizationId: analytics.organizationId,
       clickPipeId: pipe.clickPipeId,
@@ -46,6 +49,7 @@ const stack = beforeAll(
   skipped
     ? Effect.succeed({
         url: "",
+        sqlUrl: "",
         serviceId: "",
         organizationId: "",
         clickPipeId: "",
@@ -57,6 +61,7 @@ const stack = beforeAll(
 afterAll.skipIf(skipped || !!process.env.NO_DESTROY)(destroy(Stack), { timeout: 3_600_000 });
 
 const get = getJson(stack);
+const getSql = getJson(Effect.map(stack, ({ sqlUrl }) => ({ url: sqlUrl })));
 
 /** Out-of-band reads with the deployer's credentials. */
 const outOfBand = Effect.provide(
@@ -153,6 +158,14 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
     Effect.gen(function* () {
       const { rows } = yield* get<{ rows: unknown[] }>("/numbers?n=3");
       expect(rows).toEqual([{ number: 0 }, { number: 1 }, { number: 2 }]);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
+    "Ping reaches the service over the ClickHouse HTTP interface",
+    Effect.gen(function* () {
+      expect(yield* getSql<{ ok: boolean }>("/ping")).toEqual({ ok: true });
     }),
     { tags, timeout: 120_000 },
   );
