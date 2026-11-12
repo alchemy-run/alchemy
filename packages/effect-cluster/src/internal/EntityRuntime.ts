@@ -11,6 +11,9 @@
  *   a message cut short by a restart runs again when the object next wakes.
  * - A message with `DeliverAt` waits in storage until its time, which the
  *   object's alarm wakes it for.
+ * - An instance holds `mailboxCapacity` messages. A volatile message past
+ *   that fails with `MailboxFull`; a persisted one waits in storage and runs
+ *   as the instance finishes others, in the order they were stored.
  * - A defect restarts the instance, backing off, and runs its messages
  *   again, unless `disableFatalDefects` returns it to the caller.
  * - The instance stops once idle for `maxIdleTime`, closing its scope,
@@ -72,6 +75,9 @@ const REPLAY_AFTER = 30_000;
 
 /** How long a reply without a primary key is kept, for its caller's retries. */
 const KEEP_REPLIES = 60 * 60_000;
+
+/** How long an interrupt that arrived before its call waits for it. */
+const KEEP_INTERRUPTS = 60_000;
 
 /** Effect Cluster's back-off between attempts to build an instance. */
 const restartPolicy = Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced("10 seconds")]);
@@ -253,6 +259,8 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   const actives = new Map<number, Active>();
   const byKey = new Map<string, Active>();
   const byCaller = new Map<string, Active>();
+  /** Callers whose interrupt reached the object before their call, and when. */
+  const leftEarly = new Map<string, number>();
   /** Callers waiting on a message whose `DeliverAt` hasn't come. */
   const waiters = new Map<string, Array<Deferred.Deferred<string>>>();
   let nextId = 0;
@@ -263,9 +271,9 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   let replayed = false;
   let lastActive = now();
   let prunedAt = 0;
-  /** Non-persisted messages running. */
-  let volatile = 0;
-  /** Stored messages without a reply: running, cut short, or waiting for their time. */
+  /** Stored messages are due and waiting for room on the instance. */
+  let backlog = false;
+  /** Stored messages without a reply: running, cut short, or waiting for their time or for room. */
   let pending =
     (yield* exec<{ n: number }>("SELECT COUNT(*) AS n FROM cluster_mailbox WHERE exit IS NULL"))[0]
       ?.n ?? 0;
@@ -311,7 +319,6 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
 
   const forget = (active: Active) => {
     actives.delete(active.id);
-    if (!active.persisted) volatile--;
     if (byKey.get(active.key) === active) byKey.delete(active.key);
     for (const caller of active.callers) {
       if (byCaller.get(caller) === active) byCaller.delete(caller);
@@ -358,7 +365,7 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
           for (const waiter of waiting ?? []) Deferred.doneUnsafe(waiter, Exit.succeed(reply));
         }),
       ),
-    );
+    ).pipe(Effect.andThen(drain));
 
   /** Stop `active`'s handler, from apart: its own fiber may be the one asking. */
   const stop = (active: Active) =>
@@ -598,7 +605,6 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
     };
     actives.set(active.id, active);
     byKey.set(key, active);
-    if (!persisted) volatile++;
     return active;
   };
 
@@ -614,8 +620,21 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
     return waitOn(key, reply);
   };
 
-  /** Whether the mailbox holds its capacity of messages without a reply. */
-  const full = () => capacity !== "unbounded" && volatile + pending >= capacity;
+  /**
+   * Whether the instance holds its capacity of messages, running or waiting
+   * for their turn to. As on Effect Cluster's runners, a stored message
+   * waiting for its `DeliverAt` isn't one of them.
+   */
+  const full = () => capacity !== "unbounded" && actives.size >= capacity;
+
+  /**
+   * A stored message that is due but has to wait: the instance is full, or
+   * others are waiting ahead of it.
+   */
+  const queued = (mode: "ask" | "tell" | "stream", key: string): Admission => {
+    backlog = true;
+    return mode === "tell" ? accepted : waitFor(key);
+  };
 
   const storedChunks = (key: string) =>
     Effect.map(
@@ -681,6 +700,7 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
             if (row.deliver_at != null && row.deliver_at > at) {
               return mode === "tell" ? accepted : waitFor(key);
             }
+            if (backlog || full()) return queued(mode, key);
             // Stored, but cut short by a restart: run it now, as it was sent.
             const stored = JSON.parse(row.call) as Call;
             const decoded = Schema.decodeUnknownExit(payloadCodec(rpc))(stored.payload);
@@ -695,7 +715,6 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
             join(active, call.requestId);
             return run(active);
           }
-          if (full()) return rejected("MailboxFull", `${entity.type} mailbox is full`);
           const text = JSON.stringify(call);
           if (tooLarge(text)) {
             return rejected("PersistenceError", `The call ${key} is over ${limit} bytes`);
@@ -718,27 +737,46 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
             yield* arm(deliverAt);
             return mode === "tell" ? accepted : waitFor(key);
           }
+          // A full instance doesn't turn a stored message away: it runs once
+          // there is room, after those stored before it.
+          if (backlog || full()) return queued(mode, key);
           const active = makeActive(key, rpc, payload, call, true);
           join(active, call.requestId);
           return run(active);
         }),
-      );
+        // A message queued while the instance has room runs now.
+      ).pipe(Effect.tap(() => drain));
     });
 
-  /** Run every stored message whose time has come and that isn't running. */
+  /**
+   * Run the stored messages whose time has come and that aren't running,
+   * oldest first, as far as the instance has room.
+   */
   const replayStored: Effect.Effect<void> = Effect.suspend(() => {
     replayed = true;
-    if (pending === 0) return Effect.void;
+    if (pending === 0) {
+      backlog = false;
+      return Effect.void;
+    }
     return locked(
       Effect.gen(function* () {
+        // Those running are among the oldest, so the instance's capacity and
+        // one more row tell whether any are left waiting.
         const rows = yield* exec<MailboxRow>(
-          "SELECT request_id, call FROM cluster_mailbox WHERE exit IS NULL AND (deliver_at IS NULL OR deliver_at <= ?) ORDER BY created_at",
+          `SELECT request_id, call FROM cluster_mailbox WHERE exit IS NULL AND (deliver_at IS NULL OR deliver_at <= ?) ORDER BY created_at, rowid${
+            capacity === "unbounded" ? "" : ` LIMIT ${capacity + 1}`
+          }`,
           now(),
         );
         const started: Array<Active> = [];
         const dropped: Array<string> = [];
+        backlog = false;
         for (const row of rows) {
           if (byKey.has(row.request_id)) continue;
+          if (full()) {
+            backlog = true;
+            break;
+          }
           const call = JSON.parse(row.call) as Call;
           const rpc = entity.protocol.requests.get(call.tag) as Rpc.AnyWithProps | undefined;
           const payload =
@@ -780,11 +818,25 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
     );
   });
 
+  /** Run waiting stored messages, in the background, once the instance has room for one. */
+  const drain: Effect.Effect<void> = Effect.suspend(() =>
+    backlog && !full() ? options.waitUntil(replayStored) : Effect.void,
+  );
+
   /** A caller stopped waiting: interrupt its message, unless it is uninterruptible. */
   const interrupt = (caller: string) =>
     Effect.suspend(() => {
       const active = byCaller.get(caller);
-      if (active === undefined) return Effect.void;
+      if (active === undefined) {
+        // Its call may still be on its way: the two reach the object apart.
+        const at = now();
+        for (const [left, since] of leftEarly) {
+          if (at - since < KEEP_INTERRUPTS) break;
+          leftEarly.delete(left);
+        }
+        leftEarly.set(caller, at);
+        return Effect.void;
+      }
       if (ClusterSchema.isUninterruptibleForServer(active.rpc.annotations)) return Effect.void;
       active.interrupted = true;
       if (!active.delivered || instance === undefined) return complete(active, Exit.interrupt());
@@ -793,6 +845,21 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
         requestId: RpcMessage.RequestId(active.id),
         interruptors: [],
       });
+    });
+
+  /**
+   * Start a message its caller sent, unless the caller has already left:
+   * then the message is interrupted before it runs, as Effect Cluster's
+   * runners do.
+   */
+  const begin = (active: Active, caller: string) =>
+    Effect.suspend(() => {
+      if (!leftEarly.delete(caller)) return start(active);
+      return Effect.andThen(
+        interrupt(caller),
+        // An uninterruptible message runs whether or not anyone waits.
+        Effect.suspend(() => (active.interrupted ? Effect.void : start(active))),
+      );
     });
 
   const ask = (call: Call) =>
@@ -809,7 +876,7 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
         case "Wait":
           return replyText(yield* Deferred.await(admission.reply));
         case "Run":
-          yield* start(admission.active);
+          yield* begin(admission.active, call.requestId);
           return replyText(yield* Deferred.await(admission.active.reply));
       }
     });
@@ -869,7 +936,10 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
             heard = active;
             Deferred.doneUnsafe(caughtUp, Exit.void);
             active.listeners.add(listen);
-            const reply = yield* Effect.andThen(start(active), Deferred.await(active.reply)).pipe(
+            const reply = yield* Effect.andThen(
+              begin(active, call.requestId),
+              Deferred.await(active.reply),
+            ).pipe(
               // The caller stopped reading.
               Effect.onInterrupt(() => interrupt(call.requestId)),
             );
