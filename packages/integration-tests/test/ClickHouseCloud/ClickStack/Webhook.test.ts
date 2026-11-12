@@ -1,0 +1,39 @@
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { cleanSlate } from "../fixtures/cleanup.ts";
+import { needsService, testServiceId } from "../fixtures/service.ts";
+
+const { test } = Test.make({ providers: ClickHouseCloud.providers() });
+
+// ClickStack is set up per service in the console (no API). The lifecycle
+// runs in Source.test.ts's setup (CLICKHOUSE_CLOUD_TEST_CLICKSTACK_CONNECTION);
+// without ClickStack, the API refuses every ClickStack call.
+const clickstack = process.env.CLICKHOUSE_CLOUD_TEST_CLICKSTACK_CONNECTION !== undefined;
+
+test.provider.skipIf(needsService || clickstack)(
+  "a service without ClickStack set up fails with the API's Forbidden",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* cleanSlate(scratch);
+      const error = yield* scratch
+        .deploy(
+          Effect.gen(function* () {
+            const serviceId = yield* testServiceId;
+            return yield* ClickHouseCloud.ClickStack.Webhook("Probe", {
+              serviceId,
+              name: "alchemy-test",
+              service: "generic",
+              url: Redacted.make("https://example.com/clickstack"),
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("Forbidden");
+      expect(error.message).toEqual("FORBIDDEN: ClickStack has not been setup for this service");
+      yield* scratch.destroy();
+    }).pipe(Effect.scoped),
+  { tags: ["provider:clickhouse-cloud", "live"], timeout: 120_000 },
+);
