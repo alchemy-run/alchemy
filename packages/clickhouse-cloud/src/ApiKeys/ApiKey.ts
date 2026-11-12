@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { ApiKeyInUse, requireResult, ResultMissing } from "../internal/Errors.ts";
+import { ApiKeyInUse, requireResult, ResultMissing } from "../Errors.ts";
 import { isGeneratedName, isOwnedName, resolveName } from "../internal/Names.ts";
 import type { Providers } from "../Providers.ts";
 

@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { requireResult, ServiceFailed, ServiceNotReady } from "./Errors.ts";
+import { requireResult, ServiceFailed, ServiceNotReady } from "../Errors.ts";
 
 export type ServiceState = service.ServiceState;
 

@@ -5,7 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult, SystemRoleImmutable } from "../internal/Errors.ts";
+import { requireResult, SystemRoleImmutable } from "../Errors.ts";
 import { isGeneratedName, isOwnedName, resolveName } from "../internal/Names.ts";
 import type { Providers } from "../Providers.ts";
 

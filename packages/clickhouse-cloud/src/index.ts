@@ -18,7 +18,7 @@ export {
   ServiceLimitReached,
   ServiceNotReady,
   SystemRoleImmutable,
-} from "./internal/Errors.ts";
+} from "./Errors.ts";
 export * as Organization from "./Organization/index.ts";
 export * as Prometheus from "./Prometheus/index.ts";
 export * from "./Providers.ts";

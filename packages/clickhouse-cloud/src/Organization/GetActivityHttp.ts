@@ -2,7 +2,7 @@ import * as organization from "@distilled.cloud/clickhouse-cloud/organization";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindOrganization } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../internal/Errors.ts";
+import { requireResult } from "../Errors.ts";
 import { GetActivity } from "./GetActivity.ts";
 import type { Organization } from "./Organization.ts";
 

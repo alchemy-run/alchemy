@@ -2,7 +2,7 @@ import * as service from "@distilled.cloud/clickhouse-cloud/service";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../internal/Errors.ts";
+import { requireResult } from "../Errors.ts";
 import { GetService } from "./GetService.ts";
 import type { Service } from "./Service.ts";
 
