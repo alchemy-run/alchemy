@@ -1,3 +1,4 @@
+import type * as service from "@distilled.cloud/clickhouse-cloud/service";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
@@ -49,7 +50,7 @@ export class ServiceDeletionProtected extends Data.TaggedError(
   readonly serviceId: string;
   readonly serviceName: string;
   /** The API's `DeletionProtectionEnabled` answer. */
-  readonly cause: unknown;
+  readonly cause: service.DeletionProtectionEnabled;
 }> {
   override get message() {
     return (
@@ -67,7 +68,7 @@ export class ServiceLimitReached extends Data.TaggedError("ClickHouseCloud.Servi
   readonly organizationId: string;
   readonly serviceName: string;
   /** The API's `InstanceLimitReached` answer. */
-  readonly cause: unknown;
+  readonly cause: service.InstanceLimitReached;
 }> {
   override get message() {
     return (
