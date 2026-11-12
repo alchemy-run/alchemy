@@ -1,4 +1,4 @@
-import { Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -13,8 +13,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
+import { parseDockerByteSizeMagnitude } from "./internal/DockerByteSize.ts";
 import type { Providers } from "./Providers.ts";
 
 const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
@@ -32,8 +35,22 @@ export interface ContainerProps {
   name?: string;
   /** Command to run in the container. */
   command?: string[];
+  /** Override the image's executable (`--entrypoint`); arguments belong in `command`. */
+  entrypoint?: string;
+  /** Absolute working directory for the container process. */
+  workingDirectory?: string;
+  /** Container image platform, e.g. `"linux/amd64"`; requires host support. */
+  platform?: string;
   /** Container environment variables. Use Redacted for secrets. */
   environment?: Record<string, string | Redacted.Redacted<string>>;
+  /** Hostname inside the container. Changing it recreates the container. */
+  hostname?: string;
+  /** Custom DNS server IP addresses. Docker defaults apply when omitted. */
+  dns?: string[];
+  /** DNS search domains; applied at container creation. */
+  dnsSearch?: string[];
+  /** Resolver options, for example `["ndots:1"]`; applied at creation. */
+  dnsOptions?: string[];
   /**
    * Paths to Docker env files, forwarded in the declared order as repeated
    * `--env-file` options. Explicit `environment` values are forwarded after
@@ -52,7 +69,7 @@ export interface ContainerProps {
   restart?: "no" | "always" | "on-failure" | "unless-stopped";
   /**
    * Container labels. Alchemy's internal ownership labels are added
-   * automatically.
+   * automatically; the `alchemy::` prefix is reserved.
    */
   labels?: Record<string, string>;
   /**
@@ -60,16 +77,36 @@ export interface ContainerProps {
    * it.
    */
   stopTimeout?: Duration.Input;
-  /** Networks to connect after create. */
+  /**
+   * Managed network attachments. When set, Docker creates the container on
+   * the first network rather than implicitly joining the default `bridge`.
+   * Other endpoints are connected before the container starts.
+   */
   networks?: Container.NetworkMapping[];
-  /** Network namespace. Use `{ container: id }` to share another container's namespace. */
+  /**
+   * Network namespace. Use `{ container: id }` to share another container's
+   * namespace. Container-shared networking cannot set a hostname, custom DNS,
+   * extra hosts, published ports or separate network attachments.
+   */
   networkMode?: Container.NetworkMode;
+  /** IPC namespace selection, e.g. `"private"`, `"host"` or `"container:<id>"`. */
+  ipcNamespace?: string;
+  /** PID namespace selection, e.g. `"host"` or `"container:<id>"`. Omit for the private default. */
+  pidNamespace?: string;
+  /** Namespace-scoped kernel settings. Docker rejects unsupported or host-wide sysctls. */
+  sysctls?: Record<string, string>;
   /** Linux capabilities to add, for example `SYS_ADMIN`. */
   capAdd?: string[];
   /** Linux capabilities to drop, for example `["ALL"]`. */
   capDrop?: string[];
   /** Hard memory limit in Docker's byte-suffix format, e.g. `"512m"`. */
   memory?: string;
+  /**
+   * Size of `/dev/shm`, e.g. `"256m"`; separate from the container memory limit.
+   * Requires a private or shareable IPC namespace; host/container IPC shares
+   * another namespace's memory and cannot be resized by this container.
+   */
+  sharedMemorySize?: string;
   /**
    * Combined memory-plus-swap limit in Docker's byte-suffix format.
    * Requires `memory`. Set to the same value to disable swap, or `"-1"`
@@ -86,10 +123,18 @@ export interface ContainerProps {
   readOnlyRootFilesystem?: boolean;
   /** Prevent processes from gaining additional privileges through exec. */
   noNewPrivileges?: boolean;
+  /** Disable Docker's default isolation safeguards; use only for trusted workloads. @default false */
+  privileged?: boolean;
   /** Run Docker's init process to forward signals and reap child processes. */
   init?: boolean;
   /** Runtime user, e.g. `"1000:1000"` or `"app"`. Omit to keep the image's user. */
   user?: string;
+  /** Keep standard input open when the container is not attached. @default false */
+  keepStdinOpen?: boolean;
+  /** Allocate a pseudo-terminal for the main process. @default false */
+  allocatePseudoTerminal?: boolean;
+  /** Request GPU devices, e.g. `"all"` or `"device=0"`; requires a GPU-capable runtime. */
+  gpuDevices?: string;
   /**
    * Seccomp JSON profile path on the Docker CLI host, or `"builtin"` to
    * select Docker's default policy. `"unconfined"` explicitly disables it.
@@ -177,6 +222,14 @@ export declare namespace Container {
     name: string;
     /** Network aliases for the container. */
     aliases?: string[];
+    /** Static IPv4 address from the referenced network's subnet. */
+    ipv4Address?: string;
+    /** Static IPv6 address; the referenced network must have IPv6 enabled. */
+    ipv6Address?: string;
+    /** Default gateway preference for this attachment. @default 0 */
+    gatewayPriority?: number;
+    /** Driver options for this endpoint, not the underlying Docker.Network. */
+    endpointDriverOpts?: Record<string, string>;
   }
   type NetworkMode = string | { container: string };
   interface DeviceMapping {
@@ -321,6 +374,51 @@ export interface ContainerLookup {
  * const runtime = yield* Docker.inspectContainer(postgresName);
  * ```
  *
+ * ### Configured network endpoints
+ * `Docker.Network` owns subnets, IPAM and driver settings for the shared network.
+ * The container declares only its own attachment: alias, optional static IP,
+ * gateway priority and endpoint driver options. Docker allocates IPs when omitted.
+ *
+ * **Example:** Attach to a dual-stack network with a fixed address
+ * ```typescript
+ * const network = yield* Docker.Network("backend", {
+ *   enableIPv6: true,
+ *   ipam: { config: [
+ *     { subnet: "10.51.0.0/24" },
+ *     { subnet: "fd51:3456:789a::/64" },
+ *   ] },
+ * });
+ * yield* Docker.Container("api", {
+ *   image: "nginx:alpine",
+ *   hostname: "api",
+ *   networks: [{
+ *     name: network.name,
+ *     aliases: ["api"],
+ *     ipv4Address: "10.51.0.10",
+ *     ipv6Address: "fd51:3456:789a::10",
+ *     gatewayPriority: 1,
+ *   }],
+ *   start: true,
+ * });
+ * ```
+ *
+ * Declaring `networks` without `networkMode` attaches only the listed networks:
+ * Docker's implicit default `bridge` is not added. On legacy/adopted containers,
+ * Alchemy detaches that implicit bridge while keeping externally added networks.
+ * Omitting both options retains Docker's ordinary default networking.
+ * Each attachment must refer to a distinct Docker network, even when the
+ * same network is referenced once by name and again by ID.
+ *
+ * Network attachment changes reconnect only the managed endpoint without
+ * replacing the container. Docker can temporarily interrupt traffic during
+ * reconnection. If Docker rejects an update, Alchemy attempts to restore the
+ * previously observed attachment; restoration can also fail if Docker refuses
+ * it, so the update is not atomic. Alchemy leaves
+ * externally attached networks untouched. `hostname`, `dns`, `dnsSearch` and
+ * `dnsOptions` are creation-time settings and changes replace the container.
+ * Invalid options fail with `InvalidContainerOptions`, whose `path` identifies
+ * the rejected configuration property before replacement.
+ *
  * ### Host Access
  * `extraHosts` writes lines into the container's `/etc/hosts`; it changes name
  * resolution and nothing else. Docker's `host-gateway` alias resolves to the
@@ -360,6 +458,30 @@ export interface ContainerLookup {
  * ```
  *
  * ### Runtime Options
+ * **Example:** Allocate shared memory for PostgreSQL
+ * ```typescript
+ * const password = yield* Alchemy.makeRandom("DatabasePassword", { bytes: 16 });
+ * yield* Docker.Container("db", {
+ *   image: "postgres:18-alpine",
+ *   environment: { POSTGRES_PASSWORD: password },
+ *   sharedMemorySize: "256m", // --shm-size, not the container memory limit
+ *   start: true,
+ * });
+ * ```
+ *
+ * **Example:** Configure process, platform, and namespace settings
+ * ```typescript
+ * yield* Docker.Container("job", {
+ *   image: "alpine:3.22",
+ *   platform: "linux/amd64",
+ *   entrypoint: "/bin/sh",
+ *   command: ["-c", "echo ready"],
+ *   workingDirectory: "/workspace",
+ *   ipcNamespace: "private",
+ *   sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+ * });
+ * ```
+ *
  * **Example:** Contain a background worker
  * ```typescript
  * const worker = yield* Docker.Container("worker", {
@@ -528,50 +650,115 @@ export const ContainerProvider = () =>
         });
       });
 
+      const connectNetwork = (
+        network: Container.NetworkMapping,
+        container: string,
+        context: string | undefined,
+      ) =>
+        docker.network.connect({
+          network: network.name,
+          container,
+          alias: network.aliases,
+          ip: network.ipv4Address,
+          ip6: network.ipv6Address,
+          "gw-priority": network.gatewayPriority,
+          "driver-opt": network.endpointDriverOpts,
+          context,
+        });
+
+      // Names and IDs can refer to the same physical network. Resolve only
+      // multi-network declarations; check before delete-first replacements
+      // and again during reconcile, after new managed networks are created.
+      const validateNetworkIdentities = Effect.fn(function* (props: ContainerProps) {
+        if ((props.networks?.length ?? 0) < 2) return;
+        const seen = new Set<string>();
+        const context = dockerContextName(props.context);
+        for (const [index, network] of (props.networks ?? []).entries()) {
+          const actual = yield* docker.network
+            .inspect(network.name, context)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          if (!actual) continue;
+          if (seen.has(actual.Id)) {
+            return yield* invalidContainerOption(
+              `networks[${index}].name`,
+              "must be unique (another attachment refers to the same Docker network)",
+            );
+          }
+          seen.add(actual.Id);
+        }
+      });
+
+      const reconnectNetwork = Effect.fn(function* (
+        live: Docker.Container,
+        network: Container.NetworkMapping,
+        previous: InspectedNetworkEndpoint,
+        context: string | undefined,
+      ) {
+        // Reconnect changes one endpoint. Keep its observed configuration so
+        // a rejected IP or driver option cannot strand a working container.
+        const restore: Container.NetworkMapping = {
+          name: network.name,
+          aliases: previous.Aliases ?? undefined,
+          ipv4Address: previous.IPAMConfig?.IPv4Address || undefined,
+          ipv6Address: previous.IPAMConfig?.IPv6Address || undefined,
+          gatewayPriority: previous.GwPriority,
+          endpointDriverOpts: previous.DriverOpts ?? undefined,
+        };
+        yield* docker.network.disconnect({ network: network.name, container: live.Id, context });
+        yield* connectNetwork(network, live.Id, context).pipe(
+          Effect.onError(() =>
+            connectNetwork(restore, live.Id, context).pipe(
+              Effect.catchCause(() =>
+                Effect.logWarning(
+                  `Docker.Container could not restore endpoint on ${network.name} after a rejected update`,
+                ),
+              ),
+            ),
+          ),
+        );
+      });
+
       const reconcileNetworks = Effect.fn(function* (
         live: Docker.Container,
         news: ContainerProps,
         olds: ContainerProps | undefined,
       ) {
         const context = dockerContextName(news.context);
-        const connect = new Map<string, Container.NetworkMapping>();
-        const disconnect = new Set<string>();
+        // Update attachments sequentially so one rejected connection does
+        // not disconnect every managed network before returning an error.
         for (const network of news.networks ?? []) {
-          const entry = live.NetworkSettings.Networks?.[network.name];
-          if (!entry) {
-            connect.set(network.name, network);
-          } else if (!Equal.equals(entry.Aliases ?? [], network.aliases ?? [])) {
-            connect.set(network.name, network);
-            disconnect.add(network.name);
+          const previous = olds?.networks?.find((old) =>
+            referencesSameNetwork(live, old.name, network.name),
+          );
+          if (matchesNetworkEndpoint(live, network, previous)) continue;
+          const attached = findNetworkEndpoint(live, network.name);
+          if (attached) {
+            yield* reconnectNetwork(live, network, attached, context);
+          } else {
+            yield* connectNetwork(network, live.Id, context);
           }
         }
-        // Only networks alchemy itself attached are alchemy's to detach, and
-        // `olds.networks` is the sole record of which those are — the live
-        // container cannot say who connected a network. Sweeping every live
-        // network instead tore off the default `bridge` and anything a user,
-        // compose file, or another tool had attached out of band (#1386).
-        const desired = new Set((news.networks ?? []).map((n) => n.name));
+        // Legacy/adopted containers may still have Docker's implicit bridge.
+        // Drop only this known initial attachment, preserving foreign networks.
+        if (hasImplicitDefaultBridge(live, news)) {
+          yield* docker.network.disconnect({ network: "bridge", container: live.Id, context });
+        }
+        // Only detach managed networks recorded in `olds.networks`, except
+        // for the independently identified implicit default bridge above.
+        // Sweeping every live attachment also removes externally connected
+        // networks, including ones added by Compose or another tool (#1386).
         for (const network of olds?.networks ?? []) {
-          if (!desired.has(network.name) && live.NetworkSettings.Networks?.[network.name]) {
-            disconnect.add(network.name);
-          }
-        }
-        yield* Effect.forEach(
-          disconnect,
-          (network) => docker.network.disconnect({ network, container: live.Id, context }),
-          { concurrency: "unbounded" },
-        );
-        yield* Effect.forEach(
-          connect.values(),
-          (network) =>
-            docker.network.connect({
+          const stillManaged = (news.networks ?? []).some((desired) =>
+            referencesSameNetwork(live, desired.name, network.name),
+          );
+          if (!stillManaged && findNetworkEndpoint(live, network.name)) {
+            yield* docker.network.disconnect({
               network: network.name,
               container: live.Id,
-              alias: network.aliases,
               context,
-            }),
-          { concurrency: "unbounded" },
-        );
+            });
+          }
+        }
       });
 
       const inspect = (name: string, context?: string) =>
@@ -604,31 +791,62 @@ export const ContainerProvider = () =>
             info,
             olds.image !== undefined ? normalizeImageRef(olds.image) : info.Config.Image,
           );
-          if (output) return attrs;
+          if (output) {
+            if (info.Id !== output.id) {
+              return yield* containerOwnershipConflict(id, name, output.id, info.Id);
+            }
+            return attrs;
+          }
           // Without prior state, only adopt a container that carries our
           // branding; anything else is foreign and gated behind `--adopt`.
           const owned = yield* hasAlchemyTags(id, info.Config.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           if (!isResolved(news)) return undefined;
+          // Validate the desired creation settings before any delete-first
+          // replacement decision, including Docker context changes.
+          const newArgs = yield* makeCreateArgs(id, news, instanceId);
+          yield* validateNetworkIdentities(news);
+          const contextChanged =
+            dockerContextName(olds.context) !== dockerContextName(news.context);
+          const oldArgs =
+            olds.image !== undefined && !contextChanged
+              ? yield* makeCreateArgs(id, olds, instanceId)
+              : undefined;
+          const mustReplace =
+            olds.image !== undefined && (contextChanged || !Equal.equals(oldArgs, newArgs));
+          // No-op plans still need to verify the physical container identity.
+          // A foreign container can reuse the managed name after deletion.
+          if (output) {
+            const live = yield* inspect(output.name, dockerContextName(olds.context));
+            if (live && live.Id !== output.id) {
+              return yield* containerOwnershipConflict(id, output.name, output.id, live.Id);
+            }
+            if (!live && !mustReplace) return { action: "update" as const };
+          }
           // An Output-valued `image` doesn't survive a `creating`-state
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
+          if (mustReplace) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
           if (olds.image === undefined) return undefined;
-          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
-          const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
-          const newArgs = yield* makeCreateArgs(id, news, instanceId);
-          if (!Equal.equals(oldArgs, newArgs)) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
           if (
             !Equal.equals(olds.networks ?? [], news.networks ?? []) ||
             (olds.start ?? false) !== (news.start ?? false)
           ) {
             return { action: "update" as const };
+          }
+          if (news.networks?.length) {
+            const live = yield* inspect(newArgs.name, dockerContextName(news.context));
+            if (
+              live &&
+              (hasImplicitDefaultBridge(live, news) ||
+                news.networks.some((network) => !matchesNetworkEndpoint(live, network, network)))
+            ) {
+              return { action: "update" as const };
+            }
           }
           // File-backed inputs can change without changing their paths.
           // Compare their digests against the live config hash.
@@ -643,6 +861,7 @@ export const ContainerProvider = () =>
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
+          yield* validateNetworkIdentities(news);
           const configHash = yield* desiredConfigHash(args, news);
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
@@ -652,6 +871,12 @@ export const ContainerProvider = () =>
             output && (output.name !== args.name || oldContext !== context)
               ? yield* inspect(output.name, oldContext)
               : undefined;
+          if (output && desiredLive && desiredLive.Id !== output.id) {
+            return yield* containerOwnershipConflict(id, args.name, output.id, desiredLive.Id);
+          }
+          if (output && previous && previous.Id !== output.id) {
+            return yield* containerOwnershipConflict(id, output.name, output.id, previous.Id);
+          }
           if (previous) {
             yield* remove(previous.Id, oldContext);
           }
@@ -679,9 +904,9 @@ export const ContainerProvider = () =>
                 (news.envFiles?.length ?? 0) > 0 ||
                 isCustomSeccompProfile(news.seccompProfile) ||
                 // A legacy/adopted container has no stamped config hash.
-                // Do not retain it without proof that the requested security
-                // restrictions were applied.
-                hasHardeningOptions(news)
+                // Do not retain it without proof that requested create-time
+                // options (security, resources, namespaces, GPU, etc.) were applied.
+                hasUnverifiedCreationOptions(news)
               : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
           if (recreate) {
             yield* remove(live.Id, context);
@@ -692,6 +917,13 @@ export const ContainerProvider = () =>
             const internalTags = yield* createInternalTags(id);
             const { stdout: containerId } = yield* docker.container.create({
               ...args,
+              // Attach directly to the first declared network. Without this,
+              // Docker silently adds the default bridge, even for internal-only
+              // containers. `none` cannot be used here: Docker forbids
+              // connecting additional networks while in none mode.
+              ...(news.networkMode === undefined && news.networks?.length
+                ? { network: news.networks[0]!.name }
+                : {}),
               context,
               label: {
                 ...args.label,
@@ -699,22 +931,35 @@ export const ContainerProvider = () =>
                 [CREATE_CONFIG_HASH_LABEL]: configHash,
               },
             });
-            yield* Effect.forEach(
-              news.networks ?? [],
-              (network) =>
-                docker.network.connect({
-                  network: network.name,
-                  container: containerId,
-                  alias: network.aliases,
-                  context,
-                }),
-              { concurrency: "unbounded" },
+            return yield* Effect.gen(function* () {
+              const initiallyAttached =
+                news.networkMode !== undefined && news.networks?.length
+                  ? yield* docker.container.inspect(containerId, context)
+                  : undefined;
+              yield* Effect.forEach(
+                news.networks ?? [],
+                (network, index) =>
+                  (news.networkMode === undefined && index === 0) ||
+                  (initiallyAttached && findNetworkEndpoint(initiallyAttached, network.name))
+                    ? docker.network
+                        .disconnect({ network: network.name, container: containerId, context })
+                        .pipe(Effect.andThen(connectNetwork(network, containerId, context)))
+                    : connectNetwork(network, containerId, context),
+                { concurrency: 1 },
+              );
+              if (news.start) {
+                yield* docker.container.start(containerId, context);
+              }
+              const info = yield* docker.container.inspect(containerId, context);
+              return toContainerAttributes(info, args.image);
+            }).pipe(
+              // A failed attachment happens after docker create but before
+              // the engine persists attributes. Do not leave an untracked
+              // container occupying the deterministic physical name.
+              Effect.onError(() =>
+                docker.container.remove(containerId, true, context).pipe(Effect.ignore),
+              ),
             );
-            if (news.start) {
-              yield* docker.container.start(containerId, context);
-            }
-            const info = yield* docker.container.inspect(containerId, context);
-            return toContainerAttributes(info, args.image);
           }
 
           yield* reconcileNetworks(current, news, olds);
@@ -727,9 +972,7 @@ export const ContainerProvider = () =>
             .inspect(current.Id, context)
             .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
         }),
-        delete: Effect.fn(({ olds, output }) =>
-          remove(output.name, dockerContextName(olds.context)),
-        ),
+        delete: Effect.fn(({ olds, output }) => remove(output.id, dockerContextName(olds.context))),
       });
     }),
   );
@@ -742,6 +985,21 @@ const normalizeImageId = (image: Container.Image | undefined) =>
 
 type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
 
+const containerOwnershipConflict = (
+  logicalId: string,
+  physicalName: string,
+  expectedId: string,
+  actualId: string,
+) =>
+  new OwnedBySomeoneElse({
+    message:
+      `Docker container '${physicalName}' was replaced outside Alchemy: ` +
+      `expected ID ${expectedId}, found ${actualId}. Refusing to modify the replacement.`,
+    resourceType: "Docker.Container",
+    logicalId,
+    physicalName,
+  });
+
 // Containers created before config hashes were introduced are compared using
 // the fields Docker reports without image-default normalization. A subsequent
 // create stamps the complete resolved configuration hash.
@@ -750,6 +1008,12 @@ const matchesLegacyConfig = (live: Docker.Container, desired: CreateArgs, image:
     ? live.Image === normalizeImageId(image)
     : live.Config.Image === desired.image) &&
   (desired.command === undefined || Equal.equals(live.Config.Cmd, desired.command)) &&
+  (desired.hostname === undefined || live.Config.Hostname === desired.hostname) &&
+  (desired.dns === undefined || Equal.equals(live.HostConfig.Dns ?? [], desired.dns)) &&
+  (desired["dns-search"] === undefined ||
+    Equal.equals(live.HostConfig.DnsSearch ?? [], desired["dns-search"])) &&
+  (desired["dns-option"] === undefined ||
+    Equal.equals(live.HostConfig.DnsOptions ?? [], desired["dns-option"])) &&
   Object.entries(desired.env ?? {}).every(([key, value]) =>
     live.Config.Env?.includes(`${key}=${value}`),
   );
@@ -761,6 +1025,9 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       name,
       image: normalizeImageRef(news.image),
       command: news.command,
+      ...(news.entrypoint !== undefined ? { entrypoint: news.entrypoint } : {}),
+      ...(news.workingDirectory !== undefined ? { workdir: news.workingDirectory } : {}),
+      ...(news.platform !== undefined ? { platform: news.platform } : {}),
       env: normalizeEnvironment(news.environment),
       "env-file": news.envFiles?.length ? news.envFiles : undefined,
       volume: news.volumes?.map(
@@ -775,10 +1042,18 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
       }),
       "add-host": news.extraHosts,
+      ...(news.hostname !== undefined ? { hostname: news.hostname } : {}),
+      ...(news.dns?.length ? { dns: news.dns } : {}),
+      ...(news.dnsSearch?.length ? { "dns-search": news.dnsSearch } : {}),
+      ...(news.dnsOptions?.length ? { "dns-option": news.dnsOptions } : {}),
       network: normalizeNetworkMode(news.networkMode),
+      ...(news.ipcNamespace !== undefined ? { ipc: news.ipcNamespace } : {}),
+      ...(news.pidNamespace !== undefined ? { pid: news.pidNamespace } : {}),
+      ...(Object.keys(news.sysctls ?? {}).length ? { sysctl: normalizeSysctls(news.sysctls) } : {}),
       "cap-add": normalizeCapabilities(news.capAdd),
       ...(news.capDrop?.length ? { "cap-drop": normalizeCapabilities(news.capDrop) } : {}),
       ...(news.memory !== undefined ? { memory: news.memory } : {}),
+      ...(news.sharedMemorySize !== undefined ? { "shm-size": news.sharedMemorySize } : {}),
       ...(news.memorySwap !== undefined ? { "memory-swap": news.memorySwap } : {}),
       ...(news.memoryReservation !== undefined
         ? { "memory-reservation": news.memoryReservation }
@@ -786,6 +1061,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       ...(news.cpus !== undefined ? { cpus: news.cpus } : {}),
       ...(news.pidsLimit !== undefined ? { "pids-limit": news.pidsLimit } : {}),
       ...(news.readOnlyRootFilesystem ? { "read-only": true } : {}),
+      ...(news.privileged ? { privileged: true } : {}),
       ...(normalizeSecurityOptions(news) ? { "security-opt": normalizeSecurityOptions(news) } : {}),
       ...(news.userNamespace !== undefined ? { userns: news.userNamespace } : {}),
       ...(news.groupAdd?.length ? { "group-add": normalizeGroups(news.groupAdd) } : {}),
@@ -800,6 +1076,9 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       ...(news.stopSignal !== undefined ? { "stop-signal": news.stopSignal } : {}),
       ...(news.init ? { init: true } : {}),
       ...(news.user !== undefined ? { user: news.user } : {}),
+      ...(news.keepStdinOpen ? { interactive: true } : {}),
+      ...(news.allocatePseudoTerminal ? { tty: true } : {}),
+      ...(news.gpuDevices !== undefined ? { gpus: news.gpuDevices } : {}),
       ...(news.tmpfs?.length ? { tmpfs: normalizeTmpfs(news.tmpfs) } : {}),
       device: normalizeDevices(news.devices),
       restart: news.restart ?? "no",
@@ -851,6 +1130,105 @@ const toContainerAttributes = (
 const normalizeNetworkMode = (mode: Container.NetworkMode | undefined): string | undefined =>
   mode === undefined ? undefined : typeof mode === "string" ? mode : `container:${mode.container}`;
 
+const parseIpAddress = Schema.decodeUnknownResult(Schema.IpAddressFromString);
+const parseIpv4Address = Schema.decodeUnknownResult(Schema.Ipv4AddressFromString);
+const parseIpv6Address = Schema.decodeUnknownResult(Schema.Ipv6AddressFromString);
+
+const sameIpAddress = (left: string | undefined, right: string | undefined): boolean => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  const a = parseIpAddress(left);
+  const b = parseIpAddress(right);
+  return Result.isSuccess(a) && Result.isSuccess(b) && Equal.equals(a.success, b.success);
+};
+
+type InspectedNetworkEndpoint = NonNullable<
+  Docker.Container["NetworkSettings"]["Networks"]
+>[string];
+
+/** Docker indexes endpoints by network name, even when the declaration used its ID. */
+const findNetworkEndpoint = (
+  live: Docker.Container,
+  network: string,
+): InspectedNetworkEndpoint | undefined => {
+  const attached = live.NetworkSettings.Networks;
+  return (
+    attached?.[network] ??
+    Object.values(attached ?? {}).find((entry) => entry.NetworkID === network)
+  );
+};
+
+/** A managed network may be referenced by name or by the same Docker network ID. */
+const referencesSameNetwork = (live: Docker.Container, left: string, right: string): boolean => {
+  if (left === right) return true;
+  const leftEndpoint = findNetworkEndpoint(live, left);
+  const rightEndpoint = findNetworkEndpoint(live, right);
+  return (
+    leftEndpoint !== undefined &&
+    rightEndpoint !== undefined &&
+    leftEndpoint.NetworkID === rightEndpoint.NetworkID
+  );
+};
+
+const hasImplicitDefaultBridge = (live: Docker.Container, news: ContainerProps): boolean =>
+  news.networkMode === undefined &&
+  (news.networks?.length ?? 0) > 0 &&
+  (live.HostConfig.NetworkMode === "default" || live.HostConfig.NetworkMode === "bridge") &&
+  findNetworkEndpoint(live, "bridge") !== undefined &&
+  !(news.networks ?? []).some((network) => referencesSameNetwork(live, network.name, "bridge"));
+
+/** Compare only declared endpoint settings: Docker adds its own aliases and addresses. */
+const matchesNetworkEndpoint = (
+  live: Docker.Container,
+  desired: Container.NetworkMapping,
+  previous?: Container.NetworkMapping,
+): boolean => {
+  const entry = findNetworkEndpoint(live, desired.name);
+  if (!entry) return false;
+
+  const actualAliases = new Set(entry.Aliases ?? []);
+  const desiredAliases = new Set(desired.aliases ?? []);
+  if ([...desiredAliases].some((alias) => !actualAliases.has(alias))) return false;
+  if (
+    (previous?.aliases ?? []).some(
+      (alias) => !desiredAliases.has(alias) && actualAliases.has(alias),
+    )
+  ) {
+    return false;
+  }
+
+  // An explicit IPAM reservation differs from a coincidentally identical
+  // Docker-assigned address. When removing a reservation, reattach once so
+  // Docker can assign the address itself.
+  if (desired.ipv4Address !== undefined) {
+    if (
+      !sameIpAddress(entry.IPAddress, desired.ipv4Address) ||
+      !sameIpAddress(entry.IPAMConfig?.IPv4Address, desired.ipv4Address)
+    )
+      return false;
+  } else if (previous?.ipv4Address !== undefined) {
+    return false;
+  }
+  if (desired.ipv6Address !== undefined) {
+    if (
+      !sameIpAddress(entry.GlobalIPv6Address, desired.ipv6Address) ||
+      !sameIpAddress(entry.IPAMConfig?.IPv6Address, desired.ipv6Address)
+    )
+      return false;
+  } else if (previous?.ipv6Address !== undefined) {
+    return false;
+  }
+  if ((entry.GwPriority ?? 0) !== (desired.gatewayPriority ?? 0)) return false;
+  const currentOpts = entry.DriverOpts ?? {};
+  for (const [key, value] of Object.entries(desired.endpointDriverOpts ?? {})) {
+    if (currentOpts[key] !== value) return false;
+  }
+  for (const key of Object.keys(previous?.endpointDriverOpts ?? {})) {
+    if (!(key in (desired.endpointDriverOpts ?? {})) && key in currentOpts) return false;
+  }
+  return true;
+};
+
 const normalizeCapabilities = (capAdd: string[] | undefined): string[] | undefined => {
   if (!capAdd?.length) return undefined;
   return [...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean))].sort();
@@ -881,6 +1259,18 @@ const normalizeLogOptions = (options: ContainerProps["logOptions"]): string[] =>
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, value]) => `${name}=${value}`);
 
+const normalizeSysctls = (values: ContainerProps["sysctls"]): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(values ?? {}).sort(([left], [right]) => left.localeCompare(right)),
+  );
+
+/** Positive Docker go-units byte sizes, e.g. 256m, 1.5GiB or 512 kb. */
+const isPositiveDockerByteSize = (value: string): boolean => {
+  if (value !== value.trim()) return false;
+  const magnitude = parseDockerByteSizeMagnitude(value);
+  return magnitude !== undefined && magnitude > 0;
+};
+
 const normalizeTmpfs = (mounts: Container.TmpfsMount[]): string[] =>
   [...mounts]
     .sort((a, b) => a.path.localeCompare(b.path))
@@ -892,15 +1282,30 @@ const normalizeTmpfs = (mounts: Container.TmpfsMount[]): string[] =>
       return options.length > 0 ? `${path}:${options.join(",")}` : path;
     });
 
-const hasHardeningOptions = (props: ContainerProps): boolean =>
+// Older/adopted containers without a config hash can match image defaults
+// despite missing requested settings. Keep this explicit allowlist complement
+// separate from makeCreateArgs: the legacy comparison proves only selected
+// fields, while default/unset options must not roll existing containers.
+const hasUnverifiedCreationOptions = (props: ContainerProps): boolean =>
   (props.capDrop?.length ?? 0) > 0 ||
   props.memory !== undefined ||
+  props.sharedMemorySize !== undefined ||
   props.memorySwap !== undefined ||
   props.memoryReservation !== undefined ||
   props.cpus !== undefined ||
   props.pidsLimit !== undefined ||
   props.readOnlyRootFilesystem === true ||
   props.noNewPrivileges === true ||
+  props.privileged === true ||
+  props.entrypoint !== undefined ||
+  props.workingDirectory !== undefined ||
+  props.platform !== undefined ||
+  props.ipcNamespace !== undefined ||
+  props.pidNamespace !== undefined ||
+  Object.keys(props.sysctls ?? {}).length > 0 ||
+  props.gpuDevices !== undefined ||
+  props.keepStdinOpen === true ||
+  props.allocatePseudoTerminal === true ||
   props.seccompProfile !== undefined ||
   props.appArmorProfile !== undefined ||
   props.userNamespace !== undefined ||
@@ -928,44 +1333,151 @@ const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): strin
  * publishing ports.
  */
 export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerOptions")<{
+  /** Property path in the declared Docker.Container configuration. */
+  readonly path: string;
   readonly message: string;
 }> {}
 
-const validateContainerOptions = (news: ContainerProps) => {
+const invalidContainerOption = (path: string, detail: string) =>
+  Effect.fail(new InvalidContainerOptions({ path, message: `Docker.Container ${path} ${detail}` }));
+
+const invalidContainerMapEntry = (entries: Record<string, string> | undefined) =>
+  Object.entries(entries ?? {}).find(
+    ([key, value]) => !key.trim() || key.includes("=") || !value.trim(),
+  );
+
+const validateContainerValues = (news: ContainerProps) => {
+  if (Object.keys(news.labels ?? {}).some((key) => key.startsWith("alchemy::"))) {
+    return invalidContainerOption("labels", "must not use the reserved alchemy:: prefix");
+  }
   // The CLI formatter omits empty strings. Reject them instead of silently
   // dropping user-specified resource and security restrictions.
   for (const option of [
     "memory",
     "memorySwap",
     "memoryReservation",
+    "sharedMemorySize",
     "user",
+    "entrypoint",
+    "workingDirectory",
+    "platform",
+    "ipcNamespace",
+    "pidNamespace",
+    "gpuDevices",
     "seccompProfile",
     "appArmorProfile",
     "userNamespace",
     "logDriver",
     "stopSignal",
+    "hostname",
   ] as const) {
     if (news[option] !== undefined && news[option].trim().length === 0) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${option} cannot be empty`,
-        }),
+      return invalidContainerOption(option, "cannot be empty");
+    }
+  }
+  // Reject structurally invalid create-time settings during plan/diff, before
+  // the engine deletes an existing container to replace it. Docker accepts
+  // --shm-size 0 but silently falls back to its default shared-memory size.
+  if (news.sharedMemorySize !== undefined && !isPositiveDockerByteSize(news.sharedMemorySize)) {
+    return invalidContainerOption(
+      "sharedMemorySize",
+      "must be a positive Docker byte size, e.g. 256m or 1.5GiB",
+    );
+  }
+  if (
+    news.workingDirectory !== undefined &&
+    !news.workingDirectory.startsWith("/") &&
+    !/^[A-Za-z]:[\\/]/.test(news.workingDirectory)
+  ) {
+    return invalidContainerOption("workingDirectory", "must be an absolute path");
+  }
+  if (
+    news.pidNamespace !== undefined &&
+    news.pidNamespace !== "host" &&
+    !/^container:[^\s:]+$/.test(news.pidNamespace)
+  ) {
+    return invalidContainerOption(
+      "pidNamespace",
+      "must be host or container:<id> (omit for private)",
+    );
+  }
+  if (
+    news.ipcNamespace !== undefined &&
+    !["none", "private", "shareable", "host"].includes(news.ipcNamespace) &&
+    !/^container:[^\s:]+$/.test(news.ipcNamespace)
+  ) {
+    return invalidContainerOption(
+      "ipcNamespace",
+      "must be none, private, shareable, host or container:<id>",
+    );
+  }
+  if (
+    news.sharedMemorySize !== undefined &&
+    news.ipcNamespace !== undefined &&
+    news.ipcNamespace !== "private" &&
+    news.ipcNamespace !== "shareable"
+  ) {
+    return invalidContainerOption("sharedMemorySize", "requires private or shareable ipcNamespace");
+  }
+  for (const [index, value] of (news.dns ?? []).entries()) {
+    if (Result.isFailure(parseIpAddress(value))) {
+      return invalidContainerOption(`dns[${index}]`, "must be an IPv4 or IPv6 address");
+    }
+  }
+  for (const [option, values] of [
+    ["dnsSearch", news.dnsSearch],
+    ["dnsOptions", news.dnsOptions],
+  ] as const) {
+    if (values?.some((value) => !value.trim())) {
+      return invalidContainerOption(option, "cannot contain empty values");
+    }
+  }
+  return Effect.void;
+};
+
+const validateContainerNetworks = (news: ContainerProps) => {
+  const connectedNetworks = new Set<string>();
+  for (const [index, network] of (news.networks ?? []).entries()) {
+    const field = `networks[${index}]`;
+    if (!network.name.trim() || connectedNetworks.has(network.name)) {
+      return invalidContainerOption(`${field}.name`, "must be nonempty and unique");
+    }
+    connectedNetworks.add(network.name);
+    if (network.aliases?.some((alias) => !alias.trim())) {
+      return invalidContainerOption(`${field}.aliases`, "cannot contain empty aliases");
+    }
+    if (
+      network.ipv4Address !== undefined &&
+      Result.isFailure(parseIpv4Address(network.ipv4Address))
+    ) {
+      return invalidContainerOption(`${field}.ipv4Address`, "must be a valid IPv4 address");
+    }
+    if (
+      network.ipv6Address !== undefined &&
+      Result.isFailure(parseIpv6Address(network.ipv6Address))
+    ) {
+      return invalidContainerOption(`${field}.ipv6Address`, "must be a valid IPv6 address");
+    }
+    if (network.gatewayPriority !== undefined && !Number.isSafeInteger(network.gatewayPriority)) {
+      return invalidContainerOption(`${field}.gatewayPriority`, "must be an integer");
+    }
+    const invalidDriverOption = invalidContainerMapEntry(network.endpointDriverOpts);
+    if (invalidDriverOption) {
+      return invalidContainerOption(
+        `${field}.endpointDriverOpts`,
+        `contains an invalid entry: ${invalidDriverOption[0]}`,
       );
     }
   }
+  return Effect.void;
+};
+
+const validateContainerRuntime = (news: ContainerProps) => {
   if (news.capDrop?.some((capability) => capability.trim().length === 0)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container capDrop cannot contain empty capabilities",
-      }),
-    );
+    return invalidContainerOption("capDrop", "cannot contain empty capabilities");
   }
   if (news.groupAdd?.some((group) => group.trim().length === 0)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container groupAdd cannot contain empty groups",
-      }),
-    );
+    return invalidContainerOption("groupAdd", "cannot contain empty groups");
   }
   for (const [name, limit] of Object.entries(news.ulimits ?? {})) {
     if (
@@ -976,20 +1488,16 @@ const validateContainerOptions = (news: ContainerProps) => {
       limit.hard < -1 ||
       (limit.hard !== -1 && (limit.soft === -1 || limit.soft > limit.hard))
     ) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ulimits contains an invalid soft/hard limit for ${name}`,
-        }),
-      );
+      return invalidContainerOption("ulimits", `contains an invalid soft/hard limit for ${name}`);
     }
   }
-  for (const [name, value] of Object.entries(news.logOptions ?? {})) {
-    if (!name.trim() || name.includes("=") || !value.trim()) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container logOptions contains an invalid option: ${name}`,
-        }),
-      );
+  for (const [path, options, noun] of [
+    ["logOptions", news.logOptions, "option"],
+    ["sysctls", news.sysctls, "setting"],
+  ] as const) {
+    const invalidEntry = invalidContainerMapEntry(options);
+    if (invalidEntry) {
+      return invalidContainerOption(path, `contains an invalid ${noun}: ${invalidEntry[0]}`);
     }
   }
   if (
@@ -998,53 +1506,63 @@ const validateContainerOptions = (news: ContainerProps) => {
       news.oomScoreAdjustment < -1000 ||
       news.oomScoreAdjustment > 1000)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container oomScoreAdjustment must be an integer from -1000 to 1000",
-      }),
-    );
+    return invalidContainerOption("oomScoreAdjustment", "must be an integer from -1000 to 1000");
   }
   if (news.memorySwap !== undefined && news.memory === undefined) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container memorySwap requires memory to be set",
-      }),
-    );
+    return invalidContainerOption("memorySwap", "requires memory to be set");
   }
   if (news.cpus !== undefined && (!Number.isFinite(news.cpus) || news.cpus <= 0)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container cpus must be a finite, positive number",
-      }),
-    );
+    return invalidContainerOption("cpus", "must be a finite, positive number");
   }
   if (
     news.pidsLimit !== undefined &&
     (!Number.isInteger(news.pidsLimit) || (news.pidsLimit <= 0 && news.pidsLimit !== -1))
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container pidsLimit must be a positive integer or -1 (unlimited)",
-      }),
-    );
+    return invalidContainerOption("pidsLimit", "must be a positive integer or -1 (unlimited)");
   }
   if (
     isContainerNetworkMode(news.networkMode) &&
     ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container networkMode.container cannot be combined with ports or networks",
-      }),
+    return invalidContainerOption(
+      "networkMode.container",
+      "cannot be combined with ports or networks",
     );
   }
+  if (
+    (news.networkMode === "host" || news.networkMode === "none") &&
+    (news.networks?.length ?? 0) > 0
+  ) {
+    return invalidContainerOption(
+      "networkMode",
+      `${news.networkMode} cannot be combined with networks`,
+    );
+  }
+  // Docker forbids these creation flags when the network namespace belongs
+  // to another container; reject them before a delete-first replacement.
+  if (
+    isContainerNetworkMode(news.networkMode) &&
+    (news.hostname !== undefined ||
+      (news.dns?.length ?? 0) > 0 ||
+      (news.dnsSearch?.length ?? 0) > 0 ||
+      (news.dnsOptions?.length ?? 0) > 0 ||
+      (news.extraHosts?.length ?? 0) > 0)
+  ) {
+    return invalidContainerOption(
+      "networkMode.container",
+      "cannot be combined with hostname, dns, dnsSearch, dnsOptions or extraHosts",
+    );
+  }
+  return Effect.void;
+};
+
+const validateContainerMounts = (news: ContainerProps) => {
   const targets = new Set<string>();
   for (const device of news.devices ?? []) {
     if (targets.has(device.containerPath)) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container devices contain conflicting target path ${device.containerPath}`,
-        }),
+      return invalidContainerOption(
+        "devices",
+        `contain conflicting target path ${device.containerPath}`,
       );
     }
     targets.add(device.containerPath);
@@ -1052,40 +1570,32 @@ const validateContainerOptions = (news: ContainerProps) => {
   const tmpfsTargets = new Set<string>();
   for (const mount of news.tmpfs ?? []) {
     if (mount.size !== undefined && mount.size.trim().length === 0) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs size cannot be empty for ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `size cannot be empty for ${mount.path}`);
     }
     if (!mount.path.startsWith("/") || mount.path.includes(":") || mount.path.includes(",")) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs target must be an absolute path: ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `target must be an absolute path: ${mount.path}`);
     }
     if (tmpfsTargets.has(mount.path)) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs contains duplicate target ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `contains duplicate target ${mount.path}`);
     }
     if (
       mount.mode !== undefined &&
       (!Number.isInteger(mount.mode) || mount.mode < 0 || mount.mode > 0o7777)
     ) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs mode is not a valid POSIX mode for ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `mode is not a valid POSIX mode for ${mount.path}`);
     }
     tmpfsTargets.add(mount.path);
   }
   return Effect.void;
 };
+
+const validateContainerOptions = (news: ContainerProps) =>
+  Effect.gen(function* () {
+    yield* validateContainerValues(news);
+    yield* validateContainerNetworks(news);
+    yield* validateContainerRuntime(news);
+    yield* validateContainerMounts(news);
+  });
 
 const isContainerNetworkMode = (mode: Container.NetworkMode | undefined): boolean =>
   typeof mode === "string" ? mode.startsWith("container:") : mode !== undefined;

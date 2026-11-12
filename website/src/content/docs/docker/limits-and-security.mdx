@@ -37,6 +37,8 @@ const worker = yield* Docker.Container("worker", {
 
 `memory` is a hard limit: when the container goes over it, the kernel kills a process inside. `memorySwap` caps memory **plus** swap, so setting it equal to `memory` turns swap off. `memoryReservation` is a softer target Docker holds the container to when the host runs short. `cpus: 0.5` allows half a core, and `pidsLimit` caps processes and threads, which stops a fork bomb.
 
+`sharedMemorySize: "256m"` sets the size of `/dev/shm` independently of `memory`, which is useful for Postgres. Alchemy checks that the Docker byte size is positive before attempting replacement. When `sharedMemorySize` is specified, `ipcNamespace` must be `"private"` or `"shareable"` if set; a host or container-shared IPC namespace cannot be resized.
+
 ## Drop privileges
 
 ```typescript
@@ -72,6 +74,8 @@ const worker = yield* Docker.Container("profiled-worker", {
 A **seccomp** profile lists the system calls the container may make. `seccompProfile` is a JSON file on your machine, and editing it recreates the container, even when the path stays the same. An **AppArmor** profile limits which files and resources it can touch. It must already be loaded on the engine's host, and only Linux hosts with AppArmor have it. Leave both unset to keep Docker's defaults, and avoid `"unconfined"`, which turns them off.
 
 `groupAdd` adds supplementary groups, `ulimits` sets per-process limits like open files (`{ nofile: { soft: 1024, hard: 4096 } }`), and `devices` exposes a host device. `userNamespace: "host"` opts out of the engine's user remapping, which weakens isolation rather than strengthening it.
+
+`gpuDevices: "all"` requests GPUs when the Docker host supports them. `privileged: true` removes major isolation boundaries; avoid it for ordinary services. Both are optional creation settings, not in-place updates.
 
 ## Rotate logs and stop cleanly
 
