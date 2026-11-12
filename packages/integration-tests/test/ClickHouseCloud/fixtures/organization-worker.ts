@@ -24,7 +24,7 @@ export default class ClickHouseOrgWorker extends Cloudflare.Worker<ClickHouseOrg
 
         if (url.pathname === "/activities") {
           const since = new Date(Date.now() - 3_600_000).toISOString();
-          const activities = yield* listActivities({ from_date: since });
+          const activities = yield* listActivities({ fromDate: since });
           const first = activities[0];
           const one = first?.id === undefined ? undefined : yield* getActivity(first.id);
           return yield* HttpServerResponse.json({

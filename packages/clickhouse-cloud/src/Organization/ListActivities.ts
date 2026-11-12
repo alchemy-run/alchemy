@@ -8,9 +8,9 @@ import type { Organization } from "./Organization.ts";
 /** A time window of the audit log. */
 export interface ListActivitiesRequest {
   /** Start of the window (ISO 8601). */
-  from_date?: string;
+  fromDate?: string;
   /** End of the window (ISO 8601). */
-  to_date?: string;
+  toDate?: string;
 }
 
 /**
@@ -38,7 +38,7 @@ export interface ListActivitiesRequest {
  *       fetch: Effect.gen(function* () {
  *         // runtime
  *         const since = new Date(Date.now() - 86_400_000).toISOString();
- *         const activities = yield* listActivities({ from_date: since });
+ *         const activities = yield* listActivities({ fromDate: since });
  *         return yield* HttpServerResponse.json(activities);
  *       }).pipe(Effect.orDie),
  *     };
