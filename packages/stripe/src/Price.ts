@@ -15,6 +15,13 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
+  fromWireTiers,
+  tiersEqual,
+  toWireTiers,
+  type Tier,
+  type TiersMode,
+} from "./internal/tiers.ts";
+import {
   alchemyMetadataKeys,
   createInternalMetadata,
   diffMetadata,
@@ -33,23 +40,10 @@ export type PriceInterval = "day" | "month" | "week" | "year";
 export type PriceUsageType = "licensed" | "metered";
 export type PriceType = "one_time" | "recurring";
 export type PriceTaxBehavior = "exclusive" | "inclusive" | "unspecified";
-export type PriceTiersMode = "graduated" | "volume";
-
-export interface PriceTier {
-  /**
-   * Inclusive upper bound of the tier in units. The last tier uses
-   * `"inf"`.
-   */
-  upTo: number | "inf";
-  /**
-   * Per-unit amount in the currency's minor units for units in this tier.
-   */
-  unitAmount?: number;
-  /**
-   * Flat amount in the currency's minor units added once for this tier.
-   */
-  flatAmount?: number;
-}
+/** How a tiered price applies its tiers. */
+export type PriceTiersMode = TiersMode;
+/** One tier of a tiered price. */
+export type PriceTier = Tier;
 
 export interface PriceRecurring {
   /**
@@ -314,24 +308,6 @@ const toRecurring = (recurring: StripePrice["recurring"]): PriceRecurring | unde
   };
 };
 
-const toTiers = (tiers: StripePrice["tiers"]): PriceTier[] | undefined =>
-  tiers?.map((tier) => ({
-    upTo: tier.up_to ?? "inf",
-    ...(tier.unit_amount != null ? { unitAmount: tier.unit_amount } : {}),
-    ...(tier.flat_amount != null ? { flatAmount: tier.flat_amount } : {}),
-  }));
-
-const tiersEqual = (news: PriceTier[] | undefined, observed: PriceTier[] | undefined): boolean => {
-  if (news === undefined) return true;
-  if (observed === undefined || news.length !== observed.length) return false;
-  return news.every(
-    (tier, index) =>
-      tier.upTo === observed[index]?.upTo &&
-      tier.unitAmount === observed[index]?.unitAmount &&
-      tier.flatAmount === observed[index]?.flatAmount,
-  );
-};
-
 const toAttrs = (price: StripePrice) => ({
   id: price.id,
   product: productIdOf(price.product),
@@ -343,7 +319,7 @@ const toAttrs = (price: StripePrice) => ({
   lookupKey: price.lookup_key ?? undefined,
   type: price.type as PriceType,
   recurring: toRecurring(price.recurring),
-  tiers: toTiers(price.tiers),
+  tiers: fromWireTiers(price.tiers),
   tiersMode: (price.tiers_mode ?? undefined) as PriceTiersMode | undefined,
   taxBehavior: (price.tax_behavior ?? undefined) as PriceTaxBehavior | undefined,
   metadata: userMetadata(price.metadata),
@@ -558,11 +534,7 @@ export const PriceProvider = () =>
           ...(news.tiers !== undefined
             ? {
                 billing_scheme: "tiered",
-                tiers: news.tiers.map((tier) => ({
-                  up_to: tier.upTo,
-                  ...(tier.unitAmount !== undefined ? { unit_amount: tier.unitAmount } : {}),
-                  ...(tier.flatAmount !== undefined ? { flat_amount: tier.flatAmount } : {}),
-                })),
+                tiers: toWireTiers(news.tiers),
               }
             : {}),
           ...(news.tiersMode !== undefined ? { tiers_mode: news.tiersMode } : {}),
