@@ -95,3 +95,17 @@ See [Removal policy](/infrastructure-as-code/resource-lifecycle#removal-policy).
 ```typescript
 const data = Docker.Volume.lookup({ name: "pgdata" });
 ```
+
+## A volume with the same name
+
+Docker names are the only handle on a volume, so Alchemy labels each volume it creates with a generation ID and checks it before every change. If the volume was removed and another one now has its name, plan, deploy and destroy fail with `OwnedBySomeoneElse` and leave that volume alone.
+
+To manage a volume created outside the Stack, adopt it:
+
+```typescript
+import { adopt } from "alchemy/AdoptPolicy";
+
+const data = yield* Docker.Volume("postgres-data", { name: "pgdata" }).pipe(adopt(true));
+```
+
+Alchemy never deletes an adopted volume to apply a changed `driver`, `driverOpts` or `labels`; the plan fails and you migrate the data yourself. Docker removes volumes by name, so a volume swapped in between the check and the removal can still be deleted. For data you can't lose, use `RemovalPolicy.protect()`, which refuses both replacement and destroy.

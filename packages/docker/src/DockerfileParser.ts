@@ -1,6 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { isDockerByteSize } from "./internal/DockerByteSize.ts";
 import { processWord, processWords } from "./ShellWord.ts";
 
 /**
@@ -632,23 +633,6 @@ const goDuration = (value: string): number | undefined => {
   return sign * total;
 };
 
-/** go-units `RAMInBytes`: `64m`, `1.5GiB`, `512 kb`. */
-const ramInBytes = (value: string): boolean => {
-  const sep = Math.max(...Array.from("01234567890. ", (c) => value.lastIndexOf(c)));
-  if (sep === -1) return false;
-  const num = value[sep] === " " ? value.slice(0, sep) : value.slice(0, sep + 1);
-  const suffix = value.slice(sep + 1).toLowerCase();
-  if (!/^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(num)) return false;
-  if (Number(num) < 0) return false;
-  if (suffix === "") return true;
-  if (suffix.length > 3) return false;
-  if (suffix[0] === "b") return suffix.length === 1;
-  if (!"kmgtp".includes(suffix[0]!)) return false;
-  return (
-    suffix.length === 1 || (suffix.length === 2 ? suffix[1] === "b" : suffix.slice(1) === "ib")
-  );
-};
-
 /** `go-csvvalue` `Fields`: comma-separated, `"quoted"` with `""` escapes; `undefined` on a bad quote or empty input. */
 const csvFields = (input: string): string[] | undefined => {
   let line = input.replace(/\r?\n$/, "");
@@ -769,7 +753,7 @@ const checkMount = Effect.fn(function* (value: string, escape: string, line: num
         if (type !== "tmpfs") {
           return yield* fail(`unexpected key '${key}' for mount type '${type}'`, line);
         }
-        if (!ramInBytes(v)) return yield* invalid();
+        if (!isDockerByteSize(v)) return yield* invalid();
         break;
       case "id":
         id = v;

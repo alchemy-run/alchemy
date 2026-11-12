@@ -2,6 +2,7 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
@@ -14,6 +15,7 @@ import {
   defaultDurableObjectUniqueKey,
   SERVICE_USER_WORKER,
   SOCKET_USER_ENTRY,
+  SOCKET_USER_ENTRY_UNIX,
   withDefaultFlags,
 } from "./internal/constants.ts";
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
@@ -41,6 +43,7 @@ export const RuntimeLive = Layer.effect(
   Runtime,
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
+    const fs = yield* FileSystem.FileSystem;
     const storage = yield* Storage.Storage;
     const docker = yield* Docker.Docker;
     const plugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
@@ -217,8 +220,26 @@ export const RuntimeLive = Layer.effect(
             address: "127.0.0.1:0",
             service: { name: config.entry ?? SERVICE_USER_WORKER },
           },
+          ...(worker.entrySocketPath === undefined
+            ? []
+            : [
+                {
+                  name: SOCKET_USER_ENTRY_UNIX,
+                  address: `unix:${worker.entrySocketPath}`,
+                  service: { name: config.entry ?? SERVICE_USER_WORKER },
+                },
+              ]),
           ...config.sockets,
         ];
+        // workerd never removes its socket file. Registered before the
+        // process scopes, this runs after they kill workerd.
+        const { entrySocketPath } = worker;
+        if (entrySocketPath !== undefined) {
+          // Best effort: the next start clears the path anyway.
+          yield* Effect.addFinalizer(() =>
+            fs.remove(entrySocketPath, { force: true }).pipe(Effect.ignore),
+          );
+        }
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
         // Logs a failed callback outside any fiber, so a callback that never
         // settles holds nothing open.
@@ -383,6 +404,8 @@ const SOCKET_DEBUG_PORT = "debug-port";
 const pinSocket =
   (ports: Workerd.WorkerdPorts) =>
   (socket: WorkerdConfig.Socket): WorkerdConfig.Socket => {
+    // A Unix socket keeps its path; workerd reports it with port 0.
+    if (socket.address?.startsWith("unix:")) return socket;
     const port = socket.name === undefined ? undefined : ports[socket.name];
     return port === undefined ? socket : { ...socket, address: `127.0.0.1:${port}` };
   };

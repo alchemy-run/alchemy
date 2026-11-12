@@ -169,8 +169,8 @@ catalogs:
       version: 4.1.10
   default:
     '@alchemy.run/sigil':
-      specifier: 0.1.0-alpha.3
-      version: 0.1.0-alpha.3
+      specifier: 0.1.0-alpha.4
+      version: 0.1.0-alpha.4
     '@astrojs/check':
       specifier: 0.9.10
       version: 0.9.10
@@ -8967,7 +8967,7 @@ importers:
         version: link:../node-utils
       '@alchemy.run/sigil':
         specifier: 'catalog:'
-        version: 0.1.0-alpha.3(@types/react@19.3.0)(react-devtools-core@7.0.1)
+        version: 0.1.0-alpha.4(@types/react@19.3.0)(react-devtools-core@7.0.1)
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
@@ -13840,8 +13840,8 @@ packages:
   '@alchemy.run/node-utils@2.0.0-beta.74':
     resolution: {integrity: sha512-UH7mbmF0qZWL0b5xURFaRbKR2qNXdvxEjIq86FdqSKacnH0lsHSgGzNKFbDSKFAY1u6Kq3unHFmgRk7UAD/YTQ==}
 
-  '@alchemy.run/sigil@0.1.0-alpha.3':
-    resolution: {integrity: sha512-NBhQRjbeFp4jPYDGqlXSoUlT45QyNc/6DGQWmkXUnS9nHKjHa5eIRZChdnCDYHYvmgFJWNaRfPFGwxrCWmlLzw==}
+  '@alchemy.run/sigil@0.1.0-alpha.4':
+    resolution: {integrity: sha512-d6Uo16C2P6Wk7TNoYt4qzjjNGyjsrJLjq8bBotl86Nmcp/U6+R34/n4CZomqFERF2wMinut2DBqWNeUQPTBtFQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -30003,7 +30003,7 @@ snapshots:
 
   '@alchemy.run/node-utils@2.0.0-beta.74': {}
 
-  '@alchemy.run/sigil@0.1.0-alpha.3(@types/react@19.3.0)(react-devtools-core@7.0.1)':
+  '@alchemy.run/sigil@0.1.0-alpha.4(@types/react@19.3.0)(react-devtools-core@7.0.1)':
     optionalDependencies:
       '@types/react': 19.3.0
       react-devtools-core: 7.0.1

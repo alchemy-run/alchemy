@@ -1,10 +1,13 @@
+import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as WorkerProxy from "../proxy/WorkerProxy.ts";
 import * as Runtime from "../Runtime.ts";
-import { localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
+import { fetchOverSocket, localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
 
 const HELLO_SCRIPT = `
 export default {
@@ -38,6 +41,35 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
         const echo = yield* Effect.promise(() => fetch(new URL("/echo", url), { method: "POST" }));
         expect(yield* Effect.promise(() => echo.text())).toBe("POST");
       }),
+    { timeout: 30_000 },
+  );
+
+  it.effect.skipIf(process.platform === "win32")(
+    "serves the entry on a Unix socket, over a stale file, and removes it on close",
+    () => {
+      const socketPath = NodePath.join(NodeOs.tmpdir(), `alchemy-runtime-test-${process.pid}.sock`);
+      return Effect.gen(function* () {
+        // A file left at the path by an earlier process, which workerd won't
+        // bind over.
+        yield* Effect.sync(() => NodeFs.writeFileSync(socketPath, ""));
+        yield* Effect.gen(function* () {
+          const runtime = yield* Runtime.Runtime;
+          const url = yield* runtime.start({
+            name: "unix-socket",
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
+            entrySocketPath: socketPath,
+          });
+          expect(yield* fetchOverSocket(socketPath, "/hello")).toBe("hello");
+          // The TCP address keeps serving too.
+          const hello = yield* Effect.promise(() => fetch(new URL("/hello", url)));
+          expect(yield* Effect.promise(() => hello.text())).toBe("hello");
+        }).pipe(Effect.scoped);
+        expect(NodeFs.existsSync(socketPath)).toBe(false);
+      }).pipe(Effect.ensuring(Effect.sync(() => NodeFs.rmSync(socketPath, { force: true }))));
+    },
     { timeout: 30_000 },
   );
 
