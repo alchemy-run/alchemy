@@ -6,6 +6,7 @@ import * as roles from "@distilled.cloud/clickhouse-cloud/role_management";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { cleanSlate } from "../fixtures/cleanup.ts";
 
 const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 
@@ -35,7 +36,7 @@ test.provider(
   "create a role that adds a key through actors, update policies in place, leave actors alone, delete it",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
       const organizationId = yield* ClickHouseCloud.organizationId;
 
       const firstStack = Effect.gen(function* () {
@@ -103,6 +104,6 @@ test.provider(
         }),
       );
       expect(gone).toBeUndefined();
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 120_000 },
 );

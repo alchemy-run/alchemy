@@ -7,6 +7,7 @@ import { DestroyError } from "alchemy/Apply";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { cleanSlate } from "../fixtures/cleanup.ts";
 
 const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 
@@ -38,7 +39,7 @@ test.provider.skipIf(slow)(
   "create a service, update it in place, stop it, delete it",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
 
       const created = yield* stack.deploy(
         ClickHouseCloud.Service.Service("Analytics", {
@@ -106,7 +107,7 @@ test.provider.skipIf(slow)(
       expect(gone === undefined || ["terminated", "softdeleted"].includes(gone.state ?? "")).toBe(
         true,
       );
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );
 
@@ -114,7 +115,7 @@ test.provider.skipIf(slow)(
   "a region change replaces the service and deletes the old one",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
       const first = yield* stack.deploy(
         ClickHouseCloud.Service.Service("Regional", {
           ...small,
@@ -135,7 +136,7 @@ test.provider.skipIf(slow)(
         true,
       );
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );
 
@@ -147,7 +148,7 @@ test.provider.skipIf(slow)(
   "destroy refuses a protected service with ServiceDeletionProtected until protection is off",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
       // Stopped, so the refused delete answers at once.
       const protectedService = (deletionProtection: boolean) =>
         ClickHouseCloud.Service.Service("Protected", {
@@ -183,7 +184,7 @@ test.provider.skipIf(slow)(
       expect(gone === undefined || ["terminated", "softdeleted"].includes(gone.state ?? "")).toBe(
         true,
       );
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );
 
@@ -197,7 +198,7 @@ test.provider.skipIf(serviceLimit)(
   "a service beyond the organization's quota fails with ServiceLimitReached",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
       const organizationId = yield* ClickHouseCloud.organizationId;
       const { result: quota } = yield* organization.getOrganizationQuota({
         organizationId,
@@ -231,6 +232,6 @@ test.provider.skipIf(serviceLimit)(
       });
 
       yield* stack.destroy();
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );

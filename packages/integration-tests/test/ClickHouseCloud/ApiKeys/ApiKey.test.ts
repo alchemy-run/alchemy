@@ -6,6 +6,7 @@ import * as userManagement from "@distilled.cloud/clickhouse-cloud/user_manageme
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { cleanSlate } from "../fixtures/cleanup.ts";
 
 const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 
@@ -76,7 +77,7 @@ test.provider(
   "create an API key with its role, update it and its roles in place, delete it",
   (stack) =>
     Effect.gen(function* () {
-      yield* stack.destroy();
+      yield* cleanSlate(stack);
 
       const created = yield* stack.deploy(
         keyStack({
@@ -115,6 +116,6 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(created.key.id);
-    }),
+    }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 120_000 },
 );
