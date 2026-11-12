@@ -200,7 +200,7 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  * const backend = yield* Convex.Backend("Backend", {
  *   image,
  *   domain,
- *   db: { engine: "mysql", url: yield* Config.redacted("DATABASE_URL") },
+ *   db: { engine: "mysql", url: yield* Config.Redacted("DATABASE_URL") },
  * });
  * ```
  *

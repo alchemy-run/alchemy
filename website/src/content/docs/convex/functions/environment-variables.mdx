@@ -6,7 +6,7 @@ description: Set a deployment's variables, and defaults for new deployments.
 ## Set variables on a deployment
 
 ```typescript
-const secret = yield* Config.redacted("RESEND_API_KEY");
+const secret = yield* Config.Redacted("RESEND_API_KEY");
 yield* Convex.Functions("Functions", {
   deployment,
   rootDir: ".",

@@ -45,8 +45,8 @@ db: { engine: "postgres", instanceClass: "db.t4g.micro", storage: 20 }
 db: { engine: "mysql", instanceClass: "db.t4g.micro", storage: 20 }
 
 // A server you already run
-db: { engine: "postgres", url: yield* Config.redacted("DATABASE_URL") }
-db: { engine: "mysql", url: yield* Config.redacted("DATABASE_URL") }
+db: { engine: "postgres", url: yield* Config.Redacted("DATABASE_URL") }
+db: { engine: "mysql", url: yield* Config.Redacted("DATABASE_URL") }
 
 // A file on EFS, for development
 db: { engine: "sqlite" }

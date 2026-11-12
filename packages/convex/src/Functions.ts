@@ -89,7 +89,7 @@ export const pushCommand = (rootDir: string) =>
  *
  * **Example:** Pass a secret
  * ```typescript
- * const secret = yield* Config.redacted("RESEND_API_KEY");
+ * const secret = yield* Config.Redacted("RESEND_API_KEY");
  * yield* Convex.Functions("Functions", {
  *   deployment,
  *   rootDir: ".",
