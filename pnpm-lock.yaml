@@ -11239,8 +11239,8 @@ importers:
         specifier: 'catalog:'
         version: 1.4.3
       effect:
-        specifier: 4.1.0
-        version: 4.1.0
+        specifier: 4.1.4
+        version: 4.1.4
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
