@@ -144,8 +144,9 @@ export interface ServiceProps extends PlatformProps {
    * environment config). Omit to leave the current Railway setting unchanged. Needs a
    * GitHub workflow that runs on `push`.
    *
-   * Only applies to a {@link repo} service. It has no effect on an
-   * `image`, `main` or `context` service, the same as {@link branch}.
+   * Only applies to a {@link repo} service. Setting it on an `image`,
+   * `main` or `context` service fails with `ServiceSourceInvalid` before
+   * any change is made.
    *
    * @see https://docs.railway.com/deployments/github-autodeploys#wait-for-ci
    */

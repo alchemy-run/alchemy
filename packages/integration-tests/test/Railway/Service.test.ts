@@ -725,10 +725,9 @@ test.provider.skipIf(!githubEntitled)(
 );
 
 // Deploys a real repo, so it takes an explicit one instead of the first
-// repo the GitHub connection lists: RAILWAY_TEST_GITHUB_REPO=owner/name
-// (and RAILWAY_TEST_GITHUB_BRANCH, default `main`).
+// repo the GitHub connection lists: RAILWAY_TEST_GITHUB_REPO=owner/name,
+// built from its `main` branch.
 const checksRepo = process.env.RAILWAY_TEST_GITHUB_REPO;
-const checksBranch = process.env.RAILWAY_TEST_GITHUB_BRANCH ?? "main";
 
 test.provider.skipIf(checksRepo === undefined)(
   "wait for checks on a github repo service",
@@ -744,7 +743,7 @@ test.provider.skipIf(checksRepo === undefined)(
               project,
               environment,
               repo: checksRepo!,
-              branch: checksBranch,
+              branch: "main",
               waitForChecks,
             });
             return { api };
