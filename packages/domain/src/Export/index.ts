@@ -43,6 +43,7 @@ export * as Metadata from "./Metadata.ts";
 export * as Sensitive from "./Sensitive.ts";
 export * as Spec from "./Spec.ts";
 export * as Sql from "./Sql.ts";
+export * as Trino from "./Trino.ts";
 export {
   DefinitionError,
   DialectMismatch,
