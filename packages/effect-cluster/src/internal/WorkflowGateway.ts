@@ -120,7 +120,7 @@ export const makeRemoteEngine = (
       const protocol = RpcClient.layerProtocolHttp({
         url: `${target.url.replace(/\/+$/, "")}${GATEWAY_PATH}`,
         transformClient: HttpClient.mapRequest(HttpClientRequest.bearerToken(target.token)),
-      }).pipe(Layer.provide([FetchHttpClient.layer, RpcSerialization.layerJson]));
+      }).pipe(Layer.provide([FetchHttpClient.layer, RpcSerialization.layerNdjson]));
       return yield* Effect.flatMap(RpcClient.make(WorkflowRpcs), use).pipe(
         Effect.scoped,
         Effect.provide(protocol),

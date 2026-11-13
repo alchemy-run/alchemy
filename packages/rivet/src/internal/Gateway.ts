@@ -5,6 +5,12 @@
  *
  * @internal
  */
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import type * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
 import type { NativeFetcher } from "./Fetcher.ts";
 
 export interface GatewayTarget {
@@ -33,7 +39,12 @@ const encodeKey = (key: string) =>
  * {@link TOKEN_HEADER} header, never the URL, so it stays out of proxy and
  * load balancer logs.
  */
-export const gatewayUrl = (target: GatewayTarget, path: string, search: string): string => {
+export const gatewayUrl = (
+  target: GatewayTarget,
+  path: string,
+  search: string,
+  route: "request" | "websocket" = "request",
+): string => {
   const params = new URLSearchParams({
     "rvt-namespace": target.namespace,
     "rvt-method": "getOrCreate",
@@ -43,11 +54,123 @@ export const gatewayUrl = (target: GatewayTarget, path: string, search: string):
   });
   const base = target.endpoint.replace(/\/+$/, "");
   const query = search === "" ? `?${params}` : `${search}&${params}`;
-  return `${base}/gateway/${encodeURIComponent(target.name)}/request${path}${query}`;
+  return `${base}/gateway/${encodeURIComponent(target.name)}/${route}${path}${query}`;
 };
 
-/** A fetcher whose requests reach the actor's `onRequest` through the gateway. */
+/** Headers a WebSocket handshake sets itself, never forwarded. */
+const HANDSHAKE_HEADERS = new Set([
+  "connection",
+  "upgrade",
+  "host",
+  "content-length",
+  "sec-websocket-key",
+  "sec-websocket-version",
+  "sec-websocket-extensions",
+  "sec-websocket-protocol",
+  "sec-websocket-accept",
+]);
+
+/**
+ * Copy frames from a socket's reader into a writer until the reader closes,
+ * then close the writer with the reader's close code.
+ */
+const forward = (
+  reader: Effect.Effect<Socket.Reader, Socket.SocketError, Scope.Scope>,
+  to: Socket.Writer,
+) =>
+  Effect.gen(function* () {
+    const { pull } = yield* reader;
+    while (true) yield* to.writeAll(yield* pull);
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag("SocketError", (error) =>
+      to
+        .write(
+          error.reason._tag === "SocketCloseError"
+            ? new Socket.CloseEvent(error.reason.code, error.reason.closeReason)
+            : new Socket.CloseEvent(1011, "The WebSocket failed"),
+        )
+        .pipe(Effect.ignore),
+    ),
+  );
+
+/** The gateway could not be reached to carry a WebSocket. */
+class GatewayUnreachable extends Data.TaggedError("Rivet.GatewayUnreachable")<{
+  readonly cause: unknown;
+}> {}
+
+/** In workerd, an upgrade `fetch` answers with the gateway's socket. */
+const upgradeFetch = (url: string, headers: Record<string, string>) =>
+  fetch(url, { headers: { ...headers, Upgrade: "websocket" } });
+
+/**
+ * Carry a WebSocket upgrade (the current request) to the actor through the
+ * gateway. In a Worker, the gateway's socket is handed back as the
+ * response. Elsewhere (a Bun or Node server) the socket to the actor opens
+ * first, so a refusal is an HTTP error, then the caller's request upgrades
+ * and frames are copied both ways until either side closes.
+ */
+export const gatewayUpgrade = (
+  target: GatewayTarget,
+  request: HttpServerRequest.HttpServerRequest,
+) =>
+  Effect.gen(function* () {
+    const url = new URL(request.url, "http://caller");
+    const headers: Record<string, string> = {};
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (!HANDSHAKE_HEADERS.has(name.toLowerCase())) headers[name] = value;
+    }
+    headers[TOKEN_HEADER] = target.token;
+    const socketUrl = gatewayUrl(target, url.pathname, url.search, "websocket");
+    if (typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair === "function") {
+      // workerd: an upgrade `fetch` returns the gateway's socket.
+      return yield* Effect.tryPromise({
+        try: () => upgradeFetch(socketUrl, headers),
+        catch: (cause) => new GatewayUnreachable({ cause }),
+      }).pipe(
+        Effect.map((response) => HttpServerResponse.raw(response, { status: response.status })),
+        Effect.catchTag("Rivet.GatewayUnreachable", () =>
+          Effect.succeed(
+            HttpServerResponse.text("The Durable Object refused the WebSocket", { status: 502 }),
+          ),
+        ),
+      );
+    }
+    const upstream = yield* Socket.makeWebSocket(socketUrl.replace(/^http/, "ws"), {
+      headers,
+      openTimeout: "30 seconds",
+    }).pipe(
+      Effect.provideService(
+        Socket.WebSocketConstructor,
+        (socketUrl, options) =>
+          // Bun's and Node's WebSocket take handshake headers.
+          new globalThis.WebSocket(socketUrl, options as never),
+      ),
+    );
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        // Open the actor's side first: a refusal answers the caller over HTTP.
+        const reader = yield* upstream.reader.pipe(Effect.option);
+        if (reader._tag === "None") {
+          return HttpServerResponse.text("The Durable Object refused the WebSocket", {
+            status: 502,
+          });
+        }
+        const downstream = yield* request.upgrade;
+        const toCaller = yield* downstream.writer;
+        const toActor = yield* upstream.writer;
+        yield* Effect.raceFirst(
+          forward(Effect.succeed(reader.value), toCaller),
+          forward(downstream.reader, toActor),
+        );
+        return HttpServerResponse.empty({ status: 101 });
+      }),
+    );
+  });
+
+/** A fetcher whose requests reach the actor's `onRequest` (and `onWebSocket`) through the gateway. */
 export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
+  upgrade: (request) => gatewayUpgrade(target, request),
   fetch: async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
