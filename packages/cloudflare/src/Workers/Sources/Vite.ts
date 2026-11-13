@@ -14,7 +14,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as vite from "vite";
-import type { FoldkitBuildMetadata } from "../../Website/FoldkitBuild.ts";
 import { readAssets } from "../Assets.ts";
 import { resolveBuildEnv } from "../BuildEnv.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
@@ -146,12 +145,6 @@ export const viteDev = (
     );
   });
 
-type ViteBuildOptions = CloudflareVitePluginOptions & Pick<ViteOptions, "framework">;
-
-type ViteWorkerBuildOutput = ViteBuildOutput & {
-  foldkit: FoldkitBuildMetadata | undefined;
-};
-
 /**
  * Run a production Vite build in a child process rooted at the project
  * directory and adapt the result to the in-process {@link ViteBuildOutput}
@@ -166,7 +159,7 @@ type ViteWorkerBuildOutput = ViteBuildOutput & {
 export const viteBuild = (
   rootDir: string = initialCwd,
   env: Record<string, unknown>,
-  pluginOptions: ViteBuildOptions,
+  pluginOptions: CloudflareVitePluginOptions,
   fqn: string,
 ) =>
   Effect.gen(function* () {
@@ -180,7 +173,6 @@ export const viteBuild = (
         // `getDefine`); the rest may hold non-serializable values.
         env: Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith("VITE_"))),
         main: pluginOptions.main,
-        framework: pluginOptions.framework,
         compatibilityDate: pluginOptions.compatibilityDate,
         compatibilityFlags: pluginOptions.compatibilityFlags,
         viteEnvironments: pluginOptions.viteEnvironments,
@@ -189,11 +181,10 @@ export const viteBuild = (
     );
     return {
       clientDirectory: result.clientDirectory,
-      foldkit: result.foldkit,
       base: result.base,
       serverBundle: Effect.succeed(result.serverBundle),
       externalWorkspaces: Effect.succeed(new Set(result.externalWorkspaces)),
-    } satisfies ViteWorkerBuildOutput;
+    } satisfies ViteBuildOutput;
   });
 
 /**
@@ -205,14 +196,14 @@ export const viteBuild = (
 export const viteBuildInProcess = (
   rootDir: string,
   env: Record<string, unknown>,
-  pluginOptions: ViteBuildOptions,
+  pluginOptions: CloudflareVitePluginOptions,
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
     const context = yield* Effect.context<never>();
-    const foldkit = yield* Effect.promise(async () => {
+    yield* Effect.promise(async () => {
       // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes a process-wide flag the Vite plugin reads; Config is read-only
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
@@ -235,17 +226,9 @@ export const viteBuildInProcess = (
         // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
         null,
       );
-      const readFoldkitMetadata =
-        pluginOptions.framework === "foldkit"
-          ? (await import("../../Website/FoldkitBuild.ts")).foldkitBuildMetadataReader(
-              builder.config.plugins,
-              pluginOptions.main,
-            )
-          : undefined;
       await builder.buildApp();
-      return readFoldkitMetadata?.();
     });
-    return { ...(yield* outputPlugin.output), foldkit };
+    return yield* outputPlugin.output;
   });
 
 // Emulate `vite build` env semantics for `props.env`: only
@@ -348,7 +331,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
     const env = yield* resolveBuildEnv(ctx.env, ctx.selfUrl);
-    const { clientDirectory, foldkit, base, serverBundle, externalWorkspaces } = yield* viteBuild(
+    const { clientDirectory, base, serverBundle, externalWorkspaces } = yield* viteBuild(
       vite.rootDir,
       env,
       {
@@ -365,28 +348,14 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         compatibilityDate: ctx.compatibility.date,
         compatibilityFlags: ctx.compatibility.flags,
         viteEnvironments: vite.viteEnvironments,
-        framework: vite.framework,
       },
       ctx.fqn,
     );
     const declaredAssets = ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined;
-    // What the build itself says about its assets, filled in under what
-    // the resource declared: a framework that records which pages it
-    // prerendered knows the routing better than a default would, and the
-    // resource's own `assets` still has the last word.
-    const derivedAssets =
-      clientDirectory && vite.framework === "foldkit"
-        ? yield* Effect.promise(() => import("../../Website/FoldkitBuild.ts")).pipe(
-            Effect.map(({ foldkitAssetsFromManifest }) =>
-              foldkitAssetsFromManifest(foldkit?.manifest),
-            ),
-          )
-        : undefined;
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory
           ? readAssets({
-              ...derivedAssets,
               ...declaredAssets,
               // `clientDirectory` from the build child is absolute; the
               // rootDir only matters as a legacy fallback.

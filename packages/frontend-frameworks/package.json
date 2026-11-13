@@ -143,6 +143,18 @@
       "worker": "./dist/foldkit/node.js",
       "import": "./dist/foldkit/node.js"
     },
+    "./foldkit/cloudflare": {
+      "types": "./dist/foldkit/cloudflare.d.ts",
+      "bun": "./dist/foldkit/cloudflare.js",
+      "worker": "./dist/foldkit/cloudflare.js",
+      "import": "./dist/foldkit/cloudflare.js"
+    },
+    "./foldkit/source": {
+      "types": "./dist/foldkit/source.d.ts",
+      "bun": "./dist/foldkit/source.js",
+      "worker": "./dist/foldkit/source.js",
+      "import": "./dist/foldkit/source.js"
+    },
     "./nextjs": {
       "types": "./dist/nextjs/index.d.ts",
       "bun": "./dist/nextjs/index.js",

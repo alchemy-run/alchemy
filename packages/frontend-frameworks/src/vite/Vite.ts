@@ -130,6 +130,11 @@ export interface ViteOptions {
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
         readonly port?: number | undefined;
+        /**
+         * Vite plugins added to the dev server alongside the project's own
+         * (e.g. a deploy target's runtime plugin).
+         */
+        readonly plugins?: ReadonlyArray<unknown> | undefined;
       }
     | undefined;
 }
@@ -272,6 +277,9 @@ export const make: (
                 ? { configFile: path.resolve(root, options.vite.configFile) }
                 : undefined),
               ...(options?.vite?.base !== undefined ? { base: options.vite.base } : undefined),
+              ...(options?.dev?.plugins !== undefined
+                ? { plugins: [...options.dev.plugins] }
+                : undefined),
               server: {
                 port,
                 ...(host !== undefined ? { host } : undefined),
