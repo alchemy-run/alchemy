@@ -339,6 +339,38 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     for (const tag of ["UnknownBase", "Unauthenticated"]) expect(failure).toContain(tag);
   });
 
+  it("a command or a query with no input takes an empty JSON object", () => {
+    class Reset extends Domain.Command("Reset", { target: WalletId, events: [Deposited] }) {}
+    class Till extends Domain.Aggregate("Till", {
+      id: WalletId,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Reset],
+      decide: { Reset: () => [] },
+      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+    }) {}
+    class Currencies extends Domain.Query("Currencies", { success: Schema.Array(Schema.String) }) {}
+    class Tills extends Domain.Model("Tills", { aggregates: [Till], queries: [Currencies] }) {}
+    class TillApi extends Domain.Api("TillApi", { model: Tills }) {}
+    const { toolkit } = DomainAi.toToolkit(TillApi, { expose: ["Reset", "Currencies"] });
+    for (const [name, payload] of [
+      ["TillApi_Reset_send", { target: "sam-till" }],
+      ["TillApi_Currencies_ask", {}],
+    ] as const) {
+      const tool = toolkit.tools[name]!;
+      // An object with no properties, so an agent sends `{}`, not the string `"{}"`.
+      expect(Tool.getJsonSchema(tool)).toMatchObject({
+        properties: { input: { type: "object", additionalProperties: false } },
+      });
+      const parameters = tool.parametersSchema as Schema.Codec<unknown, unknown>;
+      const decodes = (input: unknown) =>
+        Exit.isSuccess(Schema.decodeUnknownExit(parameters)({ ...payload, input }));
+      expect(decodes({})).toBe(true);
+      expect(decodes("{}")).toBe(false);
+      expect(decodes(42)).toBe(false);
+    }
+  });
+
   it.live("a query tool answers with a page, and its rejection as the typed failure", () =>
     Effect.gen(function* () {
       expect(

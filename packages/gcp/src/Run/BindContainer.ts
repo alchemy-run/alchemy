@@ -239,10 +239,10 @@ export function bindContainer<Groups extends HttpApiGroup.Constraint, Req = neve
   never,
   Req | HttpClient.HttpClient
 >;
-export function bindContainer(
-  target: Bindable<unknown, unknown>,
+export function bindContainer<Req>(
+  target: Bindable<unknown, Req>,
   options?: BindContainerOptions<any, any>,
-): Effect.Effect<unknown, never, any> {
+): Effect.Effect<unknown, never, Req | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const bound = yield* bindSidecar(target);

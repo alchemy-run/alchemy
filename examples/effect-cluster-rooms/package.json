@@ -1,0 +1,22 @@
+{
+  "name": "effect-cluster-rooms-example",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/effect-cluster-rooms"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy"
+  },
+  "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
+}

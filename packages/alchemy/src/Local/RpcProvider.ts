@@ -284,7 +284,8 @@ export const effect = <
               ? Stream.unwrap(
                   Effect.map(callingProvider, (provider) => (provider as any)[prop](...args)),
                 )
-              : Effect.flatMap(callingProvider, (provider) => (provider as any)[prop](...args));
+              : // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- forwards any provider lifecycle method by name
+                Effect.flatMap(callingProvider, (provider) => (provider as any)[prop](...args));
         },
       });
     }),

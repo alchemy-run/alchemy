@@ -1,38 +1,68 @@
 ---
 title: Docker
-description: Images, containers, networks, volumes and Swarm services as Stack resources, driven through your active Docker CLI context.
+description: Docker builds applications into images and runs them as isolated containers on a Docker engine, on your laptop, a CI runner or a server.
 ---
 
 import HubMap from "../../../components/HubMap.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
-Docker packages a program with everything it needs into an image, and runs images as isolated containers. An image runs the same on a laptop, in CI or on any cloud.
+Docker builds an application into an image, a layered filesystem snapshot plus the command to run, and runs images as isolated containers on a Docker engine, on your laptop, a CI runner or a server. Registries carry images between machines, which is why nearly every cloud runs containers from them. Swarm, built into the engine, runs replicated services across a cluster of engines.
 
 **New to Docker?** Start with [What is Docker?](/docker/what-is-docker).
 
 ## A quick example
 
-Postgres with a named volume, a network alias and a published port:
+Pull Postgres and run it with its data on a volume:
 
 ```typescript title="alchemy.run.ts"
-const image = yield* Docker.RemoteImage("postgres-image", { name: "postgres", tag: "18-alpine" });
-const network = yield* Docker.Network("app-network");
-const data = yield* Docker.Volume("postgres-data");
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
 
-const postgres = yield* Docker.Container("postgres", {
-  image,
-  environment: { POSTGRES_DB: "app", POSTGRES_PASSWORD: password },
-  ports: [{ external: 15432, internal: 5432 }],
-  volumes: [{ hostPath: data.name, containerPath: "/var/lib/postgresql/data" }],
-  networks: [{ name: network.name, aliases: ["postgres"] }],
-  start: true,
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const data = yield* Docker.Volume("postgres-data");
+
+    const postgres = yield* Docker.Container("postgres", {
+      image: "postgres:18-alpine",
+      environment: { POSTGRES_PASSWORD: yield* Config.Redacted("POSTGRES_PASSWORD") },
+      ports: [{ external: 15432, internal: 5432 }],
+      volumes: [{ hostPath: data.name, containerPath: "/var/lib/postgresql/data" }],
+      start: true,
+    });
+
+    return { ports: postgres.ports };
+  }),
+);
+```
+
+Build your own image from a Dockerfile, and push it to a registry:
+
+```typescript
+const image = yield* Docker.Image("api", {
+  name: "acme/api",
+  build: { context: "./api" },
+  registry: {
+    server: "ghcr.io",
+    username: "acme",
+    password: yield* Config.Redacted("GITHUB_TOKEN"),
+  },
 });
 ```
 
-`password` can be `Redacted`. It reaches the container through its environment, never on the command line.
+Deploy, and Alchemy creates everything on the engine your `docker` CLI talks to:
+
+<PackageManagers run="alchemy deploy" />
 
 ## Where to start
 
-**Want to build?** Connect Alchemy to your engine in [Setup](/docker/setup), then [Run local services](/docker/local-services) builds Postgres on a network and a volume, step by step.
+**Want to build?** Install the provider in [Setup](/docker/setup), then follow [Local Postgres](/docker/local-services) step by step.
 
 **Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 

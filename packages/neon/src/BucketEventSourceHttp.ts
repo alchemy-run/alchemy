@@ -38,10 +38,10 @@ export const BucketEventSourceHttp = Layer.effect(
   Effect.gen(function* () {
     const host = yield* Function;
     const Trigger = yield* FunctionTrigger;
-    return Effect.fn(function* (
+    return Effect.fn(function* <E>(
       bucket: Bucket,
       props: BucketEventSourceProps,
-      handler: (event: BucketEvent) => Effect.Effect<void, unknown>,
+      handler: (event: BucketEvent) => Effect.Effect<void, E>,
     ) {
       const path = `/__alchemy/neon/bucket/${encodeURIComponent(props.name)}`;
       const triggerName = `${host.FQN}:${props.name}`;

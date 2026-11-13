@@ -1,9 +1,5 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
-import {
-  makeContainerImageSource,
-  type ImageRegistryTarget,
-  type ImageSourceLike,
-} from "@alchemy.run/docker/ImageSource";
+import { makeContainerImageSource, type ImageSourceLike } from "@alchemy.run/docker/ImageSource";
 import * as DO from "@distilled.cloud/digitalocean";
 import type {
   App as ApiApp,
@@ -440,12 +436,9 @@ const teamRegistry = (registry: string | undefined) =>
 
 // The registry accepts the API token as both the Docker username and the
 // password, the same login `doctl registry login` performs.
-const registryTarget = (
-  registry: string,
-  repository: string,
-): ImageRegistryTarget<DO.DigitalOceanOpContext> => ({
+const registryTarget = (registry: string, repository: string) => ({
   repositoryUri: Effect.succeed(`${REGISTRY_HOST}/${registry}/${repository}`),
-  hasTag: (tag) =>
+  hasTag: (tag: string) =>
     DO.listRegistryRepositoryTags
       .items({ registry_name: registry, repository_name: repository, per_page: 200 })
       .pipe(

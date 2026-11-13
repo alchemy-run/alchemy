@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
+import type * as Plan from "alchemy/Plan";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -351,6 +352,8 @@ describe.concurrent(
                     TEST_MARKER: marker,
                     SITE_KV: siteKv,
                     PUBLIC_SITE_MARKER: "ASTRO_PUBLIC_ENV_MARKER",
+                    // Resolved to this Worker's own URL before the build.
+                    PUBLIC_SITE_URL: Cloudflare.Worker.URL,
                   },
                   assets: { htmlHandling: "auto-trailing-slash", notFoundHandling: "none" },
                 });
@@ -378,6 +381,10 @@ describe.concurrent(
           yield* expectUrlContains(`${site1.url!}/public-env/`, "ASTRO_PUBLIC_ENV_MARKER", {
             timeout: "60 seconds",
             label: "astro public env",
+          });
+          yield* expectUrlContains(`${site1.url!}/public-env/`, site1.url!, {
+            timeout: "60 seconds",
+            label: "astro Worker.URL env",
           });
           // Prerendered page served from static assets. Keep the body — the
           // hashed-asset assertion below extracts the `/_astro/*.css` href.
@@ -723,16 +730,20 @@ describe.concurrent(
             'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
           );
 
-          const site = yield* stack.deploy(
+          const program = (
+            astro?: { trailingSlash: "always" },
+            notFoundHandling: "404-page" | "none" = "404-page",
+          ) =>
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Astro("AstroStaticConfigSite", {
                 rootDir,
                 workersDev: { enabled: true, previewsEnabled: true },
                 compatibility: { date: "2026-03-10" },
-                assets: { notFoundHandling: "404-page" },
+                assets: { notFoundHandling },
+                astro,
               });
-            }),
-          );
+            });
+          const site = yield* stack.deploy(program());
 
           // No server bundle was produced or uploaded.
           expect(site.hash?.assets).toBeDefined();
@@ -751,6 +762,13 @@ describe.concurrent(
             Effect.map(Option.getOrUndefined),
           );
           expect(sessionNamespace).toBeUndefined();
+
+          // Unchanged files and options plan nothing; changing only a source
+          // option or the assets config plans an update through the props diff.
+          const actionOf = (plan: Plan.Plan) => plan.resources["AstroStaticConfigSite"]?.action;
+          expect(actionOf(yield* stack.plan(program()))).toBe("noop");
+          expect(actionOf(yield* stack.plan(program({ trailingSlash: "always" })))).toBe("update");
+          expect(actionOf(yield* stack.plan(program(undefined, "none")))).toBe("update");
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);

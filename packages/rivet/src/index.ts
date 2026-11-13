@@ -16,3 +16,4 @@ export * from "./Namespace.ts";
 export * from "./Pool.ts";
 export * from "./Providers.ts";
 export * from "./Services.ts";
+export * from "./WebSocket.ts";

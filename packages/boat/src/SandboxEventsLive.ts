@@ -34,9 +34,9 @@ export const SandboxEventsLive = Layer.effect(
     // stack satisfies it at plan time.
     const createWebhook = yield* Webhook;
 
-    return Effect.fn(function* (
+    return Effect.fn(function* <Req>(
       props: SandboxEventsProps,
-      process: (event: SandboxEvent) => Effect.Effect<void, never, any>,
+      process: (event: SandboxEvent) => Effect.Effect<void, never, Req>,
     ) {
       const path = sandboxEventsPath(props);
 

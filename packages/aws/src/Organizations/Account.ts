@@ -373,12 +373,10 @@ const readAccountById = Effect.fn(function* (accountId: string) {
     return undefined;
   }
 
-  const [parentId, tags] = yield* Effect.all([
-    readParentId(described.Id),
-    readResourceTags(described.Id).pipe(
-      Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
-    ),
-  ]);
+  const readTags = readResourceTags(described.Id).pipe(
+    Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+  );
+  const [parentId, tags] = yield* Effect.all([readParentId(described.Id), readTags]);
 
   return {
     accountId: described.Id,

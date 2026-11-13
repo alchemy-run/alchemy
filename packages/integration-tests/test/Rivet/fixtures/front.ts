@@ -7,6 +7,7 @@ import * as Rivet from "@alchemy.run/rivet";
 import * as StreamFormat from "@alchemy.run/rivet/StreamFormat";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -20,6 +21,7 @@ import GatedTally from "./gated-tally.ts";
 import Greeter from "./greeter.ts";
 import { Reentrant } from "./reentrant-declaration.ts";
 import Room from "./room.ts";
+import SocketRoom from "./socket-room.ts";
 import Tally from "./tally.ts";
 
 export default class Front extends Docker.Service<Front>()(
@@ -42,6 +44,7 @@ export default class Front extends Docker.Service<Front>()(
     const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
     const rooms = yield* Room;
+    const socketRooms = yield* SocketRoom;
     const chat = yield* ChatLog;
     const binary = yield* BinaryLog;
     const conformance = conformanceFetch(counters);
@@ -141,6 +144,19 @@ export default class Front extends Docker.Service<Front>()(
             name,
             url.pathname.split("/").filter((segment) => segment.length > 0)[2],
           ).pipe(Effect.orDie);
+        }
+        // `/socket/<room>?user=<u>`: a WebSocket to the room's instance,
+        // with a header the front adds.
+        if (group === "socket" && name !== undefined) {
+          return yield* socketRooms
+            .getByName(name)
+            .fetch(request.modify({ headers: Headers.set(request.headers, "x-room", name) }))
+            .pipe(Effect.orDie);
+        }
+        if (group === "socket-count" && name !== undefined) {
+          return yield* HttpServerResponse.json({
+            sockets: yield* socketRooms.getByName(name).sockets().pipe(Effect.orDie),
+          });
         }
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);

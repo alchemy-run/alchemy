@@ -248,7 +248,8 @@ export const makeRpcClient = (
                 decodeRpcResponseStream,
               ),
             )
-          : decodeRpcResult(value),
+          : // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- RPC stub: the wire result is untyped; the stub's declared method types carry the program's errors
+            decodeRpcResult(value),
       ),
     );
   return new Proxy(
@@ -260,9 +261,11 @@ export const makeRpcClient = (
         const call = (args: unknown[]) =>
           Effect.gen(function* () {
             const names = (yield* methods) ?? [];
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- RPC stub: the wire result is untyped; the stub's declared method types carry the program's errors
             if (names.includes(prop)) return yield* callMethod(prop, args);
             const operation = (client as unknown as Record<string, unknown>)[prop];
             if (typeof operation === "function") {
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- RPC stub: the wire result is untyped; the stub's declared method types carry the program's errors
               return yield* (operation as (...a: unknown[]) => Effect.Effect<unknown, unknown>)(
                 ...args,
               );
@@ -274,7 +277,7 @@ export const makeRpcClient = (
           });
         return (...args: unknown[]) =>
           asEffectOrStream(
-            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the stub's declared method types carry `RuntimeContext`, which the caller's runtime provides
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- the stub's declared method types carry `RuntimeContext` and the program's errors
             call(args) as Effect.Effect<unknown, unknown>,
           );
       },

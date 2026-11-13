@@ -38,6 +38,7 @@ packages:
   - packages/*
   - examples/*
   - examples/cloudflare-domain/packages/*
+  - examples/cluster-domain/packages/*
   - examples/cloudflare-website-service-bindings/apps/*
   - examples/monorepo-single-stack/*
   - examples/monorepo-multi-stack/*
@@ -48,7 +49,7 @@ packages:
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 
 catalog:
-  "@alchemy.run/sigil": "0.1.0-alpha.3"
+  "@alchemy.run/sigil": "0.1.0-alpha.4"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.13.0"
   "@astrojs/mdx": "8.0.3"
@@ -310,7 +311,7 @@ patchedDependencies:
 
 minimumReleaseAgeExclude:
   - typescript@7.1.0-dev.20260923.1 || 7.1.0-dev.20261105.1
-  - "@alchemy.run/sigil@0.1.0-alpha.3"
+  - "@alchemy.run/sigil@0.1.0-alpha.4"
   - "@foldkit/vite-plugin@0.29.0"
   - foldkit@0.170.0
   - "@solidjs/start@2.0.6"

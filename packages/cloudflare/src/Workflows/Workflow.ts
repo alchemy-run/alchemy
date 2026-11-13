@@ -75,8 +75,8 @@ export interface WorkflowRollbackContext<Output = unknown> {
   output: Output | undefined;
 }
 
-export interface WorkflowRollbackOptions<Output = unknown, R = never> {
-  rollback: (context: WorkflowRollbackContext<Output>) => Effect.Effect<void, unknown, R>;
+export interface WorkflowRollbackOptions<Output = unknown, R = never, E = never> {
+  rollback: (context: WorkflowRollbackContext<Output>) => Effect.Effect<void, E, R>;
   rollbackConfig?: WorkflowStepConfig;
 }
 
@@ -87,10 +87,11 @@ export interface WorkflowRollbackOptions<Output = unknown, R = never> {
 export interface WorkflowTaskConfig<
   Output = unknown,
   RollbackReq = never,
+  RollbackErr = never,
 > extends WorkflowStepConfig {
   rollback?: (
     context: WorkflowRollbackContext<Output>,
-  ) => Effect.Effect<void, unknown, RollbackReq>;
+  ) => Effect.Effect<void, RollbackErr, RollbackReq>;
   rollbackConfig?: WorkflowStepConfig;
 }
 
@@ -103,7 +104,7 @@ export interface WorkflowTaskOptions<
   R = never,
   RollbackReq = never,
   E = never,
-> extends WorkflowTaskConfig<Output, RollbackReq> {
+> extends WorkflowTaskConfig<Output, RollbackReq, unknown> {
   name: string;
   effect: Effect.Effect<Output, E, R>;
 }
@@ -161,10 +162,10 @@ type ExcludeWorkflowStepContext<R> = R extends {
  * `Effect.die` and `Effect.orDie`
  * stop retries. Native timeout, validation, pause, and abort errors stay defects.
  */
-export function task<T, R = never, RollbackReq = never, E = never>(
+export function task<T, R = never, RollbackReq = never, E = never, RollbackErr = never>(
   name: string,
   effect: Effect.Effect<T, E, R>,
-  options?: WorkflowTaskConfig<T, RollbackReq>,
+  options?: WorkflowTaskConfig<T, RollbackReq, RollbackErr>,
 ): Effect.Effect<T, E, WorkflowStep | ExcludeWorkflowStepContext<Exclude<R | RollbackReq, Scope>>> {
   return Effect.gen(function* () {
     const step = yield* WorkflowStep;

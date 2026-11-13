@@ -193,14 +193,13 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
   const random = yield* SecureRandom.SecureRandom;
   const token = yield* random.uuidV4();
   const modules = yield* makeModules(options as PlatformProxyOptions);
+  // Name the hooks' requirements: `B`'s constraint is `BindingHook<any>`.
+  const hooks: ReadonlyArray<BindingHook<BindingRequirements<B>>> = options.bindings;
   const url = yield* runtime.start({
     name: options.name ?? "platform-proxy",
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
-    bindings: [
-      Text.local(BINDING_PLATFORM_PROXY_TOKEN, token),
-      ...options.bindings,
-    ] as unknown as B,
+    bindings: [Text.local(BINDING_PLATFORM_PROXY_TOKEN, token), ...hooks] as unknown as B,
     modules,
     durableObjectNamespaces: options.durableObjectNamespaces,
     assets: options.assets && { ...options.assets, runWorkerFirst: true },

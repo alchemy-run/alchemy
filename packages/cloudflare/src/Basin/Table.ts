@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import { isEffectOf } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -409,9 +410,8 @@ export const Table: typeof TableResource = Object.assign(
       return (TableResource as (methods: object) => unknown)(args[0]);
     }
     const [id, props] = args as [string, unknown];
-    const resolved = Effect.isEffect(props)
-      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
-        Effect.flatMap(props as Effect.Effect<unknown>, toProps)
+    const resolved = isEffectOf(props)
+      ? Effect.flatMap(props, toProps)
       : Effect.suspend(() => toProps(props));
     return TableResource(id, resolved as Effect.Effect<any>);
   },

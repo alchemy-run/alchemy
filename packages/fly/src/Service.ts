@@ -18,6 +18,7 @@ import type { LookupMethod, Resource } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { packEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
+import { yieldDeclared } from "alchemy/Util/effect";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -1118,12 +1119,10 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   // `{ app: Site }` at module scope is an Effect. Yield it here so the
   // App is registered and `news.app` is resolved attributes at
   // reconcile (same DX as `yield* App(...)` inside Effect.gen).
-  transformProps: (id, props) =>
+  transformProps: (id, props: ServiceProps) =>
     Effect.gen(function* () {
       if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const app = Effect.isEffect(props.app)
-        ? yield* props.app as Effect.Effect<App, never, Providers>
-        : props.app;
+      const app = yield* yieldDeclared(props.app);
       if (app !== undefined) {
         // Report the ports this Service publishes so the App can reject
         // two Services on the same port before either one is deployed.

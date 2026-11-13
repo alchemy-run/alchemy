@@ -443,15 +443,16 @@ export const KeyProvider = () =>
                 // A key already scheduled for deletion rejects a second
                 // DeleteKey with a conflict — that is the desired end state,
                 // so treat it as success. Any other conflict is re-raised.
-                ConflictException: (error) =>
-                  paymentcryptography.getKey({ KeyIdentifier: output.keyArn }).pipe(
+                ConflictException: Effect.fn(function* (error) {
+                  return yield* paymentcryptography.getKey({ KeyIdentifier: output.keyArn }).pipe(
                     Effect.flatMap((r) =>
                       r.Key.KeyState === "DELETE_PENDING" || r.Key.KeyState === "DELETE_COMPLETE"
                         ? Effect.void
                         : Effect.fail(error),
                     ),
                     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                  ),
+                  );
+                }),
               }),
             );
         }),

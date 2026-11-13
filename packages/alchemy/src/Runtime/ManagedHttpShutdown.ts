@@ -132,6 +132,7 @@ export const withManagedHttpShutdown = (
     yield* Effect.addFinalizer((exit) => Scope.close(dependencies, exit));
     yield* Effect.addFinalizer((exit) => Scope.close(scope, exit));
 
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the host runs the user's program and re-raises its first failure as-is
     const fiber = yield* program.pipe(
       Effect.provideService(ManagedHttpShutdown, {
         scope,
@@ -194,6 +195,7 @@ export const withManagedHttpShutdown = (
     for (const cause of failures) {
       yield* Effect.logError("Managed process cleanup failed", cause);
     }
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the host runs the user's program and re-raises its first failure as-is
     if (failures.length > 0) return yield* Effect.failCause(failures[0]!);
     if (timedOut) {
       return yield* new ManagedHttpShutdownOperationFailed({

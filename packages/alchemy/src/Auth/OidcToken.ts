@@ -1,9 +1,11 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import type { AuthError } from "./AuthProvider.ts";
 import { getEnv } from "./Env.ts";
 
 /**
@@ -55,7 +57,11 @@ const PLATFORMS: ReadonlyArray<{
   readonly name: OidcPlatform;
   readonly probe: (
     audience: string | undefined,
-  ) => Effect.Effect<Redacted.Redacted<string> | undefined, unknown, HttpClient.HttpClient>;
+  ) => Effect.Effect<
+    Redacted.Redacted<string> | undefined,
+    AuthError | HttpClientError.HttpClientError | Schema.SchemaError,
+    HttpClient.HttpClient
+  >;
 }> = [
   {
     name: "vercel",

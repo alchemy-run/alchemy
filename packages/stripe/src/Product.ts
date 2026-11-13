@@ -50,6 +50,12 @@ export interface ProductProps {
    */
   images?: string[];
   /**
+   * [Tax code](https://docs.stripe.com/tax/tax-codes) (`txcd_…`) that
+   * Stripe Tax uses to classify the product. If omitted, the product keeps
+   * its current tax code.
+   */
+  taxCode?: string;
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`.
@@ -71,6 +77,8 @@ export type Product = Resource<
     active: boolean;
     /** Image URLs meant to be displayable to the customer. */
     images: string[];
+    /** Tax code (`txcd_…`), if set. */
+    taxCode: string | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the product was created. */
@@ -94,8 +102,9 @@ export interface ProductLookup {
 
 /**
  * A Stripe Product — the catalog item that Prices, invoices, and Checkout
- * attach to. Name, description, active, images, and metadata are updated
- * in place. Deleting a product is only possible when it has no Prices.
+ * attach to. Name, description, active, images, tax code, and metadata
+ * are updated in place. Deleting a product is only possible when it has
+ * no Prices.
  *
  * @see https://docs.stripe.com/api/products
  *
@@ -114,13 +123,14 @@ export interface ProductLookup {
  * ```
  *
  * ### Catalog details
- * **Example:** Images, metadata, and inactive product
+ * **Example:** Images, tax code, metadata, and inactive product
  * ```typescript
  * const product = yield* Stripe.Product("pro-plan", {
  *   name: "Pro Plan",
  *   description: "Billed monthly",
  *   active: false,
  *   images: ["https://example.com/pro.png"],
+ *   taxCode: "txcd_10103001",
  *   metadata: { tier: "pro" },
  * });
  * ```
@@ -162,12 +172,19 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
+const taxCodeIdOf = (taxCode: StripeProduct["tax_code"]): string | undefined => {
+  if (taxCode == null) return undefined;
+  if (typeof taxCode === "string") return taxCode;
+  return taxCode.id;
+};
+
 const toAttrs = (product: StripeProduct) => ({
   id: product.id,
   name: product.name,
   description: product.description ?? undefined,
   active: product.active,
   images: product.images,
+  taxCode: taxCodeIdOf(product.tax_code),
   metadata: userMetadata(product.metadata),
   created: product.created,
   livemode: product.livemode,
@@ -298,6 +315,7 @@ export const ProductProvider = () =>
           active: desiredActive,
           ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
           ...(desiredImages.length > 0 ? { images: desiredImages } : {}),
+          ...(news.taxCode !== undefined ? { tax_code: news.taxCode } : {}),
           metadata,
         }).pipe(
           withRequestOptions({
@@ -313,12 +331,15 @@ export const ProductProvider = () =>
       const activeChanged = current.active !== desiredActive;
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const imagesChanged = !arrayEquals(current.images, desiredImages);
+      const taxCodeChanged =
+        news.taxCode !== undefined && taxCodeIdOf(current.tax_code) !== news.taxCode;
 
       if (
         !nameChanged &&
         !activeChanged &&
         !descriptionChanged &&
         !imagesChanged &&
+        !taxCodeChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -330,6 +351,7 @@ export const ProductProvider = () =>
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(descriptionChanged ? { description: desiredDescription } : {}),
         ...(imagesChanged ? { images: desiredImages.length > 0 ? desiredImages : "" } : {}),
+        ...(taxCodeChanged ? { tax_code: news.taxCode } : {}),
         ...(metadataChanged
           ? {
               metadata: {

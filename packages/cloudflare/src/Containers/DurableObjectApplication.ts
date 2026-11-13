@@ -19,6 +19,7 @@ import {
   durableObjectSettingsPatch,
   mergeApplicationSettings,
 } from "./ContainerConfiguration.ts";
+import { deleteSnapshotImages } from "./ContainerSnapshots.ts";
 
 export const DurableObjectApplicationTypeId = "Cloudflare.Containers.DurableObjectApplication";
 
@@ -324,6 +325,9 @@ export const LiveDurableObjectApplicationProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!isLiveApplication(output.applicationId)) return;
+      yield* deleteSnapshotImages(output.accountId, output.applicationId).pipe(
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
+      );
       yield* Containers.deleteContainerApplication({
         accountId: output.accountId,
         applicationId: output.applicationId,

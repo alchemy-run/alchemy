@@ -1,36 +1,30 @@
 ---
-title: "Local services: Postgres with containers, networks, and volumes"
-description: Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
+title: Local Postgres
+description: Run Postgres for local development as Stack resources — a pinned image, a network and a volume, a Redacted password, and a health-checked container.
 ---
 import Tree from "../../../components/diagrams/Tree.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
-A Docker `Container` runs an image; a `Network` gives containers a
-stable DNS name to reach each other; a `Volume` keeps data alive
-across container replacements; a `RemoteImage` pins exactly which
-image you run. In alchemy all four are resources in your Stack, so
-your local dev dependencies get the same treatment as your cloud
-infrastructure: a reviewable diff on every change, one deploy that
-converges Docker to the declared state, and one destroy that tears
-it all down.
+Run Postgres for development the same way you run your cloud resources: declared in your Stack, created with one deploy, and removed with one destroy. Docker gives you a pinned image, a network the database is reachable on by name, a volume that keeps its data, and the container itself.
 
-You'll need a Docker daemon reachable from your CLI and the provider
-registered — see [Setup](/docker/setup) and the
-[Docker overview](/docker). The full program below is the checked-in
-[`examples/docker-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/docker-postgres).
+You'll need a Docker engine and the provider installed, as in [Setup](/docker/setup). The full program is the checked-in [`examples/docker-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/docker-postgres).
 
 <Tree
+  areas={["psql engine"]}
+  phoneAreas={["psql", "engine"]}
+  colGap={9}
   nodes={[
-    { id: "engine", label: "local Docker", type: "engine", areas: ["net vol"], colGap: 3 },
-    { id: "net", label: "app-network", type: "Network · DNS by name", parent: "engine", areas: ["worker pg"], colGap: 3 },
-    { id: "worker", label: "worker", type: "Container", parent: "net" },
-    { id: "pg", label: "postgres", type: "Container", parent: "net", tone: "accent", specs: [["image", "postgres@sha256:…"]] },
-    { id: "vol", label: "postgres-data", type: "Volume", parent: "engine" },
+    { id: "psql", label: "psql", type: "your machine", icon: "square-terminal" },
+    { id: "engine", label: "local Docker", type: "engine", icon: "brand:docker", areas: ["net", "vol"] },
+    { id: "net", label: "app-network", type: "network", parent: "engine", dashed: true, icon: "network", areas: ["pg"] },
+    { id: "pg", label: "postgres", type: "container · alias postgres", parent: "net", tone: "accent", icon: "brand:postgresql", specs: [["image", "postgres:18-alpine"]] },
+    { id: "vol", label: "postgres-data", type: "volume", parent: "engine", icon: "hard-drive" },
   ]}
   links={[
-    { from: "worker", to: "pg", label: ":5432" },
+    { from: "psql", to: "pg", label: "localhost:15432" },
     { from: "pg", to: "vol", label: "mounts" },
   ]}
-  caption="The containers find each other by name on their network. The data lives in a Volume, so replacing the postgres container keeps it."
+  caption="psql on your machine reaches Postgres through its published port, and containers on app-network reach it as postgres:5432. Its data lives on a volume, so recreating the container keeps it."
 />
 
 ## Pin the image
@@ -58,12 +52,7 @@ export default Alchemy.Stack(
 );
 ```
 
-`RemoteImage` pulls `postgres:18-alpine` through your Docker CLI,
-and `alwaysPull: false` pins it — once the image is present locally,
-subsequent deploys diff to a no-op instead of re-pulling on every
-run. The Stack uses `Alchemy.localState()` because there's no cloud
-account behind these resources, and merges in
-`Alchemy.RandomProvider()` for the generated password below.
+`RemoteImage` pulls `postgres:18-alpine`, and `alwaysPull: false` keeps the copy you have instead of pulling again on every deploy. `Alchemy.localState()` keeps the Stack's state on your machine, next to the engine, and `Alchemy.RandomProvider()` is there for the generated password below.
 
 ## A network and a volume
 
@@ -72,55 +61,7 @@ const network = yield* Docker.Network("app-network");
 const data = yield* Docker.Volume("postgres-data");
 ```
 
-Neither needs any props — the engine generates unique physical names
-from the app, stage, and logical ID. Note that changing a `Network`
-or `Volume` prop (driver, labels, IPv6) is a replacement: the old
-one is deleted and a new one created, so treat a Volume's props as
-fixed once it holds data you care about.
-
-### Configure a network
-
-A network can be internal, attachable, and pinned to an explicit subnet:
-
-```typescript
-const privateNetwork = yield* Docker.Network("private-network", {
-  internal: true,
-  attachable: true,
-  driverOpts: { "com.docker.network.driver.mtu": "1420" },
-  ipam: {
-    config: [{
-      subnet: "10.50.0.0/24",
-      gateway: "10.50.0.1",
-      ipRange: "10.50.0.128/25",
-      auxAddresses: { reserved: "10.50.0.5" },
-    }],
-  },
-});
-```
-
-Without `ipam`, Docker picks the subnet and gateway, and Alchemy doesn't treat
-them as drift. Subnets are network prefixes (`10.50.0.0/24`, not
-`10.50.0.1/24`); a bad one fails with `InvalidNetworkOptions` naming the field,
-before the old network is touched.
-
-A dual-stack bridge network enables IPv6 and declares both families:
-
-```typescript
-const dualStack = yield* Docker.Network("dual-stack", {
-  enableIPv6: true,
-  ipam: {
-    config: [
-      { subnet: "10.51.0.0/24", gateway: "10.51.0.1" },
-      { subnet: "fd51:3456:789a::/64", gateway: "fd51:3456:789a::1" },
-    ],
-  },
-});
-```
-
-`internal` cuts external access through that network only; a container on
-another network can still reach out. Every network setting is fixed at
-creation, so changing one replaces the network, and Docker refuses to remove
-it while containers are attached.
+Neither needs props. Alchemy names each one from the Stack, stage and resource ID, so two stages never share a volume. Changing a volume's props later replaces it with an empty one, so settle them before it holds data.
 
 ## A Redacted password
 
@@ -137,13 +78,7 @@ const password = yield* Option.match(configuredPassword, {
 });
 ```
 
-If `POSTGRES_PASSWORD` is set in the environment it's used as-is;
-otherwise `Alchemy.makeRandom` generates a stable random secret
-(this is what `RandomProvider` in the Stack config is for). Either
-way the value is `Redacted`, and `Container` passes environment
-values to the daemon via the process environment — only the keys
-appear on the `docker` argv, so the secret never lands in shell
-history or a process listing.
+If `POSTGRES_PASSWORD` is set, it's used as it is. Otherwise `Alchemy.makeRandom` generates a random password once and keeps it in the Stack's state, so every deploy uses the same one. Either way the value is `Redacted`, and it never appears on the `docker` command line.
 
 ## The container
 
@@ -156,6 +91,7 @@ const postgres = yield* Docker.Container("postgres", {
     POSTGRES_USER: "alchemy",
     POSTGRES_PASSWORD: password,
   },
+  sharedMemorySize: "256m",
   ports: [{ external: 15432, internal: 5432 }],
   volumes: [
     { hostPath: data.name, containerPath: "/var/lib/postgresql/data" },
@@ -171,13 +107,9 @@ const postgres = yield* Docker.Container("postgres", {
 });
 ```
 
-`image` accepts the `RemoteImage` resource directly — no manual ref
-plumbing. A `hostPath` set to a volume's name mounts the named
-volume rather than a host directory, the `postgres` network alias
-gives other containers on `app-network` a stable DNS name, the
-healthcheck intervals take Effect `Duration` strings like
-`"5 seconds"`, and `start: true` actually runs the container
-(the default creates it stopped).
+`image` takes the `RemoteImage` resource itself. A `hostPath` set to the volume's name mounts the volume. The `postgres` alias is the name other containers on `app-network` connect to. The health check marks the container healthy once Postgres accepts connections, and `start: true` runs it, rather than leaving it created and stopped.
+
+`sharedMemorySize` raises `/dev/shm` above Docker's 64 MB default, which Postgres runs out of on parallel queries.
 
 ## Read the bound ports
 
@@ -189,128 +121,16 @@ return { container: postgres.name, hostPort: postgres.ports };
 const runtime = yield* Docker.inspectContainer("alchemy-example-postgres");
 ```
 
-The container's `ports` attribute is a record keyed by container
-port and protocol — here `"5432/tcp"` maps to `15432` — which is
-what your app's connection string needs; `Docker.inspectContainer`
-reads the same normalized attributes fresh from the daemon for any
-container by name, bound host ports included.
+`ports` maps each container port to its host port, here `"5432/tcp"` to `15432`. `Docker.inspectContainer` reads the same attributes straight from the engine, for any container by name.
 
-The following examples show optional runtime controls on separate
-worker containers. Check your image's filesystem and user requirements
-before applying them to the Postgres container above.
+## Run it
 
-## Limit memory, CPU, and processes
+<PackageManagers run="alchemy deploy" />
 
-```typescript
-const worker = yield* Docker.Container("worker", {
-  image: "alpine:3.22",
-  command: ["sleep", "3600"],
-  memory: "256m",
-  memorySwap: "256m",
-  memoryReservation: "128m",
-  cpus: 0.5,
-  pidsLimit: 128,
-  start: true,
-});
-```
+Connect with `psql postgres://alchemy:<password>@localhost:15432/app`. When you're done, `alchemy destroy` removes the container, network and volume, and the data with it.
 
-`memory` is a hard RAM limit; `memoryReservation` is a soft
-limit under contention. `memorySwap` limits **RAM plus swap**, not
-swap alone. Setting it equal to `memory` disables swap for this
-container where supported. `cpus: 0.5` limits CPU time to half
-a core, and `pidsLimit` limits the number of processes and threads.
-These limits apply to ordinary Docker Engine containers, not Swarm
-services.
+## Next
 
-## Restrict privileges and writable paths
-
-```typescript
-const worker = yield* Docker.Container("restricted-worker", {
-  image: "alpine:3.22",
-  command: ["sleep", "3600"],
-  readOnlyRootFilesystem: true,
-  capDrop: ["ALL"],
-  noNewPrivileges: true,
-  user: "1000:1000",
-  init: true,
-  tmpfs: [{ path: "/tmp", size: "32m", mode: 0o1777 }],
-  start: true,
-});
-```
-
-`readOnlyRootFilesystem` is Alchemy's name for Docker's `--read-only`:
-writeable directories must be mounted separately. The `tmpfs`
-above provides ephemeral scratch space; use a named `Volume` for
-data that must survive replacement. `capDrop: ["ALL"]` removes
-Linux capabilities, `noNewPrivileges` prevents gaining privileges
-through exec, and `user` sets the runtime UID/GID. `init` handles
-signal forwarding and reaping child processes. Only grant the
-capabilities and filesystem access your image actually requires.
-
-## Configure host security profiles
-
-```typescript
-const worker = yield* Docker.Container("profiled-worker", {
-  image: "alpine:3.22",
-  seccompProfile: "./security/worker-seccomp.json",
-  appArmorProfile: "worker-profile",
-});
-```
-
-`seccompProfile` points to a JSON file on the machine running
-Alchemy's Docker CLI. Alchemy hashes its **contents**, so editing
-the file recreates the container even when its path stays the
-same. `appArmorProfile` names an AppArmor policy that must already
-be loaded on the Docker host; its availability is host-dependent.
-Docker's default confinement applies when you leave these settings
-unset. Avoid `"unconfined"` unless disabling a policy is intentional.
-
-You can also provide `groupAdd: ["2000"]` for supplementary groups
-and `ulimits: { nofile: { soft: 1024, hard: 4096 } }` for per-process
-limits. `userNamespace` selects a user-namespace mode; `userNamespace: "host"`
-**opts out of** daemon user remapping rather than strengthening
-isolation.
-
-## Rotate logs and control shutdown
-
-```typescript
-const worker = yield* Docker.Container("logged-worker", {
-  image: "alpine:3.22",
-  logDriver: "local",
-  logOptions: { "max-size": "10m", "max-file": "3" },
-  oomScoreAdjustment: 200,
-  stopSignal: "SIGTERM",
-  stopTimeout: "15 seconds",
-});
-```
-
-`logDriver` and `logOptions` configure Docker-managed logging;
-supported options depend on the selected driver. `oomScoreAdjustment`
-adjusts Linux's preference for choosing a process under memory
-pressure; it does **not** disable the OOM killer. `stopSignal`
-selects the graceful-stop signal, and `stopTimeout` sets the
-grace period before Docker forces termination.
-
-Changing these create-time settings replaces a managed container.
-Replacement is **delete-first**, so account for downtime and keep
-persistent data in volumes. Unset options preserve Docker defaults;
-invalid combinations such as `memorySwap` without `memory` fail
-validation before container creation. See the
-[Container API reference](/providers/docker/container) for all
-properties and their types.
-
-## Where next
-
-- [Build & push an image](/docker/build-and-push) — build your own
-  image from a Dockerfile and push it to a registry.
-- [Docker overview](/docker) — all Docker resources at a glance,
-  including how adoption of pre-existing containers, networks, and
-  volumes is gated behind `adopt`.
-
-Reference:
-
-- [Container API reference](/providers/docker/container)
-- [RemoteImage API reference](/providers/docker/remoteimage)
-- [Image API reference](/providers/docker/image)
-- [Network API reference](/providers/docker/network)
-- [Volume API reference](/providers/docker/volume)
+- [Containers](/docker/containers), [Networks](/docker/networks) and [Volumes](/docker/volumes) explain each piece in depth.
+- [Limits & security](/docker/limits-and-security) caps memory and CPU and drops privileges.
+- [Build images](/docker/build-images) runs your own app next to the database.

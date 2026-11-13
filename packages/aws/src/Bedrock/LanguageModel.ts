@@ -100,7 +100,8 @@ export const withModelParameters =
   (parameters: LanguageModelCallParameters) =>
   <S extends Effect.Effect<any, any, any> | Stream.Stream<any, any, any>>(self: S): S =>
     (Effect.isEffect(self)
-      ? Effect.provideService(CurrentModelParameters, parameters)(self)
+      ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- provides one service to any Effect or Stream and returns it unchanged
+        Effect.provideService(CurrentModelParameters, parameters)(self)
       : Stream.provideService(
           CurrentModelParameters,
           parameters,

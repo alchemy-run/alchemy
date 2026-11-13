@@ -84,15 +84,20 @@ test.provider(
       expect(live.value2).toBe("value2");
 
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const value = yield* kv
-        .getNamespaceValue({ accountId, namespaceId, keyName: "key2" })
-        .pipe(
-          Effect.flatMap((res) =>
-            Effect.tryPromise(() =>
-              new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
-            ),
+      // The namespace was created moments ago. The Worker's write landed,
+      // yet the KV values API can still answer `namespace not found` for it.
+      const value = yield* kv.getNamespaceValue({ accountId, namespaceId, keyName: "key2" }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "NamespaceNotFound",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 15,
+        }),
+        Effect.flatMap((res) =>
+          Effect.tryPromise(() =>
+            new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
           ),
-        );
+        ),
+      );
       expect(value).toBe("value2");
 
       yield* stack.destroy();

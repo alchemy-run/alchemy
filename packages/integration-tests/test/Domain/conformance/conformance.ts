@@ -5,8 +5,12 @@
  */
 import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import { ConformanceApi } from "./model.ts";
 
 type TestFn = (
   name: string,
@@ -71,6 +75,31 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "a live read is pushed over a WebSocket",
+    Effect.gen(function* () {
+      const id = fresh("live");
+      const base = yield* url;
+      // A platform that can't hold the read's socket answers 501, and the
+      // client gives up instead of falling back to polling.
+      const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
+      const watched = yield* api.CounterTotal.watch(id).pipe(
+        Stream.map((frame) => frame.state?.total ?? 0),
+        Stream.takeUntil((total) => total === 5),
+        Stream.runCollect,
+        Effect.timeout(within),
+        Effect.forkChild,
+      );
+      yield* Effect.sleep("1 second");
+      yield* call(`/increment/${id}?by=2`);
+      yield* call(`/increment/${id}?by=3`);
+      const totals = [...(yield* Fiber.join(watched))];
+      expect(totals.at(-1)).toBe(5);
+      expect(totals).toEqual([...totals].sort((a, b) => a - b));
+    }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
+    options,
+  );
+
+  test(
     "a rejected command commits nothing",
     Effect.gen(function* () {
       const id = fresh("reject");
@@ -89,6 +118,35 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       );
       expect(first).toEqual(second);
       expect(yield* call(`/counter/${id}`)).toEqual({ total: 4 });
+    }),
+    options,
+  );
+
+  test(
+    "a view lists its entries a page at a time, in either order",
+    Effect.gen(function* () {
+      const id = fresh("pages");
+      for (const by of [1, 2, 3, 4, 5]) yield* call(`/increment/${id}?by=${by}`);
+      yield* eventually<{ increments: number }>(`/total/${id}`, (view) => view.increments === 5);
+      type Page = { totals: ReadonlyArray<number>; cursor: number | null };
+      const newest = yield* call<Page>(`/totals/${id}?order=desc&take=2`);
+      expect(newest).toEqual({ totals: [15, 10], cursor: 4 });
+      expect(yield* call<Page>(`/totals/${id}?order=desc&take=2&after=4`)).toEqual({
+        totals: [6, 3],
+        cursor: 2,
+      });
+      expect(yield* call<Page>(`/totals/${id}?order=desc&take=2&after=2`)).toEqual({
+        totals: [1],
+        cursor: null,
+      });
+      expect(yield* call<Page>(`/totals/${id}?take=2&after=2`)).toEqual({
+        totals: [6, 10],
+        cursor: 4,
+      });
+      expect(yield* call<Page>(`/totals/${id}?take=2&after=4`)).toEqual({
+        totals: [15],
+        cursor: null,
+      });
     }),
     options,
   );

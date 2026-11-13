@@ -78,24 +78,29 @@ export const stronglyConnectedComponents = (
 };
 
 /**
- * Compute the set of graph nodes that participate in a dependency cycle.
+ * Map each graph node that participates in a dependency cycle to the members
+ * of its cycle: the nodes of one strongly-connected component share one set.
  *
  * A node is considered "in a cycle" iff it sits in a strongly-connected
  * component (SCC) of size > 1, or has a self-edge (size-1 SCC that loops
  * back to itself).
  */
-export const findCycleMembers = (edges: Record<string, readonly string[]>): Set<string> => {
-  const cycleMembers = new Set<string>();
+export const findCycles = (
+  edges: Record<string, readonly string[]>,
+): Map<string, ReadonlySet<string>> => {
+  const cycles = new Map<string, ReadonlySet<string>>();
   for (const scc of stronglyConnectedComponents(Object.keys(edges), (node) => edges[node] ?? [])) {
-    if (scc.length > 1) {
-      for (const fqn of scc) cycleMembers.add(fqn);
-    } else {
-      // Size-1 SCC: only counts as a cycle if it has a self-edge.
-      const only = scc[0];
-      if ((edges[only] ?? []).includes(only)) {
-        cycleMembers.add(only);
-      }
-    }
+    // Size-1 SCC: only counts as a cycle if it has a self-edge.
+    if (scc.length === 1 && !(edges[scc[0]] ?? []).includes(scc[0])) continue;
+    const members = new Set(scc);
+    for (const fqn of scc) cycles.set(fqn, members);
   }
-  return cycleMembers;
+  return cycles;
 };
+
+/**
+ * Compute the set of graph nodes that participate in a dependency cycle, as
+ * {@link findCycles} defines one.
+ */
+export const findCycleMembers = (edges: Record<string, readonly string[]>): Set<string> =>
+  new Set(findCycles(edges).keys());

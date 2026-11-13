@@ -17,6 +17,7 @@ import {
   emptySnapshot,
   emptyStreamMeta,
   hostedModels,
+  inRange,
   Platform,
   type Json,
   type ModelHost,
@@ -27,6 +28,7 @@ import {
   type ViewEntry,
   type ViewSnapshot,
 } from "./Platform.ts";
+import { serveSocket } from "./Watch.ts";
 
 /**
  * Options for {@link make}.
@@ -970,10 +972,30 @@ export const make = (
                   Effect.map((current) => SubscriptionRef.changes(current.snapshot)),
                 ),
               ),
-            list: (key) =>
+            // A live read's WebSocket is served here, pushed on every commit.
+            connect: (key, subscription) =>
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) =>
+                  serveSocket(
+                    subscription,
+                    (latest) =>
+                      Effect.flatMap(
+                        Effect.all([
+                          SubscriptionRef.get(current.snapshot),
+                          SubscriptionRef.get(current.entries),
+                        ]),
+                        ([snapshot, entries]) => kit.push(key, latest, snapshot, entries),
+                      ),
+                    SubscriptionRef.changes(current.snapshot).pipe(Stream.drop(1)),
+                  ),
+                ),
+              ),
+            list: (key, range) =>
               ready(key).pipe(
                 Effect.andThen(get(key)),
                 Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+                Effect.map((entries) => inRange(entries, range)),
               ),
             tail: (key, after) =>
               Stream.unwrap(
@@ -1139,9 +1161,9 @@ export const make = (
           };
         }),
 
-      stream: (_stream, _kit) =>
+      stream: (_stream, kit) =>
         Effect.sync(() => {
-          const { keys, lock } = stored(`stream:${_kit.name}`, () => ({
+          const { keys, lock } = stored(`stream:${kit.name}`, () => ({
             keys: new Map<
               string,
               {
@@ -1174,7 +1196,7 @@ export const make = (
                       event,
                       envelope: {
                         id: key,
-                        stream: `${_kit.name}/${key}`,
+                        stream: `${kit.name}/${key}`,
                         seq,
                         at: write.at,
                         commandId: write.commandId,
@@ -1214,8 +1236,29 @@ export const make = (
               Stream.unwrap(
                 get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.meta))),
               ),
-            list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+            // A live read's WebSocket is served here, pushed on every append.
+            connect: (key, subscription) =>
+              get(key).pipe(
+                Effect.flatMap((current) =>
+                  serveSocket(
+                    subscription,
+                    (latest) =>
+                      Effect.flatMap(
+                        Effect.all([
+                          SubscriptionRef.get(current.meta),
+                          SubscriptionRef.get(current.entries),
+                        ]),
+                        ([meta, entries]) => kit.push(key, latest, meta, entries, entries.at(-1)),
+                      ),
+                    SubscriptionRef.changes(current.meta).pipe(Stream.drop(1)),
+                  ),
+                ),
+              ),
+            list: (key, range) =>
+              get(key).pipe(
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+                Effect.map((entries) => inRange(entries, range)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
                 get(key).pipe(

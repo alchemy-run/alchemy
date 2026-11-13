@@ -65,6 +65,12 @@ export class Docker extends Context.Service<
         image: string;
         volume: Array<string> | undefined;
         env: Record<string, string> | undefined;
+        /** Overrides the image's ENTRYPOINT executable. */
+        entrypoint?: string | undefined;
+        /** Working directory for the container process. */
+        workdir?: string | undefined;
+        /** Image platform, e.g. `linux/amd64`. */
+        platform?: string | undefined;
         /** Paths to Docker env files, forwarded as repeated `--env-file`. */
         "env-file"?: Array<string> | undefined;
         restart: "no" | "always" | "on-failure" | "unless-stopped";
@@ -81,14 +87,30 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         /** `--add-host` entries, each `hostname:address`. */
         "add-host"?: Array<string> | undefined;
+        /** Container hostname. */
+        hostname?: string | undefined;
+        /** Explicit DNS servers. */
+        dns?: Array<string> | undefined;
+        /** DNS search domains. */
+        "dns-search"?: Array<string> | undefined;
+        /** Resolver options such as `ndots:1`. */
+        "dns-option"?: Array<string> | undefined;
         /** Docker network namespace, including `container:<id>`. */
         network?: string | undefined;
+        /** IPC namespace mode. */
+        ipc?: string | undefined;
+        /** PID namespace mode. */
+        pid?: string | undefined;
+        /** Namespace-scoped sysctls. */
+        sysctl?: Record<string, string> | undefined;
         /** Linux capabilities to add. */
         "cap-add"?: Array<string> | undefined;
         /** Linux capabilities to drop. */
         "cap-drop"?: Array<string> | undefined;
         /** Hard memory limit in Docker's byte-suffix format. */
         memory?: string | undefined;
+        /** Shared-memory filesystem size (`/dev/shm`). */
+        "shm-size"?: string | undefined;
         /** Combined memory-and-swap limit in Docker's byte-suffix format. */
         "memory-swap"?: string | undefined;
         /** Soft memory reservation for memory contention. */
@@ -99,6 +121,8 @@ export class Docker extends Context.Service<
         "pids-limit"?: number | undefined;
         /** Mount the root filesystem read-only. */
         "read-only"?: boolean | undefined;
+        /** Enable Docker privileged mode. */
+        privileged?: boolean | undefined;
         /** Security options such as `no-new-privileges` and seccomp/AppArmor profiles. */
         "security-opt"?: Array<string> | undefined;
         /** Per-container user namespace; "host" disables daemon user remapping. */
@@ -119,6 +143,12 @@ export class Docker extends Context.Service<
         init?: boolean | undefined;
         /** Runtime UID/GID or named user. */
         user?: string | undefined;
+        /** Keep stdin open when detached. */
+        interactive?: boolean | undefined;
+        /** Allocate a TTY. */
+        tty?: boolean | undefined;
+        /** GPU device request, e.g. `all`. */
+        gpus?: string | undefined;
         /** Docker tmpfs mount expressions (target[:options]). */
         tmpfs?: Array<string> | undefined;
         /** Host devices in Docker's `host:container[:permissions]` form. */
@@ -299,6 +329,11 @@ export class Docker extends Context.Service<
         network: string;
         container: string;
         alias?: string[];
+        ip?: string;
+        ip6?: string;
+        "gw-priority"?: number;
+        /** Driver options for the endpoint, not for the network resource. */
+        "driver-opt"?: Record<string, string>;
         context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Disconnects a container from a network. */
@@ -496,6 +531,11 @@ export declare namespace Docker {
       Image: string;
       Cmd: string[] | null;
       Env: string[] | null;
+      Hostname?: string;
+      Entrypoint?: string[] | null;
+      WorkingDir?: string;
+      Tty?: boolean;
+      OpenStdin?: boolean;
       User?: string;
       StopSignal?: string;
       Labels: Record<string, string> | null;
@@ -513,12 +553,27 @@ export declare namespace Docker {
       PortBindings: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
       Binds: string[] | null;
       ExtraHosts: string[] | null;
+      Dns?: string[];
+      DnsSearch?: string[];
+      DnsOptions?: string[];
       RestartPolicy: { Name: string; MaximumRetryCount: number };
       AutoRemove: boolean;
       NetworkMode?: string;
       CapAdd?: string[] | null;
       CapDrop?: string[] | null;
       Memory?: number;
+      ShmSize?: number;
+      IpcMode?: string;
+      PidMode?: string;
+      Sysctls?: Record<string, string> | null;
+      Privileged?: boolean;
+      DeviceRequests?: Array<{
+        Driver?: string;
+        Count?: number;
+        DeviceIDs?: string[] | null;
+        Capabilities?: string[][];
+        Options?: Record<string, string>;
+      }> | null;
       MemorySwap?: number;
       MemoryReservation?: number;
       NanoCpus?: number;
@@ -540,7 +595,18 @@ export declare namespace Docker {
     };
     AppArmorProfile?: string;
     NetworkSettings: {
-      Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
+      Networks: Record<
+        string,
+        {
+          NetworkID: string;
+          Aliases: string[] | null;
+          IPAMConfig?: { IPv4Address?: string; IPv6Address?: string } | null;
+          IPAddress?: string;
+          GlobalIPv6Address?: string;
+          GwPriority?: number;
+          DriverOpts?: Record<string, string> | null;
+        }
+      > | null;
       Ports?: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
     };
   }
@@ -1062,14 +1128,29 @@ const makeDocker = (options: DockerOptions) =>
             ]),
             name,
           ]),
-        connect: ({ network, container, alias, context }) =>
+        connect: ({
+          network,
+          container,
+          alias,
+          ip,
+          ip6,
+          "gw-priority": gatewayPriority,
+          "driver-opt": driverOpts,
+          context,
+        }) =>
           run([
             ...formatArgs({ context }),
             "network",
             "connect",
+            ...formatArgs({
+              alias,
+              ip,
+              ip6,
+              "gw-priority": gatewayPriority,
+              "driver-opt": driverOpts,
+            }),
             network,
             container,
-            ...(alias ? alias.flatMap((a) => ["--alias", a]) : []),
           ]),
         disconnect: ({ network, container, context }) =>
           run([...formatArgs({ context }), "network", "disconnect", network, container]),

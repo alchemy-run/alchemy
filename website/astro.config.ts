@@ -2173,12 +2173,41 @@ export default defineConfig({
             { label: "What is Docker?", link: "/docker/what-is-docker" },
             { label: "Setup", link: "/docker/setup" },
             {
-              label: "Guides",
+              label: "Engines & access",
               items: [
-                { label: "Run local services", link: "/docker/local-services" },
-                { label: "Build & push images", link: "/docker/build-and-push" },
-                { label: "Docker Swarm", link: "/docker/swarm" },
+                { label: "Engines & contexts", link: "/docker/engines-and-contexts" },
+                { label: "Registries & credentials", link: "/docker/registries" },
               ],
+            },
+            {
+              label: "Images",
+              items: [
+                { label: "Build images", link: "/docker/build-images" },
+                { label: "Build caches", link: "/docker/build-caches" },
+                { label: "Pull & mirror images", link: "/docker/remote-images" },
+                { label: "Images on cloud runtimes", link: "/docker/cloud-runtimes" },
+              ],
+            },
+            {
+              label: "Containers",
+              items: [
+                { label: "Containers", link: "/docker/containers" },
+                { label: "Networks", link: "/docker/networks" },
+                { label: "Volumes", link: "/docker/volumes" },
+                { label: "Limits & security", link: "/docker/limits-and-security" },
+              ],
+            },
+            {
+              label: "Swarm",
+              items: [
+                { label: "Swarms", link: "/docker/swarm" },
+                { label: "Services", link: "/docker/services" },
+                { label: "Effectful services", link: "/docker/effectful-services" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [{ label: "Local Postgres", link: "/docker/local-services" }],
             },
             providerResourcesEntry("Docker"),
           ],

@@ -169,8 +169,8 @@ catalogs:
       version: 4.1.10
   default:
     '@alchemy.run/sigil':
-      specifier: 0.1.0-alpha.3
-      version: 0.1.0-alpha.3
+      specifier: 0.1.0-alpha.4
+      version: 0.1.0-alpha.4
     '@astrojs/check':
       specifier: 0.9.10
       version: 0.9.10
@@ -2219,6 +2219,9 @@ importers:
         specifier: 4.1.4
         version: 4.1.4
     devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2271,6 +2274,9 @@ importers:
         specifier: 'catalog:'
         version: 0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
     devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
@@ -2541,6 +2547,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2581,6 +2590,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2618,6 +2630,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2658,6 +2673,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -4236,20 +4254,89 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy-test
 
-  examples/cluster-rooms:
+  examples/cluster-domain:
     dependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../../packages/docker
       '@alchemy.run/effect-cluster':
         specifier: workspace:*
         version: link:../../packages/effect-cluster
+      '@cluster-bank/server':
+        specifier: workspace:*
+        version: link:packages/server
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
         specifier: 4.1.4
         version: 4.1.4
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
+  examples/cluster-domain/packages/domain:
+    dependencies:
+      '@alchemy.run/domain':
+        specifier: workspace:*
+        version: link:../../../../packages/domain
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(vitest@5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  examples/cluster-domain/packages/server:
+    dependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../../../../packages/aws
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../../../packages/cloudflare
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../../../packages/docker
+      '@alchemy.run/domain':
+        specifier: workspace:*
+        version: link:../../../../packages/domain
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../../../../packages/effect-cluster
+      '@cluster-bank/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(vitest@5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
   examples/daytona-sandboxes:
     dependencies:
@@ -4384,6 +4471,21 @@ importers:
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
+
+  examples/effect-cluster-rooms:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../../packages/effect-cluster
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
 
   examples/fly-app:
     dependencies:
@@ -8773,7 +8875,7 @@ importers:
         version: link:../node-utils
       '@alchemy.run/sigil':
         specifier: 'catalog:'
-        version: 0.1.0-alpha.3(@types/react@19.3.0)(react-devtools-core@7.0.1)
+        version: 0.1.0-alpha.4(@types/react@19.3.0)(react-devtools-core@7.0.1)
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
@@ -9674,6 +9776,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/node-utils':
+        specifier: workspace:*
+        version: link:../node-utils
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
@@ -11225,6 +11330,9 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
@@ -13741,8 +13849,8 @@ packages:
   '@alchemy.run/node-utils@2.0.0-beta.74':
     resolution: {integrity: sha512-UH7mbmF0qZWL0b5xURFaRbKR2qNXdvxEjIq86FdqSKacnH0lsHSgGzNKFbDSKFAY1u6Kq3unHFmgRk7UAD/YTQ==}
 
-  '@alchemy.run/sigil@0.1.0-alpha.3':
-    resolution: {integrity: sha512-NBhQRjbeFp4jPYDGqlXSoUlT45QyNc/6DGQWmkXUnS9nHKjHa5eIRZChdnCDYHYvmgFJWNaRfPFGwxrCWmlLzw==}
+  '@alchemy.run/sigil@0.1.0-alpha.4':
+    resolution: {integrity: sha512-d6Uo16C2P6Wk7TNoYt4qzjjNGyjsrJLjq8bBotl86Nmcp/U6+R34/n4CZomqFERF2wMinut2DBqWNeUQPTBtFQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -29724,7 +29832,7 @@ snapshots:
 
   '@alchemy.run/node-utils@2.0.0-beta.74': {}
 
-  '@alchemy.run/sigil@0.1.0-alpha.3(@types/react@19.3.0)(react-devtools-core@7.0.1)':
+  '@alchemy.run/sigil@0.1.0-alpha.4(@types/react@19.3.0)(react-devtools-core@7.0.1)':
     optionalDependencies:
       '@types/react': 19.3.0
       react-devtools-core: 7.0.1
