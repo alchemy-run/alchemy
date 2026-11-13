@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { describe, expect, it } from "@alchemy.run/test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Duration from "effect/Duration";
@@ -10,6 +11,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { DEV_TRUST_ENV } from "@/Local/DevTrust.ts";
 import { unwrapRpcHandlers } from "@/Local/RpcSerialization.ts";
 import type { RpcProxyApi } from "@/Local/RpcServer.ts";
 import { encodeSessionEnvironment, SESSION_ENV_PARAM } from "@/Local/RpcServerEnvironment.ts";
@@ -128,6 +130,30 @@ describe(
         ),
       // sets process-global env vars the sidecar inherits at spawn
       { timeout: 60_000, exclusive: true },
+    );
+
+    it.live(
+      "passes the dev session's trusted CAs to the sidecar, not to this process",
+      () =>
+        Effect.gen(function* () {
+          const files = ["/ca/floci.pem", "/ca/portless.pem"].join(delimiter);
+          const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+          const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
+          expect(yield* sidecarEnv(wsUrl, [DEV_TRUST_ENV])).toEqual([files]);
+          expect(process.env[DEV_TRUST_ENV]).toBeUndefined();
+        }).pipe(
+          Effect.provide(
+            Layer.provideMerge(
+              layerServer({
+                profile: undefined,
+                envFile: undefined,
+                env: { [DEV_TRUST_ENV]: ["/ca/floci.pem", "/ca/portless.pem"].join(delimiter) },
+              }),
+              Layer.merge(PlatformServices, FetchHttpClient.layer),
+            ),
+          ),
+        ),
+      { timeout: 60_000 },
     );
 
     it.live(
