@@ -799,7 +799,7 @@ test.provider(
 );
 
 test.provider(
-  "set IPv6 egress, flip it, and leave it alone when omitted",
+  "set IPv6 egress, leave it alone when omitted, then turn it off",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -828,15 +828,16 @@ test.provider(
       expect(created.api.ipv6Egress).toEqual(true);
       expect(yield* observed(created.api)).toEqual(Option.some(true));
 
+      // Omitted right after `true`, so resetting to the default would show.
+      const left = yield* deploy(undefined);
+      expect(left.api.serviceId).toEqual(created.api.serviceId);
+      expect(left.api.ipv6Egress).toEqual(true);
+      expect(yield* observed(left.api)).toEqual(Option.some(true));
+
       const disabled = yield* deploy(false);
       expect(disabled.api.serviceId).toEqual(created.api.serviceId);
       expect(disabled.api.ipv6Egress).toEqual(false);
       expect(yield* observed(disabled.api)).toEqual(Option.some(false));
-
-      const left = yield* deploy(undefined);
-      expect(left.api.serviceId).toEqual(created.api.serviceId);
-      expect(left.api.ipv6Egress).toEqual(false);
-      expect(yield* observed(left.api)).toEqual(Option.some(false));
 
       yield* stack.destroy();
 

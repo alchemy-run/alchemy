@@ -384,7 +384,7 @@ test.provider(
 );
 
 test.provider(
-  "set IPv6 egress on a function, flip it, and leave it alone when omitted",
+  "set IPv6 egress on a function, leave it alone when omitted, then turn it off",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -412,15 +412,16 @@ test.provider(
       expect(created.ping.ipv6Egress).toEqual(true);
       expect(yield* observed(created.ping)).toEqual(Option.some(true));
 
+      // Omitted right after `true`, so resetting to the default would show.
+      const left = yield* deploy(undefined);
+      expect(left.ping.serviceId).toEqual(created.ping.serviceId);
+      expect(left.ping.ipv6Egress).toEqual(true);
+      expect(yield* observed(left.ping)).toEqual(Option.some(true));
+
       const disabled = yield* deploy(false);
       expect(disabled.ping.serviceId).toEqual(created.ping.serviceId);
       expect(disabled.ping.ipv6Egress).toEqual(false);
       expect(yield* observed(disabled.ping)).toEqual(Option.some(false));
-
-      const left = yield* deploy(undefined);
-      expect(left.ping.serviceId).toEqual(created.ping.serviceId);
-      expect(left.ping.ipv6Egress).toEqual(false);
-      expect(yield* observed(left.ping)).toEqual(Option.some(false));
 
       yield* stack.destroy();
 
