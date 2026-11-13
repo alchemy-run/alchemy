@@ -54,7 +54,7 @@ esac`,
   }
 };
 
-describe("RivetGCP.ComputeEnginePool startup script", () => {
+describe("RivetGCP.ComputeEnginePool startup script", { tags: ["unit"] }, () => {
   test("a deploy restarts node i after i rollout intervals, with SIGTERM before SIGKILL", () => {
     expect(boot({ running: true, index: 2 })).toEqual([
       expect.stringMatching(/^docker load -i \S+node.tar$/),
