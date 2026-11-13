@@ -6,7 +6,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 /** An S3 bucket the service assumes an IAM role to write to. */
@@ -207,10 +206,9 @@ const matches = (attrs: BackupBucketAttributes, props: BackupBucketProps) => {
 };
 
 const getBucket = (organizationId: string, serviceId: string) =>
-  backup.getBackupBucket({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getBackupBucket")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  backup
+    .getBackupBucket({ organizationId, serviceId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BackupBucketProvider = () =>
   Provider.effect(
@@ -243,9 +241,11 @@ export const BackupBucketProvider = () =>
         const observed = yield* getBucket(organizationId, serviceId);
         // Ensure
         if (observed === undefined) {
-          const created = yield* backup
-            .createBackupBucket({ organizationId, serviceId, body: bodyOf(news) })
-            .pipe(Effect.flatMap(requireResult("createBackupBucket")));
+          const created = yield* backup.createBackupBucket({
+            organizationId,
+            serviceId,
+            body: bodyOf(news),
+          });
           return toAttributes(organizationId, serviceId, created, secretDigest);
         }
         // Sync: readable fields from the bucket, secrets from their digest.
@@ -268,9 +268,7 @@ export const BackupBucketProvider = () =>
                 iamRoleExternalId: news.iamRoleExternalId ?? null,
               }
             : bodyOf(news);
-        const updated = yield* backup
-          .updateBackupBucket({ organizationId, serviceId, body })
-          .pipe(Effect.flatMap(requireResult("updateBackupBucket")));
+        const updated = yield* backup.updateBackupBucket({ organizationId, serviceId, body });
         return toAttributes(organizationId, serviceId, updated, secretDigest);
       }),
       delete: Effect.fn(function* ({ output }) {

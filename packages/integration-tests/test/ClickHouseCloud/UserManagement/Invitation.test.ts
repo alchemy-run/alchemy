@@ -14,10 +14,9 @@ const SERVICE_READER = "21111111-1111-1111-9999-000000000007";
 const getInvitation = (invitationId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* users.getInvitation({ organizationId, invitationId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* users
+      .getInvitation({ organizationId, invitationId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 test.provider(

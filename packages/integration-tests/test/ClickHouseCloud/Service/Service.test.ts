@@ -19,10 +19,9 @@ const slow = !process.env.CLICKHOUSE_CLOUD_TEST_SLOW;
 const getService = (serviceId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* service.getService({ organizationId, serviceId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* service
+      .getService({ organizationId, serviceId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const small = {
@@ -191,7 +190,7 @@ test.provider.skipIf(slow)(
     Effect.gen(function* () {
       yield* cleanSlate(stack);
       const organizationId = yield* ClickHouseCloud.organizationId;
-      const { result: quota } = yield* organization.getOrganizationQuota({
+      const quota = yield* organization.getOrganizationQuota({
         organizationId,
         quotaCode: "services-per-organization",
       });

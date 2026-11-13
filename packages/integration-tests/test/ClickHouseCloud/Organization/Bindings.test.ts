@@ -122,7 +122,7 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
     "each binding's role allows only view permissions on the organization",
     Effect.gen(function* () {
       const { organizationId } = yield* stack;
-      const { result } = yield* roles.listOrganizationRoles({ organizationId });
+      const result = yield* roles.listOrganizationRoles({ organizationId });
       const scoped = (result ?? []).filter(
         (r) => r.type === "custom" && (r.name ?? "").startsWith(ROLE_PREFIX),
       );

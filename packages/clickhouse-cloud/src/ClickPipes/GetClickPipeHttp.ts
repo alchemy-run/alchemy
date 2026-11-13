@@ -2,7 +2,6 @@ import * as pipes from "@distilled.cloud/clickhouse-cloud/click_pipes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { ClickPipe } from "./ClickPipe.ts";
 import { GetClickPipe } from "./GetClickPipe.ts";
 
@@ -21,11 +20,7 @@ export const GetClickPipeHttp = Layer.effect(
       const clickPipeId = yield* target.clickPipeId;
       return () =>
         run((ids) =>
-          Effect.flatMap(clickPipeId, (id) =>
-            pipes
-              .getClickPipe({ ...ids, clickPipeId: id })
-              .pipe(Effect.flatMap(requireResult("getClickPipe"))),
-          ),
+          Effect.flatMap(clickPipeId, (id) => pipes.getClickPipe({ ...ids, clickPipeId: id })),
         );
     });
   }),

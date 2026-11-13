@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { PreviewNotOffered, requireResult } from "../Errors.ts";
+import { PreviewNotOffered } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface PreviewFeatureProps {
@@ -82,9 +82,7 @@ export const PreviewFeature = Resource<PreviewFeature>(
 );
 
 const listPreviews = (organizationId: string) =>
-  organization
-    .listOrganizationPublicPreviews({ organizationId })
-    .pipe(Effect.flatMap(requireResult("listOrganizationPublicPreviews")));
+  organization.listOrganizationPublicPreviews({ organizationId });
 
 const toAttributes = (
   organizationId: string,
@@ -145,9 +143,11 @@ export const PreviewFeatureProvider = () =>
           });
         }
         // Sync
-        const updated = yield* organization
-          .updateOrganizationPublicPreview({ organizationId, previewId: news.previewId, enabled })
-          .pipe(Effect.flatMap(requireResult("updateOrganizationPublicPreview")));
+        const updated = yield* organization.updateOrganizationPublicPreview({
+          organizationId,
+          previewId: news.previewId,
+          enabled,
+        });
         return toAttributes(organizationId, updated, originalEnabled);
       }),
       delete: Effect.fn(function* ({ output }) {

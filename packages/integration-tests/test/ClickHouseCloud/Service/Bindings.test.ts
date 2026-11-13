@@ -174,7 +174,7 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
     "each binding's role is scoped to the one service; only the state and ClickPipes bindings may manage",
     Effect.gen(function* () {
       const { organizationId, serviceId } = yield* stack;
-      const { result } = yield* roles.listOrganizationRoles({ organizationId });
+      const result = yield* roles.listOrganizationRoles({ organizationId });
       const scoped = (result ?? []).filter(
         (r) => r.type === "custom" && (r.name ?? "").startsWith(ROLE_PREFIX),
       );

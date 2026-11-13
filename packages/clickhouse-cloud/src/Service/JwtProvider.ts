@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface JwtProviderProps {
@@ -105,10 +104,9 @@ const toAttributes = (
 });
 
 const getProvider = (organizationId: string, serviceId: string, name: string) =>
-  service.getJwtProvider({ organizationId, serviceId, jwtProviderName: name }).pipe(
-    Effect.flatMap(requireResult("getJwtProvider")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  service
+    .getJwtProvider({ organizationId, serviceId, jwtProviderName: name })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const JwtProviderProvider = () =>
   Provider.effect(
@@ -145,9 +143,12 @@ export const JwtProviderProvider = () =>
         const observed = yield* getProvider(organizationId, serviceId, name);
         // Ensure: create is idempotent for an identical configuration.
         if (observed === undefined) {
-          const created = yield* service
-            .createJwtProvider({ organizationId, serviceId, name, ...config })
-            .pipe(Effect.flatMap(requireResult("createJwtProvider")));
+          const created = yield* service.createJwtProvider({
+            organizationId,
+            serviceId,
+            name,
+            ...config,
+          });
           return toAttributes(organizationId, serviceId, created);
         }
         // Sync: the update is a PUT carrying every field.
@@ -159,9 +160,12 @@ export const JwtProviderProvider = () =>
         ) {
           return toAttributes(organizationId, serviceId, observed);
         }
-        const updated = yield* service
-          .updateJwtProvider({ organizationId, serviceId, jwtProviderName: name, ...config })
-          .pipe(Effect.flatMap(requireResult("updateJwtProvider")));
+        const updated = yield* service.updateJwtProvider({
+          organizationId,
+          serviceId,
+          jwtProviderName: name,
+          ...config,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

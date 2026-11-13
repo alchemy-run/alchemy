@@ -43,7 +43,7 @@ test.provider.skipIf(memberUserId === undefined)(
       const organizationId = yield* ClickHouseCloud.organizationId;
       const roles = Effect.map(
         users.getMember({ organizationId, userId: memberUserId! }),
-        ({ result }) => (result?.assignedRoles ?? []).map((r) => r.roleId).sort(),
+        (member) => (member.assignedRoles ?? []).map((r) => r.roleId).sort(),
       );
       const before = yield* roles;
       const member = yield* stack.deploy(

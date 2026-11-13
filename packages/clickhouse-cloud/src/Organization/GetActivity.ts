@@ -2,7 +2,6 @@ import type * as organization from "@distilled.cloud/clickhouse-cloud/organizati
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Organization } from "./Organization.ts";
 
 /**
@@ -48,11 +47,7 @@ export interface GetActivity extends Binding.Service<
   ) => Effect.Effect<
     (
       activityId: string,
-    ) => Effect.Effect<
-      organization.Activity,
-      organization.GetActivityError | ResultMissing,
-      RuntimeContext
-    >
+    ) => Effect.Effect<organization.Activity, organization.GetActivityError, RuntimeContext>
   >
 > {}
 

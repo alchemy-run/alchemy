@@ -12,10 +12,9 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getPipe = (serviceId: string, clickPipeId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* pipes.getClickPipe({ organizationId, serviceId, clickPipeId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* pipes
+      .getClickPipe({ organizationId, serviceId, clickPipeId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const declare = (props: { name?: string; delimiter?: string }) =>

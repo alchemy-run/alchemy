@@ -10,7 +10,7 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 
 const observe = Effect.gen(function* () {
   const organizationId = yield* ClickHouseCloud.organizationId;
-  const { result } = yield* organization.getOrganization({ organizationId });
+  const result = yield* organization.getOrganization({ organizationId });
   return result!;
 });
 

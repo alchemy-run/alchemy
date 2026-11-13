@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { FeatureUnavailable, requireResult } from "../Errors.ts";
+import { FeatureUnavailable } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 /** One window of the schedule: the scaling a service has on some weekdays between two hours. */
@@ -167,7 +167,6 @@ const toAttributes = (
 
 const getSchedule = (organizationId: string, serviceId: string) =>
   service.getScalingSchedule({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getScalingSchedule")),
     // No schedule, or no service.
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -213,9 +212,11 @@ export const ScalingScheduleProvider = () =>
           );
         if (inSync) return toAttributes(organizationId, serviceId, observed);
         // Ensure + sync: the upsert replaces the whole schedule.
-        const updated = yield* service
-          .upsertScalingSchedule({ organizationId, serviceId, entries: news.entries })
-          .pipe(Effect.flatMap(requireResult("upsertScalingSchedule")));
+        const updated = yield* service.upsertScalingSchedule({
+          organizationId,
+          serviceId,
+          entries: news.entries,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

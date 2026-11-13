@@ -5,7 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { MemberNotFound, requireResult } from "../Errors.ts";
+import { MemberNotFound } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import type { InvitationRole } from "./Invitation.ts";
 
@@ -116,10 +116,9 @@ const toAttributes = (
 });
 
 const getMember = (organizationId: string, userId: string) =>
-  users.getMember({ organizationId, userId }).pipe(
-    Effect.flatMap(requireResult("getMember")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  users
+    .getMember({ organizationId, userId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameRoles = (a: readonly string[], b: readonly string[]) =>
   deepEqual([...a].sort(), [...b].sort());
@@ -155,13 +154,11 @@ export const MemberProvider = () =>
         const baselineRoleIds = output?.baselineRoleIds ?? roleIdsOf(observed);
         // Sync
         if (!sameRoles(roleIdsOf(observed), news.assignedRoleIds)) {
-          observed = yield* users
-            .updateMember({
-              organizationId,
-              userId: news.userId,
-              assignedRoleIds: news.assignedRoleIds,
-            })
-            .pipe(Effect.flatMap(requireResult("updateMember")));
+          observed = yield* users.updateMember({
+            organizationId,
+            userId: news.userId,
+            assignedRoleIds: news.assignedRoleIds,
+          });
         }
         return toAttributes(organizationId, observed, baselineRoleIds);
       }),

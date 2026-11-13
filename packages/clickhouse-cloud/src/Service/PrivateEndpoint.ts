@@ -5,7 +5,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import { getLiveService } from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -89,9 +88,7 @@ export type PrivateEndpoint = Resource<
 export const PrivateEndpoint = Resource<PrivateEndpoint>("ClickHouseCloud.Service.PrivateEndpoint");
 
 const endpointConfig = (organizationId: string, serviceId: string) =>
-  service
-    .getServicePrivateEndpointConfig({ organizationId, serviceId })
-    .pipe(Effect.flatMap(requireResult("getServicePrivateEndpointConfig")));
+  service.getServicePrivateEndpointConfig({ organizationId, serviceId });
 
 export const PrivateEndpointProvider = () =>
   Provider.effect(
@@ -133,9 +130,7 @@ export const PrivateEndpointProvider = () =>
         const organizationId = output?.organizationId ?? (yield* currentOrganizationId);
         const { serviceId, endpointId } = news;
         // Observe
-        const live = yield* service
-          .getService({ organizationId, serviceId })
-          .pipe(Effect.flatMap(requireResult("getService")));
+        const live = yield* service.getService({ organizationId, serviceId });
         // Ensure: register with the organization and allow on the service,
         // or only allow one the organization already knows.
         let registered = output?.registered ?? false;
@@ -178,13 +173,9 @@ export const PrivateEndpointProvider = () =>
         if (!output.registered) return;
         // Unregister what this resource registered, once no service allows
         // it. The organization-level patch is the API's only way to.
-        const services = yield* service
-          .listServices({ organizationId })
-          .pipe(Effect.flatMap(requireResult("listServices")));
+        const services = yield* service.listServices({ organizationId });
         if (services.some((s) => (s.privateEndpointIds ?? []).includes(endpointId))) return;
-        const org = yield* organization
-          .getOrganization({ organizationId })
-          .pipe(Effect.flatMap(requireResult("getOrganization")));
+        const org = yield* organization.getOrganization({ organizationId });
         const entry = (org.privateEndpoints ?? []).find((e) => e.id === endpointId);
         if (entry === undefined) return;
         yield* organization.updateOrganization({

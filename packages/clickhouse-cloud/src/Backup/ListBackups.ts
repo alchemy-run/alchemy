@@ -2,7 +2,6 @@ import type * as backup from "@distilled.cloud/clickhouse-cloud/backup";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 
 /**
@@ -50,9 +49,7 @@ export interface ListBackups extends Binding.Service<
   "ClickHouseCloud.Backup.ListBackups",
   (
     target: Service,
-  ) => Effect.Effect<
-    () => Effect.Effect<backup.Backup[], backup.ListBackupsError | ResultMissing, RuntimeContext>
-  >
+  ) => Effect.Effect<() => Effect.Effect<backup.Backup[], backup.ListBackupsError, RuntimeContext>>
 > {}
 
 export const ListBackups = Binding.Service<ListBackups>("ClickHouseCloud.Backup.ListBackups");

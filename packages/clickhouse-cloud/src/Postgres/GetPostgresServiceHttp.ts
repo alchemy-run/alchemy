@@ -2,7 +2,6 @@ import * as postgres from "@distilled.cloud/clickhouse-cloud/postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindPostgres } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import { GetPostgresService } from "./GetPostgresService.ts";
 import type { Service } from "./Service.ts";
 
@@ -15,12 +14,7 @@ export const GetPostgresServiceHttp = Layer.effect(
       const run = yield* bind("GetPostgresService", target, [
         "control-plane:postgres-service:view",
       ]);
-      return () =>
-        run((ids) =>
-          postgres
-            .getPostgresService(ids)
-            .pipe(Effect.flatMap(requireResult("getPostgresService"))),
-        );
+      return () => run((ids) => postgres.getPostgresService(ids));
     });
   }),
 );

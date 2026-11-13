@@ -10,7 +10,7 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const preview = (previewId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    const { result } = yield* organization.listOrganizationPublicPreviews({ organizationId });
+    const result = yield* organization.listOrganizationPublicPreviews({ organizationId });
     return (result ?? []).find((p) => p.id === previewId);
   });
 

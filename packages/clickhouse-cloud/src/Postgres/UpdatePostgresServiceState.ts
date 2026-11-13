@@ -2,7 +2,6 @@ import type * as postgres from "@distilled.cloud/clickhouse-cloud/postgres";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -55,7 +54,7 @@ export interface UpdatePostgresServiceState extends Binding.Service<
       command: "restart" | "promote" | "switchover",
     ) => Effect.Effect<
       postgres.PostgresService,
-      postgres.UpdatePostgresServiceStateError | ResultMissing,
+      postgres.UpdatePostgresServiceStateError,
       RuntimeContext
     >
   >

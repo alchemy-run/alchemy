@@ -53,7 +53,7 @@ test.provider.skipIf(needsService || !enterprise)(
         serviceId: first.serviceId,
         jwtProviderName: first.name,
       });
-      expect(observed.result?.audience).toEqual("alchemy-2");
+      expect(observed.audience).toEqual("alchemy-2");
       yield* stack.destroy();
       const gone = yield* service
         .getJwtProvider({ organizationId, serviceId: first.serviceId, jwtProviderName: first.name })

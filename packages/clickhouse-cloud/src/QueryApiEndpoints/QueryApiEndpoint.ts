@@ -6,7 +6,7 @@ import { Resource, type ResourceBinding } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { QueryApiEndpointUserOwned, requireResult } from "../Errors.ts";
+import { QueryApiEndpointUserOwned } from "../Errors.ts";
 import { isOwnedName, resolveName } from "../internal/Names.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -174,10 +174,9 @@ const toAttributes = (
 const sorted = (values: readonly string[]) => [...values].sort();
 
 const getEndpoint = (organizationId: string, serviceId: string, endpointId: string) =>
-  qae.getQueryApiEndpoint({ organizationId, serviceId, endpointId }).pipe(
-    Effect.flatMap(requireResult("getQueryApiEndpoint")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  qae
+    .getQueryApiEndpoint({ organizationId, serviceId, endpointId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByName = (organizationId: string, serviceId: string, name: string) =>
   qae.listQueryApiEndpoints.items({ organizationId, serviceId }).pipe(
@@ -249,9 +248,7 @@ export const QueryApiEndpointProvider = () =>
           : yield* findByName(organizationId, serviceId, name);
         // Ensure
         if (observed === undefined) {
-          const created = yield* qae
-            .createQueryApiEndpoint({ organizationId, serviceId, ...body })
-            .pipe(Effect.flatMap(requireResult("createQueryApiEndpoint")));
+          const created = yield* qae.createQueryApiEndpoint({ organizationId, serviceId, ...body });
           return toAttributes(organizationId, serviceId, created);
         }
         if (observed.ownerType === "user") {
@@ -270,9 +267,12 @@ export const QueryApiEndpointProvider = () =>
         ) {
           return attrs;
         }
-        const updated = yield* qae
-          .updateQueryApiEndpoint({ organizationId, serviceId, endpointId: observed.id, ...body })
-          .pipe(Effect.flatMap(requireResult("updateQueryApiEndpoint")));
+        const updated = yield* qae.updateQueryApiEndpoint({
+          organizationId,
+          serviceId,
+          endpointId: observed.id,
+          ...body,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

@@ -14,7 +14,7 @@ const slow = !process.env.CLICKHOUSE_CLOUD_TEST_SLOW;
 const getConfiguration = (serviceId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    const { result } = yield* backup.getBackupConfiguration({ organizationId, serviceId });
+    const result = yield* backup.getBackupConfiguration({ organizationId, serviceId });
     return result!;
   });
 

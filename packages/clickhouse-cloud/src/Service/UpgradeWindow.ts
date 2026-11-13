@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface UpgradeWindowProps {
@@ -88,10 +87,9 @@ const toAttributes = (
 });
 
 const getWindow = (organizationId: string, serviceId: string) =>
-  service.getUpgradeWindow({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getUpgradeWindow")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  service
+    .getUpgradeWindow({ organizationId, serviceId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const UpgradeWindowProvider = () =>
   Provider.effect(
@@ -124,14 +122,12 @@ export const UpgradeWindowProvider = () =>
           return toAttributes(organizationId, serviceId, observed);
         }
         // Ensure + sync: a PUT that creates or replaces the window.
-        const updated = yield* service
-          .updateUpgradeWindow({
-            organizationId,
-            serviceId,
-            weekday: news.weekday,
-            startHourUtc: news.startHourUtc,
-          })
-          .pipe(Effect.flatMap(requireResult("updateUpgradeWindow")));
+        const updated = yield* service.updateUpgradeWindow({
+          organizationId,
+          serviceId,
+          weekday: news.weekday,
+          startHourUtc: news.startHourUtc,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

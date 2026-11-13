@@ -2,7 +2,6 @@ import * as postgres from "@distilled.cloud/clickhouse-cloud/postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindPostgres } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import {
   GetPostgresSlowQueryPattern,
   type GetPostgresSlowQueryPatternRequest,
@@ -20,17 +19,15 @@ export const GetPostgresSlowQueryPatternHttp = Layer.effect(
       ]);
       return (request: GetPostgresSlowQueryPatternRequest) =>
         run((ids) =>
-          postgres
-            .getPostgresSlowQueryPattern({
-              ...ids,
-              queryId: request.queryId,
-              db_name: request.dbName,
-              db_user: request.dbUser,
-              db_operation: request.dbOperation,
-              app: request.app,
-              timestamp: request.timestamp,
-            })
-            .pipe(Effect.flatMap(requireResult("getPostgresSlowQueryPattern"))),
+          postgres.getPostgresSlowQueryPattern({
+            ...ids,
+            queryId: request.queryId,
+            db_name: request.dbName,
+            db_user: request.dbUser,
+            db_operation: request.dbOperation,
+            app: request.app,
+            timestamp: request.timestamp,
+          }),
         );
     });
   }),

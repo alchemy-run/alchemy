@@ -6,7 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { ByocValidationFailed, ResultMissing, requireResult } from "../Errors.ts";
+import { ByocValidationFailed, MissingId } from "../Errors.ts";
 import { ownerTags } from "../internal/Names.ts";
 import { pollUntil } from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -195,21 +195,21 @@ const GONE: Partial<Record<string, true>> = {
 
 const getInfra = (organizationId: string, byocInfrastructureId: string) =>
   organization.getByocInfrastructure({ organizationId, byocInfrastructureId }).pipe(
-    Effect.flatMap(requireResult("getByocInfrastructure")),
     Effect.map((infra) => (GONE[infra.state ?? ""] ? undefined : infra)),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getTags = (organizationId: string, byocInfrastructureId: string) =>
-  organization.getByocInfrastructureTags({ organizationId, byocInfrastructureId }).pipe(
-    Effect.flatMap(requireResult("getByocInfrastructureTags")),
-    Effect.map(
-      (r) =>
-        Object.fromEntries(
-          Object.entries(r.tags).flatMap(([k, v]) => (v === undefined ? [] : [[k, v]])),
-        ) as Record<string, string>,
-    ),
-  );
+  organization
+    .getByocInfrastructureTags({ organizationId, byocInfrastructureId })
+    .pipe(
+      Effect.map(
+        (r) =>
+          Object.fromEntries(
+            Object.entries(r.tags).flatMap(([k, v]) => (v === undefined ? [] : [[k, v]])),
+          ) as Record<string, string>,
+      ),
+    );
 
 const toAttributes = (
   organizationId: string,
@@ -256,26 +256,25 @@ export const ByocInfrastructureProvider = () =>
     ByocInfrastructure,
     Effect.gen(function* () {
       const findByLocation = (organizationId: string, regionId: string, accountId: string) =>
-        organization.getOrganization({ organizationId }).pipe(
-          Effect.flatMap(requireResult("getOrganization")),
-          Effect.map((org) =>
-            (org.byocConfig ?? []).find(
-              (b) =>
-                b.regionId === regionId &&
-                b.accountId === accountId &&
-                !GONE[b.state ?? ""] &&
-                b.id !== undefined,
+        organization
+          .getOrganization({ organizationId })
+          .pipe(
+            Effect.map((org) =>
+              (org.byocConfig ?? []).find(
+                (b) =>
+                  b.regionId === regionId &&
+                  b.accountId === accountId &&
+                  !GONE[b.state ?? ""] &&
+                  b.id !== undefined,
+              ),
             ),
-          ),
-        );
+          );
       const privateEndpoint = (organizationId: string, id: string, enabled: boolean | undefined) =>
         enabled
-          ? organization
-              .getByocInfrastructurePrivateEndpointConfig({
-                organizationId,
-                byocInfrastructureId: id,
-              })
-              .pipe(Effect.flatMap(requireResult("getByocInfrastructurePrivateEndpointConfig")))
+          ? organization.getByocInfrastructurePrivateEndpointConfig({
+              organizationId,
+              byocInfrastructureId: id,
+            })
           : Effect.succeed(undefined);
 
       return {
@@ -288,9 +287,7 @@ export const ByocInfrastructureProvider = () =>
         ],
         list: Effect.fn(function* () {
           const organizationId = yield* currentOrganizationId;
-          const org = yield* organization
-            .getOrganization({ organizationId })
-            .pipe(Effect.flatMap(requireResult("getOrganization")));
+          const org = yield* organization.getOrganization({ organizationId });
           const owned: ByocInfrastructureAttributes[] = [];
           for (const b of org.byocConfig ?? []) {
             if (b.id === undefined || GONE[b.state ?? ""]) continue;
@@ -357,9 +354,7 @@ export const ByocInfrastructureProvider = () =>
 
           // Ensure: validate first, so a missing permission fails now.
           if (infraId === undefined) {
-            const validation = yield* organization
-              .validateByocInfrastructure(location)
-              .pipe(Effect.flatMap(requireResult("validateByocInfrastructure")));
+            const validation = yield* organization.validateByocInfrastructure(location);
             if (validation.supported && !validation.allPassed) {
               return yield* new ByocValidationFailed({
                 checks: (validation.checks ?? [])
@@ -368,11 +363,12 @@ export const ByocInfrastructureProvider = () =>
               });
             }
             yield* session.note("Creating the BYOC infrastructure...");
-            const created = yield* organization
-              .createByocInfrastructure({ ...location, displayName: news.displayName })
-              .pipe(Effect.flatMap(requireResult("createByocInfrastructure")));
+            const created = yield* organization.createByocInfrastructure({
+              ...location,
+              displayName: news.displayName,
+            });
             if (created.id === undefined) {
-              return yield* new ResultMissing({ operation: "createByocInfrastructure (id)" });
+              return yield* new MissingId({ operation: "createByocInfrastructure" });
             }
             infraId = created.id;
           }
@@ -413,12 +409,10 @@ export const ByocInfrastructureProvider = () =>
           }
 
           if (news.customerAuthorizedAccess !== undefined) {
-            const access = yield* organization
-              .getByocInfrastructureCustomerAuthorizedAccess({
-                organizationId,
-                byocInfrastructureId: infraId,
-              })
-              .pipe(Effect.flatMap(requireResult("getByocInfrastructureCustomerAuthorizedAccess")));
+            const access = yield* organization.getByocInfrastructureCustomerAuthorizedAccess({
+              organizationId,
+              byocInfrastructureId: infraId,
+            });
             const want = news.customerAuthorizedAccess;
             if (
               access.mode !== want.mode ||

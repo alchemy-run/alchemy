@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { FeatureUnavailable, ResultMissing, requireResult } from "../Errors.ts";
+import { FeatureUnavailable, MissingId } from "../Errors.ts";
 import { isOwnedName, resolveName } from "../internal/Names.ts";
 import { pollUntil } from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
@@ -43,7 +43,7 @@ export interface ClickPipeProps {
   /** Replicas and resources (Kafka, Kinesis and object storage pipes). Omit to leave them alone. */
   scaling?: pipes.ClickPipeScaling;
   /** Advanced ingestion settings. Omit to leave them alone. */
-  settings?: pipes.ClickPipeSettings;
+  settings?: pipes.ClickPipeSettingsPutRequest;
   /**
    * `running` ingests; `stopped` pauses ingestion. A one-shot object
    * storage pipe that `Completed` counts as running.
@@ -324,10 +324,9 @@ const toAttributes = (
 });
 
 const getPipe = (organizationId: string, serviceId: string, clickPipeId: string) =>
-  pipes.getClickPipe({ organizationId, serviceId, clickPipeId }).pipe(
-    Effect.flatMap(requireResult("getClickPipe")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  pipes
+    .getClickPipe({ organizationId, serviceId, clickPipeId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByName = (organizationId: string, serviceId: string, name: string) =>
   pipes.listClickPipes.items({ organizationId, serviceId }).pipe(
@@ -440,21 +439,19 @@ export const ClickPipeProvider = () =>
         if (found?.id === undefined) {
           yield* session.note(`Creating ClickPipe "${name}"...`);
           const isDatabase = DATABASE_KINDS.includes(kind);
-          const created = yield* pipes
-            .createClickPipe({
-              organizationId,
-              serviceId,
-              name,
-              source: news.source,
-              destination: news.destination,
-              fieldMappings: news.fieldMappings,
-              scaling: news.scaling,
-              settings: news.settings,
-              ...(wantStopped && !isDatabase ? { startPaused: true } : {}),
-            })
-            .pipe(Effect.flatMap(requireResult("createClickPipe")));
+          const created = yield* pipes.createClickPipe({
+            organizationId,
+            serviceId,
+            name,
+            source: news.source,
+            destination: news.destination,
+            fieldMappings: news.fieldMappings,
+            scaling: news.scaling,
+            settings: news.settings,
+            ...(wantStopped && !isDatabase ? { startPaused: true } : {}),
+          });
           if (created.id === undefined) {
-            return yield* new ResultMissing({ operation: "createClickPipe (id)" });
+            return yield* new MissingId({ operation: "createClickPipe" });
           }
           observed = yield* waitState(
             organizationId,
@@ -496,9 +493,11 @@ export const ClickPipeProvider = () =>
           observed = yield* waitState(organizationId, serviceId, clickPipeId, "settled", session);
         }
         if (news.settings !== undefined) {
-          const current = yield* pipes
-            .getClickPipeSettings({ organizationId, serviceId, clickPipeId })
-            .pipe(Effect.flatMap(requireResult("getClickPipeSettings")));
+          const current = yield* pipes.getClickPipeSettings({
+            organizationId,
+            serviceId,
+            clickPipeId,
+          });
           const changed = Object.entries(news.settings).some(
             ([key, value]) =>
               value !== undefined && (current as Record<string, unknown>)[key] !== value,

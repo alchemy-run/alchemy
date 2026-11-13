@@ -59,7 +59,7 @@ test.provider.skipIf(needsService || connection === undefined)(
         serviceId: first.serviceId,
         clickStackSourceId: first.id,
       });
-      expect(observed.result?.name).toEqual("server logs");
+      expect(observed.name).toEqual("server logs");
       yield* scratch.destroy();
       const gone = yield* stack
         .getClickStackSource({

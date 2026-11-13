@@ -31,8 +31,8 @@ const listed = (serviceId: string) =>
     const svc = yield* service.getService({ organizationId, serviceId });
     const org = yield* organization.getOrganization({ organizationId });
     return {
-      onService: (svc.result?.privateEndpointIds ?? []).includes(ENDPOINT_ID),
-      inOrganization: (org.result?.privateEndpoints ?? []).some((e) => e.id === ENDPOINT_ID),
+      onService: (svc.privateEndpointIds ?? []).includes(ENDPOINT_ID),
+      inOrganization: (org.privateEndpoints ?? []).some((e) => e.id === ENDPOINT_ID),
     };
   });
 

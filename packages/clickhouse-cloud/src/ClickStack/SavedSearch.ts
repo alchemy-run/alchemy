@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { ResultMissing, requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import { type ClickStackScope, covers } from "./internal.ts";
 
@@ -66,7 +65,6 @@ export const SavedSearch = Resource<SavedSearch>("ClickHouseCloud.ClickStack.Sav
 
 const getSavedSearch = (organizationId: string, serviceId: string, id: string) =>
   stack.getClickStackSavedSearch({ organizationId, serviceId, clickStackSavedSearchId: id }).pipe(
-    Effect.flatMap(requireResult("getSavedSearch")),
     Effect.map((found): stack.ClickStackSavedSearch | undefined => found),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -104,18 +102,14 @@ export const SavedSearchProvider = () =>
         // Ensure or sync: a PUT carries the whole object.
         const saved =
           observed === undefined
-            ? yield* stack
-                .createClickStackSavedSearch({ organizationId, serviceId, ...body })
-                .pipe(Effect.flatMap(requireResult("createSavedSearch")))
+            ? yield* stack.createClickStackSavedSearch({ organizationId, serviceId, ...body })
             : yield* ((id: string) =>
                 stack.updateClickStackSavedSearch({
                   organizationId,
                   serviceId,
                   clickStackSavedSearchId: id,
                   ...body,
-                }))(observed.id!).pipe(Effect.flatMap(requireResult("updateSavedSearch")));
-        if (saved.id === undefined)
-          return yield* new ResultMissing({ operation: "createSavedSearch (id)" });
+                }))(observed.id!);
         return { id: saved.id, serviceId, organizationId, observed: saved };
       }),
       delete: Effect.fn(function* ({ output }) {

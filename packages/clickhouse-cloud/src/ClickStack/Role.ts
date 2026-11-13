@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { FeatureUnavailable, ResultMissing, requireResult } from "../Errors.ts";
+import { FeatureUnavailable } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import { type ClickStackScope, covers } from "./internal.ts";
 
@@ -67,7 +67,6 @@ export const Role = Resource<Role>("ClickHouseCloud.ClickStack.Role");
 
 const getRole = (organizationId: string, serviceId: string, id: string) =>
   stack.getClickStackRole({ organizationId, serviceId, clickStackRoleId: id }).pipe(
-    Effect.flatMap(requireResult("getRole")),
     Effect.map((found): stack.ClickStackRole | undefined => found),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -111,18 +110,14 @@ export const RoleProvider = () =>
         // Ensure or sync: a PUT carries the whole object.
         const saved =
           observed === undefined
-            ? yield* stack
-                .createClickStackRole({ organizationId, serviceId, ...body })
-                .pipe(Effect.flatMap(requireResult("createRole")))
+            ? yield* stack.createClickStackRole({ organizationId, serviceId, ...body })
             : yield* ((id: string) =>
                 stack.updateClickStackRole({
                   organizationId,
                   serviceId,
                   clickStackRoleId: id,
                   ...body,
-                }))(observed.id!).pipe(Effect.flatMap(requireResult("updateRole")));
-        if (saved.id === undefined)
-          return yield* new ResultMissing({ operation: "createRole (id)" });
+                }))(observed.id!);
         return { id: saved.id, serviceId, organizationId, observed: saved };
       }),
       delete: Effect.fn(function* ({ output }) {

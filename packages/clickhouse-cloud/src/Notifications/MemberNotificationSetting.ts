@@ -5,7 +5,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 /** A delivery channel. */
@@ -184,9 +183,7 @@ export const MemberNotificationSettingProvider = () =>
             : []),
         ];
         if (rules.length > 0) {
-          yield* notifications
-            .updateMemberNotificationSettings({ organizationId, userId, rules })
-            .pipe(Effect.flatMap(requireResult("updateMemberNotificationSettings")));
+          yield* notifications.updateMemberNotificationSettings({ organizationId, userId, rules });
         }
         const covered = new Set(wanted);
         const after = rules.length > 0 ? yield* listSettings(organizationId, userId) : observed;

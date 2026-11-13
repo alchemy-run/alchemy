@@ -5,7 +5,6 @@ import { Resource } from "alchemy/Resource";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { ResultMissing, requireResult } from "../Errors.ts";
 import { pollUntil } from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -130,7 +129,6 @@ const getEndpoint = (organizationId: string, serviceId: string, reversePrivateEn
   pipes
     .getClickPipeReversePrivateEndpoint({ organizationId, serviceId, reversePrivateEndpointId })
     .pipe(
-      Effect.flatMap(requireResult("getClickPipeReversePrivateEndpoint")),
       Effect.map((rpe) => (rpe.status === "Deleting" ? undefined : rpe)),
       Effect.catchTag("NotFound", () => Effect.undefined),
     );
@@ -172,26 +170,19 @@ export const ReversePrivateEndpointProvider = () =>
           : undefined;
         // Ensure
         if (observed === undefined) {
-          const created = yield* pipes
-            .createClickPipeReversePrivateEndpoint({
-              organizationId,
-              serviceId,
-              description: news.description,
-              type: news.type,
-              vpcEndpointServiceName: news.vpcEndpointServiceName,
-              vpcResourceConfigurationId: news.vpcResourceConfigurationId,
-              vpcResourceShareArn: news.vpcResourceShareArn,
-              mskClusterArn: news.mskClusterArn,
-              mskAuthentication: news.mskAuthentication,
-              gcpServiceAttachment: news.gcpServiceAttachment,
-              customPrivateDnsMappings: news.customPrivateDnsMappings,
-            })
-            .pipe(Effect.flatMap(requireResult("createClickPipeReversePrivateEndpoint")));
-          if (created.id === undefined) {
-            return yield* new ResultMissing({
-              operation: "createClickPipeReversePrivateEndpoint (id)",
-            });
-          }
+          const created = yield* pipes.createClickPipeReversePrivateEndpoint({
+            organizationId,
+            serviceId,
+            description: news.description,
+            type: news.type,
+            vpcEndpointServiceName: news.vpcEndpointServiceName,
+            vpcResourceConfigurationId: news.vpcResourceConfigurationId,
+            vpcResourceShareArn: news.vpcResourceShareArn,
+            mskClusterArn: news.mskClusterArn,
+            mskAuthentication: news.mskAuthentication,
+            gcpServiceAttachment: news.gcpServiceAttachment,
+            customPrivateDnsMappings: news.customPrivateDnsMappings,
+          });
           observed = created;
         }
         const id = observed.id!;

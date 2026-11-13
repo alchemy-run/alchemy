@@ -238,16 +238,13 @@ const toAttributes = (
 });
 
 const getFunction = (organizationId: string, functionName: string) =>
-  udf.getUdf({ organizationId, functionName }).pipe(
-    Effect.map((r) => r.result),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  udf
+    .getUdf({ organizationId, functionName })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Upload an archive and return its upload ID; one upload per create or version attempt. */
 const upload = Effect.fn(function* (organizationId: string, archive: Uint8Array) {
-  const session = yield* udf
-    .createUdfUploadUrl({ organizationId })
-    .pipe(Effect.map((r) => r.result));
+  const session = yield* udf.createUdfUploadUrl({ organizationId });
   const uploadUrl =
     typeof session.uploadUrl === "string"
       ? session.uploadUrl

@@ -2,7 +2,6 @@ import * as service from "@distilled.cloud/clickhouse-cloud/service";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Service } from "./Service.ts";
 import { type ServiceStateCommand, UpdateServiceState } from "./UpdateServiceState.ts";
 
@@ -17,11 +16,7 @@ export const UpdateServiceStateHttp = Layer.effect(
         "control-plane:service:manage",
       ]);
       return (command: ServiceStateCommand) =>
-        run((ids) =>
-          service
-            .updateServiceState({ ...ids, command })
-            .pipe(Effect.flatMap(requireResult("updateServiceState"))),
-        );
+        run((ids) => service.updateServiceState({ ...ids, command }));
     });
   }),
 );

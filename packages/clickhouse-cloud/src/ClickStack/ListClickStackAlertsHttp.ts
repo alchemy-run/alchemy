@@ -2,7 +2,6 @@ import * as stack from "@distilled.cloud/clickhouse-cloud/click_stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 import { ListClickStackAlerts, type ListClickStackAlertsRequest } from "./ListClickStackAlerts.ts";
 
@@ -17,11 +16,7 @@ export const ListClickStackAlertsHttp = Layer.effect(
         "control-plane:service:manage-clickstack-api",
       ]);
       return (request?: ListClickStackAlertsRequest) =>
-        run((ids) =>
-          stack
-            .listClickStackAlerts({ ...request, ...ids })
-            .pipe(Effect.flatMap(requireResult("listClickStackAlerts"))),
-        );
+        run((ids) => stack.listClickStackAlerts({ ...request, ...ids }));
     });
   }),
 );

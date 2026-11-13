@@ -13,10 +13,9 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getEndpoint = (serviceId: string, endpointId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* qae.getQueryApiEndpoint({ organizationId, serviceId, endpointId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* qae
+      .getQueryApiEndpoint({ organizationId, serviceId, endpointId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const declare = (sql: string, origins: string[]) =>

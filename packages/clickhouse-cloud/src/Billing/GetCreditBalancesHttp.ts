@@ -2,7 +2,6 @@ import * as billing from "@distilled.cloud/clickhouse-cloud/billing";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindOrganization } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Organization } from "../Organization/Organization.ts";
 import { GetCreditBalances } from "./GetCreditBalances.ts";
 
@@ -16,10 +15,7 @@ export const GetCreditBalancesHttp = Layer.effect(
         "control-plane:organization:view",
         "control-plane:organization:view-billing",
       ]);
-      return () =>
-        run((ids) =>
-          billing.getCreditBalances(ids).pipe(Effect.flatMap(requireResult("getCreditBalances"))),
-        );
+      return () => run((ids) => billing.getCreditBalances(ids));
     });
   }),
 );

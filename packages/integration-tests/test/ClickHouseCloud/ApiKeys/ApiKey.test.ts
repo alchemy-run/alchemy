@@ -14,10 +14,9 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getKey = (id: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* apiKeys.getApiKey({ organizationId, keyId: id }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* apiKeys
+      .getApiKey({ organizationId, keyId: id })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const expectGone = (id: string) =>
@@ -95,7 +94,7 @@ test.provider(
 
       // The secret authenticates the API.
       const me = yield* whoami(created.key.keyId, created.key.keySecret);
-      expect(me.result).toMatchObject({ name: created.key.name });
+      expect(me).toMatchObject({ name: created.key.name });
 
       // Name, access list, state and roles update the same key; the secret
       // is kept, and the dropped role is removed.
@@ -142,7 +141,7 @@ test.provider(
               },
             ],
           }).pipe(stack.deploy);
-          const { result } = yield* apiKeys.createApiKey({
+          const result = yield* apiKeys.createApiKey({
             organizationId,
             name,
             assignedRoleIds: [role.roleId],
@@ -183,7 +182,7 @@ test.provider(
       expect(Redacted.value(adopted.keySecret)).not.toEqual("");
       yield* expectGone(outside.keyId);
       const me = yield* whoami(adopted.keyId, adopted.keySecret);
-      expect(me.result).toMatchObject({ name });
+      expect(me).toMatchObject({ name });
 
       yield* stack.destroy();
       yield* expectGone(adopted.id);

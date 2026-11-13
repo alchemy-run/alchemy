@@ -13,16 +13,15 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getRole = (roleId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* roles.getOrganizationRole({ organizationId, roleId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* roles
+      .getOrganizationRole({ organizationId, roleId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const keyRoleIds = (keyId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    const { result } = yield* apiKeys.getApiKey({ organizationId, keyId });
+    const result = yield* apiKeys.getApiKey({ organizationId, keyId });
     return (result?.assignedRoles ?? []).map((r) => r.roleId);
   });
 

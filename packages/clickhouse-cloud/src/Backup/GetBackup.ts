@@ -2,7 +2,6 @@ import type * as backup from "@distilled.cloud/clickhouse-cloud/backup";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 
 /**
@@ -51,9 +50,7 @@ export interface GetBackup extends Binding.Service<
   (
     target: Service,
   ) => Effect.Effect<
-    (
-      backupId: string,
-    ) => Effect.Effect<backup.Backup, backup.GetBackupError | ResultMissing, RuntimeContext>
+    (backupId: string) => Effect.Effect<backup.Backup, backup.GetBackupError, RuntimeContext>
   >
 > {}
 
