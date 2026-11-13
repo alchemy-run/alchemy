@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import { getLiveService, isRunning, waitForService } from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -84,7 +83,6 @@ export const ClickHouseSetting = Resource<ClickHouseSetting>(
 /** Whether the setting is explicitly set: only those are listed. */
 const getSetting = (organizationId: string, serviceId: string, name: string) =>
   service.listServiceClickHouseSettings({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("listServiceClickHouseSettings")),
     Effect.map((list) => (list.settings ?? []).find((s) => s.name === name)),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -132,13 +130,11 @@ export const ClickHouseSettingProvider = () =>
           };
         }
         // Ensure + sync
-        const updated = yield* service
-          .updateServiceClickHouseSettings({
-            organizationId,
-            serviceId,
-            settings: { [name]: value },
-          })
-          .pipe(Effect.flatMap(requireResult("updateServiceClickHouseSettings")));
+        const updated = yield* service.updateServiceClickHouseSettings({
+          organizationId,
+          serviceId,
+          settings: { [name]: value },
+        });
         // Server settings roll out with a restart.
         const live = yield* getLiveService(organizationId, serviceId);
         if (live !== undefined && !isRunning(live.state) && live.state !== "stopped") {

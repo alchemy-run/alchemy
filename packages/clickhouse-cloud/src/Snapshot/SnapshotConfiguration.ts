@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface SnapshotConfigurationProps {
@@ -99,10 +98,9 @@ const toAttributes = (
 });
 
 const getConfiguration = (organizationId: string, serviceId: string) =>
-  snapshot.getSnapshotConfiguration({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getSnapshotConfiguration")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  snapshot
+    .getSnapshotConfiguration({ organizationId, serviceId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const SnapshotConfigurationProvider = () =>
   Provider.effect(
@@ -126,9 +124,7 @@ export const SnapshotConfigurationProvider = () =>
         const organizationId = output?.organizationId ?? (yield* currentOrganizationId);
         const { serviceId } = news;
         // Observe
-        const observed = yield* snapshot
-          .getSnapshotConfiguration({ organizationId, serviceId })
-          .pipe(Effect.flatMap(requireResult("getSnapshotConfiguration")));
+        const observed = yield* snapshot.getSnapshotConfiguration({ organizationId, serviceId });
         // Sync only declared settings that differ; null is not accepted.
         const want = { enabled: news.enabled ?? true, gap: news.gap, timeFrame: news.timeFrame };
         const patch = Object.fromEntries(
@@ -139,9 +135,11 @@ export const SnapshotConfigurationProvider = () =>
         if (Object.keys(patch).length === 0) {
           return toAttributes(organizationId, serviceId, observed);
         }
-        const updated = yield* snapshot
-          .updateSnapshotConfiguration({ organizationId, serviceId, ...patch })
-          .pipe(Effect.flatMap(requireResult("updateSnapshotConfiguration")));
+        const updated = yield* snapshot.updateSnapshotConfiguration({
+          organizationId,
+          serviceId,
+          ...patch,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

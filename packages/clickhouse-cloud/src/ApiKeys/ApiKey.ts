@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { ApiKeyInUse, requireResult, ResultMissing } from "../Errors.ts";
+import { ApiKeyInUse, MissingId } from "../Errors.ts";
 import { isGeneratedName, isOwnedName, resolveName } from "../internal/Names.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -236,10 +236,9 @@ export const ApiKeyProvider = () =>
     ApiKey,
     Effect.gen(function* () {
       const getKey = (organizationId: string, id: string) =>
-        apiKeys.getApiKey({ organizationId, keyId: id }).pipe(
-          Effect.flatMap(requireResult("getApiKey")),
-          Effect.catchTag("NotFound", () => Effect.undefined),
-        );
+        apiKeys
+          .getApiKey({ organizationId, keyId: id })
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       const findByName = (organizationId: string, name: string) =>
         apiKeys.listApiKeys.items({ organizationId }).pipe(
           Stream.filter((key) => key.name === name),
@@ -331,19 +330,17 @@ export const ApiKeyProvider = () =>
 
           // Ensure
           if (observed === undefined) {
-            const created = yield* apiKeys
-              .createApiKey({
-                organizationId,
-                name,
-                expireAt: news.expireAt,
-                state: news.state,
-                hashData: news.hashData,
-                assignedRoleIds: news.assignedRoleIds,
-                ipAccessList: news.ipAccessList,
-              })
-              .pipe(Effect.flatMap(requireResult("createApiKey")));
+            const created = yield* apiKeys.createApiKey({
+              organizationId,
+              name,
+              expireAt: news.expireAt,
+              state: news.state,
+              hashData: news.hashData,
+              assignedRoleIds: news.assignedRoleIds,
+              ipAccessList: news.ipAccessList,
+            });
             if (created.key?.id === undefined) {
-              return yield* new ResultMissing({ operation: "createApiKey (key)" });
+              return yield* new MissingId({ operation: "createApiKey" });
             }
             observed = created.key;
             const keySecret =
@@ -394,9 +391,7 @@ export const ApiKeyProvider = () =>
               : {}),
           };
           if (Object.keys(patch).length > 0) {
-            observed = yield* apiKeys
-              .updateApiKey({ organizationId, keyId, ...patch })
-              .pipe(Effect.flatMap(requireResult("updateApiKey")));
+            observed = yield* apiKeys.updateApiKey({ organizationId, keyId, ...patch });
           }
 
           return toAttributes(organizationId, observed, material);

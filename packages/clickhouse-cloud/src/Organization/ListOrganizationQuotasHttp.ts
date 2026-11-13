@@ -2,7 +2,6 @@ import * as organization from "@distilled.cloud/clickhouse-cloud/organization";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindOrganization } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import { ListOrganizationQuotas } from "./ListOrganizationQuotas.ts";
 import type { Organization } from "./Organization.ts";
 
@@ -15,12 +14,7 @@ export const ListOrganizationQuotasHttp = Layer.effect(
       const run = yield* bind("ListOrganizationQuotas", target, [
         "control-plane:organization:view",
       ]);
-      return () =>
-        run((ids) =>
-          organization
-            .listOrganizationQuotas(ids)
-            .pipe(Effect.flatMap(requireResult("listOrganizationQuotas"))),
-        );
+      return () => run((ids) => organization.listOrganizationQuotas(ids));
     });
   }),
 );

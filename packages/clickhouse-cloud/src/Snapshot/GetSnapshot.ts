@@ -2,7 +2,6 @@ import type * as snapshot from "@distilled.cloud/clickhouse-cloud/snapshot";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 
 /**
@@ -55,7 +54,7 @@ export interface GetSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       snapshotId: string,
-    ) => Effect.Effect<snapshot.Snapshot, snapshot.GetSnapshotError | ResultMissing, RuntimeContext>
+    ) => Effect.Effect<snapshot.Snapshot, snapshot.GetSnapshotError, RuntimeContext>
   >
 > {}
 

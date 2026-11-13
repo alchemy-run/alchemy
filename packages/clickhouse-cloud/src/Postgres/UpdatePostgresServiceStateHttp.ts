@@ -2,7 +2,6 @@ import * as postgres from "@distilled.cloud/clickhouse-cloud/postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindPostgres } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Service } from "./Service.ts";
 import { UpdatePostgresServiceState } from "./UpdatePostgresServiceState.ts";
 
@@ -17,11 +16,7 @@ export const UpdatePostgresServiceStateHttp = Layer.effect(
         "control-plane:postgres-service:manage",
       ]);
       return (command: "restart" | "promote" | "switchover") =>
-        run((ids) =>
-          postgres
-            .updatePostgresServiceState({ ...ids, command })
-            .pipe(Effect.flatMap(requireResult("updatePostgresServiceState"))),
-        );
+        run((ids) => postgres.updatePostgresServiceState({ ...ids, command }));
     });
   }),
 );

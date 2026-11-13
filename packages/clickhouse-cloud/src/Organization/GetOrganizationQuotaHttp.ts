@@ -2,7 +2,6 @@ import * as organization from "@distilled.cloud/clickhouse-cloud/organization";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindOrganization } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import { GetOrganizationQuota, type QuotaCode } from "./GetOrganizationQuota.ts";
 import type { Organization } from "./Organization.ts";
 
@@ -14,11 +13,7 @@ export const GetOrganizationQuotaHttp = Layer.effect(
     return Effect.fn(function* (target: Organization) {
       const run = yield* bind("GetOrganizationQuota", target, ["control-plane:organization:view"]);
       return (quotaCode: QuotaCode) =>
-        run((ids) =>
-          organization
-            .getOrganizationQuota({ ...ids, quotaCode })
-            .pipe(Effect.flatMap(requireResult("getOrganizationQuota"))),
-        );
+        run((ids) => organization.getOrganizationQuota({ ...ids, quotaCode }));
     });
   }),
 );

@@ -2,7 +2,6 @@ import type * as pipes from "@distilled.cloud/clickhouse-cloud/click_pipes";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 
 /**
@@ -58,7 +57,7 @@ export interface DiscoverClickPipeSchema extends Binding.Service<
       source: pipes.ClickPipeSchemaDiscoverySource,
     ) => Effect.Effect<
       pipes.ClickPipeSchemaDiscoveryResponse,
-      pipes.DiscoverClickPipeSchemaError | ResultMissing,
+      pipes.DiscoverClickPipeSchemaError,
       RuntimeContext
     >
   >

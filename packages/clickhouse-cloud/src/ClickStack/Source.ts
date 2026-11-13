@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { ResultMissing, requireResult } from "../Errors.ts";
+import { MissingId } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import { type ClickStackScope, covers } from "./internal.ts";
 
@@ -82,7 +82,6 @@ export const Source = Resource<Source>("ClickHouseCloud.ClickStack.Source");
 
 const getSource = (organizationId: string, serviceId: string, id: string) =>
   stack.getClickStackSource({ organizationId, serviceId, clickStackSourceId: id }).pipe(
-    Effect.flatMap(requireResult("getSource")),
     Effect.map((found): stack.ClickStackSource | undefined => found),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -125,18 +124,17 @@ export const SourceProvider = () =>
         // Ensure or sync: a PUT carries the whole object.
         const saved =
           observed === undefined
-            ? yield* stack
-                .createClickStackSource({ organizationId, serviceId, body })
-                .pipe(Effect.flatMap(requireResult("createSource")))
+            ? yield* stack.createClickStackSource({ organizationId, serviceId, body })
             : yield* ((id: string) =>
                 stack.updateClickStackSource({
                   organizationId,
                   serviceId,
                   clickStackSourceId: id,
                   body,
-                }))(observed.id!).pipe(Effect.flatMap(requireResult("updateSource")));
-        if (saved.id === undefined)
-          return yield* new ResultMissing({ operation: "createSource (id)" });
+                }))(observed.id!);
+        if (saved.id === undefined) {
+          return yield* new MissingId({ operation: "createClickStackSource" });
+        }
         return { id: saved.id, serviceId, organizationId, observed: saved };
       }),
       delete: Effect.fn(function* ({ output }) {

@@ -2,7 +2,6 @@ import * as pipes from "@distilled.cloud/clickhouse-cloud/click_pipes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 import { DiscoverClickPipeSchema } from "./DiscoverClickPipeSchema.ts";
 
@@ -19,11 +18,7 @@ export const DiscoverClickPipeSchemaHttp = Layer.effect(
         "sql-console:database:access",
       ]);
       return (source: pipes.ClickPipeSchemaDiscoverySource) =>
-        run((ids) =>
-          pipes
-            .discoverClickPipeSchema({ ...ids, source })
-            .pipe(Effect.flatMap(requireResult("discoverClickPipeSchema"))),
-        );
+        run((ids) => pipes.discoverClickPipeSchema({ ...ids, source }));
     });
   }),
 );

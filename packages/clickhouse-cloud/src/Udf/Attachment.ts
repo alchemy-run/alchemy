@@ -98,7 +98,7 @@ const toAttributes = (organizationId: string, a: udf.UdfAttachment): AttachmentA
 
 const getAttachment = (organizationId: string, functionName: string, serviceId: string) =>
   udf.getUdfAttachment({ organizationId, functionName, serviceId }).pipe(
-    Effect.map((r) => (r.result.status === "deprovisioning" ? undefined : r.result)),
+    Effect.map((a) => (a.status === "deprovisioning" ? undefined : a)),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
@@ -168,10 +168,9 @@ export const AttachmentProvider = () =>
           kind: "UDF attachment",
           id: `${functionName}@${serviceId}`,
           waitingFor: "detached",
-          read: udf.getUdfAttachment({ organizationId, functionName, serviceId }).pipe(
-            Effect.map((r) => r.result),
-            Effect.catchTag("NotFound", () => Effect.undefined),
-          ),
+          read: udf
+            .getUdfAttachment({ organizationId, functionName, serviceId })
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
           state: (a) => a?.status,
           done: (a): a is undefined => a === undefined,
           session,

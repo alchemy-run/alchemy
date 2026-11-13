@@ -2,7 +2,6 @@ import type * as postgres from "@distilled.cloud/clickhouse-cloud/postgres";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "./Service.ts";
 
 /** The window of a metrics read. */
@@ -66,7 +65,7 @@ export interface GetPostgresServiceMetrics extends Binding.Service<
       request: GetPostgresServiceMetricsRequest,
     ) => Effect.Effect<
       postgres.PostgresMetrics,
-      postgres.GetPostgresServiceMetricsError | ResultMissing,
+      postgres.GetPostgresServiceMetricsError,
       RuntimeContext
     >
   >

@@ -50,7 +50,7 @@ test.provider.skipIf(needsService || !enterprise)(
         organizationId,
         serviceId: first.serviceId,
       });
-      expect(observed.result?.weekday).toEqual(4);
+      expect(observed.weekday).toEqual(4);
       yield* stack.destroy();
       const gone = yield* service
         .getUpgradeWindow({ organizationId, serviceId: first.serviceId })

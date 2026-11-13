@@ -2,7 +2,6 @@ import * as snapshot from "@distilled.cloud/clickhouse-cloud/snapshot";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 import { GetSnapshot } from "./GetSnapshot.ts";
 
@@ -16,12 +15,7 @@ export const GetSnapshotHttp = Layer.effect(
         "control-plane:service:view",
         "control-plane:service:view-snapshots",
       ]);
-      return (snapshotId: string) =>
-        run((ids) =>
-          snapshot
-            .getSnapshot({ ...ids, snapshotId })
-            .pipe(Effect.flatMap(requireResult("getSnapshot"))),
-        );
+      return (snapshotId: string) => run((ids) => snapshot.getSnapshot({ ...ids, snapshotId }));
     });
   }),
 );

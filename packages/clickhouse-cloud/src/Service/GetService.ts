@@ -2,7 +2,6 @@ import type * as service from "@distilled.cloud/clickhouse-cloud/service";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -47,9 +46,7 @@ export interface GetService extends Binding.Service<
   "ClickHouseCloud.Service.GetService",
   (
     target: Service,
-  ) => Effect.Effect<
-    () => Effect.Effect<service.Service, service.GetServiceError | ResultMissing, RuntimeContext>
-  >
+  ) => Effect.Effect<() => Effect.Effect<service.Service, service.GetServiceError, RuntimeContext>>
 > {}
 
 export const GetService = Binding.Service<GetService>("ClickHouseCloud.Service.GetService");

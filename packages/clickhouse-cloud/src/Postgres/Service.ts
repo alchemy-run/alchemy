@@ -19,7 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { FeatureUnavailable, ResultMissing, requireResult } from "../Errors.ts";
+import { FeatureUnavailable, MissingId } from "../Errors.ts";
 import {
   hasOwnerTags,
   INSTANCE_TAG,
@@ -338,7 +338,6 @@ const toAttributes = (
 
 const getLive = (organizationId: string, postgresId: string) =>
   postgres.getPostgresService({ organizationId, postgresId }).pipe(
-    Effect.flatMap(requireResult("getPostgresService")),
     Effect.map((svc) => (svc.state === "deleting" ? undefined : svc)),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -411,9 +410,7 @@ export const ServiceProvider = () =>
         instanceId: string,
         organizationId: string,
       ) {
-        const all = yield* postgres
-          .listPostgresServices({ organizationId })
-          .pipe(Effect.flatMap(requireResult("listPostgresServices")));
+        const all = yield* postgres.listPostgresServices({ organizationId });
         for (const candidate of all) {
           if (candidate.id === undefined || candidate.state === "deleting") continue;
           const sameInstance = (candidate.tags ?? []).some(
@@ -432,9 +429,7 @@ export const ServiceProvider = () =>
         stables: ["postgresId", "organizationId", "provider", "region", "createdAt"],
         list: Effect.fn(function* () {
           const organizationId = yield* currentOrganizationId;
-          const all = yield* postgres
-            .listPostgresServices({ organizationId })
-            .pipe(Effect.flatMap(requireResult("listPostgresServices")));
+          const all = yield* postgres.listPostgresServices({ organizationId });
           const empty = {
             password: undefined,
             passwordDigest: undefined,
@@ -484,9 +479,7 @@ export const ServiceProvider = () =>
           const owned = yield* findOwned(id, instanceId, organizationId);
           if (owned) return toAttributes(organizationId, owned, secrets, migrations);
           if (olds?.name === undefined) return undefined;
-          const all = yield* postgres
-            .listPostgresServices({ organizationId })
-            .pipe(Effect.flatMap(requireResult("listPostgresServices")));
+          const all = yield* postgres.listPostgresServices({ organizationId });
           const named = all.find((s) => s.name === olds.name && s.state !== "deleting");
           if (named?.id === undefined || (yield* hasOwnerTags(id, named.tags))) return undefined;
           const live = yield* getLive(organizationId, named.id);
@@ -526,26 +519,22 @@ export const ServiceProvider = () =>
             };
             const created =
               news.replicaOf !== undefined
-                ? yield* postgres
-                    .createPostgresServiceReadReplica({
+                ? yield* postgres.createPostgresServiceReadReplica({
+                    organizationId,
+                    postgresId: news.replicaOf,
+                    name,
+                    tags: tagList,
+                    ...config,
+                  })
+                : news.restoreFrom !== undefined
+                  ? yield* postgres.restorePostgresService({
                       organizationId,
-                      postgresId: news.replicaOf,
+                      postgresId: news.restoreFrom.postgresId,
+                      restoreTarget: news.restoreFrom.target,
                       name,
                       tags: tagList,
                       ...config,
                     })
-                    .pipe(Effect.flatMap(requireResult("createPostgresServiceReadReplica")))
-                : news.restoreFrom !== undefined
-                  ? yield* postgres
-                      .restorePostgresService({
-                        organizationId,
-                        postgresId: news.restoreFrom.postgresId,
-                        restoreTarget: news.restoreFrom.target,
-                        name,
-                        tags: tagList,
-                        ...config,
-                      })
-                      .pipe(Effect.flatMap(requireResult("restorePostgresService")))
                   : news.provider === undefined ||
                       news.region === undefined ||
                       news.size === undefined
@@ -553,23 +542,21 @@ export const ServiceProvider = () =>
                         feature: "Postgres service",
                         reason: "a new primary needs `provider`, `region` and `size`",
                       })
-                    : yield* postgres
-                        .createPostgresService({
-                          organizationId,
-                          name,
-                          provider: news.provider,
-                          region: news.region,
-                          size: news.size,
-                          postgresVersion: news.postgresVersion,
-                          haType: news.haType,
-                          standbyCount: news.standbyCount,
-                          ipAccessList: news.ipAccessList,
-                          tags: tagList,
-                          ...config,
-                        })
-                        .pipe(Effect.flatMap(requireResult("createPostgresService")));
+                    : yield* postgres.createPostgresService({
+                        organizationId,
+                        name,
+                        provider: news.provider,
+                        region: news.region,
+                        size: news.size,
+                        postgresVersion: news.postgresVersion,
+                        haType: news.haType,
+                        standbyCount: news.standbyCount,
+                        ipAccessList: news.ipAccessList,
+                        tags: tagList,
+                        ...config,
+                      });
             if (created.id === undefined) {
-              return yield* new ResultMissing({ operation: "createPostgresService (id)" });
+              return yield* new MissingId({ operation: "createPostgresService" });
             }
             // Returned only now.
             password = asRedacted(created.password);
@@ -660,9 +647,10 @@ export const ServiceProvider = () =>
             olds?.pgConfig !== undefined ||
             olds?.pgBouncerConfig !== undefined
           ) {
-            const observedConfig = yield* postgres
-              .getPostgresServiceConfig({ organizationId, postgresId })
-              .pipe(Effect.flatMap(requireResult("getPostgresServiceConfig")));
+            const observedConfig = yield* postgres.getPostgresServiceConfig({
+              organizationId,
+              postgresId,
+            });
             const wantPg = toStrings(news.pgConfig);
             const wantBouncer = toStrings(news.pgBouncerConfig);
             const havePg = toStrings(observedConfig.pgConfig);
@@ -680,11 +668,9 @@ export const ServiceProvider = () =>
                 pgConfig: (news.pgConfig ?? {}) as postgres.PgConfig,
                 pgBouncerConfig: news.pgBouncerConfig ?? {},
               };
-              const result = yield* (
-                dropped
-                  ? postgres.replacePostgresServiceConfig(body)
-                  : postgres.updatePostgresServiceConfig(body)
-              ).pipe(Effect.flatMap(requireResult("updatePostgresServiceConfig")));
+              const result = yield* dropped
+                ? postgres.replacePostgresServiceConfig(body)
+                : postgres.updatePostgresServiceConfig(body);
               if (result.message) yield* session.note(result.message);
               current = yield* waitRunning(organizationId, postgresId, session);
             }
@@ -705,9 +691,10 @@ export const ServiceProvider = () =>
             connectionString = connectionUrl(current, news.password, connectionString);
           } else if (password === undefined) {
             // No password held (credential redaction, or a lost create): reset it.
-            const reset = yield* postgres
-              .updatePostgresServicePassword({ organizationId, postgresId })
-              .pipe(Effect.flatMap(requireResult("updatePostgresServicePassword")));
+            const reset = yield* postgres.updatePostgresServicePassword({
+              organizationId,
+              postgresId,
+            });
             password = asRedacted(reset.password);
           }
           if (connectionString === undefined && password !== undefined) {

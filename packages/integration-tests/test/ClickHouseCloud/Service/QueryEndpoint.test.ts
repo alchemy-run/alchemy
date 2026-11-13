@@ -12,10 +12,9 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getEndpoint = (serviceId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* service.getServiceQueryEndpoint({ organizationId, serviceId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* service
+      .getServiceQueryEndpoint({ organizationId, serviceId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const declare = (origins: string[]) =>

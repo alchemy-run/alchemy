@@ -2,7 +2,6 @@ import type * as billing from "@distilled.cloud/clickhouse-cloud/billing";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Organization } from "../Organization/Organization.ts";
 
 /**
@@ -48,11 +47,7 @@ export interface GetCreditBalances extends Binding.Service<
   (
     target: Organization,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      billing.CreditBalances,
-      billing.GetCreditBalancesError | ResultMissing,
-      RuntimeContext
-    >
+    () => Effect.Effect<billing.CreditBalances, billing.GetCreditBalancesError, RuntimeContext>
   >
 > {}
 

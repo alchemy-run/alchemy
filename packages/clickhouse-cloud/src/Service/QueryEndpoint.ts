@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 /** A SQL console role the endpoint runs queries as. */
@@ -115,7 +114,6 @@ const toAttributes = (
 
 const getEndpoint = (organizationId: string, serviceId: string) =>
   service.getServiceQueryEndpoint({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getServiceQueryEndpoint")),
     // No endpoint, or no service.
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -159,15 +157,13 @@ export const QueryEndpointProvider = () =>
           }
         }
         // Ensure + sync: upsert sends the whole endpoint.
-        const updated = yield* service
-          .upsertServiceQueryEndpoint({
-            organizationId,
-            serviceId,
-            roles: news.roles,
-            openApiKeys: news.apiKeyIds,
-            allowedOrigins: (news.allowedOrigins ?? []).join(","),
-          })
-          .pipe(Effect.flatMap(requireResult("upsertServiceQueryEndpoint")));
+        const updated = yield* service.upsertServiceQueryEndpoint({
+          organizationId,
+          serviceId,
+          roles: news.roles,
+          openApiKeys: news.apiKeyIds,
+          allowedOrigins: (news.allowedOrigins ?? []).join(","),
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

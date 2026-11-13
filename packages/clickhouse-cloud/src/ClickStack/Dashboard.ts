@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { OperationFailed, ResultMissing, requireResult } from "../Errors.ts";
+import { OperationFailed, MissingId } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import { type ClickStackScope, covers } from "./internal.ts";
 
@@ -77,7 +77,6 @@ export const Dashboard = Resource<Dashboard>("ClickHouseCloud.ClickStack.Dashboa
 
 const getDashboard = (organizationId: string, serviceId: string, id: string) =>
   stack.getClickStackDashboard({ organizationId, serviceId, clickStackDashboardId: id }).pipe(
-    Effect.flatMap(requireResult("getDashboard")),
     Effect.map((found): stack.ClickStackDashboardResponse | undefined => found),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -113,9 +112,11 @@ export const DashboardProvider = () =>
           return { id: output.id, serviceId, organizationId, observed };
         }
         // Validate first: ClickStack answers with field errors instead of a rejected write.
-        const validation = yield* stack
-          .validateClickStackDashboard({ organizationId, serviceId, ...body })
-          .pipe(Effect.flatMap(requireResult("validateDashboard")));
+        const validation = yield* stack.validateClickStackDashboard({
+          organizationId,
+          serviceId,
+          ...body,
+        });
         if (!validation.valid) {
           return yield* new OperationFailed({
             kind: "ClickStack dashboard",
@@ -127,9 +128,7 @@ export const DashboardProvider = () =>
         // Ensure or sync: a PUT carries the whole object.
         const saved =
           observed === undefined
-            ? yield* stack
-                .createClickStackDashboard({ organizationId, serviceId, ...body })
-                .pipe(Effect.flatMap(requireResult("createDashboard")))
+            ? yield* stack.createClickStackDashboard({ organizationId, serviceId, ...body })
             : yield* ((id: string) =>
                 stack.updateClickStackDashboard({
                   organizationId,
@@ -140,9 +139,10 @@ export const DashboardProvider = () =>
                     stack.UpdateClickStackDashboardRequest,
                     "organizationId" | "serviceId" | "clickStackDashboardId"
                   >),
-                }))(observed.id!).pipe(Effect.flatMap(requireResult("updateDashboard")));
-        if (saved.id === undefined)
-          return yield* new ResultMissing({ operation: "createDashboard (id)" });
+                }))(observed.id!);
+        if (saved.id === undefined) {
+          return yield* new MissingId({ operation: "createClickStackDashboard" });
+        }
         return { id: saved.id, serviceId, organizationId, observed: saved };
       }),
       delete: Effect.fn(function* ({ output }) {

@@ -2,7 +2,6 @@ import * as stack from "@distilled.cloud/clickhouse-cloud/click_stack";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Alert } from "./Alert.ts";
 import { GetClickStackAlert } from "./GetClickStackAlert.ts";
 
@@ -20,9 +19,7 @@ export const GetClickStackAlertHttp = Layer.effect(
       return () =>
         run((ids) =>
           Effect.flatMap(alertId, (clickStackAlertId) =>
-            stack
-              .getClickStackAlert({ ...ids, clickStackAlertId })
-              .pipe(Effect.flatMap(requireResult("getClickStackAlert"))),
+            stack.getClickStackAlert({ ...ids, clickStackAlertId }),
           ),
         );
     });

@@ -5,7 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { FeatureUnavailable, requireResult } from "../Errors.ts";
+import { FeatureUnavailable } from "../Errors.ts";
 import { pollUntil } from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -73,7 +73,6 @@ export const CdcScaling = Resource<CdcScaling>("ClickHouseCloud.ClickPipes.CdcSc
 
 const getScaling = (organizationId: string, serviceId: string) =>
   pipes.getClickPipeCdcScaling({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getClickPipeCdcScaling")),
     // No CDC infrastructure yet, or no service.
     Effect.catchTag("NotFound", () => Effect.undefined),
   );

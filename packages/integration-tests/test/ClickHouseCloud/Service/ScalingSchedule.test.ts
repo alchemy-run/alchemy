@@ -11,10 +11,9 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getSchedule = (serviceId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* service.getScalingSchedule({ organizationId, serviceId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* service
+      .getScalingSchedule({ organizationId, serviceId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 // A window at 01:00-02:00 UTC on Mondays: scaling the same as the base

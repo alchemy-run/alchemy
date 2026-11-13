@@ -11,10 +11,9 @@ const { test } = Test.make({ providers: ClickHouseCloud.providers() });
 const getQuery = (serviceId: string, queryId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* saved.getSavedQuery({ organizationId, serviceId, queryId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* saved
+      .getSavedQuery({ organizationId, serviceId, queryId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const declare = (props: { name?: string; sql: string; parameters?: Record<string, string> }) =>

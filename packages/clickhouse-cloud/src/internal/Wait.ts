@@ -4,13 +4,7 @@ import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  OperationFailed,
-  OperationTimedOut,
-  requireResult,
-  ServiceFailed,
-  ServiceNotReady,
-} from "../Errors.ts";
+import { OperationFailed, OperationTimedOut, ServiceFailed, ServiceNotReady } from "../Errors.ts";
 
 const RUNNING: Partial<Record<service.ServiceState, true>> = { running: true, idle: true };
 const GONE: Partial<Record<service.ServiceState, true>> = {
@@ -32,10 +26,9 @@ export const isGone = (state: service.ServiceState | undefined) =>
  * typed `NotFound` means missing: a permission error propagates.
  */
 export const getLiveService = Effect.fn(function* (organizationId: string, serviceId: string) {
-  const observed = yield* service.getService({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getService")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  const observed = yield* service
+    .getService({ organizationId, serviceId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (observed === undefined || isGone(observed.state)) return undefined;
   return observed;
 });

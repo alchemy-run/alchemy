@@ -6,7 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { OperationFailed, ResultMissing, requireResult } from "../Errors.ts";
+import { OperationFailed } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 import { type ClickStackScope, covers } from "./internal.ts";
 
@@ -100,7 +100,6 @@ const secretDigestOf = (props: WebhookProps) =>
 
 const getWebhook = (organizationId: string, serviceId: string, id: string) =>
   stack.listClickStackWebhooks({ organizationId, serviceId, limit: 1000 }).pipe(
-    Effect.flatMap(requireResult("listClickStackWebhooks")),
     // No get-by-id operation: the webhook is found in the list.
     Effect.map((all) => all.find((w) => w.id === id)),
     Effect.catchTag("NotFound", () => Effect.undefined),
@@ -149,9 +148,11 @@ export const WebhookProvider = () =>
           return { id: output.id, serviceId, organizationId, observed, secretDigest };
         }
         // Validate first: ClickStack answers with field errors instead of a rejected write.
-        const validation = yield* stack
-          .validateClickStackWebhook({ organizationId, serviceId, ...body })
-          .pipe(Effect.flatMap(requireResult("validateWebhook")));
+        const validation = yield* stack.validateClickStackWebhook({
+          organizationId,
+          serviceId,
+          ...body,
+        });
         if (!validation.valid) {
           return yield* new OperationFailed({
             kind: "ClickStack webhook",
@@ -163,18 +164,14 @@ export const WebhookProvider = () =>
         // Ensure or sync: a PUT carries the whole object.
         const saved =
           observed === undefined
-            ? yield* stack
-                .createClickStackWebhook({ organizationId, serviceId, ...body })
-                .pipe(Effect.flatMap(requireResult("createWebhook")))
+            ? yield* stack.createClickStackWebhook({ organizationId, serviceId, ...body })
             : yield* ((id: string) =>
                 stack.updateClickStackWebhook({
                   organizationId,
                   serviceId,
                   clickStackWebhookId: id,
                   ...body,
-                }))(observed.id!).pipe(Effect.flatMap(requireResult("updateWebhook")));
-        if (saved.id === undefined)
-          return yield* new ResultMissing({ operation: "createWebhook (id)" });
+                }))(observed.id!);
         return { id: saved.id, serviceId, organizationId, observed: saved, secretDigest };
       }),
       delete: Effect.fn(function* ({ output }) {

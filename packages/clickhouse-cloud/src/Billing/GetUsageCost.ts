@@ -2,7 +2,6 @@ import type * as billing from "@distilled.cloud/clickhouse-cloud/billing";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Organization } from "../Organization/Organization.ts";
 
 /** The window of a usage cost report. */
@@ -60,7 +59,7 @@ export interface GetUsageCost extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetUsageCostRequest,
-    ) => Effect.Effect<billing.UsageCost, billing.GetUsageCostError | ResultMissing, RuntimeContext>
+    ) => Effect.Effect<billing.UsageCost, billing.GetUsageCostError, RuntimeContext>
   >
 > {}
 

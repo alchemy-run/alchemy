@@ -13,10 +13,9 @@ const source = fileURLToPath(new URL("../fixtures/udf/double", import.meta.url))
 const getFunction = (functionName: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* udf.getUdf({ organizationId, functionName }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* udf
+      .getUdf({ organizationId, functionName })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const declare = (memoryLimitMib: number) =>

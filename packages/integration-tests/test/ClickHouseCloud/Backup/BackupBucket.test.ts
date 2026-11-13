@@ -19,10 +19,9 @@ const GCP_BUCKET = "https://storage.googleapis.com/alchemy-no-such-bucket-000000
 const getBucket = (serviceId: string) =>
   Effect.gen(function* () {
     const organizationId = yield* ClickHouseCloud.organizationId;
-    return yield* backup.getBackupBucket({ organizationId, serviceId }).pipe(
-      Effect.map(({ result }) => result),
-      Effect.catchTag("NotFound", () => Effect.undefined),
-    );
+    return yield* backup
+      .getBackupBucket({ organizationId, serviceId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 const aws = (prefix: string, role = "alchemy-no-such-role") =>

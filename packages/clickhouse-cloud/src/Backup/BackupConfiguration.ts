@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface BackupConfigurationProps {
@@ -119,7 +118,6 @@ const toAttributes = (
 
 const getConfiguration = (organizationId: string, serviceId: string) =>
   backup.getBackupConfiguration({ organizationId, serviceId }).pipe(
-    Effect.flatMap(requireResult("getBackupConfiguration")),
     // A missing service has no backup configuration.
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -147,9 +145,7 @@ export const BackupConfigurationProvider = () =>
         const organizationId = output?.organizationId ?? (yield* currentOrganizationId);
         const { serviceId } = news;
         // Observe
-        const observed = yield* backup
-          .getBackupConfiguration({ organizationId, serviceId })
-          .pipe(Effect.flatMap(requireResult("getBackupConfiguration")));
+        const observed = yield* backup.getBackupConfiguration({ organizationId, serviceId });
         // Sync only the declared settings that differ.
         const patch = Object.fromEntries(
           MANAGED.flatMap((key) =>
@@ -159,9 +155,11 @@ export const BackupConfigurationProvider = () =>
         if (Object.keys(patch).length === 0) {
           return toAttributes(organizationId, serviceId, observed);
         }
-        const updated = yield* backup
-          .updateBackupConfiguration({ organizationId, serviceId, ...patch })
-          .pipe(Effect.flatMap(requireResult("updateBackupConfiguration")));
+        const updated = yield* backup.updateBackupConfiguration({
+          organizationId,
+          serviceId,
+          ...patch,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ olds, output }) {

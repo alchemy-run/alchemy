@@ -2,7 +2,6 @@ import type * as pipes from "@distilled.cloud/clickhouse-cloud/click_pipes";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { ClickPipe } from "./ClickPipe.ts";
 
 /**
@@ -43,9 +42,7 @@ export interface GetClickPipe extends Binding.Service<
   "ClickHouseCloud.ClickPipes.GetClickPipe",
   (
     target: ClickPipe,
-  ) => Effect.Effect<
-    () => Effect.Effect<pipes.ClickPipe, pipes.GetClickPipeError | ResultMissing, RuntimeContext>
-  >
+  ) => Effect.Effect<() => Effect.Effect<pipes.ClickPipe, pipes.GetClickPipeError, RuntimeContext>>
 > {}
 
 export const GetClickPipe = Binding.Service<GetClickPipe>(

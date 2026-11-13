@@ -48,13 +48,13 @@ test.provider.skipIf(needsService || !snapshots)(
         organizationId,
         serviceId: first.serviceId,
       });
-      expect(observed.result?.gap).toEqual(30);
+      expect(observed.gap).toEqual(30);
       yield* stack.destroy();
       const after = yield* snapshot.getSnapshotConfiguration({
         organizationId,
         serviceId: first.serviceId,
       });
-      expect(after.result?.enabled).toBe(false);
+      expect(after.enabled).toBe(false);
     }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 900_000 },
 );

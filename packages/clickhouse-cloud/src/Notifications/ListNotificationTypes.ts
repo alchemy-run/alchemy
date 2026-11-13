@@ -2,7 +2,6 @@ import type * as notifications from "@distilled.cloud/clickhouse-cloud/notificat
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Organization } from "../Organization/Organization.ts";
 
 /**
@@ -51,7 +50,7 @@ export interface ListNotificationTypes extends Binding.Service<
   ) => Effect.Effect<
     () => Effect.Effect<
       notifications.NotificationType[],
-      notifications.ListNotificationTypesError | ResultMissing,
+      notifications.ListNotificationTypesError,
       RuntimeContext
     >
   >

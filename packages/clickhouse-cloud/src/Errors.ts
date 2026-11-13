@@ -1,26 +1,18 @@
 import type * as service from "@distilled.cloud/clickhouse-cloud/service";
 import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
 
 /**
- * ClickHouse Cloud answered a call without the `result` its envelope always
- * carries on success, so there is nothing to read the resource from.
+ * A create call succeeded but its answer carries no ID for the new object
+ * (the SDK types the ID optional, as ClickHouse's spec does), so nothing
+ * can be read back or deleted through it.
  */
-export class ResultMissing extends Data.TaggedError("ClickHouseCloud.ResultMissing")<{
+export class MissingId extends Data.TaggedError("ClickHouseCloud.MissingId")<{
   readonly operation: string;
 }> {
   override get message() {
-    return `ClickHouse Cloud returned no result for ${this.operation}`;
+    return `ClickHouse Cloud ${this.operation} answered without the new object's ID`;
   }
 }
-
-/** The payload of a successful `{ status, requestId, result }` envelope, or {@link ResultMissing}. */
-export const requireResult =
-  (operation: string) =>
-  <A>(response: { readonly result?: A | undefined }): Effect.Effect<A, ResultMissing> =>
-    response.result === undefined
-      ? Effect.fail(new ResultMissing({ operation }))
-      : Effect.succeed(response.result);
 
 /** The service reached the `failed` state. */
 export class ServiceFailed extends Data.TaggedError("ClickHouseCloud.ServiceFailed")<{

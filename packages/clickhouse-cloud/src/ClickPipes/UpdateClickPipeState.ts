@@ -2,7 +2,6 @@ import type * as pipes from "@distilled.cloud/clickhouse-cloud/click_pipes";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { ClickPipe } from "./ClickPipe.ts";
 
 /**
@@ -46,11 +45,7 @@ export interface UpdateClickPipeState extends Binding.Service<
   ) => Effect.Effect<
     (
       command: "start" | "stop" | "resync",
-    ) => Effect.Effect<
-      pipes.ClickPipe,
-      pipes.UpdateClickPipeStateError | ResultMissing,
-      RuntimeContext
-    >
+    ) => Effect.Effect<pipes.ClickPipe, pipes.UpdateClickPipeStateError, RuntimeContext>
   >
 > {}
 

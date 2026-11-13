@@ -4,7 +4,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 /** A role an invitation assigns. */
@@ -126,22 +125,19 @@ const toAttributes = (
 });
 
 const getInvitation = (organizationId: string, invitationId: string) =>
-  users.getInvitation({ organizationId, invitationId }).pipe(
-    Effect.flatMap(requireResult("getInvitation")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  users
+    .getInvitation({ organizationId, invitationId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findPending = (organizationId: string, email: string) =>
-  users.listInvitations({ organizationId }).pipe(
-    Effect.flatMap(requireResult("listInvitations")),
-    Effect.map((all) => all.find((i) => i.email === email.toLowerCase())),
-  );
+  users
+    .listInvitations({ organizationId })
+    .pipe(Effect.map((all) => all.find((i) => i.email === email.toLowerCase())));
 
 const findMember = (organizationId: string, email: string) =>
-  users.listMembers({ organizationId }).pipe(
-    Effect.flatMap(requireResult("listMembers")),
-    Effect.map((all) => all.find((m) => m.email?.toLowerCase() === email.toLowerCase())),
-  );
+  users
+    .listMembers({ organizationId })
+    .pipe(Effect.map((all) => all.find((m) => m.email?.toLowerCase() === email.toLowerCase())));
 
 export const InvitationProvider = () =>
   Provider.effect(
@@ -194,13 +190,11 @@ export const InvitationProvider = () =>
         }
         // Ensure
         yield* session.note(`Inviting ${news.email}...`);
-        const created = yield* users
-          .createInvitation({
-            organizationId,
-            email: news.email,
-            assignedRoleIds: news.assignedRoleIds,
-          })
-          .pipe(Effect.flatMap(requireResult("createInvitation")));
+        const created = yield* users.createInvitation({
+          organizationId,
+          email: news.email,
+          assignedRoleIds: news.assignedRoleIds,
+        });
         return toAttributes(organizationId, created, undefined);
       }),
       delete: Effect.fn(function* ({ output }) {

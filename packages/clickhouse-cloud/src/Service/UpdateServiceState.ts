@@ -2,7 +2,6 @@ import type * as service from "@distilled.cloud/clickhouse-cloud/service";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -65,11 +64,7 @@ export interface UpdateServiceState extends Binding.Service<
   ) => Effect.Effect<
     (
       command: ServiceStateCommand,
-    ) => Effect.Effect<
-      service.Service,
-      service.UpdateServiceStateError | ResultMissing,
-      RuntimeContext
-    >
+    ) => Effect.Effect<service.Service, service.UpdateServiceStateError, RuntimeContext>
   >
 > {}
 

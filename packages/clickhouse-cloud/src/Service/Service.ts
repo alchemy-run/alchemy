@@ -8,12 +8,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import {
-  requireResult,
-  ResultMissing,
-  ServiceDeletionProtected,
-  ServiceLimitReached,
-} from "../Errors.ts";
+import { ServiceDeletionProtected, ServiceLimitReached, MissingId } from "../Errors.ts";
 import {
   hasOwnerTags,
   INSTANCE_TAG,
@@ -586,9 +581,7 @@ const sameEntry = (
  * and logical ID.
  */
 const findOwned = Effect.fn(function* (id: string, instanceId: string, organizationId: string) {
-  const services = yield* service
-    .listServices({ organizationId })
-    .pipe(Effect.flatMap(requireResult("listServices")));
+  const services = yield* service.listServices({ organizationId });
   for (const candidate of services) {
     if (candidate.id === undefined || isGone(candidate.state)) continue;
     const sameInstance = (candidate.tags ?? []).some(
@@ -635,19 +628,16 @@ export const ServiceProvider = () =>
     Service,
     Effect.gen(function* () {
       const readRouting = (organizationId: string, serviceId: string) =>
-        service.getReplicaAwareRouting({ organizationId, serviceId }).pipe(
-          Effect.flatMap(requireResult("getReplicaAwareRouting")),
-          Effect.map((r) => ({ http: r.httpEnabled, native: r.nativeEnabled })),
-        );
+        service
+          .getReplicaAwareRouting({ organizationId, serviceId })
+          .pipe(Effect.map((r) => ({ http: r.httpEnabled, native: r.nativeEnabled })));
 
       return {
         stables: ["serviceId", "organizationId", "provider", "region", "createdAt"],
         nuke: { dependsOn: ["ClickHouseCloud.Organization.ByocInfrastructure"] },
         list: Effect.fn(function* () {
           const organizationId = yield* currentOrganizationId;
-          const services = yield* service
-            .listServices({ organizationId })
-            .pipe(Effect.flatMap(requireResult("listServices")));
+          const services = yield* service.listServices({ organizationId });
           return services
             .filter((s) => s.id !== undefined && !isGone(s.state) && isAlchemyTagged(s.tags))
             .map((s) =>
@@ -686,9 +676,7 @@ export const ServiceProvider = () =>
           if (olds?.name === undefined) return undefined;
           // A service with the user's explicit name but without our tags
           // belongs to someone else: adopting it needs `--adopt`.
-          const services = yield* service
-            .listServices({ organizationId })
-            .pipe(Effect.flatMap(requireResult("listServices")));
+          const services = yield* service.listServices({ organizationId });
           const named = services.find((s) => s.name === olds.name && !isGone(s.state));
           // Another generation of this logical ID (the one a replacement
           // replaces) is not someone else's service, and not this one.
@@ -758,7 +746,6 @@ export const ServiceProvider = () =>
                     new ServiceLimitReached({ organizationId, serviceName: name, cause }),
                   ),
                 ),
-                Effect.flatMap(requireResult("createService")),
               );
             // The generated password is returned only now.
             if (created.password !== undefined) {
@@ -768,7 +755,7 @@ export const ServiceProvider = () =>
             }
             passwordDigest = undefined;
             if (created.service?.id === undefined) {
-              return yield* new ResultMissing({ operation: "createService (service id)" });
+              return yield* new MissingId({ operation: "createService" });
             }
             serviceId = created.service.id;
             current = yield* settle(organizationId, serviceId, session);
@@ -838,9 +825,7 @@ export const ServiceProvider = () =>
               : {}),
           };
           if (Object.keys(patch).length > 0) {
-            current = yield* service
-              .updateService({ organizationId, serviceId, ...patch })
-              .pipe(Effect.flatMap(requireResult("updateService")));
+            current = yield* service.updateService({ organizationId, serviceId, ...patch });
           }
 
           // Sync scaling: only the props the user declared, sent together
@@ -878,14 +863,12 @@ export const ServiceProvider = () =>
               (wantHttp !== undefined && wantHttp !== observedRouting.http) ||
               (wantNative !== undefined && wantNative !== observedRouting.native)
             ) {
-              const updated = yield* service
-                .updateReplicaAwareRouting({
-                  organizationId,
-                  serviceId,
-                  httpEnabled: wantHttp,
-                  nativeEnabled: wantNative,
-                })
-                .pipe(Effect.flatMap(requireResult("updateReplicaAwareRouting")));
+              const updated = yield* service.updateReplicaAwareRouting({
+                organizationId,
+                serviceId,
+                httpEnabled: wantHttp,
+                nativeEnabled: wantNative,
+              });
               routing = { http: updated.httpEnabled, native: updated.nativeEnabled };
             } else {
               routing = observedRouting;

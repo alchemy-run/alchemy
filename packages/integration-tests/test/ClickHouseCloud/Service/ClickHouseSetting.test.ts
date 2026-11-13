@@ -46,7 +46,7 @@ test.provider.skipIf(needsService || !settingsApi)(
       const listed = (serviceId: string) =>
         service
           .listServiceClickHouseSettings({ organizationId, serviceId })
-          .pipe(Effect.map(({ result }) => result?.settings ?? []));
+          .pipe(Effect.map((r) => r.settings ?? []));
 
       const first = yield* stack.deploy(declare(4));
       expect(first.value).toEqual(4);

@@ -2,7 +2,6 @@ import * as billing from "@distilled.cloud/clickhouse-cloud/billing";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindOrganization } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import type { Organization } from "../Organization/Organization.ts";
 import { GetUsageCost, type GetUsageCostRequest } from "./GetUsageCost.ts";
 
@@ -18,14 +17,12 @@ export const GetUsageCostHttp = Layer.effect(
       ]);
       return (request: GetUsageCostRequest) =>
         run((ids) =>
-          billing
-            .getUsageCost({
-              ...ids,
-              from_date: request.fromDate,
-              to_date: request.toDate,
-              filter: request.filter,
-            })
-            .pipe(Effect.flatMap(requireResult("getUsageCost"))),
+          billing.getUsageCost({
+            ...ids,
+            from_date: request.fromDate,
+            to_date: request.toDate,
+            filter: request.filter,
+          }),
         );
     });
   }),

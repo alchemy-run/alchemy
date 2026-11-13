@@ -2,7 +2,6 @@ import type * as stack from "@distilled.cloud/clickhouse-cloud/click_stack";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ResultMissing } from "../Errors.ts";
 import type { Alert } from "./Alert.ts";
 
 /**
@@ -49,7 +48,7 @@ export interface GetClickStackAlert extends Binding.Service<
   ) => Effect.Effect<
     () => Effect.Effect<
       stack.ClickStackAlertResponse,
-      stack.GetClickStackAlertError | ResultMissing,
+      stack.GetClickStackAlertError,
       RuntimeContext
     >
   >

@@ -6,7 +6,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import { isOwnedName, resolveName } from "../internal/Names.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -107,10 +106,9 @@ const toAttributes = (
 });
 
 const getQuery = (organizationId: string, serviceId: string, queryId: string) =>
-  saved.getSavedQuery({ organizationId, serviceId, queryId }).pipe(
-    Effect.flatMap(requireResult("getSavedQuery")),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
+  saved
+    .getSavedQuery({ organizationId, serviceId, queryId })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByName = (organizationId: string, serviceId: string, name: string) =>
   saved.listSavedQueries.items({ organizationId, serviceId }).pipe(
@@ -170,9 +168,7 @@ export const SavedQueryProvider = () =>
           : yield* findByName(organizationId, serviceId, name);
         // Ensure
         if (observed === undefined) {
-          const created = yield* saved
-            .createSavedQuery({ organizationId, serviceId, ...body })
-            .pipe(Effect.flatMap(requireResult("createSavedQuery")));
+          const created = yield* saved.createSavedQuery({ organizationId, serviceId, ...body });
           return toAttributes(organizationId, serviceId, created);
         }
         // Sync: a PUT carrying the whole query.
@@ -185,9 +181,12 @@ export const SavedQueryProvider = () =>
         ) {
           return attrs;
         }
-        const updated = yield* saved
-          .updateSavedQuery({ organizationId, serviceId, queryId: observed.id, ...body })
-          .pipe(Effect.flatMap(requireResult("updateSavedQuery")));
+        const updated = yield* saved.updateSavedQuery({
+          organizationId,
+          serviceId,
+          queryId: observed.id,
+          ...body,
+        });
         return toAttributes(organizationId, serviceId, updated);
       }),
       delete: Effect.fn(function* ({ output }) {

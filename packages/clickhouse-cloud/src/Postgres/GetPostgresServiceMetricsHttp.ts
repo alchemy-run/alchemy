@@ -2,7 +2,6 @@ import * as postgres from "@distilled.cloud/clickhouse-cloud/postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindPostgres } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import {
   GetPostgresServiceMetrics,
   type GetPostgresServiceMetricsRequest,
@@ -20,14 +19,12 @@ export const GetPostgresServiceMetricsHttp = Layer.effect(
       ]);
       return (request: GetPostgresServiceMetricsRequest) =>
         run((ids) =>
-          postgres
-            .getPostgresServiceMetrics({
-              ...ids,
-              from_date: request.fromDate,
-              to_date: request.toDate,
-              bucket_size_seconds: request.bucketSizeSeconds,
-            })
-            .pipe(Effect.flatMap(requireResult("getPostgresServiceMetrics"))),
+          postgres.getPostgresServiceMetrics({
+            ...ids,
+            from_date: request.fromDate,
+            to_date: request.toDate,
+            bucket_size_seconds: request.bucketSizeSeconds,
+          }),
         );
     });
   }),

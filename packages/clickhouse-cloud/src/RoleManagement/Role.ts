@@ -5,7 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult, SystemRoleImmutable } from "../Errors.ts";
+import { SystemRoleImmutable } from "../Errors.ts";
 import { isGeneratedName, isOwnedName, resolveName } from "../internal/Names.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -217,15 +217,11 @@ export const RoleProvider = () =>
   Provider.effect(
     Role,
     Effect.gen(function* () {
-      const listRoles = (organizationId: string) =>
-        roles
-          .listOrganizationRoles({ organizationId })
-          .pipe(Effect.flatMap(requireResult("listOrganizationRoles")));
+      const listRoles = (organizationId: string) => roles.listOrganizationRoles({ organizationId });
       const getRole = (organizationId: string, roleId: string) =>
-        roles.getOrganizationRole({ organizationId, roleId }).pipe(
-          Effect.flatMap(requireResult("getOrganizationRole")),
-          Effect.catchTag("NotFound", () => Effect.undefined),
-        );
+        roles
+          .getOrganizationRole({ organizationId, roleId })
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       const findByName = (organizationId: string, name: string) =>
         Effect.map(listRoles(organizationId), (all) =>
           all.find((r) => r.name === name && r.type === "custom"),
@@ -274,14 +270,12 @@ export const RoleProvider = () =>
           // Ensure
           const created = observed === undefined;
           if (observed === undefined) {
-            observed = yield* roles
-              .createOrganizationRole({
-                organizationId,
-                name,
-                actors: news.actors ?? [],
-                policies: news.policies,
-              })
-              .pipe(Effect.flatMap(requireResult("createOrganizationRole")));
+            observed = yield* roles.createOrganizationRole({
+              organizationId,
+              name,
+              actors: news.actors ?? [],
+              policies: news.policies,
+            });
           }
 
           // Sync only what differs. Observed policies carry the permissions
@@ -301,9 +295,11 @@ export const RoleProvider = () =>
               : {}),
           };
           if (Object.keys(patch).length > 0) {
-            observed = yield* roles
-              .updateOrganizationRole({ organizationId, roleId: observed.id!, ...patch })
-              .pipe(Effect.flatMap(requireResult("updateOrganizationRole")));
+            observed = yield* roles.updateOrganizationRole({
+              organizationId,
+              roleId: observed.id!,
+              ...patch,
+            });
           }
           return toAttributes(organizationId, observed);
         }),

@@ -3,7 +3,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import { requireResult } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface OrganizationProps {
@@ -137,9 +136,7 @@ const toAttributes = (
 });
 
 const getOrganization = (organizationId: string) =>
-  organization
-    .getOrganization({ organizationId })
-    .pipe(Effect.flatMap(requireResult("getOrganization")));
+  organization.getOrganization({ organizationId });
 
 /** Send only the declared settings that differ from the organization. */
 const apply = Effect.fn(function* (
@@ -154,9 +151,7 @@ const apply = Effect.fn(function* (
       : {}),
   };
   if (Object.keys(patch).length === 0) return observed;
-  return yield* organization
-    .updateOrganization({ organizationId, ...patch })
-    .pipe(Effect.flatMap(requireResult("updateOrganization")));
+  return yield* organization.updateOrganization({ organizationId, ...patch });
 });
 
 export const OrganizationProvider = () =>

@@ -2,7 +2,6 @@ import * as organization from "@distilled.cloud/clickhouse-cloud/organization";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindOrganization } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../Errors.ts";
 import { ListActivities, type ListActivitiesRequest } from "./ListActivities.ts";
 import type { Organization } from "./Organization.ts";
 
@@ -18,9 +17,11 @@ export const ListActivitiesHttp = Layer.effect(
       ]);
       return (request?: ListActivitiesRequest) =>
         run((ids) =>
-          organization
-            .listActivities({ ...ids, from_date: request?.fromDate, to_date: request?.toDate })
-            .pipe(Effect.flatMap(requireResult("listActivities"))),
+          organization.listActivities({
+            ...ids,
+            from_date: request?.fromDate,
+            to_date: request?.toDate,
+          }),
         );
     });
   }),
