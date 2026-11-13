@@ -1,9 +1,8 @@
-import { Query } from "@distilled.cloud/core/query";
-import { Railway } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { environmentPatchCommit, readEnvironmentConfig } from "./GraphQL.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 
 export class ServiceWaitForChecksNotApplied extends Data.TaggedError(
@@ -47,17 +46,6 @@ interface ServiceTarget {
   readonly serviceId: string;
 }
 
-const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
-  config: Railway.environment(args).config,
-}));
-
-// `skipDeploys`: this setting gates later deploys. Flipping it must not
-// start one of its own.
-const environmentPatchCommit = Query.fn(
-  (args: { environmentId: string; commitMessage: string; patch: unknown; skipDeploys: boolean }) =>
-    Railway.environmentPatchCommit(args),
-);
-
 const readCheckSuites = (target: ServiceTarget) =>
   readEnvironmentConfig({
     id: target.environmentId,
@@ -90,6 +78,7 @@ export const syncCheckSuites = Effect.fn(function* (
               environmentId: input.environmentId,
               commitMessage: `Set Railway service wait for CI to ${desired}`,
               patch: { services: { [input.serviceId]: { source: { checkSuites: desired } } } },
+              // This setting gates later deploys; flipping it must not start one.
               skipDeploys: true,
             }).pipe(Effect.as(true)),
       ),
