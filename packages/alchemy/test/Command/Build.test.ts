@@ -288,3 +288,35 @@ test.provider(
     }),
   { tags: ["unit", "local"], timeout: 60000 },
 );
+
+test.provider(
+  "rebuilds when a single-file output changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      yield* stack.destroy();
+
+      const fixture = yield* makeTemporaryFixture();
+      const artifact = pathe.join(fixture.cwd, "artifact.txt");
+      const deploy = () =>
+        stack.deploy(
+          Command.Build("test-build", {
+            command: "cp src/main.ts artifact.txt",
+            cwd: fixture.cwd,
+            outdir: "artifact.txt",
+            memo: { include: ["src/**"], lockfile: false },
+          }),
+        );
+
+      const build1 = yield* deploy();
+      const built = yield* fs.readFileString(artifact);
+
+      yield* fs.writeFileString(artifact, "tampered\n");
+      const build2 = yield* deploy();
+      expect(yield* fs.readFileString(artifact)).toBe(built);
+      expect(build2.hash).toMatchObject(build1.hash);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"], timeout: 60000 },
+);
