@@ -54,6 +54,9 @@
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
     },
     {
@@ -161,6 +164,9 @@
     },
     {
       "path": "./packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./packages/digitalocean/tsconfig.json"
     },
     {
       "path": "./packages/railway/tsconfig.json"
