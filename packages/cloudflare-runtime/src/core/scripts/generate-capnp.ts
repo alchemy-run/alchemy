@@ -2,7 +2,7 @@ import { $ } from "bun";
 
 try {
   // capnp-es uses the TypeScript compiler API, which TypeScript 7 no longer exports.
-  await $`pnpm --package=typescript@5.9.3 --package=capnp-es@0.0.16 dlx capnp-es node_modules/workerd/workerd.capnp -ots`;
+  await $`pnpm --package=typescript@5.9.3 --package=capnp-es@0.0.17 dlx capnp-es node_modules/workerd/workerd.capnp -ots`;
 } catch (error) {
   console.error(error);
   console.error(

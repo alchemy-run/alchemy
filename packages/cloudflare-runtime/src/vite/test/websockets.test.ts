@@ -68,10 +68,12 @@ const setup = async (): Promise<Harness> => {
 
   const clientServer = NodeHttp.createServer((_req, res) => res.end("OK"));
   const upstreamPort = await listen(upstreamServer);
+  // As in dev with `server.ws` enabled: Vite's HMR server owns `vite*` upgrades.
   const removeListener = handleWebSocket(
     clientServer,
     `http://127.0.0.1:${upstreamPort}`,
     "websocket-secret",
+    true,
   );
   const clientPort = await listen(clientServer);
 
@@ -197,6 +199,87 @@ describe("handleWebSocket", () => {
     expect(harness.upstreamCalls).toHaveLength(0);
     expect(destroySpy).not.toHaveBeenCalled();
     expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  test("closes vite HMR upgrades when Vite's WebSocket server is disabled", async () => {
+    const server = NodeHttp.createServer();
+    const remove = handleWebSocket(
+      server,
+      `http://127.0.0.1:${harness.upstreamPort}`,
+      "websocket-secret",
+      false,
+    );
+    const fakeReq = makeFakeRequest({ host: "localhost", protocol: "vite-hmr" });
+    const fakeSocket = new NodeNet.Socket();
+    const destroySpy = vi.spyOn(fakeSocket, "destroy");
+
+    server.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(harness.upstreamCalls).toHaveLength(0);
+    expect(destroySpy).toHaveBeenCalled();
+    remove();
+  });
+
+  test("leaves Vite DevTools upgrades to their own handler", async () => {
+    const fakeReq = makeFakeRequest({
+      host: `127.0.0.1:${harness.clientPort}`,
+      url: "/__devtools/__ws",
+    });
+    const fakeSocket = new NodeNet.Socket();
+    const destroySpy = vi.spyOn(fakeSocket, "destroy");
+    const writeSpy = vi.spyOn(fakeSocket, "write");
+
+    harness.clientServer.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(harness.upstreamCalls).toHaveLength(0);
+    expect(destroySpy).not.toHaveBeenCalled();
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["/live?token=a%2Fb&token=+", "/live?token=a%2Fb&token=+"],
+    ["//attacker.example/live", "//attacker.example/live"],
+    ["///attacker.example:8000/live", "///attacker.example:8000/live"],
+    [String.raw`/\attacker.example/live`, "//attacker.example/live"],
+    [
+      "/%2f%5C/live?next=//attacker.example&empty=&flag",
+      "/%2f%5C/live?next=//attacker.example&empty=&flag",
+    ],
+  ])("keeps upgrade target %s on the runtime and the client's origin", async (target, expected) => {
+    harness.upstreamWss.on("connection", (ws) => ws.close());
+    const host = `127.0.0.1:${harness.clientPort}`;
+    // Raw bytes: a WebSocket client would normalize the target first.
+    const socket = NodeNet.connect(harness.clientPort, "127.0.0.1");
+    const response = new Promise<string>((resolve, reject) => {
+      socket.once("data", (chunk) => resolve(chunk.toString()));
+      socket.once("close", () => reject(new Error("closed without an answer")));
+      socket.on("error", reject);
+    });
+    socket.write(
+      [
+        `GET ${target} HTTP/1.1`,
+        `Host: ${host}`,
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+        "Sec-WebSocket-Version: 13",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+    try {
+      expect(await response).toMatch(/^HTTP\/1\.1 101/);
+    } finally {
+      socket.destroy();
+    }
+
+    expect(harness.upstreamCalls).toHaveLength(1);
+    expect(harness.upstreamCalls[0]!.url).toBe(expected);
+    expect(harness.upstreamCalls[0]!.headers["alchemy-runtime-original-url"]).toBe(
+      `http://${host}${expected}`,
+    );
   });
 
   test("forwards sandbox-preview-URL upgrades even with vite protocol", async () => {

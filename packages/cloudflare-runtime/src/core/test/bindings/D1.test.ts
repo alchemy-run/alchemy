@@ -345,6 +345,24 @@ layer(D1TestLayer)("D1 binding", (it) => {
     expect(result.results).toEqual(expectedResults);
   });
 
+  d1Test("D1Database: batch skips comment-only statements", async ({ db, tableColours }) => {
+    // Comment-only statements are skipped with or without leading whitespace
+    const batchResults = await db.batch<Pick<ColourRow, "name">>([
+      db.prepare("-- comment at offset 0"),
+      db.prepare("  -- comment after whitespace"),
+      db.prepare("--comment\n\t-- another comment\n"),
+      db.prepare(`-- leading comment\nSELECT name FROM ${tableColours} WHERE id = 1`),
+    ]);
+    expect(batchResults.length).toBe(1);
+    expect(batchResults[0].success).toBe(true);
+    expect(batchResults[0].results).toEqual([{ name: "red" }]);
+
+    // A batch with only comment-only statements has no SQL to run
+    await expect(throwCause(db.batch([db.prepare("-- comment at offset 0")]))).rejects.toThrow(
+      "No SQL statements detected.",
+    );
+  });
+
   d1Test("D1Database: exec", async ({ db, tableColours }) => {
     // Check with single statement
     let execResult = await db.exec(`UPDATE ${tableColours} SET name = 'Red' WHERE name = 'red'`);
@@ -1051,6 +1069,19 @@ const RPC_CASES: Record<string, string> = {
     ] });
     return Response.json(result.results.map(({ data }) => data));
   `,
+  bookmarkOnlyWhenRequested: `
+    const queries = [{ sql: "SELECT 1 AS answer" }];
+    const omitted = await DB.query({ queries });
+    const empty = await DB.query({ queries, bookmark: "" });
+    const whitespace = await DB.query({ queries, bookmark: "  " });
+    const withBookmark = await DB.query({ queries, bookmark: "first-unconstrained" });
+    return Response.json({
+      omitted: "bookmark" in omitted,
+      empty: "bookmark" in empty,
+      whitespace: "bookmark" in whitespace,
+      withBookmark: withBookmark.bookmark,
+    });
+  `,
   emptyBatch: `
     return Response.json(await DB.query({ queries: [] }));
   `,
@@ -1261,6 +1292,20 @@ layer(d1QueryLayer("RPC"))("D1 query RPC", (it) => {
     }),
   );
 
+  // Regression test for https://github.com/cloudflare/workers-sdk/issues/16549.
+  it.effect("query returns a bookmark only when the request has a bookmark", () =>
+    Effect.gen(function* () {
+      const { status, body } = yield* callCase("bookmarkOnlyWhenRequested");
+      expect(body).toEqual({
+        omitted: false,
+        empty: false,
+        whitespace: false,
+        withBookmark: expect.stringMatching(/.+/),
+      });
+      expect(status).toBe(200);
+    }),
+  );
+
   it.effect("bindings route RPC queries to separate databases", () =>
     Effect.gen(function* () {
       const { status, body } = yield* callCase("separateDatabases");
@@ -1293,7 +1338,7 @@ layer(d1QueryLayer("RPC"))("D1 query RPC", (it) => {
     {
       name: "comment-only",
       path: "commentOnlyBatch",
-      message: "SQL code did not contain a statement.",
+      message: "No SQL statements detected.",
     },
   ]) {
     it.effect(`query rejects a ${name} batch without returning partial results`, () =>
@@ -1373,6 +1418,24 @@ export default {
             ok: true,
             results: (await db.prepare("SELECT * FROM entries").all()).results,
           });
+        case "/session-select":
+          return Response.json({
+            ok: true,
+            results: (await db.withSession().prepare("SELECT * FROM entries").all()).results,
+          });
+        case "/insert-read":
+          await db.prepare("INSERT INTO entries (value) VALUES ('read')").run();
+          return Response.json({ ok: true });
+        case "/read-only": {
+          const statement = db.prepare("SELECT value FROM entries");
+          return Response.json({
+            ok: true,
+            all: await statement.all(),
+            first: await statement.first("value"),
+            raw: await statement.raw(),
+            batch: await db.batch([statement, statement]),
+          });
+        }
         case "/session-start": {
           const session = db.withSession("first-primary");
           await session.prepare("SELECT * FROM entries").all();
@@ -1463,6 +1526,14 @@ const withPersistedDatabase = <A>(
     }).pipe(Effect.provide(runtimeLayer), Effect.scoped);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
+/** Holds the SQLite write lock from the external connection. */
+const lockForWrites = (external: DatabaseSync) =>
+  // The runtime may still be flushing its own write; retry briefly.
+  Effect.try(() => external.exec("BEGIN IMMEDIATE")).pipe(
+    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 9 }),
+    Effect.orDie,
+  );
+
 describe("D1 session bookmark failures", () => {
   // Regression test for https://github.com/cloudflare/workers-sdk/issues/14916.
   it.live(
@@ -1470,17 +1541,13 @@ describe("D1 session bookmark failures", () => {
     () =>
       withPersistedDatabase(({ worker, external }) =>
         Effect.gen(function* () {
-          // The runtime may still be flushing its own write; retry briefly.
-          yield* Effect.try(() => external.exec("BEGIN IMMEDIATE")).pipe(
-            Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 9 }),
-            Effect.orDie,
-          );
+          yield* lockForWrites(external);
 
           // A read succeeds while another connection holds the write lock,
           // but writing the session bookmark fails. The error must stay
           // catchable.
           const failed = yield* worker
-            .fetchJson<SessionResponse>("/select")
+            .fetchJson<SessionResponse>("/session-select")
             .pipe(Effect.ensuring(Effect.sync(() => external.exec("ROLLBACK"))));
           expect(failed).toMatchObject({
             ok: false,
@@ -1490,6 +1557,33 @@ describe("D1 session bookmark failures", () => {
 
           const after = yield* worker.fetchJson<SessionResponse>("/select");
           expect(after).toEqual({ ok: true, results: [] });
+        }),
+      ),
+    { timeout: 30_000 },
+  );
+
+  // Regression test for https://github.com/cloudflare/workers-sdk/issues/16549.
+  it.live(
+    "does not write for read-only queries outside a session",
+    () =>
+      withPersistedDatabase(({ worker, external }) =>
+        Effect.gen(function* () {
+          expect(yield* worker.fetchJson<SessionResponse>("/insert-read")).toEqual({ ok: true });
+          yield* lockForWrites(external);
+
+          // Any write, such as storing a session bookmark, fails while
+          // another connection holds the write lock. Reads outside a session
+          // must not write.
+          const read = yield* worker
+            .fetchJson<Record<string, unknown>>("/read-only")
+            .pipe(Effect.ensuring(Effect.sync(() => external.exec("ROLLBACK"))));
+          expect(read).toMatchObject({
+            ok: true,
+            all: { results: [{ value: "read" }] },
+            first: "read",
+            raw: [["read"]],
+            batch: [{ results: [{ value: "read" }] }, { results: [{ value: "read" }] }],
+          });
         }),
       ),
     { timeout: 30_000 },

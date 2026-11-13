@@ -325,7 +325,7 @@ export const Nextjs: {
                 }
               : {}),
           },
-          // OpenNext requires Node.js APIs. The 2026-08-31 default date
+          // OpenNext requires Node.js APIs. The 2026-11-13 default date
           // enables both nodejs_compat modes, so no redundant flag is sent.
           compatibility: {
             date: props?.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE,

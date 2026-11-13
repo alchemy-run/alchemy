@@ -38,7 +38,9 @@ interface EdgeState {
   /** base URL of the fake edge server; set by each test before starting a worker */
   edgeUrl: string;
   /** response the fake edge sends while the session generation is 1 (the stale session) */
-  staleResponse: { status: number; body: string };
+  staleResponse: { status: number; body: string; headers?: Record<string, string> };
+  /** response the fake edge sends for every session generation, when set */
+  edgeResponse?: { status: number; body: string; headers: Record<string, string> };
 }
 
 const state: EdgeState = {
@@ -52,6 +54,7 @@ const resetState = (staleResponse: EdgeState["staleResponse"]) =>
     state.deployCount = 0;
     state.edgeUrl = "";
     state.staleResponse = staleResponse;
+    state.edgeResponse = undefined;
   });
 
 /**
@@ -83,7 +86,10 @@ const startFakeEdge = Effect.acquireRelease(
   Effect.callback<http.Server>((resume) => {
     const server = http.createServer((req, res) => {
       const generation = req.headers["x-preview-generation"];
-      if (generation === "1") {
+      if (state.edgeResponse) {
+        res.writeHead(state.edgeResponse.status, state.edgeResponse.headers);
+        res.end(state.edgeResponse.body);
+      } else if (generation === "1") {
         res.writeHead(state.staleResponse.status, {
           "content-type": "text/plain",
         });
@@ -203,6 +209,74 @@ layer(testLayer, { excludeTestServices: true })("RemoteBindings stale session", 
         // must cost exactly one more deploy no matter how many requests were
         // in flight when it was detected.
         expect(state.deployCount).toBe(2);
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  const ACCESS_LOGIN_URL =
+    "https://team.cloudflareaccess.com/cdn-cgi/access/login/worker.example.workers.dev?meta=secret-jwt";
+
+  it.effect(
+    "reports an Access login redirect instead of following it",
+    () =>
+      Effect.gen(function* () {
+        yield* resetState({ status: 400, body: "" });
+        state.edgeResponse = {
+          status: 302,
+          body: "",
+          headers: { location: ACCESS_LOGIN_URL, "set-cookie": "CF_AppSession=abc" },
+        };
+        yield* startFakeEdge;
+        const worker = yield* startWorkerWithRemoteBinding("access-login-redirect");
+
+        const result = yield* fetchBody(worker);
+        expect(result.status).toBe(401);
+        expect(result.body).toContain("redirected this remote bindings request to its login page");
+        expect(result.body).toContain('binding "SVC"');
+        expect(result.body).not.toContain("secret-jwt");
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "reports a 403 Access block page",
+    () =>
+      Effect.gen(function* () {
+        yield* resetState({ status: 400, body: "" });
+        state.edgeResponse = {
+          status: 403,
+          body: "<html><title>Error ・ Cloudflare Access</title></html>",
+          headers: { "content-type": "text/html" },
+        };
+        yield* startFakeEdge;
+        const worker = yield* startWorkerWithRemoteBinding("access-blocked");
+
+        const result = yield* fetchBody(worker);
+        expect(result.status).toBe(403);
+        expect(result.body).toContain("Cloudflare Access blocked this remote bindings request");
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "passes through Access-like responses the remote worker forwarded from the binding",
+    () =>
+      Effect.gen(function* () {
+        yield* resetState({ status: 400, body: "" });
+        state.edgeResponse = {
+          status: 403,
+          body: "the binding's own Cloudflare Access page",
+          headers: { "content-type": "text/plain", "mf-forwarded-response": "true" },
+        };
+        yield* startFakeEdge;
+        const worker = yield* startWorkerWithRemoteBinding("access-forwarded");
+
+        const response = yield* worker.fetch("/");
+        expect(response.status).toBe(403);
+        expect(response.headers.has("mf-forwarded-response")).toBe(false);
+        expect(yield* Effect.promise(() => response.text())).toBe(
+          "the binding's own Cloudflare Access page",
+        );
       }).pipe(Effect.scoped),
     { timeout: 30_000 },
   );

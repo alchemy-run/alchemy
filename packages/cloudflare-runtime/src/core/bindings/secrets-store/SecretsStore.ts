@@ -41,6 +41,7 @@ import {
   SERVICE_SECRETS_STORE_SECRET,
   SERVICE_SECRETS_STORE_STORAGE,
 } from "./SecretsStoreOptions.shared.ts";
+import { ensureSecretsStoreDirectory } from "./SecretsStorePersistence.ts";
 
 export class SecretsStore extends Plugin.Service<
   SecretsStore,
@@ -85,17 +86,10 @@ export const SecretsStoreLive = Layer.effect(
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
-      const persistPath = path.join(storageDiskPath, "secrets-store");
-      yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError((cause) =>
-          ConfigError.make({
-            subtag: "SecretsStore",
-            message: `Failed to create Secrets Store persistence directory "${persistPath}": ${cause.message}`,
-            hint: "Ensure the storage directory is writable.",
-            detail: { persistPath },
-            cause,
-          }),
-        ),
+      const persistPath = yield* ensureSecretsStoreDirectory(
+        path.join(storageDiskPath, "secrets-store"),
+      ).pipe(
+        Effect.provide([Layer.succeed(FileSystem.FileSystem, fs), Layer.succeed(Path.Path, path)]),
       );
       return {
         name: SERVICE_SECRETS_STORE_STORAGE,

@@ -81,6 +81,15 @@ export type Worker_DockerConfiguration = {
    * from containers back through workerd (e.g. for `interceptOutboundHttp`).
    */
   containerEgressInterceptorImage?: string;
+  /**
+   * Scopes the Docker resources workerd creates to a session chosen by the
+   * supervisor. Container and sidecar names include it, so different sessions
+   * never share or adopt each other's containers, while a workerd started with
+   * the same session adopts the ones an earlier process left running.
+   * Session-scoped resources carry the label `dev.workerd.session=<sessionId>`.
+   * Only letters, digits, `_`, `.` and `-`.
+   */
+  sessionId?: string;
 };
 
 export type Worker_ContainerEngine = {

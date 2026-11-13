@@ -67,6 +67,8 @@ export type EncodedValue =
       readonly name: string;
       readonly message: string;
       readonly stack?: string;
+      /** Primitive own properties, e.g. a binding error's `code`. */
+      readonly properties?: Record<string, ErrorProperty>;
     }
   | {
       readonly $: "durable-object-id";
@@ -114,6 +116,34 @@ export type EnvBindingDescriptor =
       readonly kind: "stub";
       readonly className?: string;
     };
+
+type ErrorProperty = string | number | boolean | null;
+
+const RESERVED_ERROR_KEYS = new Set(["name", "message", "stack", "cause"]);
+
+const isErrorProperty = (value: unknown): value is ErrorProperty =>
+  value === null ||
+  typeof value === "string" ||
+  typeof value === "number" ||
+  typeof value === "boolean";
+
+/**
+ * Errors from bindings carry machine-readable properties such as Artifacts'
+ * `code` and `numericCode`. Keep primitive own properties, non-enumerable ones
+ * included (like workerd's `enhanced_error_serialization`), so Node callers can
+ * branch on them. Non-primitive properties are skipped so they cannot make an
+ * error unserializable.
+ */
+const errorProperties = (error: Error): Record<string, ErrorProperty> | undefined => {
+  let properties: Record<string, ErrorProperty> | undefined;
+  for (const key of Object.getOwnPropertyNames(error)) {
+    const property: unknown = Reflect.get(error, key);
+    if (!RESERVED_ERROR_KEYS.has(key) && isErrorProperty(property)) {
+      (properties ??= {})[key] = property;
+    }
+  }
+  return properties;
+};
 
 // oxlint-disable-next-line effecttsgo/extends-native-error -- plain wire-protocol code shared with the proxy worker (no Effect); `name` identifies the error
 export class UnsupportedValueError extends Error {
@@ -194,6 +224,7 @@ export const encodeValue = (
       name: value.name,
       message: value.message,
       stack: value.stack,
+      properties: errorProperties(value),
     };
   }
   if (Array.isArray(value)) {
@@ -267,6 +298,16 @@ export const decodeValue = (
       const error = new Error(encoded.message);
       error.name = encoded.name;
       if (encoded.stack !== undefined) error.stack = encoded.stack;
+      for (const [key, property] of Object.entries(encoded.properties ?? {})) {
+        if (!RESERVED_ERROR_KEYS.has(key) && isErrorProperty(property)) {
+          Object.defineProperty(error, key, {
+            value: property,
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          });
+        }
+      }
       return error;
     }
     case "durable-object-id":

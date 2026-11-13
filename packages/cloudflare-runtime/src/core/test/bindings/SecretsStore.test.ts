@@ -273,6 +273,8 @@ describe("SecretsStore binding persistence", () => {
         const path = yield* Path.Path;
 
         const tmp = yield* makeTempDirectory("secrets-store-persist-");
+        // A traversable parent must not expose the workerd-created blobs (#16611).
+        yield* fs.chmod(tmp, 0o755);
 
         const runtimeLayerTempDir = Runtime.RuntimeLive.pipe(
           Layer.provideMerge(RuntimeServices.layerLocalBindings()),
@@ -326,6 +328,12 @@ describe("SecretsStore binding persistence", () => {
         const names = yield* fs.readDirectory(path.join(tmp, "secrets-store"));
         expect(names).toContain("cloudflare-runtime-secrets-store-KVNamespaceObject");
         expect(names).toContain("persist_store");
+        if (process.platform !== "win32") {
+          expect((yield* fs.stat(path.join(tmp, "secrets-store"))).mode & 0o777).toBe(0o700);
+          expect((yield* fs.stat(tmp)).mode & 0o777).toBe(0o755);
+          // Model a directory created by an older version.
+          yield* fs.chmod(path.join(tmp, "secrets-store"), 0o755);
+        }
 
         // "Restarting" keeps persisted data.
         yield* runAgainstStorage((worker) =>
@@ -333,6 +341,9 @@ describe("SecretsStore binding persistence", () => {
             expect(yield* worker.fetchText("/secret")).toBe("persisted-value");
           }),
         );
+        if (process.platform !== "win32") {
+          expect((yield* fs.stat(path.join(tmp, "secrets-store"))).mode & 0o777).toBe(0o700);
+        }
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 30_000 },
   );

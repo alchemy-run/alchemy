@@ -153,6 +153,11 @@ describe.each([
     name: "the Worker's own source map setting",
     userConfig: { environments: { ssr: { build: { sourcemap: "hidden" as const } } } },
   },
+  { name: "a CSS target", userConfig: { build: { cssTarget: ["chrome100", "safari15"] } } },
+  {
+    name: "the Worker's own CSS target",
+    userConfig: { environments: { ssr: { build: { cssTarget: "chrome100" } } } },
+  },
 ])("resolved config matches @cloudflare/vite-plugin with $name", ({ userConfig }) => {
   it.each(["serve", "build"] as const)("%s", async (command) => {
     const expected = await resolve(official(["nodejs_compat"]), command, userConfig);

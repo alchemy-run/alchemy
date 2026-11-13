@@ -15,6 +15,11 @@ export function handleWebSocket(
   httpServer: vite.HttpServer,
   address: string | URL,
   proxySharedSecret: string,
+  /**
+   * Whether Vite's HMR server answers `vite*` upgrades (dev with `server.ws`
+   * enabled). Otherwise, as in preview, they are closed instead of left hanging.
+   */
+  viteWebSocket = false,
 ): () => void {
   const upstreamBase = typeof address === "string" ? new URL(address) : address;
 
@@ -65,14 +70,21 @@ export function handleWebSocket(
     const url = workerRequestUrl(request.url, base);
 
     const isViteRequest = request.headers["sec-websocket-protocol"]?.startsWith("vite") ?? false;
+    const isDevToolsRequest = url.pathname === "/__devtools/__ws";
     const isSandboxRequest = hasSandboxOrigin(url.origin);
 
-    // Vite handles its own HMR upgrades; forward Sandbox preview URLs anyway.
-    if (isViteRequest && !isSandboxRequest) {
+    // Vite handles its own HMR upgrades and Vite DevTools its socket; forward
+    // Sandbox preview URLs anyway.
+    if ((isViteRequest || isDevToolsRequest) && !isSandboxRequest) {
+      // With `server.ws: false` no handler answers HMR upgrades: close them
+      // rather than leave the client waiting.
+      if (isViteRequest && !viteWebSocket) socket.destroy();
       return;
     }
 
-    const target = new URL(url.pathname + url.search, upstreamBase);
+    // Not `new URL(pathname, upstreamBase)`: a `//host/` path would name
+    // another host to connect to (see `workerRequestUrl`).
+    const target = workerRequestUrl(request.url, upstreamBase);
     // A raw TCP tunnel rather than a `node:http` client request: Bun's
     // `node:http` client never emits `upgrade`, so the handshake would hang
     // there. Writing the request head and piping both ways relays the

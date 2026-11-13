@@ -2,6 +2,7 @@ import { isAbsolute, sep } from "node:path";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import ignore from "@alchemy.run/node-utils/ignore";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -43,6 +44,40 @@ export function createPatternMatcher(
   }
 }
 
+/** An ignore file whose encoding cannot be used to match asset paths. */
+export class InvalidAssetsIgnoreError extends Data.TaggedError("InvalidAssetsIgnoreError")<{
+  readonly filePath: string;
+}> {
+  override get message() {
+    return `The .assetsignore file at "${this.filePath}" must be UTF-8 encoded and must not contain null characters. Save the file as UTF-8 and try again.`;
+  }
+}
+
+/** Read ignore patterns without silently replacing undecodable characters. */
+const readAssetsIgnoreFile = Effect.fn(function* (filePath: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const contents = yield* fs.readFile(filePath).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.undefined,
+    ),
+  );
+  if (contents === undefined) {
+    return undefined;
+  }
+  return yield* Effect.try({
+    try: () => {
+      const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(contents);
+      // BOM-less UTF-16 can be valid UTF-8 bytes but cannot form usable patterns.
+      if (text.includes("\0")) {
+        throw new Error("Ignore patterns contain a null character.");
+      }
+      return text;
+    },
+    catch: () => new InvalidAssetsIgnoreError({ filePath }),
+  });
+});
+
 /**
  * Create a function for filtering out ignored assets.
  *
@@ -50,7 +85,6 @@ export function createPatternMatcher(
  * and returns true if the asset should not be ignored.
  */
 export const createAssetsIgnoreFunction = Effect.fn(function* (dir: string) {
-  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const cfAssetIgnorePath = path.join(dir, CF_ASSETS_IGNORE_FILENAME);
 
@@ -62,12 +96,7 @@ export const createAssetsIgnoreFunction = Effect.fn(function* (dir: string) {
     `/${HEADERS_FILENAME}`,
   ];
 
-  const assetsIgnore = yield* fs.readFileString(cfAssetIgnorePath).pipe(
-    Effect.catchIf(
-      (error) => error.reason._tag === "NotFound",
-      () => Effect.undefined,
-    ),
-  );
+  const assetsIgnore = yield* readAssetsIgnoreFile(cfAssetIgnorePath);
   if (assetsIgnore !== undefined) {
     ignorePatterns.push(...assetsIgnore.split("\n"));
   }

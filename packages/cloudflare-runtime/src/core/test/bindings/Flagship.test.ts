@@ -167,6 +167,26 @@ layer(localRuntimeLayer)("Flagship binding", (it) => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("returns flag metadata with resolved evaluations", () =>
+    Effect.gen(function* () {
+      const worker = yield* start("flagship-metadata-test");
+      const metadata = { owner: "growth", ticket: 42, beta: true };
+      yield* seed(worker, "f", booleanFlag({ metadata }));
+
+      expect(
+        yield* evaluate(worker, { method: "getBooleanDetails", key: "f", defaultValue: true }),
+      ).toMatchObject({ value: false, reason: "STATIC", metadata });
+      expect(
+        yield* evaluate(worker, { method: "getStringDetails", key: "f", defaultValue: "x" }),
+      ).toMatchObject({ errorCode: "TYPE_MISMATCH", metadata });
+
+      yield* seed(worker, "f", booleanFlag({ metadata: {} }));
+      expect(
+        yield* evaluate(worker, { method: "getBooleanDetails", key: "f", defaultValue: true }),
+      ).not.toHaveProperty("metadata");
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("matches operators, nested paths and condition groups", () =>
     Effect.gen(function* () {
       const worker = yield* start("flagship-operators-test");
