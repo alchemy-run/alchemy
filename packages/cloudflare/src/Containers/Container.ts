@@ -78,6 +78,7 @@ export type ContainerStartupOptions = cf.ContainerStartupOptions;
 import type {
   DurableObjectContainerProps,
   EffectfulContainerProps,
+  EffectfulDurableObjectContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
@@ -85,9 +86,19 @@ import type {
 export type {
   DurableObjectContainerProps,
   EffectfulContainerProps,
+  EffectfulDurableObjectContainerProps,
   ExternalContainerProps,
   RemoteContainerProps,
 };
+
+/**
+ * Props for an Effect-native (`main`) container's `.make()`: a Durable
+ * Object-managed application (the default), or a fleet one with
+ * `schedulingPolicy: "default"` or `"regional"`.
+ */
+export type MakeContainerProps =
+  | InputProps<EffectfulContainerProps>
+  | InputProps<EffectfulDurableObjectContainerProps>;
 
 /**
  * Props for an image-backed container declaration — either the plain props
@@ -271,8 +282,9 @@ type ContainerShape<Shape> = {
  * ### Native Durable Object Containers
  * Use `schedulingPolicy: "durable_object"` to let a Durable Object pick its
  * image and instance size at runtime. One Container is one image: `image`
- * copies a registry image, `context`/`dockerfile` builds one. Alchemy pins the
- * image to a digest and prepares it before the Worker is uploaded.
+ * copies a registry image, `context`/`dockerfile` builds one, and `main`
+ * bundles an Effect program into one. Alchemy pins the image to a digest and
+ * prepares it before the Worker is uploaded.
  *
  * `yield* Node` returns the container's handle without starting it.
  * `start()` starts the Container's own image. Its `exec` takes an argument
@@ -376,6 +388,101 @@ type ContainerShape<Shape> = {
  * stopped container or invoke a shell; pass `['sh', '-c', command]` explicitly
  * when needed. Scope closure kills an unfinished exec process, but does not
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
+ *
+ * ### Effect-native Containers in a Durable Object
+ * An Effect-native Container (`main`) is Durable Object-managed unless it
+ * names a fleet policy. Alchemy bundles the program into the Container's
+ * image, and the handle carries both the lifecycle (`start`,
+ * `snapshotContainer`, `destroy`, `image`) and the program's RPC methods.
+ * `env` reaches the program through `start()`, which the handle calls with
+ * it; an `env` passed to `start()` overrides it by name.
+ *
+ * **Example:** An Effect-native Container the Durable Object snapshots
+ * ```typescript
+ * // src/Sandbox.ts
+ * export class Sandbox extends Cloudflare.Container<
+ *   Sandbox,
+ *   { read: (path: string) => Effect.Effect<string> }
+ * >()("Sandbox") {}
+ *
+ * // src/Sandbox.runtime.ts
+ * export default Sandbox.make(
+ *   {
+ *     main: import.meta.url,
+ *     dockerfile: Dockerfile.inline`FROM oven/bun:1
+ * RUN apt-get update && apt-get install -y poppler-utils`,
+ *   },
+ *   Effect.gen(function* () {
+ *     const fs = yield* FileSystem.FileSystem;
+ *     return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+ *   }),
+ * );
+ *
+ * // src/Agent.ts
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const sandbox = yield* Sandbox;
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *     return Effect.succeed({
+ *       read: (path: string) =>
+ *         sandbox
+ *           .start({ enableInternet: false })
+ *           .pipe(Effect.andThen(sandbox.read(path))),
+ *       sleep: () =>
+ *         Effect.gen(function* () {
+ *           const snapshot = yield* sandbox.snapshotContainer();
+ *           // A snapshot restores only on the image it was taken on.
+ *           yield* state.storage.put("snapshot", { snapshot, image: yield* sandbox.image });
+ *           yield* sandbox.destroy();
+ *         }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Select an Effect-native Container per request
+ * ```typescript
+ * export class Selector extends Cloudflare.DurableObject<Selector>()(
+ *   "Selector",
+ *   Effect.gen(function* () {
+ *     const boxes = { bun: yield* BunBox, node: yield* NodeBox };
+ *     const state = yield* Cloudflare.DurableObjectState;
+ *     return Effect.succeed({
+ *       run: (name: "bun" | "node") =>
+ *         Effect.gen(function* () {
+ *           const box = boxes[name];
+ *           // Every handle controls the object's one instance.
+ *           if ((yield* state.storage.get("current")) !== name && (yield* box.running)) {
+ *             yield* box.destroy();
+ *           }
+ *           yield* state.storage.put("current", name);
+ *           yield* box.start({ enableInternet: false });
+ *           return yield* box.whoami();
+ *         }),
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** A fleet-scheduled Effect-native Container
+ * ```typescript
+ * // Cloudflare places the instances, scales to maxInstances, and rolls out
+ * // new versions; the Durable Object starts the one image.
+ * export default Sandbox.make(
+ *   { schedulingPolicy: "default", main: import.meta.url, maxInstances: 50 },
+ *   Effect.gen(function* () {
+ *     const fs = yield* FileSystem.FileSystem;
+ *     return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+ *   }),
+ * );
+ * ```
+ *
+ * An Effect-native Container deployed on a fleet application before
+ * Durable Object scheduling became the default keeps deploying only with
+ * `schedulingPolicy: "default"`. The policy cannot change in place: moving to
+ * Durable Object scheduling takes a new Container and Durable Object class,
+ * and Durable Object storage does not carry over.
  *
  * ### Native Durable Objects on Async Workers
  * A plain Durable Object class on an async Worker attaches its Containers
@@ -667,16 +774,17 @@ type ContainerShape<Shape> = {
  *
  * ### Configuration
  * The props object — the first argument to `.make()` — accepts `main`
- * (entrypoint file), `instanceType` (compute size), `runtime`
- * (`"bun"` or `"node"`), and `observability` settings. Use
- * `Stack.useSync` to read the surrounding stack and pick a beefier
- * `instanceType` in prod while keeping the cheap `dev` instance for
- * preview environments.
+ * (entrypoint file), `runtime` (`"bun"` or `"node"`), and `observability`
+ * settings. A Durable Object-managed Container picks its compute size per
+ * instance with `start({ instance })`. A fleet application sets
+ * `instanceType` for every instance; use `Stack.useSync` to read the
+ * surrounding stack and pick a beefier one in prod.
  *
  * **Example:** Stage-dependent configuration
  * ```typescript
  * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
+ *     schedulingPolicy: "default",
  *     main: import.meta.url,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
@@ -689,9 +797,10 @@ type ContainerShape<Shape> = {
  *
  * ### Environment Variables
  * A container is a process, not a Worker: it has no bindings, so every
- * piece of configuration reaches it through `env`. Each entry lands on
- * the deployment and shows up in `process.env` inside the image —
- * generated (`main`), built (`context`), or pre-built (`image`) alike.
+ * piece of configuration reaches it through `env`. Each entry shows up in
+ * `process.env` inside the image — generated (`main`), built (`context`), or
+ * pre-built (`image`) alike. A fleet application sets it on the deployment;
+ * a Durable Object-managed one passes it to every `start()`.
  * Wrap a secret in `Redacted` to keep it encrypted in state and out of
  * plan output; the container still reads a plain string.
  *
@@ -998,9 +1107,7 @@ export declare namespace Container {
      */
     Application: Effect.Effect<ContainerApplication<Self>, never, Providers | Req>;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
-      props:
-        | InputProps<EffectfulContainerProps>
-        | Effect.Effect<InputProps<EffectfulContainerProps>, Config.ConfigError, PropsReq>,
+      props: MakeContainerProps | Effect.Effect<MakeContainerProps, Config.ConfigError, PropsReq>,
       impl: Effect.Effect<Shape & WorkerShape<WorkerReq>, Config.ConfigError, InitReq>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;

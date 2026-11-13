@@ -662,7 +662,9 @@ const classifyWorkerdError = (
 
   return SystemError.make({
     subtag: "WorkerdStartFailed",
-    message: "The Workers runtime failed to start.",
+    message: `The Workers runtime failed to start (${
+      signal !== null ? `signal ${signal}` : `exit ${exitCode}`
+    }).${lines.length > 0 ? `\n${lines.slice(-5).join("\n")}` : " It wrote nothing to stderr."}`,
     detail,
   });
 };

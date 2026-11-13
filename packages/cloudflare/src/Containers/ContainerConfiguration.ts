@@ -11,6 +11,7 @@ import type {
   DevContainerImage,
   DurableObjectApplicationSettings,
   DurableObjectContainerProps,
+  EffectfulDurableObjectContainerProps,
 } from "./ContainerApplication.ts";
 import type { DurableObjectApplication } from "./DurableObjectApplication.ts";
 
@@ -110,7 +111,6 @@ const MAX_IMAGE_NAME_LENGTH = 128;
 const FLEET_ONLY_PROPS = [
   "name",
   "className",
-  "main",
   "instanceType",
   "instances",
   "maxInstances",
@@ -118,7 +118,6 @@ const FLEET_ONLY_PROPS = [
   "memory",
   "memoryMib",
   "disk",
-  "env",
   "environmentVariables",
   "secrets",
   "labels",
@@ -135,9 +134,27 @@ const FLEET_ONLY_PROPS = [
   "sshPublicKeyIds",
 ] as const satisfies ReadonlyArray<keyof AnyContainerApplicationProps>;
 
+/** A Durable Object-managed Container's props, whatever its image source. */
+export type AnyDurableObjectContainerProps =
+  | DurableObjectContainerProps
+  | EffectfulDurableObjectContainerProps;
+
+/**
+ * The scheduling policy a Container's props select. An Effect-native
+ * Container (`main`) is Durable Object-managed unless it names a fleet
+ * policy; every other Container is fleet-scheduled unless it names
+ * `durable_object`.
+ */
+export const schedulingPolicyOf = (props: {
+  readonly schedulingPolicy?: string;
+  readonly main?: unknown;
+}): ContainerApplication.SchedulingPolicy =>
+  (props.schedulingPolicy as ContainerApplication.SchedulingPolicy | undefined) ??
+  (props.main ? "durable_object" : "default");
+
 export const isDurableObjectContainer = (
   props: AnyContainerApplicationProps,
-): props is DurableObjectContainerProps => props.schedulingPolicy === "durable_object";
+): props is AnyDurableObjectContainerProps => schedulingPolicyOf(props) === "durable_object";
 
 const invalid = (message: string) => Effect.fail(new ContainerConfigurationError({ message }));
 
@@ -163,13 +180,15 @@ export const validateContainerConfiguration = Effect.fn(function* (
   props: AnyContainerApplicationProps,
   deployedPolicy?: string,
 ) {
-  const policy = props.schedulingPolicy ?? "default";
+  const policy = schedulingPolicyOf(props);
   if (
     deployedPolicy !== undefined &&
     (deployedPolicy === "durable_object") !== (policy === "durable_object")
   ) {
     return yield* invalid(
-      "A container cannot switch between fleet and Durable Object scheduling in place. Declare a new container application and Durable Object class, then move traffic to the new namespace. Existing Durable Object storage is not transferred.",
+      props.schedulingPolicy === undefined && props.main
+        ? `This Effect-native container is deployed with fleet scheduling ('${deployedPolicy}'), and Effect-native containers now default to schedulingPolicy: 'durable_object'. Set schedulingPolicy: '${deployedPolicy}' to keep the deployed application, or declare a new container application and Durable Object class to move to Durable Object scheduling. Existing Durable Object storage is not transferred.`
+        : "A container cannot switch between fleet and Durable Object scheduling in place. Declare a new container application and Durable Object class, then move traffic to the new namespace. Existing Durable Object storage is not transferred.",
     );
   }
 
@@ -184,18 +203,18 @@ export const validateContainerConfiguration = Effect.fn(function* (
   if (!isDurableObjectContainer(props)) return;
 
   yield* imagePreparationTimeoutMillis(props.imagePreparationTimeout);
-  if (
-    props.image !== undefined &&
-    (props.context !== undefined || props.dockerfile !== undefined)
-  ) {
-    return yield* invalid(
-      "A Durable Object-managed container declares one image source: `image`, or `context`/`dockerfile`.",
-    );
-  }
-
   // The union type already forbids these, but untyped or Effect-produced
   // props can still carry them.
   const loose: AnyContainerApplicationProps = props;
+  if (
+    (loose.image !== undefined &&
+      (loose.context !== undefined || loose.dockerfile !== undefined)) ||
+    (!!loose.main && loose.context !== undefined)
+  ) {
+    return yield* invalid(
+      "A Durable Object-managed container declares one image source: `main` (optionally on an `image` or inline `dockerfile` base), `image`, or `context`/`dockerfile`.",
+    );
+  }
   const unsupported = FLEET_ONLY_PROPS.find((key) => loose[key] !== undefined);
   if (unsupported !== undefined) {
     return yield* invalid(
@@ -205,13 +224,16 @@ export const validateContainerConfiguration = Effect.fn(function* (
 });
 
 /** Whether a Durable Object-managed Container declares an image to publish. */
-export const hasImageSource = (props: DurableObjectContainerProps) =>
-  props.image !== undefined || props.context !== undefined || props.dockerfile !== undefined;
+export const hasImageSource = (props: AnyContainerApplicationProps) =>
+  !!props.main ||
+  props.image !== undefined ||
+  props.context !== undefined ||
+  props.dockerfile !== undefined;
 
 /** Read the scheduling policy off a declared Container resource's props. */
 export const isDurableObjectContainerResource = (container: ContainerApplication) => {
-  const props = container.Props as { schedulingPolicy?: unknown } | undefined;
-  return props?.schedulingPolicy === "durable_object";
+  const props = container.Props as { schedulingPolicy?: string; main?: unknown } | undefined;
+  return props !== undefined && schedulingPolicyOf(props) === "durable_object";
 };
 
 /** The application-wide settings a Container contributes to its Durable Object class. */

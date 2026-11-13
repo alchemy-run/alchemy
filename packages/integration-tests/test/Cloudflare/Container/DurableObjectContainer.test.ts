@@ -21,6 +21,8 @@ import {
   NativeImages,
   nativeStack,
 } from "./fixtures/native/stack.ts";
+import type { BoxName, Identity } from "./fixtures/selectable/containers.ts";
+import { selectableStack } from "./fixtures/selectable/stack.ts";
 
 /** What `/probe` reports about the running container (fixtures/native). */
 interface Probe {
@@ -35,6 +37,17 @@ interface Probe {
   file: string;
   /** The Durable Object storage marker, null when absent. */
   stored: string | null;
+}
+
+/** What `/run` reports (fixtures/selectable). */
+interface RunResult {
+  identity: Identity;
+  /** The container program's answer to an RPC with an argument. */
+  echo: string;
+  /** The image reference the selected Container started. */
+  image: string;
+  /** Sorted keys of `ctx.container.images`. */
+  images: string[];
 }
 
 interface Metadata {
@@ -134,12 +147,24 @@ const uploadedImageKeys = Effect.fn(function* (
   accountId: string,
   scriptName: string,
   className: string,
+  expected: ReadonlyArray<string>,
 ) {
-  const containers = yield* uploadedContainers(accountId, scriptName);
-  const entries = containers?.filter((container) => container.className === className) ?? [];
-  // One class has exactly one merged entry.
-  expect(entries).toHaveLength(1);
-  return Object.keys(entries[0]?.images ?? {}).sort();
+  // The version list can trail a fresh upload, so the newest listed version
+  // may still be the previous deploy's. Wait until it carries the expected
+  // keys; the caller's assertion reports what it last saw.
+  return yield* Effect.gen(function* () {
+    const containers = yield* uploadedContainers(accountId, scriptName);
+    const entries = containers?.filter((container) => container.className === className) ?? [];
+    // One class has exactly one merged entry.
+    expect(entries).toHaveLength(1);
+    return Object.keys(entries[0]?.images ?? {}).sort();
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (keys) => JSON.stringify(keys) === JSON.stringify([...expected].sort()),
+      times: 15,
+    }),
+  );
 });
 
 /** The `containers` metadata of a Worker's most recently uploaded version. */
@@ -713,6 +738,7 @@ for (const dev of [true, false]) {
                           application.accountId,
                           worker.workerName,
                           className,
+                          images,
                         ),
                       ).toEqual(images);
                     }
@@ -753,6 +779,7 @@ for (const dev of [true, false]) {
                         removed.asyncApplication.accountId,
                         removed.asyncWorker.workerName,
                         "NativeAsyncObject",
+                        ["AsyncShell"],
                       ),
                     ).toEqual(["AsyncShell"]);
                     expect(
@@ -760,6 +787,7 @@ for (const dev of [true, false]) {
                         removed.application.accountId,
                         removed.worker.workerName,
                         "NativeObject",
+                        ["NativeShell"],
                       ),
                     ).toEqual(["NativeShell"]);
                   }
@@ -799,6 +827,7 @@ for (const dev of [true, false]) {
                         added.asyncApplication.accountId,
                         added.asyncWorker.workerName,
                         "NativeAsyncObject",
+                        ASYNC_IMAGES,
                       ),
                     ).toEqual(ASYNC_IMAGES);
                   } else {
@@ -834,6 +863,86 @@ for (const dev of [true, false]) {
           { timeout: 300_000, retry: 0 },
         );
       }
+
+      test.provider(
+        "starts the Effect-native Container a request selects and calls it over RPC",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const deployed = yield* Effect.gen(function* () {
+              const deployed = yield* stack.deploy(selectableStack);
+              const url = deployed.worker.url!;
+              yield* waitUntilReady(url);
+              // A cold image start, then the program's port, can take a while,
+              // after the object waits out the placeholder of a fresh deploy.
+              const run = (box: BoxName) =>
+                getJson<RunResult>(url, `/run?box=${box}`).pipe(
+                  within(`/run?box=${box}`, "180 seconds"),
+                );
+
+              // Both programs are images of the one class application.
+              const bun = yield* run("bun");
+              expect(bun.images).toEqual(["BunBox", "NodeBox"]);
+              expect(bun.echo).toBe("bun:hi");
+              expect(bun.identity).toEqual({
+                container: "BunBox",
+                runtime: "bun",
+                greeting: "hello from bun",
+                secret: "bun-secret",
+                boundEnv: deployed.storage.bucketName,
+                caller: "selector",
+                hasAccountId: true,
+              });
+
+              // Selecting the other Container stops the first and starts its image.
+              const node = yield* run("node");
+              expect(node.echo).toBe("node:hi");
+              expect(node.image).not.toBe(bun.image);
+              expect(node.identity).toMatchObject({
+                container: "NodeBox",
+                runtime: "node",
+                greeting: "hello from node",
+                caller: "selector",
+                hasAccountId: true,
+              });
+              // One Container's env never reaches another's process.
+              expect(node.identity.secret).toBeUndefined();
+
+              expect((yield* run("bun")).identity.container).toBe("BunBox");
+
+              if (!dev) {
+                expect(deployed.bun.image).toMatch(/@sha256:/);
+                expect(deployed.node.image).toMatch(/@sha256:/);
+                expect(
+                  yield* uploadedImageKeys(
+                    deployed.application.accountId,
+                    deployed.worker.workerName,
+                    "Selector",
+                    ["BunBox", "NodeBox"],
+                  ),
+                ).toEqual(["BunBox", "NodeBox"]);
+              }
+
+              // An unchanged program plans nothing.
+              const unchanged = yield* stack.plan(selectableStack);
+              expect(unchanged.resources.BunBox?.action).toBe("noop");
+              expect(unchanged.resources.NodeBox?.action).toBe("noop");
+              expect(unchanged.resources.SelectableWorker?.action).toBe("noop");
+              return deployed;
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+
+            if (!dev) {
+              expect(
+                yield* waitForApplicationDeleted(
+                  deployed.application.accountId,
+                  deployed.application.applicationId,
+                ),
+              ).toBeUndefined();
+            }
+          }),
+        { timeout: 300_000, retry: 0 },
+      );
 
       test.provider(
         "builds a Container's Dockerfile with build args and BuildKit secrets",

@@ -387,6 +387,31 @@ export const watch = (
     ),
   );
 
+/**
+ * The framework's own sources, when alchemy runs from its source checkout
+ * rather than from `node_modules`.
+ *
+ * On macOS each watched directory holds a handle on itself and every
+ * ancestor, and every Worker's watcher holds its own. An Effect Worker's
+ * graph reaches dozens of the checkout's `packages/<name>/src` and
+ * `submodules/distilled` directories, so a dev session with a few dozen
+ * Workers (the test suite runs them all in one sidecar) passes the ~10k
+ * descriptors past which `posix_spawn` fails with EBADF: workerd then exits
+ * with `--control-fd=3: Bad file descriptor` and Docker builds fail. An
+ * installed alchemy lives under `node_modules`, which is never watched, so
+ * this only drops framework edits from hot reload in the alchemy repo.
+ */
+const frameworkSourceGlobs = (() => {
+  const packageRoot = import.meta.dirname.replace(/\/src\/Bundle$|\/lib\/Bundle$/, "");
+  if (packageRoot === import.meta.dirname || packageRoot.includes("/node_modules/")) {
+    return [];
+  }
+  // `<repo>/packages/alchemy` → `<repo>`.
+  const repoRoot = packageRoot.replace(/\/packages\/alchemy$/, "");
+  if (repoRoot === packageRoot) return [];
+  return [`${repoRoot}/packages/*/src/**`, `${repoRoot}/submodules/**`];
+})();
+
 const watchResolved =
   (inputOptions: rolldown.InputOptions, extra: BundleExtraOptions | undefined) =>
   (outputOptions: rolldown.OutputOptions): Stream.Stream<BundleWatchEvent> =>
@@ -426,10 +451,11 @@ const watchResolved =
             // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
             // of OS watch handles *per worker*; with several Effect workers
             // this exhausts the process fd table and the next `posix_spawn`
-            // (workerd / docker) fails with `spawn EBADF`. Workspace packages
-            // resolve to their real source paths (outside `node_modules`), so
-            // they stay watched and local HMR is unaffected.
-            exclude: ["**/node_modules/**"],
+            // (workerd / docker) fails with `spawn EBADF`. A user's own
+            // workspace packages resolve to their real source paths (outside
+            // `node_modules`), so they stay watched; the framework's sources
+            // in an alchemy checkout do not (see `frameworkSourceGlobs`).
+            exclude: ["**/node_modules/**", ...frameworkSourceGlobs],
             // `generateBundle` still fires, so the output is captured either way.
             skipWrite: !hasOutputLocation(outputOptions),
           },

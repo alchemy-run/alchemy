@@ -678,25 +678,27 @@ describe.sequential(
               },
             });
           });
-        yield* Effect.gen(function* () {
+        // Delete an application out of band and wait until neither the list
+        // nor a read by id still reports it.
+        const deleteOutOfBand = Effect.fn(function* (applicationId: string) {
           yield* Containers.deleteContainerApplication({
             accountId: first.app.accountId,
-            applicationId: first.app.applicationId,
+            applicationId,
           });
           const remaining = yield* Containers.listContainerApplications({
             accountId: first.app.accountId,
           }).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
-              until: (apps) => apps.every((app) => app.id !== first.app.applicationId),
+              until: (apps) => apps.every((app) => app.id !== applicationId),
               times: 8,
             }),
           );
-          expect(remaining.some((app) => app.id === first.app.applicationId)).toBe(false);
+          expect(remaining.some((app) => app.id === applicationId)).toBe(false);
           // Reconcile observes by id first; list deletion can propagate earlier.
           const deleted = yield* Containers.getContainerApplication({
             accountId: first.app.accountId,
-            applicationId: first.app.applicationId,
+            applicationId,
           }).pipe(
             Effect.tap((app) =>
               Effect.logInfo(
@@ -711,28 +713,44 @@ describe.sequential(
             }),
           );
           expect(deleted).toBeUndefined();
-          // State lost the attachment, but the Container waits for its
-          // Worker, which publishes the live namespace: the missing
-          // application is recreated attached to it, never unattached.
-          yield* corruptProjection(undefined);
-          const recovered = yield* deploy(AttachmentStack);
-          expect(recovered.worker.durableObjectNamespaces).toEqual(
-            first.worker.durableObjectNamespaces,
-          );
-          expect(recovered.app.applicationId).not.toBe(first.app.applicationId);
-          expect(recovered.app.durableObjects).toEqual({ namespaceId });
-          const observed = yield* readAttachmentApplication(
-            first.app.accountId,
-            recovered.app.applicationId,
-          );
-          expect(observed.durableObjects).toEqual({ namespaceId });
-          expect(observed.maxInstances).toBe(2);
+        });
+        yield* Effect.gen(function* () {
+          // The Worker's projection is stale, so it updates first and publishes
+          // its namespace; the Container waits for it and attaches the new
+          // application to that observed namespace, whatever its own record
+          // says. It never creates the application unattached.
+          let live = first.app.applicationId;
+          let url = first.url;
+          for (const recorded of [undefined, {}, { namespaceId }]) {
+            yield* deleteOutOfBand(live);
+            yield* corruptProjection(recorded);
+            const recovered = yield* deploy(AttachmentStack);
+            expect(recovered.worker.durableObjectNamespaces).toEqual(
+              first.worker.durableObjectNamespaces,
+            );
+            expect(recovered.app.applicationId).not.toBe(live);
+            expect(recovered.app.durableObjects).toEqual({ namespaceId });
+            const observed = yield* readAttachmentApplication(
+              first.app.accountId,
+              recovered.app.applicationId,
+            );
+            expect(observed.durableObjects).toEqual({ namespaceId });
+            expect(observed.maxInstances).toBe(2);
+            const applications = yield* Containers.listContainerApplications({
+              accountId: first.app.accountId,
+            });
+            expect(
+              applications.filter((app) => app.name === first.app.applicationName),
+            ).toHaveLength(1);
+            live = recovered.app.applicationId;
+            url = recovered.url;
+          }
           const other = yield* readAttachmentApplication(
             first.otherApp.accountId,
             first.otherApp.applicationId,
           );
           expect(other.durableObjects).toEqual(first.otherApp.durableObjects);
-          const response = yield* fetchReady(new URL("/hello", recovered.url), "method", 8);
+          const response = yield* fetchReady(new URL("/hello", url), "method", 8);
           expect(JSON.parse(response).method).toBe("GET");
         }).pipe(
           Effect.ensuring(
@@ -777,7 +795,7 @@ describe.sequential(
           ),
         );
       }).pipe(Effect.provide(services)),
-      { timeout: 120_000, retry: 0 },
+      { timeout: 180_000, retry: 0 },
     );
 
     // Runs last: detaching recreates the application under a new id.

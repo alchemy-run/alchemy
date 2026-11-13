@@ -658,8 +658,9 @@ export class Python extends Cloudflare.Container<Python>()("Python", {
 }) {}
 ```
 
-One Container is one image: `image` copies a registry image, and
-`context`/`dockerfile` builds one. Alchemy publishes it to Cloudflare's
+One Container is one image: `image` copies a registry image,
+`context`/`dockerfile` builds one, and `main` bundles an Effect program into
+one. Alchemy publishes it to Cloudflare's
 registry and prepares it before the Worker is uploaded.
 
 Bind both in the Durable Object. Each handle's `start()` starts its own
@@ -699,6 +700,43 @@ Two Containers that declare different values fail the deploy with
 
 A Container can be bound by several Durable Object classes. Each class adds
 the image to its own application.
+
+## Effect programs in a Durable Object's images
+
+An Effect-native Container is Durable Object-managed unless it names a fleet
+policy. Alchemy bundles `main` into the Container's image:
+
+```typescript
+// src/Sandbox.runtime.ts
+export default Sandbox.make(
+  {
+    main: import.meta.url,
+    env: { WORKSPACE: "/workspace" },
+  },
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+  }),
+);
+```
+
+The handle has the program's RPC methods next to `start`,
+`snapshotContainer`, `destroy`, and `image`, so the Durable Object can
+snapshot the program's filesystem and call it with types:
+
+```typescript
+const sandbox = yield* Sandbox;
+yield* sandbox.start({ enableInternet: false });
+const text = yield* sandbox.read("/workspace/notes.md");
+```
+
+The application has no deployment environment, so `start()` hands the
+program its `env`, the env its capabilities bind, and the account id. An
+`env` you pass to `start()` overrides them by name.
+
+Bind several Effect-native Containers to choose a program per request. As
+with any images of one class, `destroy()` the running one before you start
+another.
 
 ## Several images on an async Worker
 
@@ -768,13 +806,15 @@ the same props shape (`instanceType`, `observability`, `runtime`,
 
 ## Rollouts
 
-When a deploy changes the image or configuration, running instances
-are replaced with the new version. By default the replacement is
+Rollouts belong to fleet applications, so an Effect-native Container names
+`schedulingPolicy: "default"` to use them. When a deploy changes the image or
+configuration, running instances are replaced with the new version. By default the replacement is
 immediate — every instance at once. Set `rollout` to replace them in
 steps instead, so the application stays available through the update:
 
 ```typescript
 export class Api extends Cloudflare.Container<Api>()("Api", {
+  schedulingPolicy: "default",
   main: import.meta.url,
   instances: 4,
   maxInstances: 4,

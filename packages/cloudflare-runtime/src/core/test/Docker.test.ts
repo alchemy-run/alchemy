@@ -471,6 +471,7 @@ layer(
       if (result._tag !== "Failure") return;
       const error = result.failure as {
         subtag: string;
+        message: string;
         hint?: string;
         detail?: { exitCode: number; stderr: string };
       };
@@ -478,6 +479,9 @@ layer(
       // The docker output the user needs is carried, not discarded.
       expect(error.detail?.exitCode).toBe(1);
       expect(error.detail?.stderr).toContain("unknown flag: --load");
+      // The message names the cause, so a log or test report shows it.
+      expect(error.message).toContain("(exit 1)");
+      expect(error.message).toContain("unknown flag: --load");
       expect(error.hint).toContain("buildx");
     }),
   );

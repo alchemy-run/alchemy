@@ -133,6 +133,19 @@ export const imageUnavailableHint = (imageUri: string) =>
   `\`docker build --platform linux/amd64 -t ${imageUri} .\` or \`docker load\`.`;
 
 /** Names the missing buildx plugin when docker's own stderr only names the flag. */
+/**
+ * The last non-empty lines of a command's output, joined for an error
+ * message. A failure whose cause sits only in `detail` never reaches a log
+ * or test report, so the message carries the lines that name it.
+ */
+export const outputTail = (text: string, lines = 5): string =>
+  text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .slice(-lines)
+    .join("\n");
+
 export const buildFailureHint = (stderr: string): string | undefined =>
   BUILDKIT_MISSING_MARKERS.some((marker) => stderr.includes(marker))
     ? "This docker CLI has no BuildKit (buildx) plugin, which building container images requires. Install it and retry — e.g. `pacman -S docker-buildx` (Arch/CachyOS), `apt install docker-buildx` (Debian/Ubuntu), or Docker Desktop, which bundles it."
@@ -654,7 +667,9 @@ export const DockerLive = Layer.effect(
               ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
                 SystemError.make({
                   subtag: "DockerBuildFailed",
-                  message: `Failed to build image "${tag}".`,
+                  message: `Failed to build image "${tag}" (exit ${exitCode}).${
+                    outputTail(stderr) ? `\n${outputTail(stderr)}` : ""
+                  }`,
                   hint: buildFailureHint(stderr),
                   detail: { bin, tag, exitCode, stdout, stderr },
                 }),
