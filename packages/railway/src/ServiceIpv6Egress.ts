@@ -1,10 +1,9 @@
-import { Query } from "@distilled.cloud/core/query";
-import { Railway } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { environmentPatchCommit, readEnvironmentConfig } from "./GraphQL.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 
 export class ServiceIpv6EgressNotApplied extends Data.TaggedError(
@@ -57,15 +56,6 @@ interface ServiceTarget {
   readonly projectId: string;
   readonly serviceId: string;
 }
-
-const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
-  config: Railway.environment(args).config,
-}));
-
-const environmentPatchCommit = Query.fn(
-  (args: { environmentId: string; commitMessage: string; patch: unknown }) =>
-    Railway.environmentPatchCommit(args),
-);
 
 const readObserved = (target: ServiceTarget) =>
   readEnvironmentConfig({
