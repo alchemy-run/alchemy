@@ -1,0 +1,133 @@
+---
+title: Droplets
+description: Run DigitalOcean Droplets with cloud-init, SSH keys, volumes, snapshots, backups and autoscale pools, and know which changes update a Droplet in place and which replace it.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **Droplet** is a virtual machine. You choose its **size** (CPUs and memory, like `s-1vcpu-1gb`), its **image** (an operating system like `ubuntu-24-04-x64`, or a snapshot) and its region. It runs until you destroy it, and you're billed by the hour while it exists.
+
+A Droplet's disk goes with it. A **Volume** is a network disk that outlives the Droplet and attaches to one at a time in the same region, and a **snapshot** saves a disk as an image to start other Droplets from.
+
+<Tree
+  nodes={[
+    {
+      id: "region", label: "nyc3", type: "region", icon: "map-pin", dashed: true, colGap: 4,
+      areas: ["host data", "snap ."],
+      phoneAreas: ["host", "data", "snap"],
+    },
+    {
+      id: "host", label: "Host", type: "Droplet", parent: "region", tone: "accent", icon: "server",
+      specs: [["size", "s-1vcpu-1gb"], ["image", "ubuntu-24-04-x64"]],
+    },
+    { id: "data", label: "Data", type: "Volume · 10 GiB", parent: "region", icon: "hard-drive" },
+    { id: "snap", label: "Golden", type: "snapshot", parent: "region", icon: "package" },
+  ]}
+  links={[
+    { from: "data", to: "host", label: "attached" },
+    { from: "host", to: "snap", label: "saved as" },
+  ]}
+  caption="The Droplet's own disk goes when the Droplet does. A Volume keeps its data across replacements, and a snapshot starts new Droplets from a saved disk."
+/>
+
+## Create a Droplet
+
+In the Stack:
+
+```typescript
+const key = yield* DigitalOcean.SshKey("Key", { publicKey: "ssh-ed25519 AAAA… you@laptop" });
+const host = yield* DigitalOcean.Droplet("Host", {
+  region: "nyc3",
+  size: "s-1vcpu-1gb",
+  image: "ubuntu-24-04-x64",
+  sshKeys: [key.fingerprint],
+});
+```
+
+`host.ipv4` is its public address. SSH in as `root` with the key.
+
+## Configure it at boot
+
+`userData` runs once on first boot, with cloud-init:
+
+```typescript
+DigitalOcean.Droplet("Host", {
+  region: "nyc3",
+  size: "s-1vcpu-1gb",
+  image: "ubuntu-24-04-x64",
+  userData: `#cloud-config
+packages: [nginx]
+runcmd: [systemctl enable --now nginx]`,
+});
+```
+
+## What updates in place, and what replaces
+
+A Droplet's `name`, `tags`, backups and turning on IPv6 change in place. A new region, size, image, SSH keys, `userData`, VPC or volumes create a new Droplet and delete the old one, so keep anything that must survive on a Volume.
+
+`replaceAfter: "30 days"` replaces a Droplet once it's that old, to roll it onto a fresh image.
+
+## Keep data on a Volume
+
+```typescript
+const data = yield* DigitalOcean.Volume("Data", {
+  region: "nyc3",
+  sizeGigabytes: 10,
+  filesystemType: "ext4",
+});
+const host = yield* DigitalOcean.Droplet("Host", {
+  region: "nyc3",
+  size: "s-1vcpu-1gb",
+  image: "ubuntu-24-04-x64",
+  volumes: [data.volumeId],
+});
+```
+
+A Volume formatted with `filesystemType` mounts under `/mnt/` on Ubuntu images. `VolumeAttachment` attaches one to a Droplet that already exists.
+
+## Turn on backups
+
+```typescript
+DigitalOcean.Droplet("Host", {
+  region: "nyc3",
+  size: "s-1vcpu-1gb",
+  image: "ubuntu-24-04-x64",
+  backupPolicy: { plan: "daily", hour: 8 },
+});
+```
+
+Daily backups are kept a week, weekly ones four weeks, and the backup window starts at `hour` UTC. Backups cost a share of the Droplet's price.
+
+## Save a disk as a snapshot
+
+```typescript
+const golden = yield* DigitalOcean.DropletSnapshot("Golden", { dropletId: host.dropletId });
+```
+
+Pass `golden.snapshotId` as another Droplet's `image` to start from it. `VolumeSnapshot` does the same for a Volume.
+
+## Run a fleet with an autoscale pool
+
+An autoscale pool keeps a group of identical Droplets, a fixed number or sized to their CPU and memory:
+
+```typescript
+yield* DigitalOcean.AutoscalePool("Web", {
+  scaling: { instances: 3 },
+  droplet: {
+    region: "nyc3",
+    size: "s-1vcpu-1gb",
+    image: "ubuntu-24-04-x64",
+    sshKeys: [key.fingerprint],
+  },
+});
+```
+
+Destroying the pool destroys its Droplets.
+
+## Limits
+
+- Changing a Droplet's size replaces it here, rather than resizing it, so the change can't fail half way.
+- A Volume attaches to one Droplet at a time, in the same region.
+- `alchemy destroy` deletes the Droplet and its own disk. Volumes are separate resources and are deleted only when they're removed from the Stack.
+
+See [Networking](/digitalocean/networking/vpcs) to put Droplets in a VPC and behind a firewall or load balancer.

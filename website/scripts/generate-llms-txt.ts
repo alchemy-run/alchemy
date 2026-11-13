@@ -485,6 +485,51 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "DigitalOcean",
+    intro:
+      "DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.",
+    pages: {
+      slugs: [
+        "digitalocean/index",
+        "digitalocean/what-is-digitalocean",
+        "digitalocean/setup",
+        "digitalocean/teams-projects-and-tokens",
+      ],
+    },
+  },
+  {
+    heading: "DigitalOcean — Tutorial",
+    pages: { directory: "digitalocean/tutorial" },
+  },
+  {
+    heading: "DigitalOcean — Security",
+    pages: { directory: "digitalocean/security" },
+  },
+  {
+    heading: "DigitalOcean — Compute",
+    pages: { directory: "digitalocean/compute" },
+  },
+  {
+    heading: "DigitalOcean — Data",
+    pages: { directory: "digitalocean/data" },
+  },
+  {
+    heading: "DigitalOcean — Networking",
+    pages: { directory: "digitalocean/networking" },
+  },
+  {
+    heading: "DigitalOcean — Observability",
+    pages: { directory: "digitalocean/observability" },
+  },
+  {
+    heading: "DigitalOcean — AI",
+    pages: { directory: "digitalocean/ai" },
+  },
+  {
+    heading: "DigitalOcean — Frontend",
+    pages: { directory: "digitalocean/frontend" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",

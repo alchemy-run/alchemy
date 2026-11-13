@@ -1,0 +1,152 @@
+---
+title: App Platform
+description: Run an Effect or async program on DigitalOcean App Platform as an HTTPS service, with instance sizes, scheduled jobs, alerts, secrets and the team's Container Registry.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+**App Platform** runs your containers for you. You give it an image and it runs it as a **service**: HTTPS on an `*.ondigitalocean.app` address, a load balancer in front, and as many instances as you ask for. It pulls images from your team's **Container Registry**, and redeploys with no downtime when the image changes.
+
+An Alchemy App is your program and its App Platform configuration in one class. Deploy bundles the program into an image, pushes it to the registry, and updates the App.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 5,
+      areas: ["registry app"],
+      phoneAreas: ["registry", "app"],
+    },
+    { id: "registry", label: "acme", type: "Container Registry", parent: "team", icon: "package", specs: [["api", "a1b2c3 · d4e5f6"]] },
+    {
+      id: "app", label: "Api", type: "App · nyc", parent: "team", icon: "server",
+      areas: ["web job"],
+    },
+    { id: "web", label: "web", type: "service · 2 instances", parent: "app", tone: "accent", icon: "server" },
+    { id: "job", label: "report", type: "job · 0 3 * * *", parent: "app", icon: "clock" },
+  ]}
+  links={[{ from: "registry", to: "app", label: "pulls d4e5f6" }]}
+  caption="The App's service and scheduled job run the same image, tagged with the hash of your code. A deploy that changes your code pushes a new tag and moves the App to it."
+/>
+
+## Write an App
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc" },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from App Platform")),
+    };
+  }),
+) {}
+```
+
+Yield it in the Stack; `api.url` is its HTTPS address. Deploy needs Docker on the machine running it, to build the image.
+
+## Use the Container Registry
+
+App Platform pulls images from the team's registry, and a team has exactly one. Declare it and pass it to the App, or leave `registry` out to use the registry the team already has:
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
+```
+
+```typescript
+{ main: import.meta.url, region: "nyc", registry: Registry }
+```
+
+The free `starter` tier holds one repository, so it fits one App. Each App pushes to its own repository; use `basic` or `professional` for more.
+
+## Size and scale it
+
+```typescript
+{
+  main: import.meta.url,
+  region: "nyc",
+  instanceSizeSlug: "apps-d-1vcpu-1gb",
+  instanceCount: 3,
+  healthCheckPath: "/health",
+}
+```
+
+`instanceSizeSlug` sets each instance's CPU and memory; `apps-s-*` sizes share a CPU and `apps-d-*` sizes have their own. App Platform routes traffic only to instances whose `healthCheckPath` answers 2xx.
+
+## Run a scheduled job
+
+A job runs the App's image on a cron schedule. Declare it next to the handler with `DigitalOcean.cron`, and provide `CronLive`:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc" },
+  Effect.gen(function* () {
+    yield* DigitalOcean.cron("0 3 * * *", () => Effect.log("nightly report"), {
+      timeZone: "UTC",
+    });
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }).pipe(Effect.provide(DigitalOcean.CronLive)),
+) {}
+```
+
+The job has the App's bindings, so it reads and writes the same resources as the handler.
+
+## Pass configuration and secrets
+
+Read configuration with `Config` during construction. The value travels from your deploy to the App, and a `Config.Redacted` value becomes an App Platform secret, encrypted and hidden in the control panel:
+
+```typescript
+const apiKey = yield* Config.Redacted("STRIPE_KEY");
+```
+
+See [Secrets](/digitalocean/security/secrets).
+
+## Alert on failures
+
+```typescript
+{
+  main: import.meta.url,
+  alerts: [
+    { rule: "DEPLOYMENT_FAILED", emails: ["ops@example.com"] },
+    { rule: "CPU_UTILIZATION", operator: "GREATER_THAN", value: 80, window: "FIVE_MINUTES" },
+  ],
+}
+```
+
+Alert emails must belong to members of the team. `slackWebhooks` sends to Slack instead.
+
+## Run an async handler or an image
+
+Any module that exports `fetch(request, env)` runs as an App with `isExternal: true`:
+
+```typescript title="src/hello.ts"
+export default {
+  async fetch(request: Request) {
+    return new Response("hello");
+  },
+};
+```
+
+```typescript
+const hello = yield* DigitalOcean.App("Hello", { main: "./src/hello.ts", isExternal: true });
+```
+
+`context` and `dockerfile` build your own Dockerfile instead, and `image: "nginx:1.27"` mirrors a public image into the registry and runs it.
+
+## Limits
+
+- Deploys take two to ten minutes: App Platform pulls the image and starts new instances before it stops the old ones.
+- An App runs in one region. App Platform names regions by city: `nyc`, `ams`, `fra`, `sfo`, `sgp`, `lon`, `tor`, `blr`, `syd`, `atl`.
+- The team's Container Registry is shared by every App and stage on the team. Destroying an App deletes its repository, not the registry.
+
+See [Websites](/digitalocean/frontend/websites) to serve a framework app on App Platform.

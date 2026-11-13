@@ -1,0 +1,203 @@
+{
+  "name": "@alchemy.run/digitalocean",
+  "version": "2.0.0-beta.87",
+  "description": "DigitalOcean for Alchemy: App Platform, Droplets, Kubernetes, Managed Databases, Spaces, sandboxes, networking, DNS and monitoring.",
+  "keywords": [
+    "alchemy",
+    "digitalocean",
+    "effect",
+    "infrastructure-as-code"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/digitalocean"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Bootstrap": "./src/Bootstrap.ts",
+    "./ActionGateway": "./src/ActionGateway/index.ts",
+    "./Agents": "./src/Agents/index.ts",
+    "./Databases": "./src/Databases/index.ts",
+    "./Functions": "./src/Functions/index.ts",
+    "./GenAI": "./src/GenAI/index.ts",
+    "./Inference": "./src/Inference/index.ts",
+    "./Insights": "./src/Insights/index.ts",
+    "./Kubernetes": "./src/Kubernetes/index.ts",
+    "./Monitoring": "./src/Monitoring/index.ts",
+    "./Sandboxes": "./src/Sandboxes/index.ts",
+    "./Security": "./src/Security/index.ts",
+    "./Spaces": "./src/Spaces/index.ts",
+    "./VectorDB": "./src/VectorDB/index.ts",
+    "./Website": "./src/Website/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
+      },
+      "./ActionGateway": {
+        "types": "./lib/ActionGateway/index.d.ts",
+        "bun": "./src/ActionGateway/index.ts",
+        "worker": "./src/ActionGateway/index.ts",
+        "default": "./lib/ActionGateway/index.js"
+      },
+      "./Agents": {
+        "types": "./lib/Agents/index.d.ts",
+        "bun": "./src/Agents/index.ts",
+        "worker": "./src/Agents/index.ts",
+        "default": "./lib/Agents/index.js"
+      },
+      "./Databases": {
+        "types": "./lib/Databases/index.d.ts",
+        "bun": "./src/Databases/index.ts",
+        "worker": "./src/Databases/index.ts",
+        "default": "./lib/Databases/index.js"
+      },
+      "./Functions": {
+        "types": "./lib/Functions/index.d.ts",
+        "bun": "./src/Functions/index.ts",
+        "worker": "./src/Functions/index.ts",
+        "default": "./lib/Functions/index.js"
+      },
+      "./GenAI": {
+        "types": "./lib/GenAI/index.d.ts",
+        "bun": "./src/GenAI/index.ts",
+        "worker": "./src/GenAI/index.ts",
+        "default": "./lib/GenAI/index.js"
+      },
+      "./Inference": {
+        "types": "./lib/Inference/index.d.ts",
+        "bun": "./src/Inference/index.ts",
+        "worker": "./src/Inference/index.ts",
+        "default": "./lib/Inference/index.js"
+      },
+      "./Insights": {
+        "types": "./lib/Insights/index.d.ts",
+        "bun": "./src/Insights/index.ts",
+        "worker": "./src/Insights/index.ts",
+        "default": "./lib/Insights/index.js"
+      },
+      "./Kubernetes": {
+        "types": "./lib/Kubernetes/index.d.ts",
+        "bun": "./src/Kubernetes/index.ts",
+        "worker": "./src/Kubernetes/index.ts",
+        "default": "./lib/Kubernetes/index.js"
+      },
+      "./Monitoring": {
+        "types": "./lib/Monitoring/index.d.ts",
+        "bun": "./src/Monitoring/index.ts",
+        "worker": "./src/Monitoring/index.ts",
+        "default": "./lib/Monitoring/index.js"
+      },
+      "./Sandboxes": {
+        "types": "./lib/Sandboxes/index.d.ts",
+        "bun": "./src/Sandboxes/index.ts",
+        "worker": "./src/Sandboxes/index.ts",
+        "default": "./lib/Sandboxes/index.js"
+      },
+      "./Security": {
+        "types": "./lib/Security/index.d.ts",
+        "bun": "./src/Security/index.ts",
+        "worker": "./src/Security/index.ts",
+        "default": "./lib/Security/index.js"
+      },
+      "./Spaces": {
+        "types": "./lib/Spaces/index.d.ts",
+        "bun": "./src/Spaces/index.ts",
+        "worker": "./src/Spaces/index.ts",
+        "default": "./lib/Spaces/index.js"
+      },
+      "./VectorDB": {
+        "types": "./lib/VectorDB/index.d.ts",
+        "bun": "./src/VectorDB/index.ts",
+        "worker": "./src/VectorDB/index.ts",
+        "default": "./lib/VectorDB/index.js"
+      },
+      "./Website": {
+        "types": "./lib/Website/index.d.ts",
+        "bun": "./src/Website/index.ts",
+        "worker": "./src/Website/index.ts",
+        "default": "./lib/Website/index.js"
+      },
+      "./internal/*": null,
+      "./*/internal": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/digitalocean": "workspace:*",
+    "@distilled.cloud/s3": "workspace:*",
+    "rolldown": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/digitalocean/Contributions"
+    ]
+  }
+}

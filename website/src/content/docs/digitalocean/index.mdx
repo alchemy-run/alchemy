@@ -1,0 +1,71 @@
+---
+title: DigitalOcean
+description: Run Effect programs on DigitalOcean with Alchemy. Declare Apps, Functions, Droplets, Kubernetes, Spaces, Managed Databases, AI agents and networking in one TypeScript program.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+DigitalOcean is a cloud platform with services for virtual machines (Droplets), managed Kubernetes and databases, S3-compatible object storage (Spaces), a platform that builds and runs your containers (App Platform), serverless functions, sandboxed MicroVMs, and hosted AI agents and models. It's known for a small, consistent API and flat monthly pricing.
+
+**New to DigitalOcean?** Start with [What is DigitalOcean?](/digitalocean/what-is-digitalocean).
+
+## A quick example
+
+A Spaces bucket is a declaration:
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3" });
+```
+
+An App is your program on App Platform, with the bucket bound to it:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc" },
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putObject({ Key: "hello.txt", Body: "hello from DigitalOcean" });
+        return HttpServerResponse.text("stored");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Spaces.PutObjectHttp)),
+) {}
+```
+
+And the Stack deploys both to your team:
+
+```typescript title="alchemy.run.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Start with [Setup](/digitalocean/setup) to connect your project, then the [tutorial](/digitalocean/tutorial/part-1), which goes from an empty directory to an App with storage, a database and a scheduled job, one step at a time.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

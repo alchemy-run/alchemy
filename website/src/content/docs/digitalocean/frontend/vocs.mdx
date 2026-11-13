@@ -1,0 +1,67 @@
+---
+title: Vocs
+description: Deploy a Vocs app to DigitalOcean App Platform with DigitalOcean.Website.Vocs, built on your machine and served by an App, with Vocs's own dev server under alchemy dev.
+sidebar:
+  order: 21
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+`DigitalOcean.Website.Vocs` deploys a [Vocs](https://vocs.dev) project to [App Platform](/digitalocean/compute/app-platform). Deploy builds it on your machine, puts the output in one image, and the App serves a Vocs documentation site.
+
+## Install
+
+The build integration ships separately. It runs only at build time, so a dev dependency is enough:
+
+<PackageManagers dev="@alchemy.run/frontend-frameworks" />
+
+## Declare the site
+
+```typescript title="alchemy.run.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export const Website = DigitalOcean.Website.Vocs("Website", { rootDir: "./web" });
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+`rootDir` is the directory with the project's `package.json`. `site.url` is the App's HTTPS address. Deploy needs Docker and the team's Container Registry, or a `registry` you declare.
+
+## Add environment variables
+
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = DigitalOcean.Website.Vocs("Website", {
+  rootDir: "./web",
++  env: { VITE_GREETING: "Hello from DigitalOcean" },
+});
+```
+
+`env` is set before the build and on the App, so build-time and run-time code see the same values:
+
+```mdx title="docs/pages/index.mdx"
+# {import.meta.env.VITE_GREETING}
+```
+
+## Size the App
+
+`region`, `instanceSizeSlug` and `instanceCount` are passed to the App. See [Websites](/digitalocean/frontend/websites#size-it).
+
+## Local dev
+
+`alchemy dev` runs Vocs's own dev server with the same `env` instead of deploying, and `site.url` is its local address.
+
+## Where next
+
+- [`DigitalOcean.Website.Vocs` reference](/providers/digitalocean/website): every prop.
+- [Websites](/digitalocean/frontend/websites): what every site on DigitalOcean shares.
+- [App Platform](/digitalocean/compute/app-platform): the App the site runs on.
