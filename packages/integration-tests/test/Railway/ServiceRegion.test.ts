@@ -2,6 +2,7 @@ import {
   activeReplicaRegions,
   observedRegion,
   observedReplicas,
+  PlacementTarget,
   placementTarget,
   regionPlacementPatch,
   ServiceReplicasInvalid,
@@ -10,34 +11,65 @@ import {
 } from "@alchemy.run/railway/ServiceRegion";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 describe(
   "Railway service region placement",
   { tags: ["unit", "provider:railway", "provider:railway:service", "local"] },
   () => {
-    it("reads deploy.multiRegionConfig and ignores the legacy region field", () => {
-      const placement = serviceRegionPlacement(
-        {
-          services: {
-            api: {
-              deploy: {
-                region: "us-west2",
-                multiRegionConfig: {
-                  "asia-southeast1-eqsg3a": { numReplicas: 1 },
-                  "europe-west4-drams3a": null,
+    it.effect("reads deploy.multiRegionConfig and ignores the legacy region field", () =>
+      Effect.gen(function* () {
+        const placement = yield* serviceRegionPlacement(
+          {
+            services: {
+              api: {
+                deploy: {
+                  region: "us-west2",
+                  multiRegionConfig: {
+                    "asia-southeast1-eqsg3a": { numReplicas: 1 },
+                    "europe-west4-drams3a": null,
+                  },
                 },
               },
             },
           },
-        },
-        "api",
-      );
+          "api",
+        );
 
-      expect(activeReplicaRegions(placement)).toEqual([
-        { region: "asia-southeast1-eqsg3a", replicas: 1 },
-      ]);
-      expect(observedRegion(placement, null)).toEqual("asia-southeast1-eqsg3a");
-    });
+        expect(activeReplicaRegions(placement)).toEqual([
+          { region: "asia-southeast1-eqsg3a", replicas: 1 },
+        ]);
+        expect(observedRegion(placement, null)).toEqual("asia-southeast1-eqsg3a");
+      }),
+    );
+
+    it.effect("reads an empty placement when Railway has none", () =>
+      Effect.gen(function* () {
+        for (const config of [
+          {},
+          { services: null },
+          { services: { api: null } },
+          { services: { api: { deploy: null } } },
+          { services: { api: { deploy: { multiRegionConfig: null } } } },
+        ]) {
+          expect(yield* serviceRegionPlacement(config, "api")).toEqual({});
+        }
+      }),
+    );
+
+    it.effect("fails on a placement whose shape Railway changed", () =>
+      Effect.gen(function* () {
+        const error = yield* serviceRegionPlacement(
+          {
+            services: {
+              api: { deploy: { multiRegionConfig: { "us-west2": { numReplicas: "2" } } } },
+            },
+          },
+          "api",
+        ).pipe(Effect.flip);
+        expect(error._tag).toEqual("SchemaError");
+      }),
+    );
 
     it("moves the workspace default onto the requested region", () => {
       const placement = {
@@ -120,44 +152,42 @@ describe(
     });
 
     it("totals the replicas Railway is placing", () => {
-      expect(observedReplicas({})).toBeUndefined();
-      expect(observedReplicas({ "us-west2": null, "europe-west4-drams3a": {} })).toBeUndefined();
+      expect(observedReplicas({})).toEqual(Option.none());
+      expect(observedReplicas({ "us-west2": null, "europe-west4-drams3a": {} })).toEqual(
+        Option.none(),
+      );
       expect(
         observedReplicas({
           "us-west2": { numReplicas: 2 },
           "europe-west4-drams3a": { numReplicas: 1 },
           "asia-southeast1-eqsg3a": null,
         }),
-      ).toEqual(3);
+      ).toEqual(Option.some(3));
     });
 
     it("scales the one region the service is in when region is omitted", () => {
       const placement = { "us-west2": { numReplicas: 1 }, "europe-west4-drams3a": null };
-      expect(placementTarget({ region: undefined, placement })).toEqual({
-        _tag: "region",
-        region: "us-west2",
-      });
-      expect(placementTarget({ region: "europe-west4-drams3a", placement })).toEqual({
-        _tag: "region",
-        region: "europe-west4-drams3a",
-      });
+      expect(placementTarget({ region: undefined, placement })).toEqual(
+        PlacementTarget.Region({ region: "us-west2" }),
+      );
+      expect(placementTarget({ region: "europe-west4-drams3a", placement })).toEqual(
+        PlacementTarget.Region({ region: "europe-west4-drams3a" }),
+      );
     });
 
     it("uses the legacy region while the placement map is empty", () => {
-      expect(placementTarget({ region: undefined, placement: {}, legacy: "us-west2" })).toEqual({
-        _tag: "region",
-        region: "us-west2",
-      });
+      expect(placementTarget({ region: undefined, placement: {}, legacy: "us-west2" })).toEqual(
+        PlacementTarget.Region({ region: "us-west2" }),
+      );
     });
 
     it("defers a fresh service with no region only when asked to", () => {
-      expect(placementTarget({ region: undefined, placement: {}, deferIfUnknown: true })).toEqual({
-        _tag: "defer",
-      });
-      expect(placementTarget({ region: undefined, placement: {} })).toEqual({
-        _tag: "unknown",
-        regions: [],
-      });
+      expect(placementTarget({ region: undefined, placement: {}, deferIfUnknown: true })).toEqual(
+        PlacementTarget.Defer(),
+      );
+      expect(placementTarget({ region: undefined, placement: {} })).toEqual(
+        PlacementTarget.Unknown({ regions: [] }),
+      );
     });
 
     it("never defers replicas spread over several regions", () => {
@@ -167,7 +197,7 @@ describe(
           placement: { "us-west2": { numReplicas: 1 }, "europe-west4-drams3a": { numReplicas: 1 } },
           deferIfUnknown: true,
         }),
-      ).toEqual({ _tag: "unknown", regions: ["us-west2", "europe-west4-drams3a"] });
+      ).toEqual(PlacementTarget.Unknown({ regions: ["us-west2", "europe-west4-drams3a"] }));
     });
 
     it.effect("rejects a replica count Railway would not place", () =>

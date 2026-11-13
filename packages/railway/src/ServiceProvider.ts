@@ -21,6 +21,7 @@ import { Stack } from "alchemy/Stack";
 import { tarGzipDirectory } from "alchemy/Util/tarGzip";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -954,15 +955,12 @@ export const ServiceProvider = () =>
                   domainId: output.domainId,
                 })
               : undefined;
-          const placement =
-            resolvedEnvId.length > 0
-              ? yield* readServicePlacement({
-                  environmentId: resolvedEnvId,
-                  projectId: resolvedProjectId,
-                  serviceId: found.id,
-                  legacy: instance?.region,
-                })
-              : undefined;
+          const placement = yield* readServicePlacement({
+            environmentId: resolvedEnvId,
+            projectId: resolvedProjectId,
+            serviceId: found.id,
+            legacy: instance?.region,
+          });
           const attrs = toAttrs({
             service: found,
             instance,
@@ -972,10 +970,8 @@ export const ServiceProvider = () =>
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
-            region: placement?.region,
-            // Only a declared count reads from the placement map; otherwise
-            // the output keeps reporting the instance's count as before.
-            replicas: olds?.replicas === undefined ? undefined : placement?.replicas,
+            region: Option.getOrUndefined(placement.region),
+            replicas: Option.getOrUndefined(placement.replicas),
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -1406,8 +1402,8 @@ export const ServiceProvider = () =>
             port,
             codeHash,
             rpcToken,
-            region: placement.region,
-            replicas: props.replicas === undefined ? undefined : placement.replicas,
+            region: Option.getOrUndefined(placement.region),
+            replicas: Option.getOrUndefined(placement.replicas),
           });
         }),
 

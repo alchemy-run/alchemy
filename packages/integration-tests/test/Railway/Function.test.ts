@@ -1,5 +1,9 @@
 import * as Railway from "@alchemy.run/railway";
-import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
+import {
+  activeReplicaRegions,
+  observedReplicas,
+  serviceRegionPlacement,
+} from "@alchemy.run/railway/ServiceRegion";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
@@ -7,6 +11,7 @@ import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { AsyncPing } from "./fixtures/async-ping-fn.ts";
@@ -310,7 +315,9 @@ test.provider.skip(
 );
 
 const placedRegions = (config: unknown, serviceId: string) =>
-  activeReplicaRegions(serviceRegionPlacement(config, serviceId)).map((row) => row.region);
+  serviceRegionPlacement(config, serviceId).pipe(
+    Effect.map((placement) => activeReplicaRegions(placement).map((row) => row.region)),
+  );
 
 test.provider(
   "pin a function to a region and move it",
@@ -338,7 +345,7 @@ test.provider(
         created.ping.environmentId,
         created.ping.projectId,
       );
-      expect(placedRegions(createdConfig.config, created.ping.serviceId)).toEqual([region]);
+      expect(yield* placedRegions(createdConfig.config, created.ping.serviceId)).toEqual([region]);
 
       const moved = "us-west2";
       const updated = yield* stack.deploy(
@@ -361,7 +368,7 @@ test.provider(
         updated.ping.environmentId,
         updated.ping.projectId,
       );
-      expect(placedRegions(updatedConfig.config, updated.ping.serviceId)).toEqual([moved]);
+      expect(yield* placedRegions(updatedConfig.config, updated.ping.serviceId)).toEqual([moved]);
 
       yield* stack.destroy();
 
@@ -378,5 +385,69 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
+  },
+);
+
+test.provider(
+  "set a function's replica count with a region, then scale it without one",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const region = "europe-west4-drams3a";
+      const deployReplicas = (props: { region?: string; replicas?: number }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const ping = yield* Railway.Function("FnReplicas", {
+              project,
+              environment,
+              source: `console.log("tick");`,
+              http: false,
+              ...props,
+            });
+            return { ping };
+          }),
+        );
+      const placed = (fn: { environmentId: string; projectId: string; serviceId: string }) =>
+        readEnvironmentConfig(fn.environmentId, fn.projectId).pipe(
+          Effect.flatMap((config) => serviceRegionPlacement(config.config, fn.serviceId)),
+          Effect.map((placement) => ({
+            regions: activeReplicaRegions(placement).map((row) => row.region),
+            replicas: observedReplicas(placement),
+          })),
+        );
+
+      const created = yield* deployReplicas({ region, replicas: 2 });
+      expect(created.ping.replicas).toEqual(2);
+      expect(yield* placed(created.ping)).toEqual({ regions: [region], replicas: Option.some(2) });
+
+      // `region` omitted: the count changes in the region the function is in.
+      const scaled = yield* deployReplicas({ replicas: 3 });
+      expect(scaled.ping.serviceId).toEqual(created.ping.serviceId);
+      expect(scaled.ping.replicas).toEqual(3);
+      expect(scaled.ping.region).toEqual(region);
+      expect(yield* placed(scaled.ping)).toEqual({ regions: [region], replicas: Option.some(3) });
+
+      // `replicas` omitted: the count is left alone.
+      const kept = yield* deployReplicas({ region });
+      expect(kept.ping.serviceId).toEqual(created.ping.serviceId);
+      expect(yield* placed(kept.ping)).toEqual({ regions: [region], replicas: Option.some(3) });
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.ping.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:function",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
