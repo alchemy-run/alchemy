@@ -31,6 +31,7 @@ import {
   isDurableObjectContainer,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
+import { resolveContainerBuildPaths } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
@@ -122,10 +123,10 @@ export const LocalContainerProvider = () =>
           // directory. The runtime builds the user's Dockerfile against the
           // (real-path'd) context, exactly like the live provider's
           // `external` variant.
-          const context = yield* fs.realPath(news.context ?? ".");
-          const dockerfile = news.dockerfile
-            ? yield* fs.realPath(news.dockerfile)
-            : path.join(context, "Dockerfile");
+          const { context, dockerfile } = yield* resolveContainerBuildPaths({
+            context: news.context,
+            dockerfile: news.dockerfile,
+          });
           // Hash what Docker receives, like the live provider: the context
           // `.dockerignore` keeps (never a lockfile above it) and the Dockerfile.
           return {

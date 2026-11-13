@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import DockerfilePathWorker from "./fixtures/dockerfile-path/worker.ts";
 import FuseStack from "./fixtures/fuse/stack.ts";
 import LocalRemoteStack, { state } from "./fixtures/remote/local-stack.ts";
 
@@ -34,6 +35,40 @@ const readinessSchedule = Schedule.min([
  * `main` entrypoint" because it only handled the Effect-native variant).
  * The DO proxies a request to the echo server running inside the container.
  */
+/**
+ * #3320: a relative `dockerfile` resolves against `context` (it used to
+ * resolve only against the working directory and failed with `NotFound`),
+ * and a path relative to the working directory still builds.
+ */
+describe(
+  "local container dockerfile path",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+  },
+  () => {
+    test.provider(
+      "resolves a relative dockerfile against context, then the working directory",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { worker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* DockerfilePathWorker };
+            }),
+          );
+          expect(worker.url).toMatch(/^http:\/\/localhost:/);
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+  },
+);
+
 describe(
   "local remote container (image)",
   {
