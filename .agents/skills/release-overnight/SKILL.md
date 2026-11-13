@@ -86,7 +86,7 @@ layer shows up in minutes, not after AWS. Paths are relative to
 | 1 | Cloudflare | `test/Cloudflare` | 16 |
 | 2 | core unit | `pnpm test` (packages/alchemy) | default |
 | 3 | core integration | `test/*.test.ts test/Bundle test/Cli test/Local test/Runtime test/Util test/Website` | 8 |
-| 4 | building blocks | `test/Docker test/Redis test/Kubernetes test/SQL test/Drizzle test/Domain test/Auth test/DNS test/ACME test/Workflows test/Cluster` | 8 |
+| 4 | building blocks | `test/Docker test/Redis test/Kubernetes test/SQL test/Drizzle test/Domain test/DomainExport test/Auth test/DNS test/ACME test/Workflows test/Cluster` | 8 |
 | 5 | Git, GitHub, Axiom, Stripe, Archil, Boat | one step each | 8 |
 | 6 | Turso, Neon, Planetscale, Prisma, E2B, Daytona, Modal, Rivet | one step each | 8 |
 | 7 | Hetzner, Railway, Fly | one step each | 8 |
@@ -99,6 +99,29 @@ step. If one is missing from this table, add it to steps 5–7 by size, and fix
 this skill in the release PR. Never pass `--concurrency unbounded` or go
 over 32. Never run a sequential monster file unfiltered in a fix iteration
 (e.g. `Fly/BlueGreen.test.ts`). Its confirming run is the step's run.
+
+Opt-in tags this table's steps carry. A tag filter selects only tests that
+match it, so when the user includes one in §0, run the step's paths once more
+with `--tags <tag>`:
+
+- `export-lakes` (step 4, `test/DomainExport`): every Iceberg catalog beyond
+  the REST fixture (Lakekeeper, Polaris, Nessie, Gravitino) and the
+  hand-written Python and Spark consumers. Local Docker only, no account,
+  but heavy: one Java server per catalog file, two images built on first
+  run (about 3 GB). The Export mutation gate, `pnpm test:export:mutants
+  --lakes`, runs those suites again once per mutant; run it only when asked.
+- `export-versions` (step 4, `test/DomainExport`): the Export suites on the
+  older supported versions (Postgres 14 to 16, MySQL 8.0, ClickHouse 25.3,
+  Trino 476). Local Docker only, no account.
+- `export-live` (step 4, `test/DomainExport`): the Export suites against
+  databases the files deploy and destroy: PlanetScale MySQL and Postgres,
+  Neon, Turso, and an Iceberg lake on Glue read by Athena. Each file also
+  needs its provider's switch (`PLANETSCALE_TEST`, `NEON_TEST`,
+  `TURSO_TEST`, `EXPORT_ATHENA_TEST`), so the tag alone spends nothing. It
+  mutates real accounts and costs money (about $0.15 a run, at most about
+  $1.45; a killed run leaves a PlanetScale PS-10 billing about $1.30 a day
+  until destroyed: see the Export tests README): run it only when the user
+  names it, with the testing profile's accounts.
 
 ## 3. One step
 
