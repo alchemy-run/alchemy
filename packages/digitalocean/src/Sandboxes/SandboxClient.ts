@@ -102,7 +102,7 @@ export const makeSandboxesBinding = Effect.succeed(
       const credentials = fromApiKey({
         apiKey: typeof token === "string" ? Redacted.make(token) : token,
       });
-      const withToken = <A, E>(effect: Effect.Effect<A, E, any>) =>
+      const withToken = <A, E>(effect: Effect.Effect<A, E, DO.DigitalOceanOpContext>) =>
         asSandboxError(
           effect.pipe(Effect.provide(Layer.mergeAll(credentials, FetchHttpClient.layer))),
         ) as Effect.Effect<A, SandboxError>;

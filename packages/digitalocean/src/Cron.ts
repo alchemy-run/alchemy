@@ -9,9 +9,9 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import { isAppHost, JOB_ENV, type AppJob } from "./internal/appJobs.ts";
 
-export type CronService = <Req = never>(
+export type CronService = <Req = never, E = never>(
   expression: string,
-  handler: () => Effect.Effect<void, unknown, Req>,
+  handler: () => Effect.Effect<void, E, Req>,
   options?: { readonly timeZone?: string },
 ) => Effect.Effect<void, never, Exclude<Req, RuntimeContext | Scope.Scope>>;
 
@@ -55,9 +55,9 @@ export class Cron extends Context.Service<Cron, CronService>()("DigitalOcean.Cro
  * @binding
  * @product App Platform
  */
-export const cron = <Req = never>(
+export const cron = <Req = never, E = never>(
   expression: string,
-  handler: () => Effect.Effect<void, unknown, Req>,
+  handler: () => Effect.Effect<void, E, Req>,
   options?: { readonly timeZone?: string },
 ): Effect.Effect<void, never, Cron | Exclude<Req, RuntimeContext | Scope.Scope>> =>
   Cron.use((schedule) => schedule(expression, handler, options));
@@ -78,9 +78,9 @@ const jobNameOf = (expression: string, timeZone: string | undefined) =>
 export const CronLive = Layer.succeed(
   Cron,
   // The handler's requirements are provided by the App runtime that runs it.
-  Effect.fn(function* <Req>(
+  Effect.fn(function* <Req, E>(
     expression: string,
-    handler: () => Effect.Effect<void, unknown, Req>,
+    handler: () => Effect.Effect<void, E, Req>,
     options?: { readonly timeZone?: string },
   ) {
     const name = yield* jobNameOf(expression, options?.timeZone);

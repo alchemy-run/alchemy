@@ -153,7 +153,7 @@ export const Function: Platform<Function, never, Main<never>, FunctionRuntimeCon
     transformProps: (_id, props) =>
       Effect.gen(function* () {
         if (globalThis.__ALCHEMY_RUNTIME__ || !Effect.isEffect(props.namespace)) return props;
-        const namespace = yield* props.namespace;
+        const namespace = yield* props.namespace as Effect.Effect<NamespaceRef, never, Providers>;
         return { ...props, namespace };
       }),
   },
