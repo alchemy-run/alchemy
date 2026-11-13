@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingMeters,
   GetBillingMeter,
@@ -412,11 +411,8 @@ export const BillingMeterProvider = () =>
                 },
               }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-billing-meter-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-billing-meter-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

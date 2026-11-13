@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPromotionCodes,
   GetPromotionCode,
@@ -320,21 +319,11 @@ const toCode = (id: string, code: string | undefined, existing?: string) =>
 
 const isResourceMissing = isMissingStripeResource;
 
-/**
- * Reads ask for the API version whose promotion codes carry `promotion`.
- * An account's default version can predate it, and then `promotion.coupon`
- * is missing from every read.
- */
-const atPromotionApiVersion = withRequestOptions({ apiVersion: "2025-09-30.clover" });
-
 const getById = (promotionCode: string) =>
   GetPromotionCode({
     promotion_code: promotionCode,
     expand: ["promotion.coupon"],
-  }).pipe(
-    atPromotionApiVersion,
-    Effect.catchIf(isResourceMissing, () => Effect.undefined),
-  );
+  }).pipe(Effect.catchIf(isResourceMissing, () => Effect.undefined));
 
 const findByCode = (code: string) =>
   Effect.gen(function* () {
@@ -345,13 +334,13 @@ const findByCode = (code: string) =>
           active: true,
           limit: LIST_PAGE_SIZE,
           expand: ["data.promotion.coupon"],
-        }).pipe(atPromotionApiVersion),
+        }),
         GetPromotionCodes({
           code,
           active: false,
           limit: LIST_PAGE_SIZE,
           expand: ["data.promotion.coupon"],
-        }).pipe(atPromotionApiVersion),
+        }),
       ],
       { concurrency: 2 },
     );
@@ -370,7 +359,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
       limit: LIST_PAGE_SIZE,
       expand: ["data.promotion.coupon"],
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(atPromotionApiVersion);
+    });
     items.push(...result.data);
     if (!result.has_more || result.data.length === 0) break;
     startingAfter = result.data[result.data.length - 1]?.id;
@@ -523,10 +512,8 @@ export const PromotionCodeProvider = () =>
           ...(news.maxRedemptions !== undefined ? { max_redemptions: news.maxRedemptions } : {}),
           metadata,
           ...(createRestrictions !== undefined ? { restrictions: createRestrictions } : {}),
+          idempotencyKey: `alchemy-promotion-code-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-promotion-code-${instanceId}`,
-          }),
           Effect.catchTag("InvalidRequestError", (error) =>
             observe({ id: output?.id, code }).pipe(
               Effect.flatMap((found) =>

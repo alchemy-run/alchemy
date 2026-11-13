@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteTerminalConfiguration,
   GetTerminalConfigurations,
@@ -855,11 +854,10 @@ export const TerminalConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* CreateTerminalConfiguration(toCreatePayload(name, news)).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-terminal-configuration-${instanceId}`,
-          }),
-        );
+        current = yield* CreateTerminalConfiguration({
+          ...toCreatePayload(name, news),
+          idempotencyKey: `alchemy-terminal-configuration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

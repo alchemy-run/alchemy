@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteRadarValueList,
   GetRadarValueLists,
@@ -371,11 +370,8 @@ export const RadarValueListProvider = () =>
           name,
           item_type: itemType,
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-radar-value-list-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-radar-value-list-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

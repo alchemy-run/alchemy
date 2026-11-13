@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteApplePayDomain,
   GetApplePayDomains,
@@ -241,10 +240,8 @@ export const ApplePayDomainProvider = () =>
       if (current === undefined) {
         current = yield* CreateApplePayDomain({
           domain_name: news.domainName,
+          idempotencyKey: `alchemy-apple-pay-domain-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-apple-pay-domain-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>
