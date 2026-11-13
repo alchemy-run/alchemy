@@ -23,7 +23,12 @@ import type * as Tracer from "effect/Tracer";
 import type { HttpEffect } from "../Http.ts";
 import { rpcMethodOf, serveRpc } from "../Rpc.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import { buildEventTelemetry } from "../TelemetryRuntime.ts";
+import {
+  buildEventTelemetry,
+  buildInstanceTelemetry,
+  handOffAfterEvent,
+  type InstanceTelemetry,
+} from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
 import { gateCall, InstanceInputGate, makeInputGate } from "./InputGate.ts";
@@ -53,6 +58,12 @@ export interface BuiltDurableObject {
   /** The instance's decorated runtime context. */
   readonly runtime: RuntimeContext["Service"];
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
+  /**
+   * The instance's own exporters: fibers its initializer forks record into
+   * them, as do fibers an event leaves running once the event has ended.
+   * Every event flushes them on its way out.
+   */
+  readonly instanceTelemetry: InstanceTelemetry;
 }
 
 export interface DurableObjectInstanceOptions {
@@ -162,35 +173,44 @@ export const makeDurableObjectInstance = ({
         Layer.provideMerge(Layer.succeedContext(services)),
         Layer.provideMerge(Layer.succeedContext(context)),
       );
+      // The instance's own exporters, built into a scope that never closes
+      // (workerd gives an instance no shutdown hook). They have no export
+      // interval, so an idle instance can still hibernate; every event
+      // flushes them on its way out.
+      const instanceScope = Scope.makeUnsafe();
       // Construction runs through the gate as a call of its own, so fibers it
       // forks (a background loop) belong to that call and their storage is
       // gated like any call's.
-      return gateCall(
-        constructor.pipe(
-          Effect.flatMap((inner) =>
-            Effect.suspend(() => {
-              const seal = initialize?.();
-              const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
-                Layer.provideMerge(doContext),
-              );
-              return inner.pipe(
-                Effect.provide(instanceContext),
-                Effect.ensuring(Effect.sync(() => seal?.())),
-              );
-            }),
+      return Effect.gen(function* () {
+        const instanceTelemetry = yield* buildInstanceTelemetry(context, instanceScope);
+        const built = yield* gateCall(
+          constructor.pipe(
+            Effect.flatMap((inner) =>
+              Effect.suspend(() => {
+                const seal = initialize?.();
+                const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
+                  Layer.provideMerge(doContext),
+                );
+                return inner.pipe(
+                  Effect.provide(instanceContext),
+                  Effect.ensuring(Effect.sync(() => seal?.())),
+                );
+              }),
+            ),
           ),
-        ),
-      ).pipe(
-        Effect.provide(doContext),
-        Effect.map((built): BuiltDurableObject => ({
+        ).pipe(Effect.provideContext(instanceTelemetry.context));
+        // What construction recorded goes out now, not with the first event.
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
+        waitUntil(runPromise(instanceTelemetry.flush));
+        return {
           instance: built as DurableObjectInstanceShape,
           services: Context.add(services, RuntimeContext, instanceRuntimeContext),
           context,
           runtime: instanceRuntimeContext,
           telemetry,
-        })),
-        Effect.runPromise,
-      );
+          instanceTelemetry,
+        } satisfies BuiltDurableObject;
+      }).pipe(Effect.provide(doContext), Effect.runPromise);
     }),
   );
 
@@ -203,7 +223,16 @@ export const makeDurableObjectInstance = ({
     // context: the call's scope waits for it before closing.
     const event = makeEventLifetime(scope);
 
-    const { instance: shape, services, context, runtime, telemetry } = await instance;
+    const {
+      instance: shape,
+      services,
+      context,
+      runtime,
+      telemetry,
+      instanceTelemetry,
+    } = await instance;
+    // Set once the call's scope has closed and its exporters have flushed.
+    let ended = false;
 
     // A class given the `InputGate` Layer has a gate; the call runs
     // through it so storage can't interleave between calls.
@@ -221,7 +250,13 @@ export const makeDurableObjectInstance = ({
             // scope by `buildEventTelemetry` so buffered telemetry flushes
             // when the scope closes into `waitUntil` below (the instance
             // scope never finalizes on workerd).
-            Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
+            Layer.effectContext(
+              buildEventTelemetry(context, scope, telemetry()).pipe(
+                Effect.map((event) =>
+                  handOffAfterEvent(event, instanceTelemetry.context, () => ended),
+                ),
+              ),
+            ),
           ).pipe(
             Layer.provideMerge(Layer.succeedContext(services)),
             Layer.provideMerge(Layer.succeedContext(context)),
@@ -243,7 +278,15 @@ export const makeDurableObjectInstance = ({
           // HttpMiddleware tracer's late span-end reaches the telemetry
           // exporter before the scope's flush finalizer.
           new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
-            Effect.runPromise(Scope.close(scope, Exit.void)),
+            Effect.runPromise(
+              Scope.close(scope, Exit.void).pipe(
+                Effect.andThen(Effect.sync(() => (ended = true))),
+                // Records the instance's own fibers, and fibers earlier
+                // events left running, made since the last event,
+                // delivered from this event's I/O context.
+                Effect.andThen(instanceTelemetry.flush),
+              ),
+            ),
           ),
         ),
       );
