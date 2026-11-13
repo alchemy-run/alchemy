@@ -15,8 +15,18 @@ import { findFirst, waitForState } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface LiveTableProps {
-  /** ID of the lakehouse catalog (S3, GCS) the table lives in. */
-  readonly catalogId: string;
+  /**
+   * ID of the catalog that publishes the table: a lakehouse catalog (S3,
+   * GCS) with a Glue or Galaxy metastore. Set it, `galaxyRestCatalogId`,
+   * or both.
+   */
+  readonly catalogId?: string;
+  /**
+   * ID of a Galaxy REST metastore catalog that serves the table. With
+   * `catalogId` too, both catalogs must share the default bucket and
+   * directory, and the publishing catalog's storage settings apply.
+   */
+  readonly galaxyRestCatalogId?: string;
   /** Schema of the table; it must exist. */
   readonly schemaName: string;
   /** Table name. */
@@ -45,9 +55,11 @@ export interface LiveTableProps {
 export interface LiveTableAttributes {
   /** Galaxy's live table ID. */
   readonly liveTableId: string;
-  /** Catalog the table lives in. */
-  readonly catalogId: string;
-  /** Name of that catalog. */
+  /** Catalog that publishes the table, if any. */
+  readonly catalogId: string | undefined;
+  /** Galaxy REST metastore catalog that serves the table, if any. */
+  readonly galaxyRestCatalogId: string | undefined;
+  /** Name of the catalog holding the table's storage location. */
   readonly catalogName: string;
   /** Schema of the table. */
   readonly schemaName: string;
@@ -164,6 +176,7 @@ export const LiveTable = Resource<LiveTable>("StarburstGalaxy.Ingest.LiveTable")
 const toAttributes = (table: LiveTableShape): LiveTableAttributes => ({
   liveTableId: table.liveTableId,
   catalogId: table.catalogId,
+  galaxyRestCatalogId: table.galaxyRestCatalogId,
   catalogName: table.catalogName,
   schemaName: table.schemaName,
   tableName: table.tableName,
@@ -179,7 +192,8 @@ const getTable = (liveTableId: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByTable = (props: {
-  readonly catalogId: string;
+  readonly catalogId?: string | undefined;
+  readonly galaxyRestCatalogId?: string | undefined;
   readonly schemaName: string;
   readonly tableName: string;
 }) =>
@@ -187,6 +201,7 @@ const findByTable = (props: {
     galaxy.liveTable.listLiveTables.items({}),
     (table) =>
       table.catalogId === props.catalogId &&
+      table.galaxyRestCatalogId === props.galaxyRestCatalogId &&
       table.schemaName === props.schemaName &&
       table.tableName === props.tableName,
   );
@@ -219,7 +234,14 @@ const waitForRunning = (liveTableId: string) =>
 
 export const LiveTableProvider = () =>
   Provider.succeed(LiveTable, {
-    stables: ["liveTableId", "catalogId", "schemaName", "tableName", "cloudRegionId"],
+    stables: [
+      "liveTableId",
+      "catalogId",
+      "galaxyRestCatalogId",
+      "schemaName",
+      "tableName",
+      "cloudRegionId",
+    ],
 
     nuke: {
       // A live table holds its catalog and its source.
@@ -257,6 +279,7 @@ export const LiveTableProvider = () =>
         const created = yield* galaxy.liveTable
           .createLiveTable({
             catalogId: news.catalogId,
+            galaxyRestCatalogId: news.galaxyRestCatalogId,
             schemaName: news.schemaName,
             tableName: news.tableName,
             typeProperties: news.typeProperties,
