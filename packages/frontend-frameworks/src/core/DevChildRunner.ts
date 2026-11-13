@@ -6,12 +6,8 @@
  * framework-integration module specifier, the options for its `make(...)`,
  * and the dev options. The process's working directory IS the project root
  * (the parent spawns it with `cwd = rootDir`), so toolchains that resolve
- * from the cwd — or `process.chdir` around startup — are isolated here and
- * never touch the process hosting other sites' dev servers.
- *
- * The parent sets `ALCHEMY_FRAMEWORK_DEV_CHILD=1` in this process's env, so
- * the integration's `dev` takes its in-process path instead of recursing
- * into another child.
+ * from the cwd are isolated here and never touch the process hosting other
+ * sites' dev servers.
  *
  * The runner prints the dev server's URL wrapped in the readiness marker,
  * then serves until SIGTERM/SIGINT aborts the main fiber (closing the scope
@@ -55,7 +51,9 @@ const program = Effect.scoped(
         new Error(`Dev child module ${payload.module} does not export a make function`),
       );
     }
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
     const service = yield* module.make(payload.makeOptions);
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
     const { url } = yield* service.dev(payload.devOptions);
     // Through the real stdout: the parent scans lines for this marker.
     process.stdout.write(`${devChildUrlMarker(url)}\n`);
@@ -69,6 +67,7 @@ const controller = new AbortController();
 process.once("SIGTERM", () => controller.abort());
 process.once("SIGINT", () => controller.abort());
 
+// oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
 void Effect.runPromiseExit(program, { signal: controller.signal }).then((exit) => {
   const code = Exit.match(exit, {
     onSuccess: () => 0,

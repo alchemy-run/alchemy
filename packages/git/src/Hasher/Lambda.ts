@@ -11,6 +11,7 @@ import { InvokeFunction } from "@alchemy.run/aws/Lambda/InvokeFunction";
  * falls back to hashing that chunk inline, so a push never fails because
  * the hasher did.
  */
+import { yieldDeclared } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -31,7 +32,7 @@ export const HasherLambda = (
     Effect.gen(function* () {
       // A class-style declaration (`HasherFunction`) is yielded here — at
       // deploy that registers the function, at runtime it resolves it.
-      const func = Effect.isEffect(fn) ? yield* fn as Effect.Effect<LambdaFunction> : fn;
+      const func = yield* yieldDeclared(fn);
       const invoke = yield* InvokeFunction(func);
       const remote = (payload: Uint8Array, options: Parameters<HasherShape["hashPart"]>[1]) =>
         Effect.gen(function* () {

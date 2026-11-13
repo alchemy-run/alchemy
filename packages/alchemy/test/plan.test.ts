@@ -1529,6 +1529,47 @@ describe("construct namespaces", { tags: ["unit", "local"] }, () => {
       expect(plan.deletions).toEqual({});
     }),
   );
+
+  test.provider("binding edges between separate cycles order deletes", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", {});
+          const B = yield* BindingTarget("B", {});
+          const C = yield* BindingTarget("C", {});
+          const D = yield* BindingTarget("D", {});
+          yield* A.bind("FromB", { env: { PEER: B.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+          yield* C.bind("FromD", { env: { PEER: D.string } });
+          yield* D.bind("FromC", { env: { PEER: C.string } });
+          yield* A.bind("FromC", { env: { PEER: C.string } });
+
+          const E = yield* BindingTarget("E", {});
+          const F = yield* BindingTarget("F", {});
+          yield* E.bind("FromE", { env: { SELF: E.string } });
+          yield* F.bind("FromF", { env: { SELF: F.string } });
+          yield* E.bind("FromF", { env: { PEER: F.string } });
+        }),
+      );
+
+      const live = new Set(["A", "B", "C", "D", "E", "F"]);
+      const boundBy: Record<string, string> = { C: "A", F: "E" };
+      yield* stack.destroy().pipe(
+        Effect.provideService(TestResourceHooks, {
+          delete: (id) =>
+            Effect.gen(function* () {
+              if (id === "A" || id === "E") yield* Effect.sleep("30 millis");
+              if (live.has(boundBy[id])) {
+                return yield* Effect.fail(new Error(`${id} is still bound by ${boundBy[id]}`));
+              }
+              live.delete(id);
+            }),
+        }),
+      );
+
+      expect([...live]).toEqual([]);
+    }),
+  );
 });
 
 const createTestResourceState = (options: {

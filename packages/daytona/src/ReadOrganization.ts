@@ -79,5 +79,6 @@ export const lazyScoped = <C extends object>(
       (...args: unknown[]) =>
         // `key` is a property of C (the Proxy only sees C's members), but a
         // Proxy trap types it as string, so the lookup is untyped here.
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- Proxy dispatch: C's method types are restored by the `C` return type
         Effect.flatMap(organizationId, (id) => (make(id) as any)[key](...args)),
   });

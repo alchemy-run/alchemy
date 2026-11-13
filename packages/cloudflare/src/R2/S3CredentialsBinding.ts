@@ -99,6 +99,7 @@ export type BucketInput = Bucket | Effect.Effect<Bucket, never, any>;
 
 /** Resolve a {@link BucketInput} to the bucket resource. */
 export const resolveBucket = (bucket: BucketInput) =>
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a declaration Effect's requirement is resolved when the credentials are bound; the cast drops it on purpose
   (Effect.isEffect(bucket) ? bucket : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
 
 /**

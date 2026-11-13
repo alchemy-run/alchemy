@@ -2,6 +2,7 @@ import type { Url } from "@alchemy.run/redis";
 import { UrlMissing as RedisUrlMissing } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
+import { isEffectOf } from "alchemy/Util/effect";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -36,12 +37,11 @@ const _resolveName = (redis: Redis) =>
     const direct = asPlain(value);
     if (direct !== undefined) return direct;
     if (Output.isOutput(value)) {
-      const accessor = yield* value as Output.Output<string>;
+      const accessor = yield* value as Output.Output<string, never>;
       return asPlain(yield* accessor) ?? "";
     }
-    if (Effect.isEffect(value)) {
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource attribute Effects resolve without requirements
-      return asPlain(yield* value as Effect.Effect<unknown>) ?? "";
+    if (isEffectOf(value)) {
+      return asPlain(yield* value) ?? "";
     }
     return redis.LogicalId;
   });

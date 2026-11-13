@@ -8,10 +8,10 @@ export interface CronEventSourceProps {
   /** Numeric five-field UTC cron expression. */ cron: string;
   /** Enable future delivery. @default true */ enabled?: boolean;
 }
-export type CronEventSourceService = <R = never>(
+export type CronEventSourceService = <R = never, E = never>(
   name: string,
   props: CronEventSourceProps,
-  handler: (event: CronEvent) => Effect.Effect<void, unknown, R>,
+  handler: (event: CronEvent) => Effect.Effect<void, E, R>,
 ) => Effect.Effect<void, never, Exclude<R, RuntimeContext | Scope>>;
 /**
  * Register a typed POST handler and create its tracked FunctionTrigger automatically.
@@ -33,10 +33,10 @@ export interface CronEventSource extends Binding.Service<
   "Neon.CronEventSource",
   CronEventSourceService
 > {
-  <R = never>(
+  <R = never, E = never>(
     name: string,
     props: CronEventSourceProps,
-    handler: (event: CronEvent) => Effect.Effect<void, unknown, R>,
+    handler: (event: CronEvent) => Effect.Effect<void, E, R>,
   ): Effect.Effect<void, never, CronEventSource | Exclude<R, RuntimeContext | Scope>>;
 }
 export const CronEventSource = Binding.Service<CronEventSource>("Neon.CronEventSource");

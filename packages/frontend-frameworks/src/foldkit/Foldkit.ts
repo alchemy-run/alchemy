@@ -34,7 +34,14 @@ export interface FoldkitTargetConfig {
   /** Override static HTML routing. */
   readonly htmlHandling?: NodeServeHtmlHandling | undefined;
 }
-export interface FoldkitTarget extends Core.DeployTarget<FoldkitTargetConfig> {}
+export interface FoldkitTarget extends Core.DeployTarget<FoldkitTargetConfig> {
+  /**
+   * Vite plugins the target adds to the app's build and dev server (e.g.
+   * Cloudflare's runtime plugin). A target with plugins builds every
+   * environment with them and deploys the server bundle they produce.
+   */
+  readonly vitePlugins?: ((context: { readonly root: string }) => Array<Plugin>) | undefined;
+}
 export type FoldkitTargetInput = Core.DeployTargetInput<FoldkitTarget, FoldkitTargetConfig>;
 export interface FoldkitOptions extends FoldkitTargetConfig {
   /** Project directory. @default process.cwd() */
@@ -67,10 +74,16 @@ interface ViteBuilder {
   readonly build: (environment: unknown) => Promise<unknown>;
 }
 interface ViteModule {
-  readonly createBuilder: (config: Record<string, unknown>) => Promise<ViteBuilder>;
+  readonly createBuilder: (
+    config: Record<string, unknown>,
+    useLegacyBuilder?: null,
+  ) => Promise<ViteBuilder>;
 }
 const fail = (message: string, cause?: unknown) =>
   new Core.FrameworkError({ framework: "foldkit", message, cause });
+
+const hasPlugin = (plugins: ViteBuilder["config"]["plugins"], name: string) =>
+  plugins.some((plugin) => plugin.name === name);
 
 /** Capture the plugin API before building, but only read it after buildApp succeeds. */
 export const metadataReader = (plugins: ViteBuilder["config"]["plugins"]) => {
@@ -190,23 +203,68 @@ export const make: (
       notFoundHandling: options.notFoundHandling,
       htmlHandling: options.htmlHandling,
     };
-    const native = yield* makeVite({
-      root: baseRoot,
-      vite: options.vite,
-      dev: options.dev,
-    });
     const provide = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
       effect.pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, path),
       );
+    const resolveTarget = (root: string, input: FoldkitTargetInput) =>
+      Core.resolveDeployTarget<FoldkitTarget, FoldkitTargetConfig>(root, input, config).pipe(
+        Effect.mapError((error) => fail(error.message, error.cause)),
+      );
+    const inlineConfig = (root: string) => ({
+      root,
+      logLevel: "warn",
+      ...(options.vite?.configFile !== undefined
+        ? { configFile: path.resolve(root, options.vite.configFile) }
+        : {}),
+      ...(options.vite?.base !== undefined ? { base: options.vite.base } : {}),
+      ...(options.vite?.outDir !== undefined ? { build: { outDir: options.vite.outDir } } : {}),
+    });
+    /**
+     * Build every environment with the target's plugins, which bundle the
+     * server for the target's runtime: a custom entry, or the handler
+     * Foldkit's `ssr.build` generates. The two cannot be combined.
+     */
+    const buildWithTargetPlugins = Effect.fn(function* (
+      vite: ViteModule,
+      target: FoldkitTarget & { readonly vitePlugins: NonNullable<FoldkitTarget["vitePlugins"]> },
+      context: Core.DeployTargetFinishContext,
+    ) {
+      const collector = yield* provide(Core.makeBuildOutputCollector({ entryEnvironment: "ssr" }));
+      const assetBase = yield* Effect.tryPromise({
+        try: async () => {
+          const builder = await vite.createBuilder(
+            {
+              ...inlineConfig(context.root),
+              plugins: [...target.vitePlugins({ root: context.root }), collector.plugin],
+            },
+            null,
+          );
+          if (target.entry !== undefined && hasPlugin(builder.config.plugins, "foldkit:build")) {
+            throw fail(
+              "Foldkit ssr.build generates the server handler and cannot be combined with main. Remove main or disable ssr.build for a custom entry.",
+            );
+          }
+          await builder.buildApp();
+          // The `base` the client's URLs were rewritten with, which the
+          // uploaded asset paths must agree with.
+          return (builder.environments.client?.config ?? builder.config).base;
+        },
+        catch: (cause) =>
+          cause instanceof Core.FrameworkError ? cause : fail("Failed to build Foldkit", cause),
+      });
+      const collected = yield* collector
+        .collect()
+        .pipe(Effect.mapError((error) => fail(error.message, error.cause)));
+      const output = { ...collected, assetBase };
+      return yield* provide(Core.applyDeployTargetFinish(target, output, context)).pipe(
+        Effect.mapError((error) => fail(error.message, error.cause)),
+      );
+    });
     const build: Core.Framework["Service"]["build"] = Effect.fn(function* (buildOptions) {
       const root = path.resolve(buildOptions?.root ?? baseRoot);
-      const target = yield* Core.resolveDeployTarget<FoldkitTarget, FoldkitTargetConfig>(
-        root,
-        options.target ?? DEFAULT_TARGET_SPECIFIER,
-        config,
-      ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
+      const target = yield* resolveTarget(root, options.target ?? DEFAULT_TARGET_SPECIFIER);
       const context = { root, framework: "foldkit", env: buildOptions?.env };
       if (target.build)
         return yield* provide(target.build(context)).pipe(
@@ -215,6 +273,10 @@ export const make: (
       const vite = yield* Core.loadProjectModule<ViteModule>(root, "vite").pipe(
         Effect.mapError((error) => fail(error.message, error.cause)),
       );
+      const { vitePlugins } = target;
+      if (vitePlugins !== undefined) {
+        return yield* buildWithTargetPlugins(vite, { ...target, vitePlugins }, context);
+      }
       const built = yield* Effect.tryPromise({
         try: async () => {
           const outDir = options.vite?.outDir;
@@ -245,13 +307,7 @@ export const make: (
                 : undefined,
           };
           const builder = await vite.createBuilder({
-            root,
-            logLevel: "warn",
-            ...(options.vite?.configFile !== undefined
-              ? { configFile: path.resolve(root, options.vite.configFile) }
-              : {}),
-            ...(options.vite?.base !== undefined ? { base: options.vite.base } : {}),
-            ...(outDir !== undefined ? { build: { outDir } } : {}),
+            ...inlineConfig(root),
             plugins: [outputPlugin],
           });
           const read = metadataReader(builder.config.plugins);
@@ -281,7 +337,22 @@ export const make: (
         }),
       ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     });
-    return Core.Framework.of({ build, dev: native.dev });
+    // The project's native dev server, with the target's plugins when an
+    // explicit target brings any.
+    const dev: Core.Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+      const root = path.resolve(devOptions?.root ?? baseRoot);
+      const target =
+        options.target === undefined ? undefined : yield* resolveTarget(root, options.target);
+      const native = yield* provide(
+        makeVite({
+          root: baseRoot,
+          vite: options.vite,
+          dev: { ...options.dev, plugins: target?.vitePlugins?.({ root }) },
+        }),
+      );
+      return yield* native.dev(devOptions);
+    });
+    return Core.Framework.of({ build, dev });
   });
 
 export const layer = (

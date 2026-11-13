@@ -95,6 +95,12 @@ export type ServerDevProps =
        * @default false
        */
       strictPort?: boolean;
+      /**
+       * The JS runtime the dev server runs under, overriding the
+       * framework's default (Node for frameworks whose dev server is known
+       * to misbehave under Bun, otherwise the engine's own runtime).
+       */
+      runtime?: "node" | "bun";
     }
   | {
       /**
@@ -140,11 +146,17 @@ export interface ServerProps {
    */
   dev?: ServerDevProps;
   /**
+   * The framework's default JS runtime for its dev server. Some dev servers
+   * are runtime-sensitive (Vocs's Vite dev server exhausts memory under
+   * Bun), so the composite pins them to `"node"`; `dev.runtime` overrides
+   * it. Defaults to the engine's runtime.
+   */
+  runtime?: "node" | "bun";
+  /**
    * Environment variables for the framework server. On deploy the
-   * composite sets these on the Lambda; during `alchemy dev` they are
-   * applied to the dev server's process environment (the dev sidecar and
-   * any child it spawns) so server code reads the same values in both
-   * modes. Changing a value restarts the dev server.
+   * composite sets these on the Lambda; during `alchemy dev` they are set
+   * on the dev server's child process, so server code reads the same values
+   * in both modes. Changing a value restarts the dev server.
    *
    * Entries whose value is `undefined` are dropped — this lets website
    * composites forward optional values (e.g. an `Output` service URL that
@@ -205,8 +217,9 @@ export interface Server extends Resource<
  * The framework toolchain half of a website: on `alchemy deploy` it
  * runs the framework's production build with a platform deploy target and
  * tracks the on-disk output in state; on `alchemy dev` it runs the
- * framework's OWN dev server (native HMR via the framework's kit) in the
- * dev sidecar and exposes its local URL. Shared by AWS, Fly, Hetzner, and
+ * framework's OWN dev server (native HMR via the framework's kit) in a
+ * child process of the dev sidecar, rooted at the project, and exposes its
+ * local URL. Shared by AWS, Fly, Hetzner, and
  * Railway website composites.
  *
  * The framework package and the target module are loaded from *your*
@@ -261,6 +274,7 @@ const makeFramework = (props: ServerProps, root: string) =>
   importFrameworkModule(props.framework).pipe(
     Effect.flatMap((module_) =>
       Effect.mapError(
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework-core is loaded from the project at runtime; its errors are mapped to FrameworkServerError here
         module_.make({
           ...props.options,
           root,
@@ -293,6 +307,7 @@ export const ServerProviderLive = () =>
         const root = path.resolve(initialCwd, props.root ?? ".");
         const service = yield* makeFramework(props, root);
         return yield* Effect.mapError(
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework-core is loaded from the project at runtime; its errors are mapped to FrameworkServerError here
           service.build({ root, env: definedEnv(props.env) }),
           (cause) =>
             new FrameworkServerError({
@@ -475,8 +490,9 @@ const normalizeAdvertisedUrl = (url: string) =>
 
 /**
  * The `alchemy dev` variant: runs the framework's own dev server (native
- * HMR through the framework's kit — nuxt, astro, ...) inside the dev
- * sidecar, so it survives user-code hot reloads. Restarts when the
+ * HMR through the framework's kit — nuxt, astro, ...) in a child process of
+ * the dev sidecar, rooted at the project, so it survives user-code hot
+ * reloads. Restarts when the
  * framework/target/root/options config changes.
  */
 export const ServerProviderLocal = () =>
@@ -485,7 +501,6 @@ export const ServerProviderLocal = () =>
     import.meta.resolve(`./ServerLocal${moduleExtension(import.meta.url)}`, import.meta.url),
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const fs = yield* FileSystem.FileSystem;
       return {
         start: Effect.fn(function* ({ news: props }) {
           // External mode: an external dev server (run out-of-band by the
@@ -502,26 +517,6 @@ export const ServerProviderLocal = () =>
           }
           const dev = props.dev;
           const root = path.resolve(initialCwd, props.root ?? ".");
-          // Dev/live env parity: the composite sets these on the Lambda on
-          // deploy; in dev the framework server runs inside the sidecar
-          // (or as its child — `next dev`), so the sidecar's process env
-          // is what SSR code reads. `env` is part of the restart surface,
-          // so a changed value restarts the dev server with the new
-          // environment. Values are not unset on stop: sibling dev servers
-          // share the process, so clearing could clobber their keys.
-          if (props.env !== undefined) {
-            yield* Effect.sync(() => {
-              for (const [key, value] of Object.entries(props.env!)) {
-                if (value === undefined) continue;
-                // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports props.env into the sidecar's process env for the dev server, not config reading
-                process.env[key] = String(value);
-              }
-            });
-          }
-          const service = yield* makeFramework(props, root).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.provideService(Path.Path, path),
-          );
           // Resolve the port BEFORE handing off to the framework: probe
           // the preferred port, fail on `strictPort`, otherwise walk
           // forward to the next free port. Without a preferred port the
@@ -535,11 +530,33 @@ export const ServerProviderLocal = () =>
                   strictPort: dev.strictPort ?? false,
                 })
               : undefined;
-          // `dev` is scoped: the server lives in the instance scope the
-          // LocalProvider helper provides and is torn down on
-          // restart/delete. It resolves at readiness with the local URL.
+          // Never in the sidecar: framework toolchains read the cwd and keep
+          // process-wide caches.
+          const { runDevChild } = yield* Effect.tryPromise({
+            try: () => import("@alchemy.run/frontend-frameworks/core"),
+            catch: (cause) =>
+              new FrameworkServerError({
+                framework: props.framework,
+                message:
+                  'Failed to import "@alchemy.run/frontend-frameworks/core". ' +
+                  "Install @alchemy.run/frontend-frameworks in your project to run a website in dev.",
+                cause,
+              }),
+          });
           const { url } = yield* Effect.mapError(
-            service.dev({ root, port, host: dev?.host }),
+            runDevChild({
+              runtime: dev?.runtime ?? props.runtime,
+              framework: props.framework,
+              module: props.framework,
+              rootDir: root,
+              env: definedEnv(props.env),
+              makeOptions: { ...props.options, root, target: props.target },
+              devOptions: {
+                root,
+                ...(port !== undefined ? { port } : {}),
+                ...(dev?.host !== undefined ? { host: dev.host } : {}),
+              },
+            }),
             (cause) =>
               new FrameworkServerError({
                 framework: props.framework,

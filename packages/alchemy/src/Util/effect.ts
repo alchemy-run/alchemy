@@ -93,3 +93,21 @@ export const toEffectInterface = <T extends object>(raw: T) =>
       ]),
     ),
   }) as ToEffectInterface<T>;
+
+/**
+ * Whether `value` is an Effect, narrowed to one that yields `A`.
+ *
+ * For values whose Effect form is a declaration (a resource declared at
+ * module scope, an Effect-valued prop): its requirements are the stack's,
+ * which the engine satisfies when it yields the declaration, so the
+ * narrowed Effect carries none.
+ */
+export const isEffectOf = <A = unknown>(value: unknown): value is Effect.Effect<A> =>
+  Effect.isEffect(value);
+
+/**
+ * Yield `value` if it is a declaration Effect, otherwise succeed with it:
+ * `{ app: Site }` and `{ app: yield* Site }` resolve to the same `App`.
+ */
+export const yieldDeclared = <A>(value: A | Effect.Effect<A, any, any>): Effect.Effect<A> =>
+  isEffectOf<A>(value) ? value : Effect.succeed(value as A);

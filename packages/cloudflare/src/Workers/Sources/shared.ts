@@ -76,6 +76,7 @@ export const bundleSource = (spec: {
     ),
   hash: (ctx) => spec.build(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
   dev: (ctx) =>
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- watch requirements beyond `SourceDevServices` (Rolldown's `WorkerBundle`) are provided by the source module's `make` layers
     spec.watch(ctx).pipe(Effect.map((bundles) => ({ mode: "bundle", bundles }) as SourceDevHandle)),
 });
 

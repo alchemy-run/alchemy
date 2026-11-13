@@ -440,17 +440,19 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
             runners.push(effect);
           }),
         serve: ((_handler, options) =>
           Effect.sync(() => {
             const run = options?.shape?.run;
             if (Effect.isEffect(run)) {
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- `run` is a user program; the host runner surfaces its failures and satisfies its requirements
               runners.push(run as Effect.Effect<void, never, any>);
             }
           })) as HostRuntimeContext["serve"],
         exports: Effect.sync(() => ({
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
           program: Effect.all(runners, { concurrency: "unbounded" }).pipe(Effect.asVoid),
         })),
       };

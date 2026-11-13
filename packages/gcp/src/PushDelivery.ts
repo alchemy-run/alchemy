@@ -130,12 +130,12 @@ const unavailable = HttpServerResponse.text("unavailable", { status: 503 });
  * host's own service account), then run `handle`. Any other request is
  * left for the next listener or the user's `fetch`.
  */
-export const listenForDeliveries = (
+export const listenForDeliveries = <Req = never>(
   host: PushHost,
   path: string,
   handle: (
     request: HttpServerRequest,
-  ) => Effect.Effect<HttpServerResponse.HttpServerResponse, never, any>,
+  ) => Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
 ) =>
   host.listen((request) => {
     const pathname = new URL(request.url, "http://host").pathname;

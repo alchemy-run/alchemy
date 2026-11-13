@@ -5,7 +5,7 @@ import * as Output from "alchemy/Output";
 import type { PlatformServices } from "alchemy/Platform";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { toSeconds, toWireDays } from "alchemy/Util/Duration";
-import { effectClass, taggedFunction } from "alchemy/Util/effect";
+import { effectClass, taggedFunction, isEffectOf } from "alchemy/Util/effect";
 import type { DistributiveOmit } from "alchemy/Util/types";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
@@ -322,9 +322,8 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
 };
 
 const mapDurablePropsInput = (props: unknown) =>
-  Effect.isEffect(props)
-    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
-      Effect.map(props as Effect.Effect<DurableFunctionProps>, mapDurableProps)
+  isEffectOf<DurableFunctionProps>(props)
+    ? Effect.map(props, mapDurableProps)
     : mapDurableProps(props as DurableFunctionProps);
 
 const resolveDurableHandle = (id: string) => (instance: unknown) => {
@@ -475,6 +474,7 @@ const composeDurableImpl = (
     // Resolve the body function. Bindings resolved in the impl's init close
     // over their services; the returned closure's only leftover requirements
     // are DurableRunServices, provided per invocation by the bridge.
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the impl's init requirements are the host's, erased by composeDurableImpl
     const fn = yield* (impl as Effect.Effect<DurableFunctionImpl<any, any>>).pipe(
       Effect.provideService(DurableFunctionScope, handle),
     );

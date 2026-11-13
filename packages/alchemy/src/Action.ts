@@ -173,7 +173,8 @@ const makeActionClass = (
   let resolveRunner: Effect.Effect<ActionRunner<any, any, any>, any, any> | undefined;
   if (baked !== undefined) {
     resolveRunner = isRunnerEffect(baked)
-      ? baked.pipe(Effect.cached, Effect.runSync)
+      ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- Action runners are registered per type and erased; each Action's own signature carries its types
+        baked.pipe(Effect.cached, Effect.runSync)
       : Effect.succeed(baked);
   }
 
@@ -194,7 +195,8 @@ const makeActionClass = (
     const [id, input] = args.length === 1 ? [type, args[0]] : (args as [string, any]);
     return Effect.gen(function* () {
       const run = resolveRunner
-        ? yield* resolveRunner.pipe(Effect.provideService(RuntimeContext, captureContext))
+        ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- Action runners are registered per type and erased; each Action's own signature carries its types
+          yield* resolveRunner.pipe(Effect.provideService(RuntimeContext, captureContext))
         : ((yield* SelfTag!) as ActionRunner<any, any, any>);
       return yield* registerAction(type, id, input, run, captures);
     });
@@ -212,6 +214,7 @@ const makeActionClass = (
       isRunnerEffect(initOrRun)
         ? Layer.effect(
             SelfTag,
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- Action runners are registered per type and erased; each Action's own signature carries its types
             (initOrRun as ActionInit<any, any, R>).pipe(
               Effect.provideService(RuntimeContext, captureContext),
             ),

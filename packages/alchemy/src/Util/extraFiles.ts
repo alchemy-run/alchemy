@@ -192,14 +192,14 @@ export const copyTree = Effect.fn(function* (from: string, to: string) {
   );
 });
 
-export const copyExtraFiles = Effect.fn(function* (
+export const copyExtraFiles = Effect.fn(function* <E = never>(
   contextDir: string,
   extraFiles: ReadonlyArray<ExtraFile> | undefined,
   options?: {
     readonly onMissing?: (file: {
       readonly source: string;
       readonly dest: string;
-    }) => Effect.Effect<unknown, any>;
+    }) => Effect.Effect<unknown, E>;
   },
 ) {
   const fs = yield* FileSystem.FileSystem;

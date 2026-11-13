@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetIssuingPersonalizationDesigns,
   GetIssuingPersonalizationDesign,
@@ -493,11 +492,8 @@ export const IssuingPersonalizationDesignProvider = () =>
             ? { carrier_text: toWireCarrierText(desiredCarrierText) }
             : {}),
           ...(desiredIsDefault ? { preferences: { is_default: true } } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-issuing-personalization-design-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-issuing-personalization-design-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

@@ -32,6 +32,7 @@ export interface VinextPluginOptionsInputs {
   };
   readonly worker?: CloudflareVitePluginOptions["worker"];
   readonly context?: CloudflareVitePluginOptions["context"];
+  readonly entrypoints?: CloudflareVitePluginOptions["entrypoints"];
 }
 
 export const makeVinextPluginOptions = (
@@ -48,5 +49,6 @@ export const makeVinextPluginOptions = (
     compatibilityFlags: [...inputs.compatibilityFlags],
     ...(inputs.worker !== undefined ? { worker: inputs.worker } : {}),
     ...(inputs.context !== undefined ? { context: inputs.context } : {}),
+    ...(inputs.entrypoints !== undefined ? { entrypoints: inputs.entrypoints } : {}),
   };
 };

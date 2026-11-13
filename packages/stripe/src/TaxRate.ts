@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetTaxRates,
   GetTaxRate,
@@ -391,11 +390,8 @@ export const TaxRateProvider = () =>
           ...(news.jurisdiction !== undefined ? { jurisdiction: news.jurisdiction } : {}),
           ...(news.state !== undefined ? { state: news.state } : {}),
           ...(news.taxType !== undefined ? { tax_type: news.taxType } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-tax-rate-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-tax-rate-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

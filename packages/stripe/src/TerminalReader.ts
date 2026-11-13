@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteTerminalReader,
   GetTerminalReaders,
@@ -340,11 +339,8 @@ export const TerminalReaderProvider = () =>
           metadata,
           ...(news.label !== undefined ? { label: news.label } : {}),
           ...(news.location !== undefined ? { location: news.location } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-terminal-reader-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-terminal-reader-${instanceId}`,
+        });
       }
 
       if (current === undefined) {
