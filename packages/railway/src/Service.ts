@@ -256,8 +256,9 @@ export type Service = Resource<
     /** Observed healthcheck timeout in seconds. */
     healthcheckTimeout: number | undefined;
     /**
-     * Replica count. The `replicas` prop once set; otherwise the
-     * count Railway reports (default 1).
+     * Replicas Railway places across regions
+     * (`deploy.multiRegionConfig`), falling back to the instance's
+     * `numReplicas` when the placement map is empty.
      */
     replicas: number | undefined;
     /** Observed build command. */
