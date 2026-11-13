@@ -91,7 +91,7 @@ export type ProjectProps = {
    * Number of seconds of WAL history retained on the project for
    * point-in-time branching/restore.
    *
-   * @default 86400
+   * @default 21600
    */
   historyRetentionSeconds?: number;
   /**
@@ -304,7 +304,7 @@ export const ProjectProvider = () =>
       }
       if (
         oldName !== name ||
-        (news.historyRetentionSeconds ?? 86400) !== (output?.historyRetentionSeconds ?? 86400)
+        (news.historyRetentionSeconds ?? 21600) !== (output?.historyRetentionSeconds ?? 21600)
       ) {
         return { action: "update" } as const;
       }
@@ -428,7 +428,7 @@ export const ProjectProvider = () =>
           reason: "Neon logical replication cannot be disabled once enabled",
         });
       }
-      const retention = news.historyRetentionSeconds ?? 86400;
+      const retention = news.historyRetentionSeconds ?? 21600;
       if (
         observed.name !== name ||
         observed.history_retention_seconds !== retention ||
@@ -711,7 +711,7 @@ const hydrateProjectAttributes = (
       pooledConnectionUri: conn.pooled,
       origin: parsePostgresOrigin(conn.uri),
       pooledOrigin: parsePostgresOrigin(conn.pooled),
-      historyRetentionSeconds: project.history_retention_seconds ?? 86400,
+      historyRetentionSeconds: project.history_retention_seconds ?? 21600,
       enableLogicalReplication: project.settings?.enable_logical_replication === true,
       migrationsDir: opts.migrationsDir,
       migrationsTable: opts.migrationsTable,
