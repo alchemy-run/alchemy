@@ -42,6 +42,7 @@ export const Engine = EngineModule.make;
 export * as Metadata from "./Metadata.ts";
 export * as Sensitive from "./Sensitive.ts";
 export * as Spec from "./Spec.ts";
+export * as Sql from "./Sql.ts";
 export {
   DefinitionError,
   DialectMismatch,
