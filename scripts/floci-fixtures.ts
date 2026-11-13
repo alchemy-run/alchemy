@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 /**
  * Standing prerequisites for the Floci-gated AWS suites (EKS, AMP scraper,
  * SageMaker HyperPod and endpoints, RDS proxy, ECS capacity providers, Flink,
- * custom domains, API Gateway VPC links, SES, OAM, Control Tower). They are
+ * custom domains, API Gateway VPC links, SES, OAM, Q Apps, Shield Advanced, Control Tower). They are
  * created through the emulated AWS APIs before `test:aws:floci` spawns the
  * suite, exported as the env vars the suites read, and removed after the run.
  *
@@ -24,6 +24,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as oam from "@distilled.cloud/aws/oam";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -31,6 +32,8 @@ import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as shield from "@distilled.cloud/aws/shield";
+import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -47,6 +50,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { MEDIACONVERT_INPUT_MP4_BASE64 } from "./floci-fixture-media.ts";
 
 export interface FlociStandingFixtures {
   readonly env: Record<string, string>;
@@ -108,8 +112,12 @@ type Group =
   | "vpcLink"
   | "ses"
   | "oam"
+  | "qapps"
+  | "shieldAdvanced"
+  | "socialMessaging"
   | "sagemakerEndpoint"
-  | "controlTower";
+  | "controlTower"
+  | "mediaConvert";
 
 const groupVars: Record<Group, ReadonlyArray<string>> = {
   eksRole: ["AWS_TEST_EKS_ROLE_ARN", "AWS_TEST_EKS_SUBNET_IDS"],
@@ -155,7 +163,11 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
     "AWS_TEST_SES_VDM",
   ],
   oam: ["AWS_TEST_OAM_SINK_ARN"],
+  qapps: ["AWS_TEST_QAPPS", "QAPPS_INSTANCE_ID"],
+  shieldAdvanced: ["AWS_TEST_SHIELD_ADVANCED"],
+  socialMessaging: ["AWS_TEST_SOCIALMESSAGING", "AWS_TEST_SOCIALMESSAGING_WABA_ID"],
   sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
+  mediaConvert: ["MEDIACONVERT_ROLE_ARN", "MEDIACONVERT_TEST_INPUT", "MEDIACONVERT_TEST_OUTPUT"],
   controlTower: [
     "AWS_TEST_CONTROLTOWER",
     "AWS_TEST_CONTROLTOWER_CONTROL",
@@ -197,8 +209,15 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
     "SES/CustomVerificationEmailTemplate.test.ts",
   ],
   oam: ["OAM/Sink.test.ts"],
+  qapps: ["QApps/QApp.test.ts", "QApps/Bindings.test.ts", "QApps/QAppsMissingLookup.test.ts"],
+  shieldAdvanced: ["Shield/Shield.test.ts"],
+  socialMessaging: [
+    "SocialMessaging/LinkedWhatsAppBusinessAccount.test.ts",
+    "SocialMessaging/Bindings.test.ts",
+  ],
   sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
+  mediaConvert: ["MediaConvert/MediaConvert.test.ts"],
 };
 
 export class FixtureError extends Data.TaggedError("FlociFixtureError")<{
@@ -919,6 +938,39 @@ const ensureFlinkJar = (ledger: Array<Cleanup>) =>
     return `arn:aws:s3:::${FLINK_BUCKET}`;
   });
 
+// ─── S3 + IAM (MediaConvert job input) ───────────────────────────────────────
+
+const MEDIACONVERT_BUCKET = `${NAME}-mediaconvert`;
+const MEDIACONVERT_INPUT_KEY = "input/input.mp4";
+
+const ensureMediaConvertInput = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const exists = yield* s3.headBucket({ Bucket: MEDIACONVERT_BUCKET }).pipe(
+      Effect.as(true),
+      Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
+    );
+    yield* register(ledger, {
+      label: `S3 bucket ${MEDIACONVERT_BUCKET}`,
+      run: deleteBucket(MEDIACONVERT_BUCKET),
+    });
+    if (!exists) {
+      yield* s3
+        .createBucket({ Bucket: MEDIACONVERT_BUCKET })
+        .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void));
+    }
+    const body = yield* Effect.sync(() => Buffer.from(MEDIACONVERT_INPUT_MP4_BASE64, "base64"));
+    yield* s3.putObject({
+      Bucket: MEDIACONVERT_BUCKET,
+      Key: MEDIACONVERT_INPUT_KEY,
+      Body: new Uint8Array(body),
+      ContentType: "video/mp4",
+    });
+    return {
+      input: `s3://${MEDIACONVERT_BUCKET}/${MEDIACONVERT_INPUT_KEY}`,
+      output: `s3://${MEDIACONVERT_BUCKET}/output/`,
+    };
+  });
+
 // ─── Route 53 + ACM ──────────────────────────────────────────────────────────
 
 const trimDot = (name: string) => name.replace(/\.+$/, "");
@@ -1234,6 +1286,80 @@ const ensureSesFixtures = (ledger: Array<Cleanup>) =>
     yield* ensureDkimVerifiedDomain(ledger, zoneId, SES_REDIRECT_DOMAIN);
     yield* ensureVdmEnabled(ledger);
     return { bounceMessageId: sent.MessageId };
+  });
+
+// ─── Q Apps instance ────────────────────────────────────────────────────────
+
+// A Q Apps instance is a Q Business application with Q Apps enabled.
+const ensureQAppsInstance = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const listed = yield* qbusiness.listApplications({});
+    const existing = (listed.applications ?? []).find((app) => app.displayName === NAME);
+    const applicationId =
+      existing?.applicationId ??
+      (yield* qbusiness
+        .createApplication({
+          displayName: NAME,
+          identityType: "ANONYMOUS",
+          qAppsConfiguration: { qAppsControlMode: "ENABLED" },
+          tags: [{ key: FIXTURE_TAG_KEY, value: FIXTURE_TAG_VALUE }],
+        })
+        .pipe(Effect.map((created) => created.applicationId)));
+    if (applicationId === undefined) {
+      return yield* fixtureError(`Q Business application ${NAME} has no id`);
+    }
+    const id = applicationId;
+    yield* register(ledger, {
+      label: `Q Business application ${id}`,
+      run: qbusiness
+        .deleteApplication({ applicationId: id })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    });
+    yield* qbusiness.getApplication({ applicationId: id }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("500 millis"),
+        until: (app) => app.status === "ACTIVE",
+        times: 60,
+      }),
+    );
+    return id;
+  });
+
+// ─── WhatsApp (End User Messaging Social) ────────────────────────────────────
+
+/**
+ * Links a WhatsApp Business Account through the two-step signup Floci simulates
+ * (on AWS this is Meta's embedded signup in the console): the callback lists
+ * the account and its phone number, and finalization registers them.
+ */
+const linkWhatsAppBusinessAccount = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const callback = yield* socialmessaging.associateWhatsAppBusinessAccount({
+      signupCallback: { accessToken: NAME },
+    });
+    const result = callback.signupCallbackResult;
+    const [id, pending] = Object.entries(result?.linkedAccountsWithIncompleteSetup ?? {})[0] ?? [];
+    const phoneNumberId = pending?.unregisteredWhatsAppPhoneNumbers?.[0]?.phoneNumberId;
+    if (
+      result?.associateInProgressToken === undefined ||
+      id === undefined ||
+      phoneNumberId === undefined
+    ) {
+      return yield* fixtureError("WhatsApp signup returned no account to finish");
+    }
+    yield* socialmessaging.associateWhatsAppBusinessAccount({
+      setupFinalization: {
+        associateInProgressToken: result.associateInProgressToken,
+        phoneNumbers: [{ id: phoneNumberId, twoFactorPin: "123456" }],
+      },
+    });
+    yield* register(ledger, {
+      label: `WhatsApp Business Account ${id}`,
+      run: socialmessaging
+        .disassociateWhatsAppBusinessAccount({ id })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    });
+    return id;
   });
 
 // ─── OAM (second account) ────────────────────────────────────────────────────
@@ -1593,9 +1719,41 @@ const provision = (
       env.AWS_TEST_OAM_SINK_ARN = yield* ensureOamSink(ledger);
     }
 
+    if (groups.has("qapps")) {
+      env.QAPPS_INSTANCE_ID = yield* ensureQAppsInstance(ledger);
+      env.AWS_TEST_QAPPS = "1";
+    }
+
+    if (groups.has("shieldAdvanced")) {
+      // A Shield Advanced subscription can't be ended inside its one-year
+      // commitment, in Floci as on AWS; it goes with the emulator.
+      yield* shield
+        .createSubscription({})
+        .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+      env.AWS_TEST_SHIELD_ADVANCED = "1";
+    }
+
+    if (groups.has("socialMessaging")) {
+      env.AWS_TEST_SOCIALMESSAGING_WABA_ID = yield* linkWhatsAppBusinessAccount(ledger);
+      env.AWS_TEST_SOCIALMESSAGING = "1";
+    }
+
     if (groups.has("sagemakerEndpoint")) {
       env.AWS_TEST_SAGEMAKER_ENDPOINT = "1";
       env.AWS_TEST_SAGEMAKER_IMAGE = yield* buildSageMakerServeImage;
+    }
+
+    if (groups.has("mediaConvert")) {
+      env.MEDIACONVERT_ROLE_ARN = yield* ensureRole(
+        ledger,
+        "mediaconvert",
+        "mediaconvert.amazonaws.com",
+        ["sts:AssumeRole"],
+        ["AmazonS3FullAccess"],
+      );
+      const { input, output } = yield* ensureMediaConvertInput(ledger);
+      env.MEDIACONVERT_TEST_INPUT = input;
+      env.MEDIACONVERT_TEST_OUTPUT = output;
     }
 
     if (groups.has("controlTower")) {

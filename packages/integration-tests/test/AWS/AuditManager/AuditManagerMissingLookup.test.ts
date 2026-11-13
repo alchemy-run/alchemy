@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
-import { missingName } from "../../lookup.ts";
 import { expectAllMissing } from "../lookup.ts";
+import { ensureRegistered } from "./registration.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,8 +15,8 @@ test.provider.skipIf(!process.env.AWS_TEST_AUDITMANAGER)(
   "a lookup of a missing resource fails the deploy",
   (stack) =>
     Effect.gen(function* () {
+      yield* ensureRegistered;
       yield* stack.destroy();
-      const name = missingName(stack.stage);
       yield* expectAllMissing(stack, {
         "missing-assessment": AWS.AuditManager.Assessment.lookup({
           assessmentId: "11111111-1111-4111-8111-111111111111",

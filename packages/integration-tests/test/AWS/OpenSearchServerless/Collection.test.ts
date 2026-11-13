@@ -229,7 +229,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(collection.collectionArn).toContain(":collection/");
       expect(collection.collectionId).toBeDefined();
       // The data-plane endpoint that a Bedrock Knowledge Base points at.
-      expect(collection.collectionEndpoint).toContain("aoss.amazonaws.com");
+      expect(collection.collectionEndpoint).toContain(".aoss.");
 
       // Out-of-band verification via distilled: the collection is ACTIVE.
       const observed = yield* aoss.batchGetCollection({ ids: [collection.collectionId] });

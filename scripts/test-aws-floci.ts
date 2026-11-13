@@ -64,6 +64,29 @@ const extraDirs: Record<string, ReadonlyArray<string>> = {
   SecretsManager: ["Secret"],
 };
 
+/**
+ * Services with bindings but no resources, so nothing in Providers.ts names
+ * them. Their suites deploy a Lambda (which runs on floci) that calls the
+ * service, so they run once floci emulates it.
+ */
+const bindingOnlyServices = [
+  "AICapabilities",
+  "Comprehend",
+  "ComprehendMedical",
+  "ExternalHost",
+  "Geo",
+  "GeoMaps",
+  "GeoPlaces",
+  "GeoRoutes",
+  "Pricing",
+  "RDSData",
+  "RedshiftData",
+  "Rekognition",
+  "Route53Domains",
+  "SageMakerRuntime",
+  "Transcribe",
+];
+
 // Opt-in gates whose tests are gated only for live-AWS cost, quota, slow
 // provisioning, or preview access. Floci emulates all of them, so enable them
 // here unless the caller set them explicitly. Gates that need standing
@@ -71,18 +94,27 @@ const extraDirs: Record<string, ReadonlyArray<string>> = {
 const flociOptInGates = [
   "ALCHEMY_TEST_IDENTITY_CENTER",
   "AWS_LAMBDA_TEST_SHUTDOWN",
+  "AWS_TEST_ACMPCA",
+  "AWS_TEST_AIOPS",
   "AWS_ORG_MANAGEMENT_ACCOUNT",
   "AWS_TEST_APIGWV2_VPCLINK",
+  "AWS_TEST_APPREGISTRY",
+  "AWS_TEST_APPRUNNER_SERVICES",
   "AWS_TEST_APPSYNC_CACHE",
+  "AWS_TEST_AUDITMANAGER",
+  "AWS_TEST_BACKUP_SEARCH",
+  "AWS_TEST_BEDROCK_AGENTS",
   "AWS_TEST_CLOUDHSM",
-  "AWS_TEST_CLOUDTRAIL_LAKE",
   "AWS_TEST_CLOUDMAP_PUBLIC",
+  "AWS_TEST_CLOUDTRAIL_LAKE",
   "AWS_TEST_CODEARTIFACT_EVENTS",
   "AWS_TEST_CONFIG_RECORDER",
   "AWS_TEST_EFS_MULTI_AZ",
+  "AWS_TEST_LOCATION_API_KEYS",
   "AWS_TEST_METRICSTREAM",
   "AWS_TEST_NAT_GATEWAY",
   "AWS_TEST_NETWORKFIREWALL",
+  "AWS_TEST_OBJECT_LAMBDA",
   "AWS_TEST_ORG_MANAGEMENT",
   "AWS_TEST_POLICY_STORE_ALIAS",
   "AWS_TEST_RDS_DBCLUSTER",
@@ -97,6 +129,7 @@ const flociOptInGates = [
   "AWS_TEST_SES_DEDICATED_IP",
   "AWS_TEST_SLOW",
   "AWS_TEST_TRANSFER_TRANSITIONS",
+  "AWS_TEST_TRANSLATE_PARALLEL_DATA",
   "AWS_TEST_WAF_ASSOCIATION",
   "AWS_TEST_WAF_CLOUDFRONT",
   "CLOUDFRONT_TEST_VPC_ORIGIN",
@@ -119,12 +152,73 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_SNS_PLATFORM: "1",
   AWS_TEST_SNS_PLATFORM_NAME: "GCM",
   // Floci accepts GCM credentials of 24+ chars without "invalid"/"fake"/"probe".
+  // Floci's knowledge bases need no vector store or embedding model: any
+  // well-formed role, collection, and model ARNs are accepted.
+  BEDROCK_KB_ROLE_ARN: "arn:aws:iam::000000000000:role/alchemy-floci-bedrock-kb",
+  BEDROCK_KB_COLLECTION_ARN: "arn:aws:aoss:us-east-1:000000000000:collection/alchemyflocikb",
+  BEDROCK_KB_INDEX_NAME: "bedrock-index",
+  BEDROCK_KB_EMBEDDING_MODEL_ARN:
+    "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0",
   AWS_TEST_SNS_PLATFORM_CREDENTIAL: "alchemy-floci-gcm-server-key-000000000000",
   AWS_TEST_SNS_PLATFORM_TOKEN: "alchemy-floci-device-token-0001",
   // Floci's AgentCore control plane records the artifact without pulling it.
   AWS_TEST_AGENTCORE: "1",
   AWS_TEST_AGENTCORE_IMAGE:
     "000000000000.dkr.ecr.us-east-1.amazonaws.com/alchemy-floci-agentcore:latest",
+  // Every Floci account starts with one Slack workspace and one Microsoft Teams team onboarded.
+  AWS_TEST_CHATBOT: "1",
+  AWS_CHATBOT_SLACK_TEAM_ID: "TFLOCI00001",
+  AWS_CHATBOT_SLACK_CHANNEL_ID: "C0FLOCI0001",
+  AWS_CHATBOT_TEAMS_TEAM_ID: "f10c1000-0000-4000-8000-000000000001",
+  AWS_CHATBOT_TEAMS_TENANT_ID: "f10c1000-0000-4000-8000-0000000000aa",
+  AWS_CHATBOT_TEAMS_CHANNEL_ID: "19%3afloci%40thread.tacv2",
+  // Every Floci account and Region has an AVAILABLE demo GitHub connection with a linked
+  // repository (floci-demo/app); its handshake happens outside the API on AWS.
+  AWS_TEST_CODECONNECTIONS_CONNECTION_ARN:
+    "arn:aws:codeconnections:us-east-1:000000000000:connection/f10c1000-0000-4000-8000-0000000000c1",
+  AWS_TEST_CODECONNECTIONS_OWNER_ID: "floci-demo",
+  AWS_TEST_CODECONNECTIONS_REPOSITORY_NAME: "alchemy",
+  AWS_TEST_CODECONNECTIONS_REPO_LINK_ID: "f10c1000-0000-4000-8000-0000000000c2",
+  AWS_TEST_CODECONNECTIONS_SYNC_ROLE_ARN: "arn:aws:iam::000000000000:role/alchemy-floci-git-sync",
+  // Every Floci account holds the entitled "AWS Data Exchange Heartbeat" data set; event
+  // actions on it export each hourly revision to the bucket.
+  AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID: "f10c1000000040008000000000000ea7",
+  AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET: "alchemy-floci-dataexchange-exports",
+  // floci serves Deadline Cloud farms, fleets and jobs without an entitled account.
+  AWS_TEST_DEADLINE: "1",
+  // floci provisions Managed Microsoft AD directories in seconds; Simple AD stays closed to new
+  // customers, as on AWS, so its lifecycle (AWS_TEST_DIRECTORY_SIMPLE_AD) stays off.
+  AWS_TEST_DIRECTORY: "1",
+  AWS_TEST_DIRECTORY_MSAD: "1",
+  // floci runs Entity Resolution matching and ID mapping jobs over the Glue tables' S3 data in
+  // seconds, where AWS takes several minutes even for a few rows.
+  AWS_TEST_ENTITYRESOLUTION_RUN: "1",
+  // floci onboards an organization to Firewall Manager in seconds, where AWS keeps it onboarding
+  // (and refusing to offboard) for over ten minutes.
+  AWS_TEST_FMS: "1",
+  AWS_TEST_FORECAST: "1",
+  AWS_TEST_GLACIER: "1",
+  // floci treats its accounts as existing Kendra customers and provisions indexes in seconds.
+  AWS_TEST_KENDRA: "1",
+  AWS_TEST_LICENSE_MANAGER_CREATE: "1",
+  AWS_TEST_MAILMANAGER: "1",
+  AWS_TEST_MAILMANAGER_ADDONS: "1",
+  AWS_TEST_MEDIACONNECT: "1",
+  AWS_TEST_MEDIALIVE: "1",
+  MPV2_SWEEP: "1",
+  AWS_TEST_MEDICAL_IMAGING: "1",
+  AWS_TEST_OMICS: "1",
+  AWS_TEST_PINPOINT_SMS: "1",
+  AWS_TEST_QBUSINESS: "1",
+  AWS_TEST_INCIDENT_MANAGER: "1",
+  AWS_TEST_REPOSTSPACE: "1",
+  AWS_TEST_SECURITYLAKE: "1",
+  // Floci checks the instance ARN's form; its bootstrap Identity Center instance.
+  QBUSINESS_IDC_INSTANCE_ARN: "arn:aws:sso:::instance/ssoins-7223b02a5d9f7c8e",
+  AWS_TEST_GRAFANA: "1",
+  AWS_TEST_HEALTHLAKE: "1",
+  AWS_TEST_IOTFLEETWISE: "1",
+  AWS_TEST_IOT_MI: "1",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
@@ -188,7 +282,7 @@ const splitArgs = (args: ReadonlyArray<string>) => {
 const dualizedServices = Effect.fn(function* (providersFile: string) {
   const fs = yield* FileSystem.FileSystem;
   const source = yield* fs.readFileString(providersFile);
-  const names = new Set<string>(["Local"]);
+  const names = new Set<string>(["Local", ...bindingOnlyServices]);
   const pattern = /(?:flociDual|ProviderLayer\.dual)\(\s*([A-Za-z0-9]+)\./g;
   for (const match of source.matchAll(pattern)) {
     const service = match[1]!;

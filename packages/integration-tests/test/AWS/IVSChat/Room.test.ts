@@ -62,6 +62,7 @@ test.provider(
       expect(created.roomName).toBe("alchemy-test-ivschat-room");
       expect(created.roomArn).toContain(":room/");
       expect(created.roomId).toBeDefined();
+      expect(created.messagingEndpoint).toMatch(/^wss?:\/\/edge\.ivschat\./);
 
       // Out-of-band verification via distilled.
       const observed = yield* ivschat.getRoom({ identifier: created.roomArn });

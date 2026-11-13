@@ -47,11 +47,12 @@ describe("AWS.Kendra.Index", { tags: ["provider:aws", "provider:aws:kendra", "li
     { timeout: 60_000 },
   );
 
-  // Fails before anything is created: the closed-to-new-customers check
-  // precedes role validation. If this ever starts failing with a different
-  // tag, the account can create indexes again — run with AWS_TEST_KENDRA=1.
+  // Fails before anything is created: a new customer is refused before the
+  // role is checked (KendraClosedToNewCustomers); an existing customer gets
+  // past that check and is refused for the role Kendra can't assume
+  // (ValidationException). Either way nothing is created.
   test.provider(
-    "createIndex is rejected with a typed KendraClosedToNewCustomers",
+    "createIndex is rejected with a typed KendraClosedToNewCustomers or ValidationException",
     (_stack) =>
       Effect.gen(function* () {
         const error = yield* kendra
@@ -61,7 +62,7 @@ describe("AWS.Kendra.Index", { tags: ["provider:aws", "provider:aws:kendra", "li
             RoleArn: "arn:aws:iam::123456789012:role/alchemy-kendra-probe-nonexistent",
           })
           .pipe(Effect.flip);
-        expect(error._tag).toBe("KendraClosedToNewCustomers");
+        expect(["KendraClosedToNewCustomers", "ValidationException"]).toContain(error._tag);
       }),
     { timeout: 60_000 },
   );

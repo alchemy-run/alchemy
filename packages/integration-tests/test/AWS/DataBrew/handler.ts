@@ -52,7 +52,7 @@ export const foundation = Effect.gen(function* () {
       ],
     },
     managedPolicyArns: [
-      "arn:aws:iam::aws:policy/service-role/AwsGlueDataBrewServiceRole",
+      "arn:aws:iam::aws:policy/service-role/AWSGlueDataBrewServiceRole",
       "arn:aws:iam::aws:policy/AmazonS3FullAccess",
     ],
   });
