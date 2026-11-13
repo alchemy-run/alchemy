@@ -23,6 +23,7 @@ import {
   isContainerStartPath,
   loopbackPortsFromEnv,
   mergeSidecarLoopbackHostConfig,
+  sidecarNameFromCreatePath,
 } from "./DockerLoopback.ts";
 import { makeDockerLoopbackForwarders } from "./internal/docker-loopback-forwarders.ts";
 import { makeDockerUpgradeRouter } from "./internal/docker-upgrade-router.ts";
@@ -308,6 +309,19 @@ export const DockerLive = Layer.effect(
               Cache.get(ensuredImages, image?.tag ?? original.Image),
             );
             if (Exit.isFailure(pulled)) return sendError(res, 500, Cause.pretty(pulled.cause));
+            // workerd starts the sidecar before it creates this container, so
+            // the forwarder attached at sidecar start only has the ports from
+            // the registered image env. Env passed to `start({ env })` first
+            // appears in this request, so attach its loopback ports now,
+            // before the container can connect to them.
+            const sidecar = sidecarNameFromCreatePath(req.url);
+            if (sidecar !== undefined) {
+              const ports = [
+                ...new Set([...registeredLoopbackPorts(), ...loopbackPortsFromEnv(original.Env)]),
+              ];
+              ensureLoopbackUnixSockets(ports);
+              yield* forwarders.attach(sidecar, ports);
+            }
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,

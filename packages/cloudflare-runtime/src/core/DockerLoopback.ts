@@ -205,3 +205,16 @@ export const containerIdFromPath = (url: string | undefined) => {
   if (url === undefined) return undefined;
   return /\/containers\/([^/?]+)/.exec(url)?.[1];
 };
+
+/**
+ * Returns the name of the networking sidecar for the container that a
+ * `POST /containers/create?name=<name>` request creates. workerd names the
+ * sidecar `<name>-proxy` and encodes both names the same way, so the result
+ * matches the id that {@link containerIdFromPath} reads from the sidecar's
+ * start path.
+ */
+export const sidecarNameFromCreatePath = (url: string | undefined) => {
+  if (url === undefined) return undefined;
+  const name = /[?&]name=([^&]+)/.exec(url)?.[1];
+  return name === undefined || name.endsWith("-proxy") ? undefined : `${name}-proxy`;
+};
