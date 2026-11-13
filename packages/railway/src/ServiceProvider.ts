@@ -21,6 +21,7 @@ import { Stack } from "alchemy/Stack";
 import { tarGzipDirectory } from "alchemy/Util/tarGzip";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
@@ -950,14 +951,13 @@ export const ServiceProvider = () =>
                   legacy: instance?.region,
                 })
               : undefined;
-          const ipv6Egress =
-            resolvedEnvId.length > 0
-              ? yield* readServiceIpv6Egress({
-                  environmentId: resolvedEnvId,
-                  projectId: resolvedProjectId,
-                  serviceId: found.id,
-                })
-              : undefined;
+          const ipv6Egress = Option.getOrUndefined(
+            yield* readServiceIpv6Egress({
+              environmentId: resolvedEnvId,
+              projectId: resolvedProjectId,
+              serviceId: found.id,
+            }),
+          );
           const attrs = toAttrs({
             service: found,
             instance,
@@ -1275,7 +1275,7 @@ export const ServiceProvider = () =>
               projectId,
               serviceId,
               enabled: props.ipv6Egress,
-            });
+            }).pipe(Effect.map(Option.getOrUndefined));
           let ipv6Egress = yield* placeIpv6Egress();
 
           if (sourceRepo !== undefined) {

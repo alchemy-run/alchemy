@@ -11,6 +11,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -820,22 +821,22 @@ test.provider(
         );
       const observed = (api: { environmentId: string; projectId: string; serviceId: string }) =>
         readEnvironmentConfig(api.environmentId, api.projectId).pipe(
-          Effect.map((environment) => serviceIpv6Egress(environment.config, api.serviceId)),
+          Effect.flatMap((environment) => serviceIpv6Egress(environment.config, api.serviceId)),
         );
 
       const created = yield* deploy(true);
       expect(created.api.ipv6Egress).toEqual(true);
-      expect(yield* observed(created.api)).toEqual(true);
+      expect(yield* observed(created.api)).toEqual(Option.some(true));
 
       const disabled = yield* deploy(false);
       expect(disabled.api.serviceId).toEqual(created.api.serviceId);
       expect(disabled.api.ipv6Egress).toEqual(false);
-      expect(yield* observed(disabled.api)).toEqual(false);
+      expect(yield* observed(disabled.api)).toEqual(Option.some(false));
 
       const left = yield* deploy(undefined);
       expect(left.api.serviceId).toEqual(created.api.serviceId);
       expect(left.api.ipv6Egress).toEqual(false);
-      expect(yield* observed(left.api)).toEqual(false);
+      expect(yield* observed(left.api)).toEqual(Option.some(false));
 
       yield* stack.destroy();
 
