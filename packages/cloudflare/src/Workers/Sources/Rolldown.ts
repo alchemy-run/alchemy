@@ -171,7 +171,11 @@ export const WorkerBundle = Shared.makeWorkerBundle<WorkerBundleOptions, Additio
     import("@alchemy.run/cloudflare-runtime/rolldown").then((module) => module.default),
   virtualEntry: (options) =>
     options.entry.kind === "effect"
-      ? makeEffectVirtualEntry(options.entry.exports, options.stack)
+      ? makeEffectVirtualEntry(
+          options.entry.exports,
+          options.stack,
+          options.extraOptions?.nativeExports,
+        )
       : undefined,
   moduleRules: (options, main) =>
     realGlobs(options.rules).pipe(Effect.map((rules) => toModuleRules(main, rules))),
@@ -190,6 +194,7 @@ const exportClass = (name: string, base: string, local: string) =>
 export const makeEffectVirtualEntry = (
   exports: Record<string, WorkerExport>,
   stack: { name: string; stage: string },
+  nativeExports: string[] = [],
 ) => {
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
@@ -214,6 +219,9 @@ import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkfl
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
+${nativeExports
+  .map((name) => `export { ${JSON.stringify(name)} } from ${JSON.stringify(importPath)};`)
+  .join("\n")}
 
 const meta = {
   entrypoint: ${hasMigrations ? `withSqlMigrations(entrypoint, ${JSON.stringify(migrations)})` : "entrypoint"},
