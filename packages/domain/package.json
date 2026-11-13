@@ -30,6 +30,7 @@
     ".": "./src/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
     "./EffectCluster": "./src/EffectCluster/index.ts",
+    "./Export": "./src/Export/index.ts",
     "./Rivet": "./src/Rivet/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -50,6 +51,11 @@
         "types": "./lib/EffectCluster/index.d.ts",
         "bun": "./src/EffectCluster/index.ts",
         "default": "./lib/EffectCluster/index.js"
+      },
+      "./Export": {
+        "types": "./lib/Export/index.d.ts",
+        "bun": "./src/Export/index.ts",
+        "default": "./lib/Export/index.js"
       },
       "./Rivet": {
         "types": "./lib/Rivet/index.d.ts",

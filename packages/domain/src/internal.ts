@@ -1,8 +1,16 @@
+import * as Arr from "effect/Array";
+import * as BigInt_ from "effect/BigInt";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
+import * as Base64 from "effect/encoding/Base64";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import type { SqlError } from "effect/sql/SqlError";
 import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
 
 export { DefinitionError } from "./DefinitionError.ts";
@@ -205,3 +213,79 @@ export const evolveView = (
   }
   return current;
 };
+
+/**
+ * A JSON value that is an object. Shallow: the value is JSON already.
+ *
+ * @internal
+ */
+export const isJsonObject = (json: Schema.Json | undefined): json is Schema.JsonObject =>
+  Predicate.isReadonlyObject(json) && !Array.isArray(json);
+
+/**
+ * The value at a dotted path of a JSON object, or `undefined`.
+ *
+ * @internal
+ */
+export const jsonAt = (object: Schema.JsonObject, path: string): Schema.Json | undefined =>
+  Arr.reduce(path.split("."), Option.some<Schema.Json>(object), (value, part) =>
+    Option.flatMap(value, (json) =>
+      isJsonObject(json) ? Option.fromNullishOr(json[part]) : Option.none(),
+    ),
+  ).pipe(Option.getOrUndefined);
+
+/**
+ * A driver's value as JSON: a `Date` is its ISO string, a `bigint` a number
+ * when it fits exactly (else its digits), bytes their base64, and lists and
+ * objects element by element. The matcher is built once.
+ *
+ * @internal
+ */
+export const toJson: (value: unknown) => Schema.Json = Match.type<unknown>().pipe(
+  Match.when(Predicate.isNullish, () => null),
+  Match.when(Predicate.isString, (string) => string),
+  Match.when(Predicate.isBoolean, (boolean) => boolean),
+  Match.when(Predicate.isNumber, (number) => (Number.isFinite(number) ? number : String(number))),
+  Match.when(Predicate.isBigInt, (bigint) =>
+    Option.getOrElse(BigInt_.toNumber(bigint), () => bigint.toString()),
+  ),
+  Match.when(Predicate.isDate, (date) => DateTime.formatIso(DateTime.fromDateUnsafe(date))),
+  Match.when(Predicate.isUint8Array, Base64.encode),
+  Match.when(Array.isArray, (values) => Arr.map(values, (value) => toJson(value))),
+  Match.when(Predicate.isReadonlyObject, (object) => Rec.map(object, (value) => toJson(value))),
+  Match.orElse(String),
+);
+
+/**
+ * A driver's row as JSON.
+ *
+ * @internal
+ */
+export const rowToJson = (row: Readonly<Record<string, unknown>>): Schema.JsonObject =>
+  Rec.map(row, (value) => toJson(value));
+
+/**
+ * What a failure says, for an error's detail.
+ *
+ * @internal
+ */
+export const detailOf = (cause: unknown): string =>
+  Predicate.hasProperty(cause, "message") ? String(cause.message) : String(cause);
+
+/**
+ * Whether a SQL failure is the statement's own fault: a syntax error or a
+ * violated constraint, which running it again cannot fix. Every other reason
+ * (a connection, credentials, a deadlock, a timeout, a driver that names no
+ * reason) may pass.
+ *
+ * @internal
+ */
+export const isStatementFault = (error: SqlError): boolean =>
+  Match.value(error.reason).pipe(
+    Match.tags({
+      SqlSyntaxError: () => true,
+      UniqueViolation: () => true,
+      ConstraintError: () => true,
+    }),
+    Match.orElse(() => false),
+  );
