@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pyiceberg[pyarrow,s3fs]
+pandas
+polars
+duckdb

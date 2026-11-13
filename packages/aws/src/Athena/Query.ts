@@ -17,15 +17,19 @@ export interface RunQueryRequest extends Omit<
 
 /**
  * The fully-resolved result of a query: the terminal state plus the decoded
- * result set (column names + rows of string cells, exactly as Athena returns
- * them — the first row of a `SELECT` is the header).
+ * result set, every page of it. `rows` holds string cells exactly as Athena
+ * returns them (the first row of a `SELECT` is the header, a `NULL` is
+ * `""`); `values` holds the data rows alone with `NULL` as `null`, and
+ * `types` each column's Athena type (`varchar`, `bigint`, `timestamp`, …).
  */
 export interface QueryResult {
   readonly queryExecutionId: string;
   readonly state: athena.QueryExecutionState;
   readonly stateChangeReason: string | undefined;
   readonly columns: string[];
+  readonly types: string[];
   readonly rows: string[][];
+  readonly values: Array<Array<string | null>>;
 }
 
 /**

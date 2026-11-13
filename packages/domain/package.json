@@ -30,6 +30,7 @@
     ".": "./src/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
     "./EffectCluster": "./src/EffectCluster/index.ts",
+    "./Export": "./src/Export/index.ts",
     "./Rivet": "./src/Rivet/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -51,6 +52,11 @@
         "bun": "./src/EffectCluster/index.ts",
         "default": "./lib/EffectCluster/index.js"
       },
+      "./Export": {
+        "types": "./lib/Export/index.d.ts",
+        "bun": "./src/Export/index.ts",
+        "default": "./lib/Export/index.js"
+      },
       "./Rivet": {
         "types": "./lib/Rivet/index.d.ts",
         "bun": "./src/Rivet/index.ts",
@@ -71,10 +77,12 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
+    "@duckdb/node-api": "1.5.6-r.2",
     "@effect/sql-pg": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -84,17 +92,25 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
+    "@duckdb/node-api": "^1.5.6-r.2",
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "foldkit": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
     "@alchemy.run/cloudflare": {
+      "optional": true
+    },
+    "@duckdb/node-api": {
       "optional": true
     },
     "@alchemy.run/effect-cluster": {
