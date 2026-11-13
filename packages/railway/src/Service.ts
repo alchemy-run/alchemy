@@ -16,6 +16,7 @@ import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import { serveRailwayRpc } from "./rpc-server.ts";
 import { mintRpcToken } from "./rpc-token.ts";
+import type { ImageUpdates } from "./ServiceImageUpdates.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -24,6 +25,12 @@ import { mintRpcToken } from "./rpc-token.ts";
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
 export type { ExtraFile, RailwayBuildOptions };
+export type {
+  ImageUpdates,
+  ImageUpdateTagMode,
+  ImageUpdateType,
+  ImageUpdateWindow,
+} from "./ServiceImageUpdates.ts";
 
 /**
  * Environment identity a Service is deployed into. Accepts a
@@ -206,10 +213,29 @@ export interface ServiceProps extends PlatformProps {
    */
   sleepApplication?: boolean;
   /**
-   * Auto-deploy on new commits / image tags
-   * (`serviceInstanceAutoDeployUpdate`).
+   * Auto-deploy toggle (`serviceInstanceAutoDeployUpdate`): redeploy on
+   * new commits or image pushes. This is not the image update policy; to
+   * choose which image versions Railway takes and when, use
+   * {@link imageUpdates}.
    */
   autoUpdates?: boolean;
+  /**
+   * Image update policy (`source.autoUpdates`): which new versions of
+   * {@link image} Railway takes, how it compares tags, and the weekly UTC
+   * windows in which it may apply them. This is not the auto-deploy toggle;
+   * that is {@link autoUpdates}.
+   *
+   * Only for a service that runs a public image (`image` without `main`,
+   * `context` or `repo`); any other source fails with
+   * `Railway.ServiceSourceInvalid`. Railway supports it only for Docker
+   * Hub and GHCR images.
+   *
+   * Omit to leave the current policy alone. Fields you set are converged;
+   * fields you leave out keep Railway's value. To clear a schedule (apply
+   * updates at any time) pass `schedule: []`. Changing the policy does not
+   * redeploy the service.
+   */
+  imageUpdates?: ImageUpdates;
   /**
    * Dockerfile path relative to {@link rootDirectory}, or to {@link context}
    * for a local context.
@@ -428,6 +454,28 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   image: "hashicorp/http-echo",
  *   port: 5678,
  *   region: "us-west2",
+ * });
+ * ```
+ *
+ * ### Image update policy
+ * `imageUpdates` sets which new versions of `image` Railway takes
+ * (`source.autoUpdates`): `type` is `disabled`, `patch` or `minor`,
+ * `tagMode` is `semver` or `sha`, and `schedule` lists the weekly UTC
+ * windows (`day` 0 is Sunday, `endHour` is exclusive) in which Railway may
+ * apply an update. It is separate from `autoUpdates`, the auto-deploy
+ * toggle. Docker Hub and GHCR images only. Omit it to leave the policy as
+ * it is.
+ *
+ * **Example:** Patch updates on Saturday mornings
+ * ```typescript
+ * const db = yield* Railway.Service("Db", {
+ *   project: site,
+ *   image: "ghcr.io/railwayapp-templates/postgres-ssl:18",
+ *   imageUpdates: {
+ *     type: "patch",
+ *     tagMode: "semver",
+ *     schedule: [{ day: 6, startHour: 2, endHour: 6 }],
+ *   },
  * });
  * ```
  *

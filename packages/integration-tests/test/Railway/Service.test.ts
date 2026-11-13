@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
+import { serviceImageUpdates } from "@alchemy.run/railway/ServiceImageUpdates";
 import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
 import { withEnvironmentConfigLock } from "@alchemy.run/railway/transient";
 import { expect } from "@alchemy.run/test";
@@ -783,6 +784,95 @@ test.provider(
 
       const gone = yield* waitUntilGone(created.api.serviceId);
       expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "set, change, keep and clear an image update policy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (imageUpdates: Railway.ImageUpdates | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const api = yield* Railway.Service("ImageUpdates", {
+              project,
+              environment,
+              image: "hashicorp/http-echo",
+              port: 5678,
+              publicDomain: false,
+              ...(imageUpdates !== undefined ? { imageUpdates } : {}),
+            });
+            return { api };
+          }),
+        );
+      const observe = (api: { environmentId: string; projectId: string; serviceId: string }) =>
+        readEnvironmentConfig(api.environmentId, api.projectId).pipe(
+          Effect.flatMap((read) => serviceImageUpdates(read.config, api.serviceId)),
+        );
+
+      const created = yield* deploy({
+        type: "patch",
+        tagMode: "semver",
+        schedule: [{ day: 6, startHour: 2, endHour: 6 }],
+      });
+      expect(yield* observe(created.api)).toEqual({
+        type: "patch",
+        tagMode: "semver",
+        schedule: [{ day: 6, startHour: 2, endHour: 6 }],
+      });
+
+      const changed = yield* deploy({
+        type: "minor",
+        tagMode: "sha",
+        schedule: [
+          { day: 0, startHour: 0, endHour: 24 },
+          { day: 6, startHour: 0, endHour: 24 },
+        ],
+      });
+      expect(changed.api.serviceId).toEqual(created.api.serviceId);
+      const afterChange = yield* observe(changed.api);
+      expect(afterChange.type).toEqual("minor");
+      expect(afterChange.tagMode).toEqual("sha");
+      expect([...(afterChange.schedule ?? [])].sort((a, b) => a.day - b.day)).toEqual([
+        { day: 0, startHour: 0, endHour: 24 },
+        { day: 6, startHour: 0, endHour: 24 },
+      ]);
+
+      // Omitted right after a full policy, so resetting any field would show.
+      yield* deploy(undefined);
+      const afterOmit = yield* observe(changed.api);
+      expect(afterOmit.type).toEqual("minor");
+      expect(afterOmit.tagMode).toEqual("sha");
+      expect([...(afterOmit.schedule ?? [])].sort((a, b) => a.day - b.day)).toEqual([
+        { day: 0, startHour: 0, endHour: 24 },
+        { day: 6, startHour: 0, endHour: 24 },
+      ]);
+
+      // `schedule: []` clears the windows and leaves type and tag mode alone.
+      yield* deploy({ type: "minor", schedule: [] });
+      const afterClear = yield* observe(changed.api);
+      expect(afterClear.type).toEqual("minor");
+      expect(afterClear.tagMode).toEqual("sha");
+      expect(afterClear.schedule ?? []).toEqual([]);
+
+      yield* deploy({ type: "disabled" });
+      expect((yield* observe(changed.api)).type).toEqual("disabled");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.api.serviceId)).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: [
