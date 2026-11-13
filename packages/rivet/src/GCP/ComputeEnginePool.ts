@@ -54,9 +54,10 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
   stopTimeout?: number;
   /**
    * Seconds between two nodes restarting when a deploy changes them: node
-   * `i` restarts `i * rolloutInterval` seconds after the change reaches it,
-   * so the pool restarts one node at a time and keeps the rest connected.
-   * Make it longer than `stopTimeout` plus the time a node takes to start.
+   * `i` restarts `i * rolloutInterval` seconds after the change reaches it.
+   * This is a timer, not a readiness gate: node `i` stops whether or not
+   * node `i - 1` has reconnected. Make it longer than `stopTimeout` plus the
+   * time a node takes to start, so the restarts do not overlap.
    * @default 60
    */
   rolloutInterval?: number;
@@ -162,8 +163,8 @@ pgrep -f "docker logs -f rivet-node" >/dev/null || setsid sh -c 'while true; do 
  * `Rivet.DurableObject` given this pool in a Node container. The node
  * program sits in a Cloud Storage bucket the instances read as their own
  * service account; a deploy that changes it, or the nodes' env, restarts the
- * container on each instance in place, one instance at a time, giving each
- * node `stopTimeout` seconds to stop.
+ * container on each instance in place, staggered by `rolloutInterval`,
+ * giving each node `stopTimeout` seconds to stop.
  *
  * Nodes only connect out to the control plane, so no inbound traffic
  * reaches them, and the pool works with any control plane it can reach —
