@@ -541,6 +541,12 @@ const SECTIONS: Section[] = [
     pages: { directory: "neon/frontend" },
   },
   {
+    heading: "ClickHouse Cloud",
+    intro:
+      "ClickHouse Cloud services as Stack resources: services with their access lists, scaling and desired state, backup configuration, the organization, API keys and roles, and bindings that read services, backups, the audit log, quotas and Prometheus metrics.",
+    pages: { slugs: ["clickhouse-cloud/index", "clickhouse-cloud/setup"] },
+  },
+  {
     heading: "Turso",
     intro:
       "Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.",

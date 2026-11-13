@@ -36,6 +36,9 @@
       "path": "./submodules/distilled/packages/boat-dev/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/clickhouse-cloud/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/rivet/tsconfig.json"
     },
     {
@@ -137,6 +140,9 @@
     },
     {
       "path": "./packages/boat/tsconfig.json"
+    },
+    {
+      "path": "./packages/clickhouse-cloud/tsconfig.json"
     },
     {
       "path": "./packages/rivet/tsconfig.json"
@@ -402,6 +408,12 @@
     },
     {
       "path": "./examples/boat-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/clickhouse-cloud-query-api/tsconfig.json"
+    },
+    {
+      "path": "./examples/clickhouse-cloud-usage/tsconfig.json"
     },
     {
       "path": "./examples/e2b-program-async/tsconfig.json"

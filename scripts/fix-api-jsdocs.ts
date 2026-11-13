@@ -28,6 +28,7 @@ const packages = [
   "daytona",
   "archil",
   "boat",
+  "clickhouse-cloud",
   "modal",
   "planetscale",
   "neon",

@@ -1,0 +1,209 @@
+{
+  "name": "@alchemy.run/clickhouse-cloud",
+  "version": "2.0.0-beta.85",
+  "description": "ClickHouse Cloud services, backups, API keys and roles for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "clickhouse",
+    "clickhouse-cloud",
+    "effect",
+    "infrastructure-as-code",
+    "olap"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/clickhouse-cloud"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./ApiKeys": "./src/ApiKeys/index.ts",
+    "./Backup": "./src/Backup/index.ts",
+    "./Billing": "./src/Billing/index.ts",
+    "./ClickPipes": "./src/ClickPipes/index.ts",
+    "./ClickStack": "./src/ClickStack/index.ts",
+    "./Notifications": "./src/Notifications/index.ts",
+    "./Organization": "./src/Organization/index.ts",
+    "./Postgres": "./src/Postgres/index.ts",
+    "./Prometheus": "./src/Prometheus/index.ts",
+    "./QueryApiEndpoints": "./src/QueryApiEndpoints/index.ts",
+    "./RoleManagement": "./src/RoleManagement/index.ts",
+    "./SavedQueries": "./src/SavedQueries/index.ts",
+    "./Service": "./src/Service/index.ts",
+    "./Snapshot": "./src/Snapshot/index.ts",
+    "./Udf": "./src/Udf/index.ts",
+    "./UserManagement": "./src/UserManagement/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./ApiKeys": {
+        "types": "./lib/ApiKeys/index.d.ts",
+        "bun": "./src/ApiKeys/index.ts",
+        "worker": "./src/ApiKeys/index.ts",
+        "default": "./lib/ApiKeys/index.js"
+      },
+      "./Backup": {
+        "types": "./lib/Backup/index.d.ts",
+        "bun": "./src/Backup/index.ts",
+        "worker": "./src/Backup/index.ts",
+        "default": "./lib/Backup/index.js"
+      },
+      "./Billing": {
+        "types": "./lib/Billing/index.d.ts",
+        "bun": "./src/Billing/index.ts",
+        "worker": "./src/Billing/index.ts",
+        "default": "./lib/Billing/index.js"
+      },
+      "./ClickPipes": {
+        "types": "./lib/ClickPipes/index.d.ts",
+        "bun": "./src/ClickPipes/index.ts",
+        "worker": "./src/ClickPipes/index.ts",
+        "default": "./lib/ClickPipes/index.js"
+      },
+      "./ClickStack": {
+        "types": "./lib/ClickStack/index.d.ts",
+        "bun": "./src/ClickStack/index.ts",
+        "worker": "./src/ClickStack/index.ts",
+        "default": "./lib/ClickStack/index.js"
+      },
+      "./Notifications": {
+        "types": "./lib/Notifications/index.d.ts",
+        "bun": "./src/Notifications/index.ts",
+        "worker": "./src/Notifications/index.ts",
+        "default": "./lib/Notifications/index.js"
+      },
+      "./Organization": {
+        "types": "./lib/Organization/index.d.ts",
+        "bun": "./src/Organization/index.ts",
+        "worker": "./src/Organization/index.ts",
+        "default": "./lib/Organization/index.js"
+      },
+      "./Postgres": {
+        "types": "./lib/Postgres/index.d.ts",
+        "bun": "./src/Postgres/index.ts",
+        "worker": "./src/Postgres/index.ts",
+        "default": "./lib/Postgres/index.js"
+      },
+      "./Prometheus": {
+        "types": "./lib/Prometheus/index.d.ts",
+        "bun": "./src/Prometheus/index.ts",
+        "worker": "./src/Prometheus/index.ts",
+        "default": "./lib/Prometheus/index.js"
+      },
+      "./QueryApiEndpoints": {
+        "types": "./lib/QueryApiEndpoints/index.d.ts",
+        "bun": "./src/QueryApiEndpoints/index.ts",
+        "worker": "./src/QueryApiEndpoints/index.ts",
+        "default": "./lib/QueryApiEndpoints/index.js"
+      },
+      "./RoleManagement": {
+        "types": "./lib/RoleManagement/index.d.ts",
+        "bun": "./src/RoleManagement/index.ts",
+        "worker": "./src/RoleManagement/index.ts",
+        "default": "./lib/RoleManagement/index.js"
+      },
+      "./SavedQueries": {
+        "types": "./lib/SavedQueries/index.d.ts",
+        "bun": "./src/SavedQueries/index.ts",
+        "worker": "./src/SavedQueries/index.ts",
+        "default": "./lib/SavedQueries/index.js"
+      },
+      "./Service": {
+        "types": "./lib/Service/index.d.ts",
+        "bun": "./src/Service/index.ts",
+        "worker": "./src/Service/index.ts",
+        "default": "./lib/Service/index.js"
+      },
+      "./Snapshot": {
+        "types": "./lib/Snapshot/index.d.ts",
+        "bun": "./src/Snapshot/index.ts",
+        "worker": "./src/Snapshot/index.ts",
+        "default": "./lib/Snapshot/index.js"
+      },
+      "./Udf": {
+        "types": "./lib/Udf/index.d.ts",
+        "bun": "./src/Udf/index.ts",
+        "worker": "./src/Udf/index.ts",
+        "default": "./lib/Udf/index.js"
+      },
+      "./UserManagement": {
+        "types": "./lib/UserManagement/index.d.ts",
+        "bun": "./src/UserManagement/index.ts",
+        "worker": "./src/UserManagement/index.ts",
+        "default": "./lib/UserManagement/index.js"
+      },
+      "./internal/*": null,
+      "./*/internal": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/clickhouse-cloud": "workspace:*",
+    "@distilled.cloud/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-clickhouse": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-clickhouse": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "pg": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "@effect/sql-clickhouse": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/clickhouse-cloud/Contributions"
+    ]
+  }
+}

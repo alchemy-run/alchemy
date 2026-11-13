@@ -1,0 +1,113 @@
+---
+title: ClickHouse Cloud
+description: Create ClickHouse Cloud services, ClickPipes, Query API endpoints, UDFs, Postgres, keys and roles, and call them from your Workers.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+ClickHouse Cloud runs ClickHouse, the column-oriented analytics database, as a managed service. Each service is compute and storage in one region of AWS, GCP or Azure. It scales to zero when idle and bills by the minute while it runs.
+
+## A quick example
+
+A service that idles after five minutes without queries:
+
+```typescript
+// alchemy.run.ts
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+
+export const Analytics = ClickHouseCloud.Service.Service("Analytics", {
+  provider: "aws",
+  region: "us-east-1",
+  ipAccessList: [{ source: "0.0.0.0/0", description: "anywhere" }],
+  idleScaling: true,
+  idleTimeoutMinutes: 5,
+});
+```
+
+Deploy returns once the service is running. `Analytics.httpsUrl` is its HTTPS interface, and `Analytics.password` is the password ClickHouse generated for the `default` user.
+
+Back it up twice a day and keep a week of backups:
+
+```typescript
+// alchemy.run.ts
+export const Backups = Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  return yield* ClickHouseCloud.Backup.BackupConfiguration("AnalyticsBackups", {
+    serviceId: analytics.serviceId,
+    backupPeriodInHours: 12,
+    backupRetentionPeriodInHours: 168,
+  });
+});
+```
+
+Read the service's state from a Worker:
+
+```typescript
+const getService = yield* ClickHouseCloud.Service.GetService(Analytics);
+const svc = yield* getService();
+```
+
+The Worker gets its own API key, holding a role that allows `control-plane:service:view` on that one service.
+
+## What you can create
+
+**Services and their settings**
+
+- `Service.Service`: a service, with its IP access list, scaling, idle scaling, tags, password, desired state (`running` or `stopped`) and deletion protection.
+- `Service.ScalingSchedule`, `Service.QueryEndpoint`, `Service.PrivateEndpoint`, `Service.ClickHouseSetting`, `Service.JwtProvider`, `Service.UpgradeWindow`.
+- `Backup.BackupConfiguration` (schedule and retention) and `Backup.BackupBucket` (backups to your own S3, GCS or Azure bucket).
+- `Snapshot.SnapshotConfiguration`: scheduled snapshots.
+
+**Data in a service**
+
+- `ClickPipes.ClickPipe`: ingestion from object storage, Kafka, Kinesis, Pub/Sub or a database. `ClickPipes.CdcScaling`, `ClickPipes.ReversePrivateEndpoint` and `ClickPipes.WorkloadIdentity` configure where pipes run and how they authenticate.
+- `SavedQueries.SavedQuery` and `QueryApiEndpoints.QueryApiEndpoint`: SQL you keep, and SQL served over HTTPS.
+- `Udf.Function` and `Udf.Attachment`: executable user-defined functions built from a source directory, and the services that run them.
+- `ClickStack.Source`, `SavedSearch`, `Dashboard`, `Webhook`, `Alert` and `Role`: the observability UI of a service.
+
+**Postgres**
+
+- `Postgres.Service`: a managed Postgres primary, read replica or restore, with SQL migrations applied over TLS.
+
+**Organization and access**
+
+- `Organization.Organization`, `Organization.PreviewFeature`, `Organization.ByocInfrastructure`.
+- `ApiKeys.ApiKey` and `RoleManagement.Role`.
+- `UserManagement.Invitation`, `UserManagement.Member` (a member's roles) and `Notifications.MemberNotificationSetting`.
+
+Some of these need a plan or feature ClickHouse enables per organization: `JwtProvider` and `UpgradeWindow` need the Enterprise tier, `ClickHouseSetting` and `SnapshotConfiguration` need ClickHouse to enable those APIs, `ClickStack.*` needs ClickStack set up on the service, `ByocInfrastructure` needs a BYOC organization, and `CdcScaling` needs a database ClickPipe. Without it, the deploy fails with `FeatureUnavailable` and the API's message (`CdcScaling`: the provider's `ClickHouseCloud.FeatureUnavailable`).
+
+## Bindings
+
+Bindings call the Cloud API from any runtime with the host's own key:
+
+- Service: `GetService`, `UpdateServiceState`; `Backup.ListBackups`, `Backup.GetBackup`; `Snapshot.ListSnapshots`, `Snapshot.GetSnapshot`.
+- Data: `QueryApiEndpoints.RunQueryApiEndpoint`; `ClickPipes.GetClickPipe`, `UpdateClickPipeState`, `DiscoverClickPipeSchema`; `ClickStack.GetClickStackAlert`, `ListClickStackAlerts` and the `consumeAlerts` event source.
+- SQL on a Node.js host: `Service.Query`, `Service.Insert`, `Service.Ping`.
+- Postgres: `Connect`, `GetPostgresService`, `UpdatePostgresServiceState`, `GetPostgresServiceMetrics`, `ListPostgresLogs`, `ListPostgresSlowQueryPatterns`, `GetPostgresSlowQueryPattern`, `ListPostgresServiceBackups`.
+- Organization: `ListActivities`, `GetActivity`, `ListOrganizationQuotas`, `GetOrganizationQuota`; `Billing.GetUsageCost`, `Billing.GetCreditBalances`; `Notifications.ListNotifications`, `ListNotificationTypes`.
+- Prometheus: service, Postgres and organization metrics, and the organization's service discovery.
+
+ClickHouse Cloud trusts no OIDC issuer, so each binding gives its host a role scoped to the bound object, and an API key that holds only that role. See [Credentials & bindings](/clickhouse-cloud/credentials).
+
+:::note[Beta endpoints]
+ClickHouse marks part of the Cloud API Beta: the contract is stable and no breaking changes are expected. These call Beta endpoints, and each one's reference entry names them:
+
+- Resources: `Backup.BackupBucket`, `Snapshot.SnapshotConfiguration`, `Service.ClickHouseSetting`, `Service.JwtProvider`, `Organization.PreviewFeature`, `Organization.ByocInfrastructure`, `Notifications.MemberNotificationSetting`, `ClickPipes.WorkloadIdentity`, every `ClickStack` resource, `Postgres.Service`, and `Service.Service` when it sets replica-aware routing.
+- Bindings: `Billing.GetCreditBalances`, `Notifications.ListNotifications` and `ListNotificationTypes`, `Organization.ListOrganizationQuotas` and `GetOrganizationQuota`, `ClickPipes.DiscoverClickPipeSchema`, the ClickStack alert bindings, the Snapshot bindings, the Postgres bindings except `Connect`, and the Postgres Prometheus bindings.
+:::
+
+## Out of scope
+
+- Deprecated create fields: `tier`, `minTotalMemoryGb`, `maxTotalMemoryGb` and create-time `privateEndpointIds` on a service, an API key's legacy `roles`, and the organization's `privateEndpoints` patch. Use the replica memory and replica count props, `assignedRoleIds`, and `Service.PrivateEndpoint`.
+- Catalogue lookups with no state to manage: the instance profile list (`listServiceProfiles`) and the ClickHouse settings schema (`getServiceClickHouseSettingsSchema`).
+- BYOC provisioning progress (`getByocInfrastructureProgress`): it only reports progress. A `ByocInfrastructure` waits until its state is ready.
+- `listOrganizations`: an API key belongs to one organization, so it is only used to find the organization ID when you don't set one.
+
+## Where to start
+
+Start with [Setup](/clickhouse-cloud/setup) to give Alchemy an API key, then build a deployed app in the [tutorial](/clickhouse-cloud/tutorial). Every resource and binding is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

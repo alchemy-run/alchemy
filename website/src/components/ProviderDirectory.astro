@@ -66,6 +66,10 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
     href: "/aws",
     blurb: "Lambda, ECS, EKS, EC2, DynamoDB, S3, SQS, Kinesis",
   },
+  ClickHouseCloud: {
+    href: "/clickhouse-cloud",
+    blurb: "Services that idle to zero, backups, API keys and roles",
+  },
   Archil: {
     href: "/archil",
     blurb: "Serverless exec, sandboxes, programs and websites on durable disks",
@@ -125,6 +129,7 @@ const BLURBS: Record<string, string> = {};
 const DISPLAY_LABELS: Record<string, string> = {
   Planetscale: "PlanetScale",
   BetterAuth: "Better Auth",
+  ClickHouseCloud: "ClickHouse Cloud",
 };
 
 const providers = generatedSidebar() ?? [];
