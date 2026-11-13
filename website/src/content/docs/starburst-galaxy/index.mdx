@@ -1,0 +1,93 @@
+---
+title: Starburst Galaxy
+description: Declare Starburst Galaxy clusters, catalogs, access control, governance, data products, data quality and ingestion as resources in your Stack, and call Galaxy from your hosts through bindings.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Starburst Galaxy is managed Trino. A catalog connects Galaxy to a data source: a PostgreSQL database, an S3 lakehouse, a warehouse. A cluster is the Trino compute that queries the catalogs attached to it, and suspends itself when idle.
+
+Access is role-based: privileges are granted to roles, and roles to users and service accounts. Column masks, row filters and tags govern what each role sees.
+
+## A quick example
+
+A catalog connects a PostgreSQL database; Galaxy checks the connection on every deploy:
+
+```typescript
+const project = yield* Neon.Project("app");
+const pg = yield* StarburstGalaxy.Catalog.PostgresqlCatalog("App", {
+  endpoint: project.origin.host,
+  databaseName: project.origin.database,
+  username: project.origin.user,
+  password: project.origin.password,
+});
+```
+
+A cluster queries it. It starts enabled, suspends after five idle minutes, and the next query resumes it:
+
+```typescript
+const cluster = yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
+  cloudRegionId: "aws-us-east1",
+  catalogs: [pg.catalogId],
+});
+```
+
+A role gets exactly the privileges you grant, and a service account logs in to `cluster.trinoUri` with it:
+
+```typescript
+const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {});
+yield* StarburstGalaxy.Role.RolePrivilege("ReportingUseCluster", {
+  role: reporting.roleId,
+  privilege: "UseCluster",
+  entity: { kind: "Cluster", clusterId: cluster.clusterId },
+});
+yield* StarburstGalaxy.Role.RolePrivilege("ReportingSelect", {
+  role: reporting.roleId,
+  privilege: "Select",
+  entity: { kind: "Table", catalogId: pg.catalogId, schemaName: "public", tableName: "*" },
+});
+const account = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", { role: reporting.roleId });
+const password = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
+  serviceAccount: account.serviceAccountId,
+});
+```
+
+Log in as `account.userName` (the name qualified with your account domain) with `password.trinoPassword` from JDBC, the Trino CLI, or any Trino client.
+
+## Where to start
+
+**New to Galaxy in Alchemy?** Connect your account in [Setup](/starburst-galaxy/setup), then follow the [tutorial](/starburst-galaxy/tutorial): a Postgres database queried through a free cluster, with a read-only login.
+
+**Calling Galaxy from a Worker?** [Credentials & bindings](/starburst-galaxy/credentials) explains what a host gets, and the generated [API reference](/providers) lists each resource and binding.
+
+## What the provider covers
+
+Resources and bindings are grouped by namespace: `StarburstGalaxy.Catalog.PostgresqlCatalog`, `StarburstGalaxy.Discovery.GetCatalogSchema`.
+
+- **Catalog:** PostgreSQL, MySQL, SQL Server, BigQuery, Snowflake, Redshift, MongoDB, Cassandra, OpenSearch, S3 and GCS catalogs, on one shared lifecycle. Galaxy validates each connection on deploy unless `validate: false`.
+- **Cluster:** `Cluster`, with `enabled` and `autoSuspend`. A deploy waits for an enable or disable to register, never for a cold start.
+- **Role and User:** `Role`, `RolePrivilege`, `RoleGrant` (a role to a user, role or group), `UserDefaultRole`, and lookups of existing `User`s and SCIM `Group`s.
+- **ServiceAccount:** `ServiceAccount` and `ServiceAccountPassword`, the login for Trino clients.
+- **Governance:** `ColumnMask`, `RowFilter`, `Tag`, `TagAssignment` and `Policy` (attribute-based access).
+- **DataProduct:** `DataDomain`, `DataProduct` and `DataProductUsageExample`.
+- **Discovery:** `CatalogMetadata`, `SchemaMetadata` and `TableMetadata` (descriptions, contacts, links), and bindings that read a catalog's schemas, tables and columns and document a column.
+- **DataQuality:** `DataQualityCheck` and `DataQualitySchedule`, and bindings that run a check and read its results and the quality summaries.
+- **SqlJob:** `SqlJob`, and bindings that run it and read its status and history.
+- **Ingest:** `FileIngestSource`, `KafkaIngestSource` and `LiveTable`, and a binding that reads a live table's state.
+- **SchemaDiscovery:** bindings that discover tables in a lakehouse location and apply the result.
+- **Network and CloudAccess:** `CrossAccountIamRole`, and lookups of `PrivateLink`s and the `CrossAccountIamRoleTrust` values your AWS trust policy needs.
+
+Galaxy objects have no labels or tags, so Alchemy recognizes the objects it created by their generated names. An object found under an explicit `name` with no Alchemy state is adopted only with `--adopt`.
+
+## Out of scope
+
+- **Running SQL from Alchemy.** Querying a cluster needs a Trino client for Effect (`@effect/sql-trino`), which does not exist yet; until it does, connect any Trino client to `cluster.trinoUri`, or run statements as a `SqlJob`.
+- **Inviting users.** Galaxy's API can invite a person by email (`createUser`) but has no way to remove one, so a managed user would outlive every `destroy`. Users and groups come from Galaxy's console or SCIM; `User.lookup` and `Group.lookup` reference them.
+- **API clients.** Galaxy's API has no operations for OAuth API clients. Create the client Alchemy deploys with in the console ([Setup](/starburst-galaxy/setup)).
+- **Changing a JSON transform live table's columns in place.** A `LiveTable` change replaces the table.
+- **Warp resiliency.** The cluster setting is deprecated: Galaxy ignores it.
+- **Billing and usage.** Not part of Galaxy's public API.
+
+## The docs
+
+<HubMap />

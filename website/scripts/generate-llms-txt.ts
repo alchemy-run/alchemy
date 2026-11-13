@@ -821,6 +821,14 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Starburst Galaxy",
+    intro:
+      "Managed Trino as Stack resources: clusters that suspend when idle, catalogs over PostgreSQL and S3, roles, privileges, service accounts, and governance objects.",
+    pages: {
+      slugs: ["starburst-galaxy/index", "starburst-galaxy/setup"],
+    },
+  },
+  {
     heading: "GitHub",
     intro:
       "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",

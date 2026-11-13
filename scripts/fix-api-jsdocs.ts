@@ -37,6 +37,7 @@ const packages = [
   "fly",
   "github",
   "stripe",
+  "starburst-galaxy",
   "cloudflare",
   "gcp",
   "aws",

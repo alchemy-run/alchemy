@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/starburst-galaxy/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/daytona/tsconfig.json"
     },
     {
@@ -152,6 +155,9 @@
     },
     {
       "path": "./packages/planetscale/tsconfig.json"
+    },
+    {
+      "path": "./packages/starburst-galaxy/tsconfig.json"
     },
     {
       "path": "./packages/neon/tsconfig.json"
@@ -402,6 +408,12 @@
     },
     {
       "path": "./examples/boat-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/starburst-galaxy-governance/tsconfig.json"
+    },
+    {
+      "path": "./examples/starburst-galaxy-postgres/tsconfig.json"
     },
     {
       "path": "./examples/e2b-program-async/tsconfig.json"

@@ -8765,6 +8765,56 @@ importers:
         specifier: 4.1.4
         version: 4.1.4
 
+  examples/starburst-galaxy-governance:
+    dependencies:
+      '@alchemy.run/neon':
+        specifier: workspace:*
+        version: link:../../packages/neon
+      '@alchemy.run/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../../packages/starburst-galaxy
+      '@distilled.cloud/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/starburst-galaxy
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
+  examples/starburst-galaxy-postgres:
+    dependencies:
+      '@alchemy.run/neon':
+        specifier: workspace:*
+        version: link:../../packages/neon
+      '@alchemy.run/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../../packages/starburst-galaxy
+      '@distilled.cloud/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/starburst-galaxy
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/stripe-billing:
     dependencies:
       '@alchemy.run/cloudflare':
@@ -10769,6 +10819,9 @@ importers:
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
+      '@alchemy.run/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../starburst-galaxy
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../stripe
@@ -10847,6 +10900,9 @@ importers:
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
+      '@distilled.cloud/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/starburst-galaxy
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
@@ -11523,6 +11579,28 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  packages/starburst-galaxy:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/starburst-galaxy
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
   packages/stripe:
     dependencies:
       '@distilled.cloud/core':
@@ -11647,6 +11725,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../packages/railway
+      '@alchemy.run/starburst-galaxy':
+        specifier: workspace:*
+        version: link:../packages/starburst-galaxy
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../packages/stripe

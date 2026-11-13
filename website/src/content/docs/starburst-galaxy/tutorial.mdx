@@ -1,0 +1,169 @@
+---
+title: "Tutorial: Query Postgres through Galaxy"
+description: Connect a Neon Postgres database to Starburst Galaxy, put a free cluster over it, and give a reporting application a read-only Trino login.
+---
+
+Connect a Postgres database to Galaxy, query it through a free cluster, and give a reporting application a login that may only read. Everything is a resource in one Stack, so `alchemy destroy` removes it all.
+
+The finished code is in [`examples/starburst-galaxy-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/starburst-galaxy-postgres).
+
+## Prerequisites
+
+Finish [Galaxy setup](/starburst-galaxy/setup) and [Neon setup](/neon/setup). A free Galaxy account and a free Neon account are enough: the cluster is a free cluster, and the database fits Neon's free plan.
+
+## Create the database
+
+A migration creates the table Galaxy will read:
+
+```sql title="migrations/0001_orders.sql"
+CREATE SCHEMA shop;
+
+CREATE TABLE shop.orders (
+  id integer PRIMARY KEY,
+  customer text NOT NULL,
+  amount numeric(10, 2) NOT NULL,
+  placed_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO shop.orders (id, customer, amount) VALUES
+  (1, 'ada', 42.50),
+  (2, 'grace', 99.00),
+  (3, 'edsger', 7.25);
+```
+
+## Connect it to Galaxy
+
+A catalog is how Galaxy reaches a data source. `PostgresqlCatalog` takes the database's connection details straight from the `Neon.Project`:
+
+```typescript title="src/Warehouse.ts"
+import * as path from "node:path";
+import * as Neon from "@alchemy.run/neon";
+import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
+import * as Effect from "effect/Effect";
+
+export const Warehouse = Effect.gen(function* () {
+  const db = yield* Neon.Project("ShopDb", {
+    migrations: path.join(import.meta.dirname, "..", "migrations"),
+    // The Neon free plan keeps at most six hours of history.
+    historyRetentionSeconds: 21600,
+  });
+  return yield* StarburstGalaxy.Catalog.PostgresqlCatalog("Shop", {
+    endpoint: db.origin.host,
+    databaseName: db.origin.database,
+    username: db.origin.user,
+    password: db.origin.password,
+  });
+});
+```
+
+Galaxy connects to the database on every deploy. A wrong host or password fails the deploy with Galaxy's reason (`StarburstGalaxy.CatalogValidationFailed`), not your first query.
+
+## Add a cluster and a reporting login
+
+A cluster is the Trino compute that runs queries over the catalogs attached to it. A role holds privileges; a service account is a login with a role:
+
+```typescript title="src/Reporting.ts"
+import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
+import * as Effect from "effect/Effect";
+import { Warehouse } from "./Warehouse.ts";
+
+export const Reporting = Effect.gen(function* () {
+  const shop = yield* Warehouse;
+
+  // It suspends after a minute without queries; the next query resumes it.
+  const cluster = yield* StarburstGalaxy.Cluster.Cluster("Analytics", {
+    cloudRegionId: "aws-us-east1",
+    catalogs: [shop.catalogId],
+    autoSuspend: "1 minute",
+  });
+
+  const reporting = yield* StarburstGalaxy.Role.Role("Reporting", {
+    description: "Reads the shop schema",
+  });
+  yield* StarburstGalaxy.Role.RolePrivilege("ReportingUsesCluster", {
+    role: reporting.roleId,
+    privilege: "UseCluster",
+    entity: { kind: "Cluster", clusterId: cluster.clusterId },
+  });
+  yield* StarburstGalaxy.Role.RolePrivilege("ReportingReadsShop", {
+    role: reporting.roleId,
+    privilege: "Select",
+    entity: { kind: "Table", catalogId: shop.catalogId, schemaName: "shop", tableName: "*" },
+  });
+
+  const reporter = yield* StarburstGalaxy.ServiceAccount.ServiceAccount("Reporter", {
+    role: reporting.roleId,
+  });
+  const password = yield* StarburstGalaxy.ServiceAccount.ServiceAccountPassword("ReporterPassword", {
+    serviceAccount: reporter.serviceAccountId,
+  });
+
+  return { shop, cluster, reporting, reporter, password };
+});
+```
+
+The role gets exactly these two privileges: it may run queries on this cluster, and read the tables of `shop`. It can't write, and it can't see other catalogs.
+
+## Deploy
+
+The Stack registers both providers and returns what a Trino client needs:
+
+```typescript title="alchemy.run.ts"
+import * as Neon from "@alchemy.run/neon";
+import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Reporting } from "./src/Reporting.ts";
+
+export default Alchemy.Stack(
+  "StarburstGalaxyPostgresExample",
+  {
+    providers: Layer.mergeAll(StarburstGalaxy.providers(), Neon.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const { shop, cluster, reporting, reporter } = yield* Reporting;
+    return {
+      catalogId: shop.catalogId,
+      catalog: shop.name,
+      clusterId: cluster.clusterId,
+      trinoUri: cluster.trinoUri,
+      roleId: reporting.roleId,
+      userName: reporter.userName,
+    };
+  }),
+);
+```
+
+```sh
+pnpm alchemy deploy
+```
+
+The output has the cluster's `trinoUri`, the catalog's generated name, and the login's `userName`.
+
+## Query it
+
+In Galaxy's console, open **Catalogs**: the catalog lists `shop.orders` with its four columns. To query it as the reporting login, connect any Trino client to `trinoUri` as `userName`, with the password's `trinoPassword`:
+
+```sh
+trino --server "$TRINO_URI" --user "$USER_NAME" --password \
+  --execute 'SELECT customer, amount FROM "<catalog>".shop.orders ORDER BY amount DESC'
+```
+
+The first query resumes the suspended cluster, which takes a few seconds; the cluster suspends again a minute after the last query. An `INSERT` as this login fails: the role may only read.
+
+Running SQL from inside a Stack or a Worker waits on a Trino client for Effect (`@effect/sql-trino`). Until then, use a Trino client, or run statements on a schedule as a `SqlJob`.
+
+## Clean up
+
+```sh
+pnpm alchemy destroy
+```
+
+Alchemy revokes the password, deletes the service account, the privileges, the role, the cluster and the catalog, then the Neon project.
+
+## Next steps
+
+- [Credentials & bindings](/starburst-galaxy/credentials): call Galaxy from a Worker.
+- [`examples/starburst-galaxy-governance`](https://github.com/alchemy-run/alchemy/tree/main/examples/starburst-galaxy-governance): filter rows and mask columns with a `Policy`.

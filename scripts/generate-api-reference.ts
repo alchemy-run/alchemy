@@ -140,6 +140,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/stripe/src",
   },
   {
+    srcRoot: "packages/starburst-galaxy/src",
+    providerPrefix: "StarburstGalaxy",
+    sourceDisplayPrefix: "packages/starburst-galaxy/src",
+  },
+  {
     srcRoot: "packages/cloudflare/src",
     providerPrefix: "Cloudflare",
     sourceDisplayPrefix: "packages/cloudflare/src",

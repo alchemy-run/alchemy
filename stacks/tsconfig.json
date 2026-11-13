@@ -26,6 +26,7 @@
     { "path": "../packages/daytona/tsconfig.json" },
     { "path": "../packages/archil/tsconfig.json" },
     { "path": "../packages/boat/tsconfig.json" },
+    { "path": "../packages/starburst-galaxy/tsconfig.json" },
     { "path": "../packages/modal/tsconfig.json" }
   ]
 }
