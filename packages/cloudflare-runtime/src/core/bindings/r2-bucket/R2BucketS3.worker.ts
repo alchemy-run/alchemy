@@ -179,6 +179,21 @@ const xmlParser = new XMLParser({
   parseTagValue: false,
 });
 
+/**
+ * Parses an XML request body, or returns `undefined` when it isn't well formed.
+ * `XMLValidator` accepts a self-closing element after the root, so documents
+ * with more than one root element are rejected here (upstream switched to
+ * `fast-xml-validator` with `multipleRoots: false`).
+ */
+function parseXmlDocument(text: string): Record<string, unknown> | undefined {
+  if (XMLValidator.validate(text) !== true) return undefined;
+  const parsed = xmlParser.parse(text) as Record<string, unknown>;
+  // `?xml` and other processing instructions are not elements.
+  const roots = Object.keys(parsed).filter((name) => !name.startsWith("?"));
+  if (roots.length !== 1 || roots.some((name) => Array.isArray(parsed[name]))) return undefined;
+  return parsed;
+}
+
 function xmlResponse(root: string, content: Record<string, unknown>, status = 200): Response {
   const body = `<?xml version="1.0" encoding="UTF-8"?>${xmlBuilder.build({
     [root]: { "@_xmlns": XMLNS, ...content },
@@ -2016,10 +2031,8 @@ const MULTIPART_OPERATIONS: Record<
   CompleteMultipartUpload: {
     unsupportedHeaders: BUCKET_OWNER,
     async handle({ c, bucket, bucketId, key, uploadId }) {
-      const text = await c.req.raw.text();
-      if (XMLValidator.validate(text) !== true) return malformedXml();
-
-      const parsed: unknown = xmlParser.parse(text);
+      const parsed = parseXmlDocument(await c.req.raw.text());
+      if (parsed === undefined) return malformedXml();
       const request = (parsed as { CompleteMultipartUpload?: { Part?: unknown } })
         .CompleteMultipartUpload;
       if (request === undefined) return malformedXml();
@@ -2154,10 +2167,8 @@ const BUCKET_OPERATIONS: Record<
       const digestError = await verifyContentMD5(c, body);
       if (digestError !== undefined) return digestError;
 
-      const text = new TextDecoder().decode(body);
-      if (XMLValidator.validate(text) !== true) return malformedXml();
-
-      const parsed: unknown = xmlParser.parse(text);
+      const parsed = parseXmlDocument(new TextDecoder().decode(body));
+      if (parsed === undefined) return malformedXml();
       const request = (parsed as { Delete?: { Object?: unknown; Quiet?: unknown } }).Delete;
       if (request === undefined) return malformedXml();
 

@@ -92,12 +92,19 @@ export const AssetsLive = Layer.effect(
       const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(dir).pipe(
         Effect.provide([Layer.succeed(FileSystem.FileSystem, fs), Layer.succeed(Path.Path, path)]),
         Effect.mapError((cause) =>
-          SystemError.make({
-            subtag: "Assets",
-            message: `Failed to read assets ignore file in "${dir}": ${cause.message}`,
-            detail: { directory: dir },
-            cause,
-          }),
+          cause._tag === "InvalidAssetsIgnoreError"
+            ? ConfigError.make({
+                subtag: "Assets",
+                message: cause.message,
+                detail: { directory: dir },
+                cause,
+              })
+            : SystemError.make({
+                subtag: "Assets",
+                message: `Failed to read assets ignore file in "${dir}": ${cause.message}`,
+                detail: { directory: dir },
+                cause,
+              }),
         ),
       );
       const manifest: Array<ManifestEntry> = [];
@@ -269,6 +276,8 @@ export const AssetsLive = Layer.effect(
               name: "assets:files",
               disk: {
                 path: filesDirectory,
+                // Reject writes even when callers bypass the read-only KV Worker.
+                writable: false,
                 // Deploys upload dot-paths such as `.well-known/`. Reads still
                 // go through the manifest, so ignored files stay unreachable.
                 allowDotfiles: true,

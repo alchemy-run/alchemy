@@ -99,6 +99,22 @@ function getExposedFetcher(request: Request, env: Env) {
 }
 
 /**
+ * Tag a response returned by an exposed binding, so the local outbound proxy
+ * can tell it apart from one generated in front of this worker (a Cloudflare
+ * Access login redirect or block page), which never carries the tag. The
+ * proxy strips the tag before handing the response to the binding.
+ */
+function markForwardedResponse(response: Response): Response {
+  // A WebSocket upgrade response can't be re-wrapped without losing its socket.
+  if (response.webSocket) {
+    return response;
+  }
+  const marked = new Response(response.body, response);
+  marked.headers.set("MF-Forwarded-Response", "true");
+  return marked;
+}
+
+/**
  * This Worker can proxy two types of remote binding:
  *  1. "raw" bindings, where this Worker has been configured to pass through the raw
  *     fetch from a local workerd instance to the relevant binding
@@ -128,13 +144,14 @@ export default {
           }
         }
 
-        return await fetcher.fetch(
+        const response = await fetcher.fetch(
           request.headers.get("MF-URL") ?? "http://example.com",
           new Request(request, {
             redirect: "manual",
             headers: originalHeaders,
           }),
         );
+        return markForwardedResponse(response);
       }
     } catch (e) {
       if (e instanceof BindingNotFoundError) {

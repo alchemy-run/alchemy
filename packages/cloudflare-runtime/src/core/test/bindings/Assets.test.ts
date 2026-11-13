@@ -1,5 +1,6 @@
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import * as Assets from "../../bindings/assets/Assets.ts";
 import { getFixture } from "../helpers/fixture.ts";
@@ -144,6 +145,28 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         bindings: [Assets.local("ASSETS")],
       }).pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "ConfigError", subtag: "Assets" });
+    }),
+  );
+
+  // Adapted from Miniflare's `test/plugins/assets/index.spec.ts` (#16521).
+  it.effect("reports an invalid .assetsignore encoding as a ConfigError", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped();
+      yield* fs.writeFile(
+        `${directory}/.assetsignore`,
+        new Uint8Array(Buffer.from("ignored.txt", "utf16le")),
+      );
+      const error = yield* startTestWorker({
+        name: "assets-invalid-ignore",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
+        assets: { directory },
+        bindings: [Assets.local("ASSETS")],
+      }).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "ConfigError", subtag: "Assets" });
+      expect(error.message).toContain("Save the file as UTF-8 and try again.");
     }),
   );
 });

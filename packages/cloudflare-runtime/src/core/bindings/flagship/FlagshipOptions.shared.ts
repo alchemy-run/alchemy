@@ -33,7 +33,11 @@ export interface FlagshipFlagDefinition {
   readonly variations: Record<string, unknown>;
   /** Targeting rules, evaluated in ascending `priority`. */
   readonly rules: ReadonlyArray<FlagshipRule>;
+  /** Arbitrary key/value metadata returned with every resolved evaluation. */
+  readonly metadata?: FlagshipFlagMetadata | null;
 }
+
+export type FlagshipFlagMetadata = Record<string, boolean | string | number>;
 
 export interface FlagshipRule {
   readonly conditions: ReadonlyArray<FlagshipCondition>;

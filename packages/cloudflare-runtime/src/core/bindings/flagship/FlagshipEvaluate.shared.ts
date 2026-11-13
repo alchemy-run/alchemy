@@ -15,6 +15,7 @@
 import type {
   FlagshipCondition,
   FlagshipFlagDefinition,
+  FlagshipFlagMetadata,
   FlagshipRule,
 } from "./FlagshipOptions.shared.ts";
 
@@ -26,6 +27,8 @@ export interface FlagshipDetails {
   value: unknown;
   variant?: string;
   reason?: string;
+  /** The flag's metadata, once a variation resolves; omitted when empty. */
+  metadata?: FlagshipFlagMetadata;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -60,6 +63,8 @@ export const evaluateFlag = (input: {
     return error("GENERAL", `Flag "${flagKey}" has no variation "${resolved.variant}"`);
   }
   const value = flag.variations[resolved.variant];
+  const metadata =
+    flag.metadata && Object.keys(flag.metadata).length > 0 ? { metadata: flag.metadata } : {};
   if (expectedType !== undefined && !isOfType(value, expectedType)) {
     return {
       flagKey,
@@ -68,9 +73,10 @@ export const evaluateFlag = (input: {
       reason: "ERROR",
       errorCode: "TYPE_MISMATCH",
       errorMessage: `Flag "${flagKey}" is not a ${expectedType} flag`,
+      ...metadata,
     };
   }
-  return { flagKey, value, variant: resolved.variant, reason: resolved.reason };
+  return { flagKey, value, variant: resolved.variant, reason: resolved.reason, ...metadata };
 };
 
 const resolveVariant = (

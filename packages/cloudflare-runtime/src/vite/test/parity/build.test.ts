@@ -45,7 +45,19 @@ interface Shape {
   files: Record<string, string>;
   /** Whether the project has a Worker entry. */
   worker: boolean;
+  config?: vite.InlineConfig;
 }
+
+const ASSET_WORKER_FILES = {
+  ...WORKER_FILES,
+  "src/index.ts": `import logo from "./logo.svg?url";\nexport default { fetch: () => new Response(logo) };`,
+  "src/logo.svg": `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+};
+
+/** A framework's `buildApp` that builds only the Worker, as some do first. */
+const buildWorkerOnly = async (builder: vite.ViteBuilder) => {
+  await builder.build(builder.environments.ssr!);
+};
 
 const SHAPES: ReadonlyArray<Shape> = [
   {
@@ -58,13 +70,26 @@ const SHAPES: ReadonlyArray<Shape> = [
     worker: true,
     files: { ...WORKER_FILES, "public/robots.txt": "User-agent: *" },
   },
+  { name: "a Worker importing an asset by URL", worker: true, files: ASSET_WORKER_FILES },
   {
-    name: "a Worker importing an asset by URL",
+    name: "a Worker importing an emitted asset",
     worker: true,
-    files: {
-      ...WORKER_FILES,
-      "src/index.ts": `import logo from "./logo.svg?url";\nexport default { fetch: () => new Response(logo) };`,
-      "src/logo.svg": `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+    files: ASSET_WORKER_FILES,
+    config: { build: { assetsInlineLimit: 0 } },
+  },
+  {
+    name: "a framework's builder.buildApp building the Worker first",
+    worker: true,
+    files: { ...ASSET_WORKER_FILES, ...CLIENT },
+    config: { build: { assetsInlineLimit: 0 }, builder: { buildApp: buildWorkerOnly } },
+  },
+  {
+    name: "a framework's buildApp hook building the Worker first",
+    worker: true,
+    files: { ...ASSET_WORKER_FILES, ...CLIENT },
+    config: {
+      build: { assetsInlineLimit: 0 },
+      plugins: [{ name: "framework", buildApp: buildWorkerOnly }],
     },
   },
   { name: "a Worker only", worker: true, files: WORKER_FILES },
@@ -92,12 +117,13 @@ const project = async (files: Record<string, string>) => {
   return root;
 };
 
-const build = async (root: string, plugins: vite.PluginOption) => {
+const build = async (root: string, plugins: vite.PluginOption, config: vite.InlineConfig = {}) => {
   const builder = await vite.createBuilder({
+    ...config,
     configFile: false,
     root,
     logLevel: "silent",
-    plugins: [plugins],
+    plugins: [plugins, ...(config.plugins ?? [])],
   });
   await builder.buildApp();
 };
@@ -163,8 +189,8 @@ describe.each(SHAPES)("build output matches @cloudflare/vite-plugin for $name", 
       project(shape.files),
       project(shape.files),
     ]);
-    await build(officialRoot, official(shape));
-    await build(alchemyRoot, alchemy(shape));
+    await build(officialRoot, official(shape), shape.config);
+    await build(alchemyRoot, alchemy(shape), shape.config);
     return { officialRoot, alchemyRoot };
   })();
 

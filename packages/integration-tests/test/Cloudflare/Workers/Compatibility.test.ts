@@ -88,7 +88,7 @@ describe(
     // 2026-08-04, so Alchemy's newer default no longer emits a redundant flag.
     test("uses date-default Node.js compatibility for Effect-native workers", () => {
       const { date, flags } = getCompatibility({} as WorkerProps);
-      expect(date).toBe("2026-08-31");
+      expect(date).toBe("2026-11-13");
       expect(flags).not.toContain("nodejs_compat");
     });
 

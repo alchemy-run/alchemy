@@ -35,6 +35,9 @@ export interface OptionsApi {
 
 export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (pluginOptions) => {
   let input: Record<string, string> = {};
+  // The assets each Worker environment's chunks import, recorded as they're
+  // written, so the client build can take them over without a Vite manifest.
+  const importedAssets = new Map<string, Set<string>>();
   // A framework's own `index` input in the Worker environment (Waku's server
   // entry) merges over the Worker entry's, so once every config is merged the
   // Worker entry takes `index` back and the framework's builds under its own
@@ -79,6 +82,31 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
       },
     },
     vite: {
+      writeBundle(_options, bundle) {
+        if (!parseViteEnvironments(pluginOptions).includes(this.environment.name)) return;
+        const assets = new Set<string>();
+        // Emitted CSS assets carry `importedAssets` too (fonts, images).
+        for (const output of Object.values(bundle)) {
+          for (const asset of output.viteMetadata?.importedAssets ?? []) assets.add(asset);
+        }
+        importedAssets.set(this.environment.name, assets);
+      },
+      // After a framework's own `buildApp` (or ours), build the Worker
+      // environments and the client it left out and move the Worker's
+      // imported assets, as `@cloudflare/vite-plugin` does. Not run on Vite 6.
+      buildApp: {
+        order: "post",
+        async handler(builder) {
+          const assetsOnly =
+            Object.keys(input).length === 0 && pluginOptions.viteEnvironments === undefined;
+          await buildApp(
+            builder,
+            assetsOnly ? [] : parseViteEnvironments(pluginOptions),
+            pluginOptions,
+            { importedAssets, others: false },
+          );
+        },
+      },
       // On Vite 6 and 7, `vite:esbuild-transpile` lowers every chunk with the
       // top-level `esbuild` options, which would also leave `using` in the
       // client bundle. Each environment reads its own `esbuild` first, so
@@ -197,9 +225,15 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                   build: {
                     ssr: true,
                     target: isRolldown ? TARGET : ESBUILD_TARGET,
-                    cssTarget: CSS_TARGET,
+                    // Vite appends an array `cssTarget` to the user's, and
+                    // Lightning CSS takes the lowest version, so the default
+                    // would lower a pinned target: only set it when unset.
+                    cssTarget:
+                      (userConfig.environments?.[name]?.build?.cssTarget ??
+                        userConfig.build?.cssTarget) === undefined
+                        ? CSS_TARGET
+                        : undefined,
                     emitAssets: true,
-                    manifest: true,
                     // Source maps upload with the Worker, for readable stack traces.
                     sourcemap:
                       userConfig.environments?.[name]?.build?.sourcemap ??
@@ -247,7 +281,10 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {
                   buildApp: (builder) =>
                     // An assets-only site builds only its client.
-                    buildApp(builder, assetsOnly ? [] : environmentNames, pluginOptions),
+                    buildApp(builder, assetsOnly ? [] : environmentNames, pluginOptions, {
+                      importedAssets,
+                      others: true,
+                    }),
                 },
           // An assets-only site has no Worker environments, as with
           // `@cloudflare/vite-plugin`: the client builds to Vite's own outDir.
@@ -277,79 +314,80 @@ const CLIENT_FALLBACK_ENTRY_NAME = "__cloudflare_fallback_entry__";
 
 /**
  * `@cloudflare/vite-plugin`'s default build: the Worker environments, any
- * other environment the app declares, then the client. A client with no
- * entry still builds when it has `public/` files or the Worker imports
- * assets, so its output holds every static asset; the Worker's imported
- * assets then move into it.
+ * other environment the app declares (`others`), then the client. A client
+ * with no entry still builds when it has `public/` files or a Worker imports
+ * assets, so its output holds every static asset; the assets the entry
+ * Worker and its built children import then move into it. Environments
+ * already built (by a framework's own `buildApp`) are not built again.
  */
 const buildApp = async (
   builder: vite.ViteBuilder,
   environmentNames: ReadonlyArray<string>,
   options: BasePluginOptions,
+  {
+    importedAssets,
+    others: buildOthers,
+  }: { importedAssets: ReadonlyMap<string, ReadonlySet<string>>; others: boolean },
 ) => {
   const client = builder.environments.client;
   const workerEnvironments = environmentNames.flatMap((name) => {
     const environment = builder.environments[name];
     return environment ? [environment] : [];
   });
-  const others = Object.values(builder.environments).filter(
-    (environment) =>
-      workerEnvironments.length > 0 &&
-      environment !== client &&
-      !environmentNames.includes(environment.name) &&
-      // Framework-owned environments we were told to leave alone may have
-      // no build input; never drive them from the default orchestrator.
-      !options.skipEnvironments?.includes(environment.name),
-  );
+  const others = buildOthers
+    ? Object.values(builder.environments).filter(
+        (environment) =>
+          workerEnvironments.length > 0 &&
+          environment !== client &&
+          !environmentNames.includes(environment.name) &&
+          // Framework-owned environments we were told to leave alone may have
+          // no build input; never drive them from the default orchestrator.
+          !options.skipEnvironments?.includes(environment.name),
+      )
+    : [];
   for (const environment of [...workerEnvironments, ...others]) {
     if (!environment.isBuilt) await builder.build(environment);
   }
-  if (!client || client.isBuilt) return;
-  const entry = workerEnvironments[0];
-  const entryDirectory = entry
-    ? path.resolve(builder.config.root, entry.config.build.outDir)
-    : undefined;
-  const importedAssets = entryDirectory ? readImportedAssets(entryDirectory) : new Set<string>();
-  if (!isEntrylessClientEnvironment(client)) {
-    await builder.build(client);
-  } else if (importedAssets.size > 0 || hasPublicAssets(builder.config)) {
-    client.config.build.rollupOptions = {
-      input: CLIENT_FALLBACK_ENTRY_ID,
-      logLevel: "silent",
-      output: { entryFileNames: CLIENT_FALLBACK_ENTRY_NAME },
-    };
-    await builder.build(client);
-    fs.rmSync(
-      path.resolve(builder.config.root, client.config.build.outDir, CLIENT_FALLBACK_ENTRY_NAME),
-      { force: true },
-    );
-  } else {
-    return;
-  }
-  if (!entryDirectory) return;
-  const clientDirectory = path.resolve(builder.config.root, client.config.build.outDir);
-  for (const asset of importedAssets) {
-    const source = path.join(entryDirectory, asset);
-    const destination = path.join(clientDirectory, asset);
-    if (!fs.existsSync(source)) continue;
-    if (fs.existsSync(destination)) {
-      fs.unlinkSync(source);
+  if (!client) return;
+  // The entry Worker and the children that were built.
+  const assetEnvironments = workerEnvironments.filter(
+    (environment, index) => index === 0 || environment.isBuilt,
+  );
+  if (!client.isBuilt) {
+    if (!isEntrylessClientEnvironment(client)) {
+      await builder.build(client);
+    } else if (
+      assetEnvironments.some((environment) => importedAssets.get(environment.name)?.size) ||
+      hasPublicAssets(builder.config)
+    ) {
+      client.config.build.rollupOptions = {
+        input: CLIENT_FALLBACK_ENTRY_ID,
+        logLevel: "silent",
+        output: { entryFileNames: CLIENT_FALLBACK_ENTRY_NAME },
+      };
+      await builder.build(client);
+      fs.rmSync(
+        path.resolve(builder.config.root, client.config.build.outDir, CLIENT_FALLBACK_ENTRY_NAME),
+        { force: true },
+      );
     } else {
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.renameSync(source, destination);
+      return;
     }
   }
-};
-
-/** The assets the Worker's chunks import, from its build manifest. */
-const readImportedAssets = (directory: string): Set<string> => {
-  try {
-    const manifest = JSON.parse(
-      fs.readFileSync(path.join(directory, ".vite", "manifest.json"), "utf8"),
-    ) as Record<string, { assets?: Array<string> }>;
-    return new Set(Object.values(manifest).flatMap((chunk) => chunk.assets ?? []));
-  } catch {
-    return new Set();
+  const clientDirectory = path.resolve(builder.config.root, client.config.build.outDir);
+  for (const environment of assetEnvironments) {
+    const directory = path.resolve(builder.config.root, environment.config.build.outDir);
+    for (const asset of importedAssets.get(environment.name) ?? []) {
+      const source = path.join(directory, asset);
+      const destination = path.join(clientDirectory, asset);
+      if (!fs.existsSync(source)) continue;
+      if (fs.existsSync(destination)) {
+        fs.unlinkSync(source);
+      } else {
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.renameSync(source, destination);
+      }
+    }
   }
 };
 
