@@ -8,7 +8,6 @@ import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { localAccountId } from "../LocalAccount.ts";
@@ -54,7 +53,6 @@ export const LocalContainerProvider = () =>
     ContainerPlatform,
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
       // Resolve the `dev` image plus a content hash for change detection.

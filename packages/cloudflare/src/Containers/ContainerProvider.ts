@@ -17,7 +17,6 @@ import { normalizeNulls } from "alchemy/Util/stable";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
@@ -195,7 +194,6 @@ export const LiveContainerProvider = () =>
     ContainerPlatform,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const docker = yield* Docker;
       const http = yield* HttpClient.HttpClient;
