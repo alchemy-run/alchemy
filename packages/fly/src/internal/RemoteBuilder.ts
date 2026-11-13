@@ -3,7 +3,8 @@ import {
   type Docker,
   type RegistryCredentials,
 } from "@alchemy.run/docker/Docker";
-import * as builders from "@distilled.cloud/fly-io/builders";
+import { Query } from "@distilled.cloud/core/query";
+import { Fly, GraphQLLive } from "@distilled.cloud/fly-io/GraphQL";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -113,6 +114,12 @@ const acquireConnection = Effect.fn(function* (
   });
 });
 
+/** Start (or reuse) the app's Depot remote builder; `buildToken` is Redacted. */
+const ensureDepotRemoteBuilder = Query.fn((appName: string) => {
+  const payload = Fly.ensureDepotRemoteBuilder({ input: { appName, builderScope: "app" } });
+  return { buildId: payload.buildId, buildToken: payload.buildToken };
+});
+
 /**
  * Build `imageRef` from `contextDir` on a Fly remote builder and push it to
  * `registry` from there.
@@ -127,10 +134,15 @@ export const buildOnRemoteBuilder = Effect.fn(function* (input: {
   note?: (message: string) => Effect.Effect<void>;
 }) {
   const note = input.note ?? ((_message: string) => Effect.void);
-  const { buildId, buildToken } = yield* builders.ensureDepotRemoteBuilder({
-    input: { appName: input.appName, builderScope: "app" },
-  });
-  const token = Redacted.isRedacted(buildToken) ? buildToken : Redacted.make(buildToken);
+  const { buildId, buildToken: token } = yield* ensureDepotRemoteBuilder(input.appName).pipe(
+    Effect.provide(GraphQLLive),
+  );
+  if (buildId === null || token === null) {
+    return yield* new RemoteBuilderError({
+      operation: "ensureDepotRemoteBuilder",
+      message: `Fly returned no remote builder for ${input.appName}`,
+    });
+  }
   const platform = platformOf(input.platform);
 
   const finish = (result: object) =>
