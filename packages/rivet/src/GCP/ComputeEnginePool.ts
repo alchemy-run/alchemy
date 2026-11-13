@@ -22,6 +22,7 @@ const NODE_IMAGE = "node:26-slim";
 const APP_PATH = "/var/lib/rivet-node";
 const HASH_KEY = "rivet-node-hash";
 const ENV_KEY = "rivet-node-env";
+const INDEX_KEY = "rivet-node-index";
 
 export interface ComputeEnginePoolOptions extends PoolSettings {
   /**
@@ -45,6 +46,21 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    * @default "10.46.0.0/20"
    */
   cidrBlock?: string;
+  /**
+   * Seconds a node gets to stop when a deploy restarts it: Docker sends it
+   * SIGTERM, and SIGKILL once this has passed.
+   * @default 30
+   */
+  stopTimeout?: number;
+  /**
+   * Seconds between two nodes restarting when a deploy changes them: node
+   * `i` restarts `i * rolloutInterval` seconds after the change reaches it.
+   * This is a timer, not a readiness gate: node `i` stops whether or not
+   * node `i - 1` has reconnected. Make it longer than `stopTimeout` plus the
+   * time a node takes to start, so the restarts do not overlap.
+   * @default 60
+   */
+  rolloutInterval?: number;
 }
 
 const asOutput = (value: Input<string>): Output.Output<string> =>
@@ -62,47 +78,74 @@ const asOutput = (value: Input<string>): Output.Output<string> =>
 const platformOf = (machineType: string) =>
   /^(t2a|c4a|n4a)-/.test(machineType) ? ("linux/arm64" as const) : ("linux/amd64" as const);
 
-/** Fetch the node program from the bucket, then run it with Docker. */
-const runProgram = (bucket: string, image: boolean) =>
+/**
+ * Fetch the node program from the bucket and make its image ready, while
+ * the running node keeps serving: a slow download or load never widens the
+ * gap between stopping the old container and starting the new one.
+ */
+const prepareProgram = (bucket: string, image: boolean) =>
   image
     ? // A Rust program is a whole image: load it, and run it as it is.
       `curl -sf -H "Authorization: Bearer $TOKEN" -o ${APP_PATH}/node.tar.next \\
     "https://storage.googleapis.com/storage/v1/b/${bucket}/o/node.tar?alt=media" \\
     && mv ${APP_PATH}/node.tar.next ${APP_PATH}/node.tar
-  curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
-  ${loadNodeImage(`${APP_PATH}/node.tar`)}
-  docker rm -f rivet-node >/dev/null 2>&1 || true
-  docker run -d --name rivet-node --restart always --network host \\
-    --env-file ${APP_PATH}/env.list "$IMAGE"`
+  ${loadNodeImage(`${APP_PATH}/node.tar`)}`
     : `curl -sf -H "Authorization: Bearer $TOKEN" -o ${APP_PATH}/node.mjs.next \\
     "https://storage.googleapis.com/storage/v1/b/${bucket}/o/node.mjs?alt=media" \\
     && mv ${APP_PATH}/node.mjs.next ${APP_PATH}/node.mjs
-  curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
-  docker rm -f rivet-node >/dev/null 2>&1 || true
-  docker run -d --name rivet-node --restart always --network host \\
-    --env-file ${APP_PATH}/env.list -v ${APP_PATH}/node.mjs:/program/node.mjs:ro -w /app ${NODE_IMAGE} \\
+  IMAGE=${NODE_IMAGE}
+  docker pull -q "$IMAGE" >/dev/null || true`;
+
+/** The `docker run` arguments after the image: how the container starts the node. */
+const runCommand = (image: boolean) =>
+  image
+    ? ""
+    : ` \\
     sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${RIVETKIT_VERSION} && exec node node.mjs'`;
 
-const startupScript = (options: {
+/** The startup script every node runs, rendered for a pool. @internal */
+export const startupScript = (options: {
   readonly bucket: string;
   readonly image: boolean;
+  readonly stopTimeout: number;
+  readonly rolloutInterval: number;
 }) => `#!/bin/bash
 set -uo pipefail
 MD=http://metadata.google.internal/computeMetadata/v1
 mkdir -p ${APP_PATH}
 start() {
   TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\\1/')"
-  ${runProgram(options.bucket, options.image)}
+  ${prepareProgram(options.bucket, options.image)}
+  curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
+  if docker inspect rivet-node >/dev/null 2>&1; then
+    # A deploy: node i waits its turn, so the pool restarts one node at a
+    # time and the others keep serving while it does.
+    INDEX="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${INDEX_KEY}" || echo 0)"
+    sleep $((INDEX * ${options.rolloutInterval}))
+    # SIGTERM first, so the node drains its actors; SIGKILL only after the grace.
+    docker stop -t ${options.stopTimeout} rivet-node >/dev/null 2>&1 || true
+    docker rm -f rivet-node >/dev/null 2>&1 || true
+  fi
+  # --init forwards SIGTERM to the node whatever its image runs as PID 1.
+  docker run -d --name rivet-node --restart always --network host --init \\
+    --stop-timeout ${options.stopTimeout} --env-file ${APP_PATH}/env.list${
+      options.image
+        ? ""
+        : ` \\
+    -v ${APP_PATH}/node.mjs:/program/node.mjs:ro -w /app`
+    } "$IMAGE"${runCommand(options.image)}
 }
 etag() {
   curl -sf -H 'Metadata-Flavor: Google' -D - -o /dev/null "$MD/instance/attributes/?recursive=true$1" \\
     | grep -i '^etag:' | awk '{print $2}' | tr -d '\\r'
 }
+# Read the version before starting, so a change made while this node
+# waits its turn or starts still reaches it.
+ETAG="$(etag "")"
 start
 # On any change, run the current startup script again: it starts the node
 # afresh and waits for the next change, so a new script reaches this node too.
 (
-  ETAG="$(etag "")"
   while true; do
     NEXT="$(etag "&wait_for_change=true&timeout_sec=3600&last_etag=$ETAG")"
     if [ -n "$NEXT" ] && [ "$NEXT" != "$ETAG" ]; then
@@ -122,7 +165,8 @@ pgrep -f "docker logs -f rivet-node" >/dev/null || setsid sh -c 'while true; do 
  * `Rivet.DurableObject` given this pool in a Node container. The node
  * program sits in a Cloud Storage bucket the instances read as their own
  * service account; a deploy that changes it, or the nodes' env, restarts the
- * container on every instance in place.
+ * container on each instance in place, staggered by `rolloutInterval`,
+ * giving each node `stopTimeout` seconds to stop.
  *
  * Nodes only connect out to the control plane, so no inbound traffic
  * reaches them, and the pool works with any control plane it can reach —
@@ -217,13 +261,20 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
             .join("\n"),
         ),
       );
-      const metadata = Output.all(bucket.bucketName, program.md5Hash, envFile, grant.role).pipe(
-        Output.map(([bucketName, programHash, env]) => ({
-          "startup-script": startupScript({ bucket: bucketName, image }),
-          [HASH_KEY]: programHash ?? "",
-          [ENV_KEY]: env,
-        })),
-      );
+      const metadata = (index: number) =>
+        Output.all(bucket.bucketName, program.md5Hash, envFile, grant.role).pipe(
+          Output.map(([bucketName, programHash, env]) => ({
+            "startup-script": startupScript({
+              bucket: bucketName,
+              image,
+              stopTimeout: options.stopTimeout ?? 30,
+              rolloutInterval: options.rolloutInterval ?? 60,
+            }),
+            [HASH_KEY]: programHash ?? "",
+            [ENV_KEY]: env,
+            [INDEX_KEY]: String(index),
+          })),
+        );
 
       for (let i = 0; i < (options.replicas ?? 1); i++) {
         yield* Compute.Instance(`${id}Node${i}`, {
@@ -235,7 +286,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
           associatePublicIp: true,
           serviceAccount: account.email,
           oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
-          metadata: metadata as unknown as Record<string, string>,
+          metadata: metadata(i) as unknown as Record<string, string>,
         });
       }
     }),
