@@ -104,7 +104,10 @@ describe("RivetGCP.ComputeEnginePool startup script", { tags: ["unit"] }, () => 
       index: 0,
       secrets: {
         RIVET_TOKEN: { version: "projects/p/secrets/rivet/versions/2", value: "admin token" },
-        DATABASE_URL: { version: "projects/p/secrets/db/versions/7", value: "postgres://u:p@h/db?x=1" },
+        DATABASE_URL: {
+          version: "projects/p/secrets/db/versions/7",
+          value: "postgres://u:p@h/db?x=1",
+        },
       },
     });
     expect(calls.at(-3)).toMatch(/ -e RIVET_TOKEN -e DATABASE_URL rivet-node-p:latest$/);
