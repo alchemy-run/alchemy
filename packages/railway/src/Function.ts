@@ -20,6 +20,7 @@ import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as Types from "effect/Types";
@@ -45,6 +46,7 @@ import { ownedProjects, projectEnvironmentIds, type Project } from "./Project.ts
 import type { Providers } from "./Providers.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
 import { ensureServiceDomain, type ServiceDomainRecord } from "./ServiceDomain.ts";
+import { readServiceIpv6Egress, syncServiceIpv6Egress } from "./ServiceIpv6Egress.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import { attachVolumeToService } from "./Volume.ts";
 
@@ -186,6 +188,12 @@ export interface FunctionProps<
    */
   region?: string;
   /**
+   * Whether the function may make outbound IPv6 connections. Written to
+   * `deploy.ipv6EgressEnabled` through `environmentPatchCommit`. Omit it
+   * and the current Railway setting is left alone.
+   */
+  ipv6Egress?: boolean;
+  /**
    * Port published on the generated service domain. Passed as
    * `serviceDomainCreate.targetPort`. Omit to let Railway detect it.
    */
@@ -232,6 +240,11 @@ export type Function<Env extends Record<string, any> = Record<string, any>> = Re
      * `deploy.multiRegionConfig` has replicas in exactly one region.
      */
     region: string | undefined;
+    /**
+     * Observed `deploy.ipv6EgressEnabled`. `undefined` when Railway has
+     * not stored a value.
+     */
+    ipv6Egress: boolean | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
     /**
@@ -854,6 +867,7 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  ipv6Egress: boolean | undefined;
 }): Function["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -864,6 +878,7 @@ const toAttrs = (input: {
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   sleepApplication: input.instance?.sleepApplication ?? undefined,
   region: input.region,
+  ipv6Egress: input.ipv6Egress,
   port: input.port ?? input.domain?.targetPort,
   dnsName: `${input.service.name}.railway.internal`,
   rpcToken: input.rpcToken,
@@ -991,6 +1006,13 @@ export const FunctionProvider = () =>
                   legacy: instance?.region,
                 })
               : undefined;
+          const ipv6Egress = Option.getOrUndefined(
+            yield* readServiceIpv6Egress({
+              environmentId: resolvedEnvId,
+              projectId: resolvedProjectId,
+              serviceId: found.id,
+            }),
+          );
           const attrs = toAttrs({
             service: found,
             instance,
@@ -1002,6 +1024,7 @@ export const FunctionProvider = () =>
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
             region,
+            ipv6Egress,
           });
           if (output !== undefined) return attrs;
           return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
@@ -1046,6 +1069,7 @@ export const FunctionProvider = () =>
                           codeHash: "",
                           rpcToken: "",
                           region: instance.region ?? undefined,
+                          ipv6Egress: undefined,
                         }),
                       ];
                     }),
@@ -1077,6 +1101,7 @@ export const FunctionProvider = () =>
             cronSchedule: undefined,
             sleepApplication: undefined,
             region: undefined,
+            ipv6Egress: undefined,
             port,
             dnsName: `${name}.railway.internal`,
             rpcToken: plainEnvValue(news.rpcToken) ?? "",
@@ -1202,6 +1227,14 @@ export const FunctionProvider = () =>
               fallbackReplicas: instance?.numReplicas,
             });
           let region = yield* placeRegion();
+          const placeIpv6Egress = () =>
+            syncServiceIpv6Egress({
+              environmentId,
+              projectId,
+              serviceId,
+              enabled: props.ipv6Egress,
+            }).pipe(Effect.map(Option.getOrUndefined));
+          let ipv6Egress = yield* placeIpv6Egress();
 
           const envChanged = yield* syncEnv({
             projectId,
@@ -1254,6 +1287,7 @@ export const FunctionProvider = () =>
           }
 
           region = yield* placeRegion();
+          ipv6Egress = yield* placeIpv6Egress();
 
           return toAttrs({
             service: current,
@@ -1266,6 +1300,7 @@ export const FunctionProvider = () =>
             codeHash,
             rpcToken,
             region,
+            ipv6Egress,
           });
         }),
 
