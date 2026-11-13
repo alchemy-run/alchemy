@@ -1,4 +1,5 @@
 import * as Railway from "@alchemy.run/railway";
+import { serviceIpv6Egress } from "@alchemy.run/railway/ServiceIpv6Egress";
 import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -7,6 +8,7 @@ import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { AsyncPing } from "./fixtures/async-ping-fn.ts";
@@ -362,6 +364,63 @@ test.provider(
         updated.ping.projectId,
       );
       expect(placedRegions(updatedConfig.config, updated.ping.serviceId)).toEqual([moved]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.ping.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:function",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "set IPv6 egress on a function, flip it, and leave it alone when omitted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (ipv6Egress: boolean | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const ping = yield* Railway.Function("FnIpv6Egress", {
+              project,
+              environment,
+              source: `console.log("tick");`,
+              http: false,
+              ipv6Egress,
+            });
+            return { ping };
+          }),
+        );
+      const observed = (fn: { environmentId: string; projectId: string; serviceId: string }) =>
+        readEnvironmentConfig(fn.environmentId, fn.projectId).pipe(
+          Effect.flatMap((environment) => serviceIpv6Egress(environment.config, fn.serviceId)),
+        );
+
+      const created = yield* deploy(true);
+      expect(created.ping.ipv6Egress).toEqual(true);
+      expect(yield* observed(created.ping)).toEqual(Option.some(true));
+
+      const disabled = yield* deploy(false);
+      expect(disabled.ping.serviceId).toEqual(created.ping.serviceId);
+      expect(disabled.ping.ipv6Egress).toEqual(false);
+      expect(yield* observed(disabled.ping)).toEqual(Option.some(false));
+
+      const left = yield* deploy(undefined);
+      expect(left.ping.serviceId).toEqual(created.ping.serviceId);
+      expect(left.ping.ipv6Egress).toEqual(false);
+      expect(yield* observed(left.ping)).toEqual(Option.some(false));
 
       yield* stack.destroy();
 
