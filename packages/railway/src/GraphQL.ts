@@ -35,6 +35,27 @@ export const projectBuckets = <Mapped>(
 export const projectGroups = <Mapped>(projectId: string, select: (group: Query<Group>) => Mapped) =>
   collect(Railway.project({ id: projectId }).groups({ first: 50 }).pipe(Query.map(select)));
 
+/**
+ * An environment's `config`: the document Railway's own IaC reads and
+ * {@link environmentPatchCommit} patches. Pass `projectId` when it is known.
+ */
+export const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
+  config: Railway.environment(args).config,
+}));
+
+/**
+ * Merge `patch` into an environment's config. `skipDeploys` commits without
+ * starting a deploy. Wrap a read-modify-commit in `withEnvironmentConfigLock`.
+ */
+export const environmentPatchCommit = Query.fn(
+  (input: {
+    environmentId: string;
+    commitMessage: string;
+    patch: unknown;
+    skipDeploys?: boolean;
+  }) => Railway.environmentPatchCommit(input),
+);
+
 const environmentDeleted = Query.fn((id: string, projectId: string) => ({
   deletedAt: Railway.environment({ id, projectId }).deletedAt,
 }));
