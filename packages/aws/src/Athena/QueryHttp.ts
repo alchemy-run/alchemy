@@ -4,6 +4,7 @@ import type { Output as OutputType } from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import { AthenaQueryFailed, Query, type QueryResult, type RunQueryRequest } from "./Query.ts";
@@ -113,19 +114,30 @@ export const QueryHttp = Layer.effect(
           return yield* new AthenaQueryFailed({ queryExecutionId, state, reason });
         }
 
-        const results = yield* getQueryResults({
-          QueryExecutionId: queryExecutionId,
-        });
-        const columns = (results.ResultSet?.ResultSetMetadata?.ColumnInfo ?? []).map((c) => c.Name);
-        const rows = (results.ResultSet?.Rows ?? []).map((row) =>
-          (row.Data ?? []).map((d) => d.VarCharValue ?? ""),
+        // Every page: `GetQueryResults` returns at most 1,000 rows per call. The operation
+        // `withCredentials` resolved keeps distilled's `.pages`, which follows `NextToken`.
+        const pages = yield* Stream.runCollect(
+          getQueryResults.pages({ QueryExecutionId: queryExecutionId }),
         );
+        const info = pages[0]?.ResultSet?.ResultSetMetadata?.ColumnInfo ?? [];
+        const columns = info.map((c) => c.Name);
+        const data = pages.flatMap((page) => page.ResultSet?.Rows ?? []);
+        const rows = data.map((row) => (row.Data ?? []).map((d) => d.VarCharValue ?? ""));
+        const cells = data.map((row) => (row.Data ?? []).map((d) => d.VarCharValue ?? null));
+        // A `SELECT`'s first row repeats the column names.
+        const [first] = cells;
+        const header =
+          first !== undefined &&
+          first.length === columns.length &&
+          first.every((cell, i) => cell === columns[i]);
         return {
           queryExecutionId,
           state,
           stateChangeReason: reason,
           columns,
+          types: info.map((c) => c.Type),
           rows,
+          values: header ? cells.slice(1) : cells,
         } satisfies QueryResult;
       });
     });
