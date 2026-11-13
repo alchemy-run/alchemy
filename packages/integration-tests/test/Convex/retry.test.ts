@@ -83,8 +83,9 @@ test.provider(
         if (calls.length !== wrapped.length) raw.push(`${file}: ${calls.length - wrapped.length}`);
       }
       expect(raw).toEqual([]);
-      // Project, Deployment, DeployKey, PreviewDeployKey, CustomDomain, LogStream, UsageLimit.
-      expect(total).toBe(7);
+      // Project, Deployment, DeployKey, PreviewDeployKey, CustomDomain, LogStream, UsageLimit,
+      // and the push key Functions makes.
+      expect(total).toBe(8);
     }),
   { tags: ["unit", "provider:convex", "local"] },
 );
