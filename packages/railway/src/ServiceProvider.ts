@@ -50,11 +50,7 @@ import {
   findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
-import {
-  invalidImageUpdates,
-  ServiceImageUpdatesInvalid,
-  syncServiceImageUpdates,
-} from "./ServiceImageUpdates.ts";
+import { syncServiceImageUpdates, validateImageUpdates } from "./ServiceImageUpdates.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
@@ -1074,10 +1070,7 @@ export const ServiceProvider = () =>
                   "Railway.Service `imageUpdates` applies only to a service that runs a public image (`image` without `main`, `context` or `repo`).",
               });
             }
-            const invalid = invalidImageUpdates(props.imageUpdates);
-            if (invalid !== undefined) {
-              return yield* new ServiceImageUpdatesInvalid({ message: invalid });
-            }
+            yield* validateImageUpdates(props.imageUpdates);
           }
           const hostedMain = source.mode === "main" ? source.main : undefined;
           const localContext: RailwayLocalContextSource | undefined =

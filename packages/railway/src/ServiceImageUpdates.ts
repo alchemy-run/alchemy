@@ -1,8 +1,13 @@
 import { Query } from "@distilled.cloud/core/query";
 import { Railway } from "@distilled.cloud/railway";
+import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Equivalence from "effect/Equivalence";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import { withEnvironmentConfigLock } from "./transient.ts";
 
 /**
@@ -10,44 +15,70 @@ import { withEnvironmentConfigLock } from "./transient.ts";
  * `disabled` takes nothing, `patch` takes patch bumps of a semver tag,
  * `minor` takes minor and patch bumps.
  */
-export type ImageUpdateType = "disabled" | "patch" | "minor";
+export const ImageUpdateType = Schema.Literals(["disabled", "patch", "minor"]);
+export type ImageUpdateType = typeof ImageUpdateType.Type;
 
 /**
  * How Railway compares tags. `semver` follows version tags; `sha` follows
  * the digest behind a mutable tag such as `latest`.
  */
-export type ImageUpdateTagMode = "semver" | "sha";
+export const ImageUpdateTagMode = Schema.Literals(["semver", "sha"]);
+export type ImageUpdateTagMode = typeof ImageUpdateTagMode.Type;
+
+const Hour = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 24 }));
 
 /**
  * One weekly UTC window in which Railway may apply an image update.
- * A window cannot cross midnight: use two windows on consecutive days.
+ * `day` is the UTC weekday, `0` (Sunday) through `6` (Saturday).
+ * `startHour` (inclusive, `0`-`23`) is before `endHour` (exclusive,
+ * `1`-`24`). A window cannot cross midnight: use two windows on
+ * consecutive days.
  */
-export interface ImageUpdateWindow {
-  /** UTC weekday, `0` (Sunday) through `6` (Saturday). */
-  readonly day: number;
-  /** UTC hour the window opens (inclusive), `0`-`23`. */
-  readonly startHour: number;
-  /** UTC hour the window closes (exclusive), `1`-`24`. Greater than `startHour`. */
-  readonly endHour: number;
-}
+export const ImageUpdateWindow = Schema.Struct({
+  day: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })),
+  startHour: Hour,
+  endHour: Hour,
+}).check(
+  Schema.makeFilter(
+    (window: { readonly startHour: number; readonly endHour: number }) =>
+      window.startHour < window.endHour || "startHour must be before endHour",
+  ),
+);
+export type ImageUpdateWindow = typeof ImageUpdateWindow.Type;
 
 /** `source.autoUpdates` as Alchemy writes it. */
-export interface ImageUpdates {
-  readonly type: ImageUpdateType;
-  readonly tagMode?: ImageUpdateTagMode;
-  readonly schedule?: ReadonlyArray<ImageUpdateWindow>;
-}
+export const ImageUpdates = Schema.Struct({
+  type: ImageUpdateType,
+  tagMode: ImageUpdateTagMode.pipe(Schema.optional),
+  schedule: ImageUpdateWindow.pipe(Schema.Array, Schema.optional),
+});
+export type ImageUpdates = typeof ImageUpdates.Type;
 
 /**
  * `source.autoUpdates` as Railway reports it. Values are not narrowed: a
  * policy set in the dashboard may use a value Alchemy does not know, and
  * that compares as different from the desired one.
  */
-export interface ObservedImageUpdates {
-  readonly type?: string;
-  readonly tagMode?: string;
-  readonly schedule?: ReadonlyArray<ImageUpdateWindow>;
-}
+const ObservedImageUpdates = Schema.Struct({
+  type: Schema.String.pipe(Schema.NullOr, Schema.optional),
+  tagMode: Schema.String.pipe(Schema.NullOr, Schema.optional),
+  schedule: Schema.Array(
+    Schema.Struct({ day: Schema.Number, startHour: Schema.Number, endHour: Schema.Number }),
+  ).pipe(Schema.NullOr, Schema.optional),
+});
+export type ObservedImageUpdates = typeof ObservedImageUpdates.Type;
+
+/** The slice of an environment config that holds `source.autoUpdates`. */
+const ImageUpdatesConfig = Schema.Struct({
+  services: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      source: Schema.Struct({
+        autoUpdates: ObservedImageUpdates.pipe(Schema.NullOr, Schema.optional),
+      }).pipe(Schema.NullOr, Schema.optional),
+    }).pipe(Schema.NullOr),
+  ).pipe(Schema.NullOr, Schema.optional),
+});
 
 export class ServiceImageUpdatesInvalid extends Data.TaggedError(
   "Railway.ServiceImageUpdatesInvalid",
@@ -65,123 +96,79 @@ export class ServiceImageUpdatesNotApplied extends Data.TaggedError(
   }
 }
 
-class ServiceImageUpdatesPending extends Data.TaggedError("Railway.ServiceImageUpdatesPending")<{
-  serviceId: string;
-}> {}
-
-const TYPES: ReadonlySet<string> = new Set<ImageUpdateType>(["disabled", "patch", "minor"]);
-const TAG_MODES: ReadonlySet<string> = new Set<ImageUpdateTagMode>(["semver", "sha"]);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-const isInteger = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value);
-
-/** The reason `desired` is not a policy Railway accepts, or `undefined`. */
-export const invalidImageUpdates = (desired: ImageUpdates): string | undefined => {
-  if (!TYPES.has(desired.type)) {
-    return `Railway.Service \`imageUpdates.type\` must be "disabled", "patch" or "minor", got ${JSON.stringify(desired.type)}`;
-  }
-  if (desired.tagMode !== undefined && !TAG_MODES.has(desired.tagMode)) {
-    return `Railway.Service \`imageUpdates.tagMode\` must be "semver" or "sha", got ${JSON.stringify(desired.tagMode)}`;
-  }
-  for (const [index, window] of (desired.schedule ?? []).entries()) {
-    const { day, startHour, endHour } = window;
-    if (
-      !isInteger(day) ||
-      !isInteger(startHour) ||
-      !isInteger(endHour) ||
-      day < 0 ||
-      day > 6 ||
-      startHour < 0 ||
-      startHour > 23 ||
-      endHour < 1 ||
-      endHour > 24 ||
-      endHour <= startHour
-    ) {
-      return `Railway.Service \`imageUpdates.schedule[${index}]\` must have day 0-6, startHour 0-23 and endHour 1-24 greater than startHour, got ${JSON.stringify(window)}`;
-    }
-  }
-  return undefined;
-};
-
-const windowKey = (window: ImageUpdateWindow) =>
-  `${window.day}:${window.startHour}:${window.endHour}`;
-
-const sameSchedule = (
-  left: ReadonlyArray<ImageUpdateWindow>,
-  right: ReadonlyArray<ImageUpdateWindow>,
-): boolean => {
-  if (left.length !== right.length) return false;
-  const a = left.map(windowKey).sort();
-  const b = right.map(windowKey).sort();
-  return a.every((key, index) => key === b[index]);
-};
-
-/** `source.autoUpdates` for `serviceId` inside an environment config. */
-export const serviceImageUpdates = (config: unknown, serviceId: string): ObservedImageUpdates => {
-  if (!isRecord(config)) return {};
-  const services = config.services;
-  if (!isRecord(services)) return {};
-  const service = services[serviceId];
-  if (!isRecord(service)) return {};
-  const source = service.source;
-  if (!isRecord(source)) return {};
-  const autoUpdates = source.autoUpdates;
-  if (!isRecord(autoUpdates)) return {};
-
-  const schedule = Array.isArray(autoUpdates.schedule)
-    ? autoUpdates.schedule.flatMap((entry: unknown) =>
-        isRecord(entry) &&
-        typeof entry.day === "number" &&
-        typeof entry.startHour === "number" &&
-        typeof entry.endHour === "number"
-          ? [{ day: entry.day, startHour: entry.startHour, endHour: entry.endHour }]
-          : [],
-      )
-    : undefined;
-  return {
-    ...(typeof autoUpdates.type === "string" ? { type: autoUpdates.type } : {}),
-    ...(typeof autoUpdates.tagMode === "string" ? { tagMode: autoUpdates.tagMode } : {}),
-    ...(schedule !== undefined ? { schedule } : {}),
-  };
-};
+/** `desired` as a policy Railway accepts, or a typed failure saying why not. */
+export const validateImageUpdates = (desired: unknown) =>
+  Schema.decodeUnknownEffect(ImageUpdates)(desired).pipe(
+    Effect.mapError(
+      (error) =>
+        new ServiceImageUpdatesInvalid({
+          message: `Railway.Service \`imageUpdates\` is not a policy Railway accepts: ${error.message}`,
+        }),
+    ),
+  );
 
 /**
- * The fields of `desired` that differ from `observed`, or `undefined` when
+ * `source.autoUpdates` for `serviceId` inside an environment config. Empty
+ * when Railway has none. Fails with a `SchemaError` when the config does not
+ * have the expected shape.
+ */
+export const serviceImageUpdates = (config: unknown, serviceId: string) =>
+  Schema.decodeUnknownEffect(ImageUpdatesConfig)(config).pipe(
+    Effect.map(
+      (decoded): ObservedImageUpdates => decoded.services?.[serviceId]?.source?.autoUpdates ?? {},
+    ),
+  );
+
+type Window = { readonly day: number; readonly startHour: number; readonly endHour: number };
+
+const windowOrder: Order.Order<Window> = Order.Struct({
+  day: Order.Number,
+  startHour: Order.Number,
+  endHour: Order.Number,
+});
+
+/** Same windows, in any order. */
+const sameSchedule: Equivalence.Equivalence<ReadonlyArray<Window>> = Equivalence.mapInput(
+  Equivalence.Array(
+    Equivalence.Struct({
+      day: Equivalence.Number,
+      startHour: Equivalence.Number,
+      endHour: Equivalence.Number,
+    }),
+  ),
+  (windows: ReadonlyArray<Window>) => Arr.sort(windows, windowOrder),
+);
+
+/**
+ * The fields of `desired` that differ from `observed`, or `None` when
  * Railway already has them. A field left out of `desired` is not touched,
  * and a missing schedule counts as an empty one (any time).
  */
 export const imageUpdatesPatch = (
   desired: ImageUpdates,
   observed: ObservedImageUpdates,
-):
-  | {
-      type?: ImageUpdateType;
-      tagMode?: ImageUpdateTagMode;
-      schedule?: Array<ImageUpdateWindow>;
-    }
-  | undefined => {
+): Option.Option<{
+  type?: ImageUpdateType;
+  tagMode?: ImageUpdateTagMode;
+  schedule?: Array<ImageUpdateWindow>;
+}> => {
   const typeChanged = desired.type !== observed.type;
   const tagModeChanged = desired.tagMode !== undefined && desired.tagMode !== observed.tagMode;
   const scheduleChanged =
     desired.schedule !== undefined && !sameSchedule(desired.schedule, observed.schedule ?? []);
-  if (!typeChanged && !tagModeChanged && !scheduleChanged) return undefined;
-  return {
+  if (!typeChanged && !tagModeChanged && !scheduleChanged) return Option.none();
+  return Option.some({
     ...(typeChanged ? { type: desired.type } : {}),
     ...(tagModeChanged ? { tagMode: desired.tagMode } : {}),
-    ...(scheduleChanged
-      ? {
-          schedule: (desired.schedule ?? []).map(({ day, startHour, endHour }) => ({
-            day,
-            startHour,
-            endHour,
-          })),
-        }
-      : {}),
-  };
+    ...(scheduleChanged ? { schedule: [...(desired.schedule ?? [])] } : {}),
+  });
 };
+
+interface ServiceTarget {
+  readonly environmentId: string;
+  readonly projectId: string;
+  readonly serviceId: string;
+}
 
 const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
   config: Railway.environment(args).config,
@@ -192,12 +179,13 @@ const environmentPatchCommit = Query.fn(
     Railway.environmentPatchCommit(args),
 );
 
-const readImageUpdates = (input: { environmentId: string; projectId: string; serviceId: string }) =>
-  readEnvironmentConfig(
-    input.projectId.length > 0
-      ? { id: input.environmentId, projectId: input.projectId }
-      : { id: input.environmentId },
-  ).pipe(Effect.map((environment) => serviceImageUpdates(environment.config, input.serviceId)));
+const readImageUpdates = (target: ServiceTarget) =>
+  readEnvironmentConfig({
+    id: target.environmentId,
+    ...(target.projectId.length > 0 ? { projectId: target.projectId } : {}),
+  }).pipe(
+    Effect.flatMap((environment) => serviceImageUpdates(environment.config, target.serviceId)),
+  );
 
 /**
  * Converge `source.autoUpdates` to `desired` through
@@ -207,58 +195,42 @@ const readImageUpdates = (input: { environmentId: string; projectId: string; ser
  * redeploy. Waits until the environment config reports the policy, and
  * fails if it never does.
  */
-export const syncServiceImageUpdates = Effect.fn(function* (input: {
-  environmentId: string;
-  projectId: string;
-  serviceId: string;
-  desired: ImageUpdates;
-}) {
-  const invalid = invalidImageUpdates(input.desired);
-  if (invalid !== undefined) return yield* new ServiceImageUpdatesInvalid({ message: invalid });
+export const syncServiceImageUpdates = Effect.fn(function* (
+  input: ServiceTarget & { readonly desired: ImageUpdates },
+) {
+  const desired = yield* validateImageUpdates(input.desired);
+  const applied = (observed: ObservedImageUpdates) =>
+    Option.isNone(imageUpdatesPatch(desired, observed));
 
-  const patched = yield* withEnvironmentConfigLock(
+  const committed = yield* withEnvironmentConfigLock(
     input.environmentId,
-    Effect.gen(function* () {
-      const patch = imageUpdatesPatch(input.desired, yield* readImageUpdates(input));
-      if (patch === undefined) return false;
-      yield* environmentPatchCommit({
-        environmentId: input.environmentId,
-        commitMessage: "Set Railway image update policy",
-        patch: { services: { [input.serviceId]: { source: { autoUpdates: patch } } } },
-        skipDeploys: true,
-      });
-      return true;
-    }),
-  );
-  if (!patched) return;
-
-  const check = readImageUpdates(input).pipe(
-    Effect.flatMap((observed) =>
-      imageUpdatesPatch(input.desired, observed) === undefined
-        ? Effect.void
-        : Effect.fail(new ServiceImageUpdatesPending({ serviceId: input.serviceId })),
+    readImageUpdates(input).pipe(
+      Effect.flatMap((observed) =>
+        Option.match(imageUpdatesPatch(desired, observed), {
+          onNone: () => Effect.succeed(false),
+          onSome: (autoUpdates) =>
+            environmentPatchCommit({
+              environmentId: input.environmentId,
+              commitMessage: "Set Railway image update policy",
+              patch: { services: { [input.serviceId]: { source: { autoUpdates } } } },
+              skipDeploys: true,
+            }).pipe(Effect.as(true)),
+        }),
+      ),
     ),
   );
-  yield* check.pipe(
-    Effect.retry({
-      while: (error) => error._tag === "Railway.ServiceImageUpdatesPending",
-      schedule: Schedule.spaced("1 second"),
-      times: 10,
-    }),
-    Effect.catchTag("Railway.ServiceImageUpdatesPending", () =>
-      readImageUpdates(input).pipe(
-        Effect.flatMap((observed) =>
-          imageUpdatesPatch(input.desired, observed) === undefined
-            ? Effect.void
-            : Effect.fail(
-                new ServiceImageUpdatesNotApplied({
-                  serviceId: input.serviceId,
-                  environmentId: input.environmentId,
-                  observed,
-                }),
-              ),
-        ),
-      ),
+  if (!committed) return;
+
+  yield* readImageUpdates(input).pipe(
+    Effect.repeat({ until: applied, schedule: Schedule.spaced("1 second"), times: 10 }),
+    Effect.filterOrFail(
+      applied,
+      (observed) =>
+        new ServiceImageUpdatesNotApplied({
+          serviceId: input.serviceId,
+          environmentId: input.environmentId,
+          observed,
+        }),
     ),
   );
 });

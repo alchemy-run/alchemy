@@ -820,7 +820,7 @@ test.provider(
         );
       const observe = (api: { environmentId: string; projectId: string; serviceId: string }) =>
         readEnvironmentConfig(api.environmentId, api.projectId).pipe(
-          Effect.map((read) => serviceImageUpdates(read.config, api.serviceId)),
+          Effect.flatMap((read) => serviceImageUpdates(read.config, api.serviceId)),
         );
 
       const created = yield* deploy({
