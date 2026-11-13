@@ -32,7 +32,7 @@ Open the printed `http://localhost:…` URL, type a command (`echo hello`,
 `uname -a`, `ls -la /`) and press enter. Under `alchemy dev` the Worker and
 Durable Object run in local workerd while the MicroVM runs on the Floci
 emulator — the cross-cloud STS assume-role and the VM's TLS data plane are
-wired automatically (the emulator CA is trusted via `NODE_EXTRA_CA_CERTS`).
+wired automatically (`alchemy dev` trusts the emulator CA).
 
 To exit the first-apply smoke check without keeping the session alive:
 
