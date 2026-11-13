@@ -71,7 +71,9 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    * secret version each value names, such as
    * `projects/acme/secrets/DATABASE_URL/versions/3`. The nodes' service
    * account is granted `roles/secretmanager.secretAccessor` on each secret,
-   * and the values never sit in instance metadata or on a node's disk.
+   * and the values stay out of instance metadata and the node's env file.
+   * Docker still keeps a container's environment in its configuration on
+   * the VM's disk, so root on the VM can read them.
    * Name `RIVET_TOKEN` here to keep the control plane's token out of
    * metadata too. A node that cannot read a secret keeps running what it
    * ran before.
