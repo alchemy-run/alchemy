@@ -102,7 +102,8 @@ const runCommand = (image: boolean) =>
     : ` \\
     sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${RIVETKIT_VERSION} && exec node node.mjs'`;
 
-const startupScript = (options: {
+/** The startup script every node runs, rendered for a pool. @internal */
+export const startupScript = (options: {
   readonly bucket: string;
   readonly image: boolean;
   readonly stopTimeout: number;
