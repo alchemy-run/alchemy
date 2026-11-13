@@ -24,7 +24,7 @@ If the pushed code still reads it, Convex refuses and the deploy fails with `Aut
 
 ## Take over a variable set by hand
 
-A name in `env` that already holds a different value, set in the dashboard or by another tool, fails the deploy with `VariablesOwnedBySomeoneElse`. Adopt it to overwrite it:
+A name in `env` that already holds a different value, set in the dashboard or by another tool, fails the deploy with `VariablesOwnedBySomeoneElse`. A value the deployment took from the project defaults below doesn't count. Adopt it to overwrite it:
 
 ```typescript
 yield* Convex.Functions("Functions", {

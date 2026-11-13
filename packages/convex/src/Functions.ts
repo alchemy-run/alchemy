@@ -130,8 +130,9 @@ export type Functions = Resource<
  *
  * ### Variables Set by Hand
  * A name in `env` that already holds a different value, set by someone else,
- * fails the deploy with `VariablesOwnedBySomeoneElse`. A variable set by hand
- * and never listed is left alone.
+ * fails the deploy with `VariablesOwnedBySomeoneElse`. A value the deployment
+ * took from its project's defaults doesn't count. A variable set by hand and
+ * never listed is left alone.
  *
  * **Example:** Take over a variable set in the dashboard
  * ```typescript
@@ -224,6 +225,18 @@ const contentHash = Effect.fn(function* (props: FunctionsProps, salt: Redacted.R
   );
 });
 
+const originOf = (url: string) => (URL.canParse(url) ? new URL(url).origin : url);
+
+/** The project's default variables for this deployment's type, which it took on creation. */
+const inheritedOf = Effect.fn(function* (deploymentName: string) {
+  const { projectId, deploymentType } = yield* management.getDeployment({ deploymentName });
+  const { items } = yield* management.listDefaultEnvironmentVariables({
+    projectId,
+    deploymentType,
+  });
+  return Object.fromEntries(items.map((item) => [item.name, item.value]));
+});
+
 const tokenOf = (target: PushTarget) =>
   target.kind === "cloud" ? target.deployKey : target.adminKey;
 
@@ -277,6 +290,9 @@ export const FunctionsProvider = () =>
       return {
         diff: Effect.fn(function* ({ news, output }) {
           if (output === undefined || !isResolved(news)) return undefined;
+          // Another deployment or backend: a new resource there, and the old
+          // one removes its variables from the old target.
+          if (originOf(urlOf(news)) !== output.url) return { action: "replace" } as const;
           if (news.memo === false) return { action: "update" } as const;
           const hash = yield* contentHash(news, output.salt).pipe(Effect.provide(services));
           return { action: hash === output.hash ? "noop" : "update" } as const;
@@ -303,7 +319,18 @@ export const FunctionsProvider = () =>
               const { environmentVariables: observed } = yield* on(
                 deployment.listEnvironmentVariables({}),
               );
-              const plan = planEnvSync(observed, desired, output?.envNames ?? []);
+              // Names set on another target are not ours here.
+              const managed =
+                output !== undefined && output.url === originOf(target.url) ? output.envNames : [];
+              let plan = planEnvSync(observed, desired, managed);
+              if (plan.foreign.length > 0 && news.deployment !== undefined) {
+                plan = planEnvSync(
+                  observed,
+                  desired,
+                  managed,
+                  yield* inheritedOf(news.deployment.deploymentName),
+                );
+              }
               if (plan.foreign.length > 0 && !(yield* adoptionAllowed(fqn))) {
                 return yield* new VariablesOwnedBySomeoneElse({
                   url: target.url,

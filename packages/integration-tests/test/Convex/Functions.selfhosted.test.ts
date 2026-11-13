@@ -259,3 +259,69 @@ test.provider(
     }),
   options,
 );
+
+test.provider(
+  "switching to another backend leaves its variables alone and cleans up the old one",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const first = yield* makeBackend;
+      const second = yield* makeBackend;
+      const rootDir = yield* scratchApp("selfhosted-switch");
+      const both = (target: Backend, env?: Record<string, string>, adopting?: boolean) =>
+        Effect.gen(function* () {
+          const a = yield* Docker.Container("BackendA", {
+            name: "alchemy-test-convex-push-switch-a",
+            image: BACKEND_IMAGE,
+            environment: { INSTANCE_NAME, INSTANCE_SECRET },
+            ports: [{ external: first.port, internal: 3210 }],
+            start: true,
+          });
+          const b = yield* Docker.Container("BackendB", {
+            name: "alchemy-test-convex-push-switch-b",
+            image: BACKEND_IMAGE,
+            environment: { INSTANCE_NAME, INSTANCE_SECRET },
+            ports: [{ external: second.port, internal: 3210 }],
+            start: true,
+          });
+          if (env === undefined) return;
+          const container = target === first ? a : b;
+          yield* Convex.Functions("Functions", {
+            backend: {
+              url: Output.map(container.id, () => target.url),
+              adminKey: target.adminKey,
+            },
+            rootDir,
+            env,
+          }).pipe(adopt(adopting ?? false));
+        });
+      yield* stack.deploy(both(first));
+      for (const backend of [first, second]) {
+        const client = yield* HttpClient.HttpClient;
+        yield* client.get(`${backend.url}/version`).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200 ? Effect.void : Effect.fail(new Error(`${response.status}`)),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
+        );
+      }
+      yield* stack.deploy(both(first, { SHARED: "mine", ONLY_A: "a" }));
+      yield* deployments
+        .updateEnvironmentVariables({ changes: [{ name: "SHARED", value: "theirs" }] })
+        .pipe(Effect.provide(fromDeployment({ url: second.url, token: second.adminKey })));
+
+      // SHARED on the second backend belongs to someone else.
+      const refused = yield* stack.deploy(both(second, { SHARED: "mine" })).pipe(Effect.flip);
+      expect(refused).toMatchObject({ _tag: "VariablesOwnedBySomeoneElse", names: ["SHARED"] });
+      expect((yield* variables(second)).SHARED).toBe("theirs");
+
+      yield* stack.deploy(both(second, { SHARED: "mine" }, true));
+      expect((yield* variables(second)).SHARED).toBe("mine");
+      // The first backend no longer has anything this resource set.
+      const left = yield* variables(first);
+      expect(left).not.toHaveProperty("SHARED");
+      expect(left).not.toHaveProperty("ONLY_A");
+      yield* stack.destroy();
+    }),
+  options,
+);

@@ -37,7 +37,6 @@ export class PushTargetMismatch extends Data.TaggedError("PushTargetMismatch")<{
 const DEPLOYED_LINE = /Deployed Convex functions to (https?:\/\/\S+)/;
 const TAIL_LINES = 20;
 const MIN_SECRET_LENGTH = 8;
-const HOME_VARIABLES = ["HOME", "USERPROFILE", "XDG_CONFIG_HOME"] as const;
 
 /** The origin the CLI reports in its "Deployed Convex functions to <url>" line. */
 export const parseDeployedUrl = (output: string): string | undefined => {
@@ -47,21 +46,19 @@ export const parseDeployedUrl = (output: string): string | undefined => {
 
 /**
  * The CLI's environment: this process's variables without any `CONVEX_*`
- * name, which could select another deployment, and with `home` as the home
- * directory, so the CLI can't read a login saved on this machine.
+ * name, which could select another deployment. HOME stays, because Node
+ * version managers find `node` through it; the key in the env file takes
+ * precedence over a login saved on this machine.
  */
 export const cliEnvironment = (
   env: Readonly<Record<string, string | undefined>>,
-  home: string,
-): Record<string, string> => ({
-  ...Object.fromEntries(
+): Record<string, string> =>
+  Object.fromEntries(
     Object.entries(env).filter(
       (entry): entry is [string, string] =>
         entry[1] !== undefined && !entry[0].toUpperCase().startsWith("CONVEX_"),
     ),
-  ),
-  ...Object.fromEntries(HOME_VARIABLES.map((name) => [name, home])),
-});
+  );
 
 /** The last lines of `output`, without colour codes and with every secret replaced. */
 export const redactOutput = (output: string, secrets: ReadonlyArray<string>): string =>
@@ -86,7 +83,7 @@ const secretOf = (target: PushTarget) =>
 /**
  * Runs the app's own `convex deploy` against `target` and returns the origin
  * it pushed to. The CLI gets its credentials only from an env file in a fresh
- * temporary home directory, removed afterwards whatever happens.
+ * temporary directory, removed afterwards whatever happens.
  */
 export const runConvexDeploy = Effect.fn(function* (input: {
   readonly rootDir: string;
@@ -104,14 +101,14 @@ export const runConvexDeploy = Effect.fn(function* (input: {
 
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-convex-push-" });
-      const envFile = path.join(home, "deploy.env");
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-convex-push-" });
+      const envFile = path.join(dir, "deploy.env");
       yield* fs.writeFileString(envFile, envFileOf(input.target), { mode: 0o600 });
       const parent = yield* Effect.sync(() => ({ ...process.env }));
       const child = yield* spawner.spawn(
         ChildProcess.make(cli, ["deploy", "--yes", "--env-file", envFile], {
           cwd: path.resolve(input.rootDir),
-          env: cliEnvironment(parent, home),
+          env: cliEnvironment(parent),
           extendEnv: false,
           stdin: "ignore",
           stdout: "pipe",

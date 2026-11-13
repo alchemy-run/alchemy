@@ -44,26 +44,20 @@ it.effect(
 );
 
 it.effect(
-  "cliEnvironment drops every CONVEX_ variable and points home at the temp directory",
+  "cliEnvironment drops every CONVEX_ variable and keeps the rest, HOME included",
   () =>
     Effect.sync(() => {
+      // Node version managers (asdf, mise, nodenv) find `node` through HOME.
       expect(
-        cliEnvironment(
-          {
-            PATH: "/bin",
-            CONVEX_DEPLOYMENT: "dev:x",
-            convex_deploy_key: "k",
-            HOME: "/Users/me",
-            UNSET: undefined,
-          },
-          "/tmp/h",
-        ),
-      ).toEqual({
-        PATH: "/bin",
-        HOME: "/tmp/h",
-        USERPROFILE: "/tmp/h",
-        XDG_CONFIG_HOME: "/tmp/h",
-      });
+        cliEnvironment({
+          PATH: "/bin",
+          CONVEX_DEPLOYMENT: "dev:x",
+          convex_deploy_key: "k",
+          HOME: "/Users/me",
+          XDG_CONFIG_HOME: "/Users/me/.config",
+          UNSET: undefined,
+        }),
+      ).toEqual({ PATH: "/bin", HOME: "/Users/me", XDG_CONFIG_HOME: "/Users/me/.config" });
     }),
   { tags },
 );
@@ -154,6 +148,31 @@ it.effect(
       const plan = planEnvSync({}, {}, ["GONE"]);
       expect(plan.before).toEqual([]);
       expect(plan.after).toEqual([]);
+    }),
+  { tags },
+);
+
+it.effect(
+  "planEnvSync treats a value inherited from the project defaults as no conflict",
+  () =>
+    Effect.sync(() => {
+      const plan = planEnvSync({ API_URL: "default" }, { API_URL: "mine" }, [], {
+        API_URL: "default",
+      });
+      expect(plan.foreign).toEqual([]);
+      expect(plan.before).toEqual([{ name: "API_URL", value: "mine" }]);
+    }),
+  { tags },
+);
+
+it.effect(
+  "planEnvSync still names a variable changed away from the project default",
+  () =>
+    Effect.sync(() => {
+      const plan = planEnvSync({ API_URL: "edited" }, { API_URL: "mine" }, [], {
+        API_URL: "default",
+      });
+      expect(plan.foreign).toEqual(["API_URL"]);
     }),
   { tags },
 );

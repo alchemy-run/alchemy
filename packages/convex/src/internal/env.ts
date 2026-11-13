@@ -44,7 +44,10 @@ export interface EnvSyncPlan {
   readonly after: ReadonlyArray<EnvChange>;
   /** Undoes `before`: the earlier value, or null where there was none. */
   readonly restore: ReadonlyArray<EnvChange>;
-  /** Names this resource never set that already hold a different value. */
+  /**
+   * Names this resource never set that already hold a different value, other
+   * than a value the deployment took from its project's defaults.
+   */
   readonly foreign: ReadonlyArray<string>;
 }
 
@@ -54,6 +57,8 @@ export const planEnvSync = (
   observed: Readonly<Record<string, string | undefined>>,
   desired: Readonly<Record<string, string>>,
   managed: ReadonlyArray<string>,
+  /** The project's default values for this deployment's type. */
+  inherited: Readonly<Record<string, string>> = {},
 ): EnvSyncPlan => {
   const changed = Object.entries(desired).filter(([name, value]) => observed[name] !== value);
   return {
@@ -64,7 +69,12 @@ export const planEnvSync = (
       .toSorted(byName),
     restore: changed.map(([name]) => ({ name, value: observed[name] ?? null })).toSorted(byName),
     foreign: changed
-      .filter(([name]) => !managed.includes(name) && observed[name] !== undefined)
+      .filter(
+        ([name]) =>
+          !managed.includes(name) &&
+          observed[name] !== undefined &&
+          observed[name] !== inherited[name],
+      )
       .map(([name]) => name)
       .toSorted(),
   };

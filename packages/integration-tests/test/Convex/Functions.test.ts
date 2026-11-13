@@ -418,3 +418,36 @@ test.provider(
     }),
   options,
 );
+
+test.provider(
+  "a value the deployment took from the project defaults is not someone else's",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("functions-defaults");
+      const rootDir = yield* scratchApp("functions-defaults");
+      const program = (withDeployment: boolean) =>
+        Effect.gen(function* () {
+          const project = yield* Convex.Project("App", { name }).pipe(RemovalPolicy.destroy());
+          yield* Convex.DefaultEnvironmentVariables("Defaults", {
+            project,
+            deploymentTypes: ["preview"],
+            env: { API_URL: "https://default.example.com" },
+          });
+          if (!withDeployment) return undefined;
+          const target = yield* Convex.Deployment("Deployment", { project, type: "preview" });
+          yield* Convex.Functions("Functions", {
+            deployment: target,
+            rootDir,
+            env: { API_URL: "https://mine.example.com" },
+          });
+          return target;
+        });
+      // The defaults first, so the deployment starts with API_URL.
+      yield* stack.deploy(program(false));
+      const deployment = yield* stack.deploy(program(true));
+      expect((yield* variables(deployment!.url)).API_URL).toBe("https://mine.example.com");
+      yield* stack.destroy();
+    }),
+  options,
+);
