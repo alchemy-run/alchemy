@@ -798,7 +798,7 @@ test.provider(
 );
 
 test.provider(
-  "set, change, and keep an image update policy",
+  "set, change, keep and clear an image update policy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -851,6 +851,16 @@ test.provider(
         { day: 6, startHour: 0, endHour: 24 },
       ]);
 
+      // Omitted right after a full policy, so resetting any field would show.
+      yield* deploy(undefined);
+      const afterOmit = yield* observe(changed.api);
+      expect(afterOmit.type).toEqual("minor");
+      expect(afterOmit.tagMode).toEqual("sha");
+      expect([...(afterOmit.schedule ?? [])].sort((a, b) => a.day - b.day)).toEqual([
+        { day: 0, startHour: 0, endHour: 24 },
+        { day: 6, startHour: 0, endHour: 24 },
+      ]);
+
       // `schedule: []` clears the windows and leaves type and tag mode alone.
       yield* deploy({ type: "minor", schedule: [] });
       const afterClear = yield* observe(changed.api);
@@ -858,9 +868,7 @@ test.provider(
       expect(afterClear.tagMode).toEqual("sha");
       expect(afterClear.schedule ?? []).toEqual([]);
 
-      // Omitting the prop leaves the policy as it is.
       yield* deploy({ type: "disabled" });
-      yield* deploy(undefined);
       expect((yield* observe(changed.api)).type).toEqual("disabled");
 
       yield* stack.destroy();

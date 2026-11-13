@@ -196,9 +196,10 @@ const readImageUpdates = (target: ServiceTarget) =>
  * fails if it never does.
  */
 export const syncServiceImageUpdates = Effect.fn(function* (
+  // Validated with `validateImageUpdates` before any cloud call.
   input: ServiceTarget & { readonly desired: ImageUpdates },
 ) {
-  const desired = yield* validateImageUpdates(input.desired);
+  const desired = input.desired;
   const applied = (observed: ObservedImageUpdates) =>
     Option.isNone(imageUpdatesPatch(desired, observed));
 
