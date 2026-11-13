@@ -17,7 +17,6 @@ import { normalizeNulls } from "alchemy/Util/stable";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
@@ -48,7 +47,7 @@ import {
   isDurableObjectContainer,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
-import { waitForContainerImage } from "./ContainerImagePreparation.ts";
+import { resolveContainerBuildPaths, waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
@@ -195,7 +194,6 @@ export const LiveContainerProvider = () =>
     ContainerPlatform,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const docker = yield* Docker;
       const http = yield* HttpClient.HttpClient;
@@ -569,10 +567,10 @@ export const LiveContainerProvider = () =>
 
         // Variant 3b — user-supplied Dockerfile path + build context
         // directory.
-        const context = yield* fs.realPath(props.context ?? ".");
-        const dockerfile = props.dockerfile
-          ? yield* fs.realPath(props.dockerfile)
-          : path.join(context, "Dockerfile");
+        const { context, dockerfile } = yield* resolveContainerBuildPaths({
+          context: props.context,
+          dockerfile: props.dockerfile,
+        });
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(

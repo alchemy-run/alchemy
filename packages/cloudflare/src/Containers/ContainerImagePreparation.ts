@@ -3,6 +3,8 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import {
   ContainerImagePreparationError,
@@ -58,3 +60,26 @@ export const waitForContainerImage = <E, R>(options: {
       }),
     );
   });
+
+/**
+ * Real-path a user-supplied build `context` and `dockerfile`. A relative
+ * `dockerfile` resolves against `context` first, like `docker build` and
+ * Compose, then against the working directory, which stacks written before
+ * the context lookup still rely on. Defaults to `<context>/Dockerfile`.
+ */
+export const resolveContainerBuildPaths = Effect.fn(function* (props: {
+  context: string | undefined;
+  dockerfile: string | undefined;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const context = yield* fs.realPath(props.context ?? ".");
+  if (props.dockerfile === undefined) {
+    return { context, dockerfile: path.join(context, "Dockerfile") };
+  }
+  const inContext = path.resolve(context, props.dockerfile);
+  const dockerfile = yield* fs.realPath(
+    (yield* fs.exists(inContext)) ? inContext : props.dockerfile,
+  );
+  return { context, dockerfile };
+});
