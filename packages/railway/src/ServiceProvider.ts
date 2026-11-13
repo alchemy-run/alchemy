@@ -56,6 +56,7 @@ import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
+export { ServiceWaitForChecksNotApplied } from "./ServiceChecks.ts";
 export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({

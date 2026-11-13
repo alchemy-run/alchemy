@@ -724,15 +724,17 @@ test.provider.skipIf(!githubEntitled)(
   },
 );
 
-test.provider.skipIf(!githubEntitled)(
+// Deploys a real repo, so it takes an explicit one instead of the first
+// repo the GitHub connection lists: RAILWAY_TEST_GITHUB_REPO=owner/name
+// (and RAILWAY_TEST_GITHUB_BRANCH, default `main`).
+const checksRepo = process.env.RAILWAY_TEST_GITHUB_REPO;
+const checksBranch = process.env.RAILWAY_TEST_GITHUB_BRANCH ?? "main";
+
+test.provider.skipIf(checksRepo === undefined)(
   "wait for checks on a github repo service",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const repos = yield* readGithubRepos();
-      const repo = repos[0];
-      expect(repo).toBeDefined();
 
       const deployWith = (waitForChecks: boolean | undefined) =>
         stack.deploy(
@@ -741,8 +743,8 @@ test.provider.skipIf(!githubEntitled)(
             const api = yield* Railway.Service("Checks", {
               project,
               environment,
-              repo: repo!.fullName,
-              branch: repo!.defaultBranch,
+              repo: checksRepo!,
+              branch: checksBranch,
               waitForChecks,
             });
             return { api };
@@ -750,7 +752,7 @@ test.provider.skipIf(!githubEntitled)(
         );
       const observed = (api: { projectId: string; environmentId: string; serviceId: string }) =>
         readEnvironmentConfig(api.environmentId, api.projectId).pipe(
-          Effect.map((row) => serviceCheckSuites(row.config, api.serviceId)),
+          Effect.flatMap((row) => serviceCheckSuites(row.config, api.serviceId)),
         );
 
       const on = yield* deployWith(true);
