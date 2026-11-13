@@ -478,7 +478,10 @@ export const DurableObject: DurableObjectClass = ((
       ? rust(args[0], args[1] as RustDurableObjectProps)
       : args[1].image !== undefined
         ? image(args[0], args[1] as ImageDurableObjectProps)
-        : external(args[0], args[1] as ExternalDurableObjectProps)) as unknown as DurableObjectClass;
+        : external(
+            args[0],
+            args[1] as ExternalDurableObjectProps,
+          )) as unknown as DurableObjectClass;
 
 /**
  * An external Durable Object: declare its resource, then have the pool it
