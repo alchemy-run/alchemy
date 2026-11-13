@@ -246,7 +246,7 @@ const activeBindings = (bindings: ReadonlyArray<ResourceBinding<FunctionBinding>
   );
 
 const observe = (namespace: NamespaceRef, name: string) =>
-  Fn.getAction({ namespace: namespace.namespaceId, action_name: name }).pipe(
+  Fn.getActionByName({ namespace: namespace.namespaceId, actionName: name }).pipe(
     Effect.asSome,
     Effect.catchTag("NotFound", () => Effect.succeedNone),
     withNamespace(namespace),
@@ -287,11 +287,11 @@ export const FunctionProvider = () =>
         ALCHEMY_PHASE: "runtime",
         ...news.env,
       };
-      // `putAction` with `overwrite` is an upsert: the observed state only
+      // `updateAction` with `overwrite` is an upsert: the observed state only
       // matters for the version it reports.
-      const deployed = yield* Fn.putAction({
+      const deployed = yield* Fn.updateAction({
         namespace: namespace.namespaceId,
-        action_name: name,
+        actionName: name,
         overwrite: true,
         exec: { kind: news.runtime ?? "nodejs:18", code: bundled.code, main: "main" },
         parameters: Object.entries(env).map(([key, value]) => ({ key, value: plain(value) })),
@@ -312,7 +312,7 @@ export const FunctionProvider = () =>
     }),
     delete: Effect.fn(function* ({ olds, output }) {
       const namespace = yield* namespaceOf(olds.namespace);
-      yield* Fn.deleteAction({ namespace: output.namespaceId, action_name: output.name }).pipe(
+      yield* Fn.deleteAction({ namespace: output.namespaceId, actionName: output.name }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         withNamespace(namespace),
       );

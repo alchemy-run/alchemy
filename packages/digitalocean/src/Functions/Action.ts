@@ -140,8 +140,8 @@ const inSync = (observed: Fn.Action, desired: ReturnType<typeof desiredOf>) => {
     (observed.exec?.main ?? "main") === desired.exec.main &&
     web === desired.annotations[0]!.value &&
     sameJson(
-      [...(observed.parameters ?? [])].sort((a, b) => a.key.localeCompare(b.key)),
-      [...desired.parameters].sort((a, b) => a.key.localeCompare(b.key)),
+      [...(observed.parameters ?? [])].sort((a, b) => (a.key ?? "").localeCompare(b.key ?? "")),
+      [...desired.parameters].sort((a, b) => (a.key ?? "").localeCompare(b.key ?? "")),
     ) &&
     observed.limits?.timeout === desired.limits.timeout &&
     observed.limits?.memory === desired.limits.memory
@@ -149,7 +149,7 @@ const inSync = (observed: Fn.Action, desired: ReturnType<typeof desiredOf>) => {
 };
 
 const observe = (namespace: NamespaceRef, name: string) =>
-  Fn.getAction({ namespace: namespace.namespaceId, action_name: name, code: true }).pipe(
+  Fn.getActionByName({ namespace: namespace.namespaceId, actionName: name, code: true }).pipe(
     Effect.asSome,
     Effect.catchTag("NotFound", () => Effect.succeedNone),
     withNamespace(namespace),
@@ -192,16 +192,16 @@ export const ActionProvider = () =>
       if (Option.isSome(observed) && inSync(observed.value, desired)) {
         return toAttrs(news.namespace, observed.value, news.web ?? false);
       }
-      const deployed = yield* Fn.putAction({
+      const deployed = yield* Fn.updateAction({
         namespace: news.namespace.namespaceId,
-        action_name: name,
+        actionName: name,
         overwrite: true,
         ...desired,
       }).pipe(withNamespace(news.namespace));
       return toAttrs(news.namespace, deployed, news.web ?? false);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
-      yield* Fn.deleteAction({ namespace: output.namespaceId, action_name: output.name }).pipe(
+      yield* Fn.deleteAction({ namespace: output.namespaceId, actionName: output.name }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         withNamespace(olds.namespace),
       );

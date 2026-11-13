@@ -72,9 +72,9 @@ export const InvokeFunctionHttp = Layer.effect(
         }
         const activation = yield* Fn.invokeAction({
           namespace,
-          action_name: name,
+          actionName: name,
           blocking: true,
-          body: parameters,
+          params: parameters,
         }).pipe(
           Effect.provide(
             Layer.mergeAll(

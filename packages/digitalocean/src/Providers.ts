@@ -1,4 +1,3 @@
-import { layerS3Keys } from "@distilled.cloud/digitalocean/Spaces";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
@@ -45,6 +44,7 @@ import {
 } from "./ReservedIpv6Assignment.ts";
 import * as Sandboxes from "./Sandboxes/index.ts";
 import * as Security from "./Security/index.ts";
+import { SpacesDeployKeys } from "./Spaces/DeployKeys.ts";
 import * as Spaces from "./Spaces/index.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Tag, TagProvider } from "./Tag.ts";
@@ -248,7 +248,7 @@ export const providers = () =>
     // `Kubernetes.*` workloads on a DigitalOcean cluster resolve this adapter.
     Layer.provideMerge(Command.providers()),
     Layer.provideMerge(Kubernetes.DoksKubernetesAdapter()),
-    Layer.provideMerge(layerS3Keys()),
+    Layer.provideMerge(SpacesDeployKeys()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(DigitalOceanAuth),
     Layer.provideMerge(ProfileStoreLive),
