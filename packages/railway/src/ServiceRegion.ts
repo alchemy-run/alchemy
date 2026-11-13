@@ -217,16 +217,6 @@ export const readServicePlacement = Effect.fn(function* (input: {
   return toObserved(placement, input.legacy);
 });
 
-/** Region reported by the environment config, without writing. */
-export const readServiceRegion = Effect.fn(function* (input: {
-  environmentId: string;
-  projectId: string;
-  serviceId: string;
-  legacy?: string | null;
-}) {
-  return Option.getOrUndefined((yield* readServicePlacement(input)).region);
-});
-
 const waitUntilPlaced = (input: {
   environmentId: string;
   projectId: string;
@@ -382,19 +372,4 @@ export const syncServicePlacement = Effect.fn(function* (input: {
   );
   if (!patched.changed) return patched.observed;
   return yield* waitUntilPlaced({ ...input, region: patched.region, replicas });
-});
-
-/**
- * Make `region` the only replica placement, or read the current one when
- * `region` is omitted.
- */
-export const syncServiceRegion = Effect.fn(function* (input: {
-  environmentId: string;
-  projectId: string;
-  serviceId: string;
-  region: string | undefined;
-  legacy?: string | null;
-  fallbackReplicas?: number | null;
-}) {
-  return Option.getOrUndefined((yield* syncServicePlacement(input)).region);
 });
