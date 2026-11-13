@@ -12,7 +12,11 @@ export type Input<T> =
   | T
   | Output<T>
   | Config<T>
-  // TODO(sam): extract Requirements in Resource
+  // TODO(sam): extract Requirements in Resource, then type this as
+  // `Effect<T, never, Req>`. Until then `any` leaks into every Effect-valued
+  // Input, so sites that pipe one disable
+  // `effecttsgo/any-unknown-in-error-context` (or go through `isEffectOf` /
+  // `yieldDeclared` in Util/effect.ts).
   | Effect<T, any, any>
   | (T extends S.Schema<any>
       ? never

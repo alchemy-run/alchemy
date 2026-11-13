@@ -20,7 +20,6 @@ import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resou
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { buildEventTelemetry } from "alchemy/Telemetry";
 import { sha256 } from "alchemy/Util/sha256";
@@ -33,7 +32,6 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -103,6 +101,11 @@ class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
     return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
   }
 }
+
+class FunctionTagsMismatch extends Data.TaggedError("FunctionTagsMismatch")<{
+  functionName: string;
+  message: string;
+}> {}
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
@@ -1987,6 +1990,18 @@ export const FunctionProvider = () =>
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
             Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
+        const readAttachedManagedPolicies = iam
+          .listAttachedRolePolicies({ RoleName: roleName })
+          .pipe(
+            Effect.map((result) =>
+              (result.AttachedPolicies ?? []).flatMap((policy) =>
+                policy.PolicyArn && managedExecutionPolicyArns.has(policy.PolicyArn)
+                  ? [policy.PolicyArn]
+                  : [],
+              ),
+            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([] as string[])),
+          );
         const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy, invokeConfig] =
           yield* Effect.all(
             [
@@ -2003,16 +2018,7 @@ export const FunctionProvider = () =>
                           )?.retentionInDays,
                       ),
                     ),
-              iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-                Effect.map((result) =>
-                  (result.AttachedPolicies ?? []).flatMap((policy) =>
-                    policy.PolicyArn && managedExecutionPolicyArns.has(policy.PolicyArn)
-                      ? [policy.PolicyArn]
-                      : [],
-                  ),
-                ),
-                Effect.catchTag("NoSuchEntityException", () => Effect.succeed([] as string[])),
-              ),
+              readAttachedManagedPolicies,
               readInlinePolicy(policyName),
               readInlinePolicy(logGroupGuardPolicyName),
               observeEventInvokeConfig(functionName, qualifier),
@@ -2219,29 +2225,7 @@ export const FunctionProvider = () =>
         } satisfies PreparedFunctionCode;
       });
 
-      const createOrUpdateFunction: (input: {
-        id: string;
-        news: FunctionProps;
-        roleArn: string;
-        code: FunctionDeploymentCode;
-        env: Record<string, string> | undefined;
-        functionName: string;
-        preferUpdate?: boolean;
-        // Resolved EFS mounts. `undefined` leaves the function's existing
-        // config untouched (precreate stub); `[]` explicitly clears mounts.
-        fileSystemConfigs?: Lambda.FileSystemConfig[];
-        // Effective VPC attachment (prop ∪ binding-channel requests).
-        // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
-        // (Output-valued subnet/security-group ids would fail to serialize),
-        // and the stub doesn't need connectivity — `reconcile` attaches the
-        // resolved VPC config afterwards.
-        vpc?: FunctionProps["vpc"];
-        session: { note: (note: string) => Effect.Effect<void> };
-      }) => Effect.Effect<
-        void,
-        any,
-        Credentials | Region | HttpClient | Stack | Stage | AWSEnvironment
-      > = Effect.fn(function* ({
+      const createOrUpdateFunction = Effect.fn(function* ({
         id,
         news,
         roleArn,
@@ -2260,7 +2244,14 @@ export const FunctionProvider = () =>
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
+        // Resolved EFS mounts. `undefined` leaves the function's existing
+        // config untouched (precreate stub); `[]` explicitly clears mounts.
         fileSystemConfigs?: Lambda.FileSystemConfig[];
+        // Effective VPC attachment (prop ∪ binding-channel requests).
+        // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
+        // (Output-valued subnet/security-group ids would fail to serialize),
+        // and the stub doesn't need connectivity — `reconcile` attaches the
+        // resolved VPC config afterwards.
         vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
@@ -2432,7 +2423,7 @@ export const FunctionProvider = () =>
               yield* Lambda.tagResource({ Resource: configured.FunctionArn, Tags: tags });
             }
           }
-        }) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+        });
 
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
@@ -2454,11 +2445,13 @@ export const FunctionProvider = () =>
           Effect.filterOrFail(
             (owned) => owned,
             () =>
-              // TODO(sam): add custom
-              new Error("Function tags do not match expected values"),
+              new FunctionTagsMismatch({
+                functionName,
+                message: "Function tags do not match expected values",
+              }),
           ),
           Effect.andThen(update),
-        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+        );
 
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) => Effect.logDebug(e)),
@@ -2469,7 +2462,7 @@ export const FunctionProvider = () =>
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
           }),
-        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+        );
 
         if (preferUpdate) {
           // The engine has admitted this function (`read`/`observe`, or
@@ -2491,18 +2484,16 @@ export const FunctionProvider = () =>
         functionName: string,
         qualifier: string | undefined,
       ) {
+        const removePermission = (StatementId: string) =>
+          Lambda.removePermission({
+            FunctionName: functionName,
+            Qualifier: qualifier,
+            StatementId,
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         yield* Effect.all(
           [
-            Lambda.removePermission({
-              FunctionName: functionName,
-              Qualifier: qualifier,
-              StatementId: publicUrlAccessStatementId,
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
-            Lambda.removePermission({
-              FunctionName: functionName,
-              Qualifier: qualifier,
-              StatementId: publicUrlInvokeStatementId,
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+            removePermission(publicUrlAccessStatementId),
+            removePermission(publicUrlInvokeStatementId),
           ],
           { concurrency: "unbounded" },
         );
@@ -2555,14 +2546,15 @@ export const FunctionProvider = () =>
         qualifier: string | undefined,
       ) {
         yield* Effect.logDebug(`deleting function url config ${functionName}`);
+        const deleteUrlConfig = Lambda.deleteFunctionUrlConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+        }).pipe(
+          retryFunctionMutation,
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
         yield* Effect.all([
-          Lambda.deleteFunctionUrlConfig({
-            FunctionName: functionName,
-            Qualifier: qualifier,
-          }).pipe(
-            retryFunctionMutation,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          deleteUrlConfig,
           removePublicFunctionUrlPermissions(functionName, qualifier),
         ]);
         yield* Effect.logDebug(`deleted function url config ${functionName}`);

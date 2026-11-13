@@ -1,5 +1,6 @@
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import { isEffectOf } from "alchemy/Util/effect";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -72,7 +73,7 @@ const liftValue = (
 ): Input<Redacted.Redacted<string>> =>
   Config.isConfig(value)
     ? Config.map(value, toRedacted)
-    : Effect.isEffect(value)
+    : isEffectOf<string | Redacted.Redacted<string>>(value)
       ? Effect.map(value, toRedacted)
       : Output.isOutput(value)
         ? Output.map(value as Output.Output<string | Redacted.Redacted<string>>, toRedacted)

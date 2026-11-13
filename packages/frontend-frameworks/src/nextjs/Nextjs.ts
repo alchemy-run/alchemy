@@ -443,6 +443,7 @@ export const make = (
                     }),
                   ]
                 : []),
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
               ...(worker?.bindings ?? []),
             ],
             assets: {
@@ -476,6 +477,7 @@ export const make = (
 
       return FrameworkCore.Framework.of({
         build: (buildOptions) => build(buildOptions),
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
         dev: (devOptions) => dev(devOptions),
       });
     }),

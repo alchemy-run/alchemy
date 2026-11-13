@@ -89,11 +89,7 @@ const withOAuthCredentials = <A, E, R>(
  * the same endpoint wrangler uses. `GET /accounts` remains as a fallback for
  * tokens authorized without `memberships.read` (custom scope selections).
  */
-const listVisibleAccounts: Effect.Effect<
-  ReadonlyArray<{ id: string; name: string }>,
-  unknown,
-  CfCredentialsModule.Credentials | HttpClient.HttpClient
-> = Effect.gen(function* () {
+const listVisibleAccounts = Effect.gen(function* () {
   // Both endpoints page at 20 by default; walk every page so users with more
   // accounts than that can pick any of them.
   const membershipAccounts = yield* cfMemberships.listMemberships.items({ perPage: 50 }).pipe(

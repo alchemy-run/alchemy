@@ -48,6 +48,7 @@ const preview = Command.make(
 Command.make("e2e").pipe(
   Command.withSubcommands([build, dev, preview]),
   Command.run({ version: "0.0.0" }),
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the fixture's framework comes from a dynamically imported module; `Options.FrameworkLayer` can only promise an unknown failure
   Effect.provide(Runtime.layer),
   Runtime.runMain,
 );

@@ -249,22 +249,21 @@ export const makeNextjsSourceProvider = (
           message: "The OpenNext build produced no server modules",
         });
       }
-      const [assets, inputHash] = yield* Effect.all(
-        [
-          output.clientDirectory !== undefined
-            ? readClientAssets(
-                path.resolve(rootDir, output.clientDirectory),
-                assetsConfigOf(ctx.assets),
-              ).pipe(
-                Effect.catchTag("AssetLimitError", (error) =>
-                  Effect.fail(
-                    new SourceProviderError({ provider: PROVIDER, message: error.message }),
-                  ),
+      const readAssets =
+        output.clientDirectory !== undefined
+          ? readClientAssets(
+              path.resolve(rootDir, output.clientDirectory),
+              assetsConfigOf(ctx.assets),
+            ).pipe(
+              Effect.catchTag("AssetLimitError", (error) =>
+                Effect.fail(
+                  new SourceProviderError({ provider: PROVIDER, message: error.message }),
                 ),
-              )
-            : Effect.undefined,
-          input(rootDir, ctx.dotAlchemy, output.externalWorkspaces),
-        ],
+              ),
+            )
+          : Effect.undefined;
+      const [assets, inputHash] = yield* Effect.all(
+        [readAssets, input(rootDir, ctx.dotAlchemy, output.externalWorkspaces)],
         { concurrency: "unbounded" },
       );
       return {

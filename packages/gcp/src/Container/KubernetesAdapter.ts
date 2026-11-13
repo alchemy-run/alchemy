@@ -1,7 +1,6 @@
 import {
   ClusterAdapter,
   ClusterNotFoundError,
-  type AdapterLifecycleServices,
   type ClusterAdapterService,
   type ClusterTransport,
   type ImageRegistryDeleteOptions,
@@ -641,9 +640,7 @@ export const GkeKubernetesAdapter = () =>
         }).pipe(withGcp);
       });
 
-      const registryResolve = (
-        options: ImageRegistryResolveOptions,
-      ): Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices> =>
+      const registryResolve = (options: ImageRegistryResolveOptions) =>
         Effect.gen(function* () {
           const state = options.state;
           const env = yield* GcpEnvironment.current;
@@ -683,7 +680,7 @@ export const GkeKubernetesAdapter = () =>
                   : imageSource.resourceName(env.project, location, resolved.repositoryName),
             },
           } satisfies ImageRegistryResult;
-        }).pipe(withGcp) as Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
+        }).pipe(withGcp);
 
       const registryHash = Effect.fn(function* (options: {
         source: ImageSourceLike;
@@ -703,13 +700,11 @@ export const GkeKubernetesAdapter = () =>
           .pipe(withGcp);
       });
 
-      const registryDelete = (
-        options: ImageRegistryDeleteOptions,
-      ): Effect.Effect<void, any, AdapterLifecycleServices> =>
+      const registryDelete = (options: ImageRegistryDeleteOptions) =>
         Effect.gen(function* () {
           if (typeof options.state?.name !== "string") return;
           yield* imageSource.destroyRepository(options.state.name);
-        }).pipe(withGcp) as Effect.Effect<void, any, AdapterLifecycleServices>;
+        }).pipe(withGcp);
 
       const loadBalancerDefaults = Effect.fn(function* (_options: { connection: Connection }) {
         return {

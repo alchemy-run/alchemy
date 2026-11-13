@@ -13,6 +13,7 @@ import { createRequire } from "node:module";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
 import cloudflare from "@alchemy.run/cloudflare-runtime/vite";
+import { yieldDeclared } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -357,8 +358,7 @@ const resolveVinextCacheEnv = (env: Record<string, unknown>) =>
     for (const key of [VINEXT_KV_CACHE_BINDING, VINEXT_CACHE_BINDING]) {
       const value = env[key];
       if (value == null || isBindingMarker(value)) continue;
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- cache bindings are pre-resolved resource Effects
-      resolved[key] = Effect.isEffect(value) ? yield* value as Effect.Effect<unknown> : value;
+      resolved[key] = yield* yieldDeclared(value);
     }
     return resolved;
   });

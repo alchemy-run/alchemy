@@ -267,22 +267,27 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
 
 /**
  * Where a resolved image is pushed. Each field is an Effect so a target can
- * create resources lazily (ECR creates the repository on first use).
+ * create resources lazily (ECR creates the repository on first use). Each
+ * field may fail and require differently; their errors and requirements
+ * union into `resolve`'s own.
  */
-export interface ImageRegistryTarget<R = never> {
+export interface RegistryTargetFields<UriE, UriR, TagE, TagR, CredE, CredR> {
   /** The repository URI images are tagged into (`<repositoryUri>:<hash>`). */
-  readonly repositoryUri: Effect.Effect<string, any, R>;
+  readonly repositoryUri: Effect.Effect<string, UriE, UriR>;
   /**
    * Whether the content-addressed tag is already in the registry. `true`
    * skips the build and push entirely.
    */
-  readonly hasTag: (tag: string) => Effect.Effect<boolean, any, R>;
+  readonly hasTag: (tag: string) => Effect.Effect<boolean, TagE, TagR>;
   /**
    * Push credentials. `undefined` pushes with the build machine's own
    * Docker configuration (`docker login`, credential helpers).
    */
-  readonly credentials: Effect.Effect<RegistryCredentials | undefined, any, R>;
+  readonly credentials: Effect.Effect<RegistryCredentials | undefined, CredE, CredR>;
 }
+
+/** A registry target whose fields share one error and requirement type. */
+export type ImageRegistryTarget<R = never, E = never> = RegistryTargetFields<E, R, E, R, E, R>;
 
 export interface ResolveContainerImageOptions {
   /** Logical resource id — keys the stable build-context directory. */
@@ -707,8 +712,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
       }),
     );
 
-  const buildAndPush = Effect.fnUntraced(function* <R>(
-    target: ImageRegistryTarget<R>,
+  const buildAndPush = Effect.fnUntraced(function* <E, R>(
+    target: { readonly credentials: Effect.Effect<RegistryCredentials | undefined, E, R> },
     options: {
       imageUri: string;
       context: string;
@@ -736,9 +741,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
    * compute the content-addressed tag, then build/mirror + push only when
    * that exact tag is not already in the registry (crash-safe convergence).
    */
-  const resolveSource = Effect.fnUntraced(function* <R>(
+  const resolveSource = Effect.fnUntraced(function* <UriE, UriR, TagE, TagR, CredE, CredR>(
     options: ResolveContainerImageOptions,
-    target: ImageRegistryTarget<R>,
+    target: RegistryTargetFields<UriE, UriR, TagE, TagR, CredE, CredR>,
   ) {
     const { id, source, session } = options;
     const platform = options.platform ?? "linux/amd64";
@@ -921,7 +926,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
    * Publish an {@link ImageAgent} as an image of its own, `agent-<hash>` in
    * the target repository, unless that tag is already there.
    */
-  const resolveAgent = Effect.fnUntraced(function* <R>(
+  const resolveAgent = Effect.fnUntraced(function* <TagE, TagR, CredE, CredR>(
     options: {
       id: string;
       agent: ImageAgent;
@@ -929,7 +934,10 @@ export const makeContainerImageSource = Effect.gen(function* () {
       repositoryUri: string;
       session: ResolveContainerImageOptions["session"];
     },
-    target: ImageRegistryTarget<R>,
+    target: Pick<
+      RegistryTargetFields<never, never, TagE, TagR, CredE, CredR>,
+      "hasTag" | "credentials"
+    >,
   ) {
     const { id, platform, session } = options;
     yield* session.note(`Bundling ${id} sandbox agent...`);
@@ -959,9 +967,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
    * beside it when one is asked for. The image is the user's own, unchanged;
    * `codeHash` then covers both images.
    */
-  const resolve = Effect.fnUntraced(function* <R>(
+  const resolve = Effect.fnUntraced(function* <UriE, UriR, TagE, TagR, CredE, CredR>(
     options: ResolveContainerImageOptions,
-    target: ImageRegistryTarget<R>,
+    target: RegistryTargetFields<UriE, UriR, TagE, TagR, CredE, CredR>,
   ) {
     const image = yield* resolveSource(options, target);
     if (options.agent === undefined || imageSourceKind(options.source) === "main") {

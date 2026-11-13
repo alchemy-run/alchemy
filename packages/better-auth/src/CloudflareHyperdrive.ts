@@ -85,17 +85,17 @@ export interface CloudflareHyperdriveOptions {
  * @peer mysql2
  * @product Hyperdrive
  */
-export const CloudflareHyperdrive = (
+export const CloudflareHyperdrive = <R = never>(
   connection:
     | Cloudflare.Hyperdrive.Connection
-    | Effect.Effect<Cloudflare.Hyperdrive.Connection, never, any>,
+    | Effect.Effect<Cloudflare.Hyperdrive.Connection, never, R>,
   options?: CloudflareHyperdriveOptions,
 ) =>
   Layer.effect(
     Database,
     Effect.gen(function* () {
       const conn = Effect.isEffect(connection)
-        ? yield* connection as Effect.Effect<Cloudflare.Hyperdrive.Connection>
+        ? yield* connection as Effect.Effect<Cloudflare.Hyperdrive.Connection, never, R>
         : connection;
       const client = yield* Cloudflare.Hyperdrive.Connect(conn);
       const source = client.connectionString as Effect.Effect<

@@ -210,6 +210,7 @@ export const withDevSessionKv = (
   // when none is configured.
   worker: {
     ...viteOptions?.worker,
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
     bindings: [...(viteOptions?.worker?.bindings ?? []), KvNamespace.local({ binding })],
   } as CloudflareVitePluginOptions["worker"],
 });

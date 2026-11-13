@@ -349,7 +349,9 @@ describe("Lambda external packages", { tags: ["unit", "local"] }, () => {
               installDirectory = directory;
               installArgs.push(args);
               const manifest = yield* fs.readFileString(path.join(directory, "package.json"));
-              artifactPackageJson = yield* Effect.try(() => JSON.parse(manifest));
+              artifactPackageJson = yield* Effect.try(() => JSON.parse(manifest)).pipe(
+                Effect.orDie,
+              );
 
               const sharpRoot = path.join(directory, "node_modules", "sharp");
               const sharpBinRoot = path.join(sharpRoot, "bin");

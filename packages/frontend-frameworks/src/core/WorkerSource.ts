@@ -372,23 +372,22 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
         });
       }
       const assetsConfig = { ...spec.assetDefaults?.(output), ...assetsConfigOf(ctx.assets) };
-      const [assets, inputHash] = yield* Effect.all(
-        [
-          output.clientDirectory !== undefined
-            ? readClientAssets(
-                path.resolve(rootDir, output.clientDirectory),
-                Object.keys(assetsConfig).length > 0 ? assetsConfig : undefined,
-                output.assetBase,
-              ).pipe(
-                Effect.catchTag("AssetLimitError", (error) =>
-                  Effect.fail(
-                    new SourceProviderError({ provider: spec.provider, message: error.message }),
-                  ),
+      const readAssets =
+        output.clientDirectory !== undefined
+          ? readClientAssets(
+              path.resolve(rootDir, output.clientDirectory),
+              Object.keys(assetsConfig).length > 0 ? assetsConfig : undefined,
+              output.assetBase,
+            ).pipe(
+              Effect.catchTag("AssetLimitError", (error) =>
+                Effect.fail(
+                  new SourceProviderError({ provider: spec.provider, message: error.message }),
                 ),
-              )
-            : Effect.undefined,
-          input(rootDir, output.externalWorkspaces),
-        ],
+              ),
+            )
+          : Effect.undefined;
+      const [assets, inputHash] = yield* Effect.all(
+        [readAssets, input(rootDir, output.externalWorkspaces)],
         { concurrency: "unbounded" },
       );
       return {

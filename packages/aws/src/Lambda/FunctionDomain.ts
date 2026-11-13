@@ -23,6 +23,7 @@ import { ApiMapping } from "../ApiGatewayV2/ApiMapping.ts";
 import { DomainName } from "../ApiGatewayV2/DomainName.ts";
 import { HttpApi } from "../ApiGatewayV2/HttpApi.ts";
 import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
+import type { Providers } from "../Providers.ts";
 import { qualifiedArnOf, qualifiedNameOf } from "./QualifiedArn.ts";
 
 /** Object form of the `AWS.Lambda.Function` `domain` prop. */
@@ -112,7 +113,7 @@ interface FunctionDomainHost {
 export const composeFunctionDomain = (
   fn: FunctionDomainHost,
   domainProp: FunctionDomain | undefined,
-): Effect.Effect<void, never, any> =>
+): Effect.Effect<void, never, Providers> =>
   Effect.gen(function* () {
     if (globalThis.__ALCHEMY_RUNTIME__) return;
     const domain = normalizeFunctionDomain(domainProp);
@@ -202,4 +203,4 @@ export const composeFunctionDomain = (
         });
       }
     }).pipe(Namespace.push(id));
-  }) as Effect.Effect<void, never, any>;
+  });

@@ -51,7 +51,9 @@ const program = Effect.scoped(
         new Error(`Dev child module ${payload.module} does not export a make function`),
       );
     }
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
     const service = yield* module.make(payload.makeOptions);
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
     const { url } = yield* service.dev(payload.devOptions);
     // Through the real stdout: the parent scans lines for this marker.
     process.stdout.write(`${devChildUrlMarker(url)}\n`);
@@ -65,6 +67,7 @@ const controller = new AbortController();
 process.once("SIGTERM", () => controller.abort());
 process.once("SIGINT", () => controller.abort());
 
+// oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
 void Effect.runPromiseExit(program, { signal: controller.signal }).then((exit) => {
   const code = Exit.match(exit, {
     onSuccess: () => 0,

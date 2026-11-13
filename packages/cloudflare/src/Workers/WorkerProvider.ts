@@ -5735,16 +5735,12 @@ export const LiveWorkerProvider = () =>
             }).pipe(Effect.ignore);
           }
           if (liveDomains.length) {
-            yield* Effect.all(
-              liveDomains.flatMap((d) =>
-                d.id
-                  ? [
-                      workers
-                        .deleteDomain({ accountId: output.accountId, domainId: d.id })
-                        .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
-                    ]
-                  : [],
-              ),
+            yield* Effect.forEach(
+              liveDomains.flatMap((d) => (d.id ? [d.id] : [])),
+              (domainId) =>
+                workers
+                  .deleteDomain({ accountId: output.accountId, domainId })
+                  .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
               { concurrency: "unbounded" },
             );
           }

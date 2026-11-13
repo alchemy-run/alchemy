@@ -563,10 +563,7 @@ class ServiceStillExists extends Data.TaggedError("Kubernetes.ServiceStillExists
  * Bounded (~3 min) wait for a deleted Service to disappear, i.e. for the
  * cloud controller to tear down its load balancer and drop the finalizer.
  */
-const waitForServiceGone = (
-  transport: ClusterTransport,
-  service: KubernetesObjectRef,
-): Effect.Effect<void, unknown> =>
+const waitForServiceGone = (transport: ClusterTransport, service: KubernetesObjectRef) =>
   Effect.retry(
     readObject({ transport, object: service }).pipe(
       Effect.flatMap(() => Effect.fail(new ServiceStillExists())),

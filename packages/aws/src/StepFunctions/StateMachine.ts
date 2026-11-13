@@ -719,23 +719,22 @@ export const StateMachineProvider = () =>
         roleName: string | undefined,
       ) {
         const level = machine.loggingConfiguration?.level ?? "OFF";
-        const [tags, executionRolePolicy] = yield* Effect.all(
-          [
-            fetchObservedTags(machine.stateMachineArn),
-            roleName === undefined
-              ? Effect.undefined
-              : iam
-                  .getRolePolicy({
-                    RoleName: roleName,
-                    PolicyName: yield* createPolicyName(id),
-                  })
-                  .pipe(
-                    Effect.map((policy): unknown =>
-                      JSON.parse(decodeURIComponent(policy.PolicyDocument)),
-                    ),
-                    Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
+        const readExecutionRolePolicy =
+          roleName === undefined
+            ? Effect.undefined
+            : iam
+                .getRolePolicy({
+                  RoleName: roleName,
+                  PolicyName: yield* createPolicyName(id),
+                })
+                .pipe(
+                  Effect.map((policy): unknown =>
+                    JSON.parse(decodeURIComponent(policy.PolicyDocument)),
                   ),
-          ],
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
+                );
+        const [tags, executionRolePolicy] = yield* Effect.all(
+          [fetchObservedTags(machine.stateMachineArn), readExecutionRolePolicy],
           { concurrency: "unbounded" },
         );
         return {
