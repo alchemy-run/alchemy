@@ -23,6 +23,7 @@ const APP_PATH = "/var/lib/rivet-node";
 const HASH_KEY = "rivet-node-hash";
 const ENV_KEY = "rivet-node-env";
 const INDEX_KEY = "rivet-node-index";
+const SECRETS_KEY = "rivet-node-secrets";
 
 export interface ComputeEnginePoolOptions extends PoolSettings {
   /**
@@ -54,13 +55,32 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
   stopTimeout?: number;
   /**
    * Seconds between two nodes restarting when a deploy changes them: node
-   * `i` restarts `i * rolloutInterval` seconds after the change reaches it.
-   * This is a timer, not a readiness gate: node `i` stops whether or not
-   * node `i - 1` has reconnected. Make it longer than `stopTimeout` plus the
-   * time a node takes to start, so the restarts do not overlap.
+   * `i` restarts `i * rolloutInterval` seconds after the change reaches it,
+   * so the pool restarts one node at a time and keeps the rest connected.
+   * Make it longer than `stopTimeout` plus the time a node takes to start.
    * @default 60
    */
   rolloutInterval?: number;
+  /**
+   * Environment each node runs with, besides the pool's own.
+   */
+  env?: Record<string, Input<string>>;
+  /**
+   * Environment each node reads from Secret Manager when it starts, by the
+   * secret version each value names, such as
+   * `projects/acme/secrets/DATABASE_URL/versions/3`. The nodes' service
+   * account is granted `roles/secretmanager.secretAccessor` on each secret,
+   * and the values never sit in instance metadata or on a node's disk.
+   * Name `RIVET_TOKEN` here to keep the control plane's token out of
+   * metadata too. A node that cannot read a secret keeps running what it
+   * ran before.
+   */
+  secrets?: Record<string, Input<string>>;
+  /**
+   * Email of the service account the nodes run as.
+   * @default a service account of the pool's own
+   */
+  serviceAccount?: Input<string>;
 }
 
 const asOutput = (value: Input<string>): Output.Output<string> =>
@@ -103,6 +123,21 @@ const runCommand = (image: boolean) =>
     : ` \\
     sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${RIVETKIT_VERSION} && exec node node.mjs'`;
 
+/**
+ * Read each secret version named in the instance's metadata into the
+ * script's environment and add `-e NAME` to `SECRET_ARGS`, so Docker hands
+ * the value to the container without writing it anywhere. Fails, and the
+ * running node is left as it is, when a secret cannot be read.
+ */
+const readSecrets = `SECRET_ARGS=()
+  while IFS='=' read -r NAME VERSION; do
+    [ -n "$NAME" ] || continue
+    BODY="$(curl -sf -H "Authorization: Bearer $TOKEN" "https://secretmanager.googleapis.com/v1/$VERSION:access")" || return 1
+    VALUE="$(printf '%s' "$BODY" | tr -d '\\n' | sed -E 's/.*"data": *"([^"]*)".*/\\1/' | base64 -d)" || return 1
+    export "$NAME=$VALUE"
+    SECRET_ARGS+=(-e "$NAME")
+  done <<< "$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${SECRETS_KEY}")"`;
+
 /** The startup script every node runs, rendered for a pool. @internal */
 export const startupScript = (options: {
   readonly bucket: string;
@@ -115,6 +150,7 @@ MD=http://metadata.google.internal/computeMetadata/v1
 mkdir -p ${APP_PATH}
 start() {
   TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\\1/')"
+  ${readSecrets}
   ${prepareProgram(options.bucket, options.image)}
   curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
   if docker inspect rivet-node >/dev/null 2>&1; then
@@ -128,10 +164,8 @@ start() {
   fi
   # --init forwards SIGTERM to the node whatever its image runs as PID 1.
   docker run -d --name rivet-node --restart always --network host --init \\
-    --stop-timeout ${options.stopTimeout} --env-file ${APP_PATH}/env.list${
-      options.image
-        ? ""
-        : ` \\
+    --stop-timeout ${options.stopTimeout} --env-file ${APP_PATH}/env.list "\${SECRET_ARGS[@]}"${
+      options.image ? "" : ` \\
     -v ${APP_PATH}/node.mjs:/program/node.mjs:ro -w /app`
     } "$IMAGE"${runCommand(options.image)}
 }
@@ -165,8 +199,8 @@ pgrep -f "docker logs -f rivet-node" >/dev/null || setsid sh -c 'while true; do 
  * `Rivet.DurableObject` given this pool in a Node container. The node
  * program sits in a Cloud Storage bucket the instances read as their own
  * service account; a deploy that changes it, or the nodes' env, restarts the
- * container on each instance in place, staggered by `rolloutInterval`,
- * giving each node `stopTimeout` seconds to stop.
+ * container on each instance in place, one instance at a time, giving each
+ * node `stopTimeout` seconds to stop.
  *
  * Nodes only connect out to the control plane, so no inbound traffic
  * reaches them, and the pool works with any control plane it can reach —
@@ -235,35 +269,72 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
         contentType: image ? "application/x-tar" : "text/javascript",
       });
 
-      const account = yield* IAM.ServiceAccount(`${id}NodeAccount`, {
-        displayName: "Rivet pool nodes",
-      });
+      const email =
+        options.serviceAccount ??
+        (yield* IAM.ServiceAccount(`${id}NodeAccount`, {
+          displayName: "Rivet pool nodes",
+        })).email;
+      const member = Output.interpolate`serviceAccount:${asOutput(email)}`;
       const grant = yield* IAM.Member(`${id}ProgramGrant`, {
         kind: "storage.bucket",
         name: bucket.bucketName,
         role: "roles/storage.objectViewer",
-        member: Output.interpolate`serviceAccount:${account.email}`,
+        member,
       });
+      // Nodes read each secret themselves: grant the secret, not the project.
+      const secrets = Object.entries(options.secrets ?? {});
+      const secretGrants: Array<Output.Output<string>> = [];
+      for (const [name, version] of secrets) {
+        const secretGrant = yield* IAM.Member(`${id}Secret${name}`, {
+          kind: "secretmanager.secret",
+          name: asOutput(version).pipe(Output.map((v) => v.replace(/\/versions\/[^/]+$/, ""))),
+          role: "roles/secretmanager.secretAccessor",
+          member,
+        });
+        secretGrants.push(secretGrant.role);
+      }
+      // `NAME=version` lines: the versions, never the values.
+      const secretVersions = Output.all(
+        ...secrets.map(([name, version]) =>
+          asOutput(version).pipe(Output.map((v) => `${name}=${v}`)),
+        ),
+      ).pipe(Output.map((lines) => lines.join("\n")));
 
       // A bare VM has no hosted runtime to name the stack: the node's
       // runtime reads it from its env, as on every other host.
       const stack = yield* Stack;
       // A Docker env file: one `NAME=value` per line.
-      const envFile = nodeEnvironment(nodes).pipe(
-        Output.map((env) =>
+      const own = Output.all(
+        ...Object.entries(options.env ?? {}).map(([name, value]) =>
+          asOutput(value).pipe(Output.map((v) => [name, v] as const)),
+        ),
+      ).pipe(Output.map((entries) => Object.fromEntries(entries)));
+      const envFile = Output.all(nodeEnvironment(nodes), own).pipe(
+        Output.map(([env, extra]) =>
           Object.entries({
             ...env,
+            ...extra,
             ALCHEMY_STACK_NAME: stack.name,
             ALCHEMY_STAGE: stack.stage,
             ALCHEMY_PHASE: "runtime",
           })
+            // A secret reaches the node from Secret Manager, never metadata.
+            .filter(([name]) => !secrets.some(([secret]) => secret === name))
             .map(([name, value]) => `${name}=${String(value).replaceAll("\n", " ")}`)
             .join("\n"),
         ),
       );
       const metadata = (index: number) =>
-        Output.all(bucket.bucketName, program.md5Hash, envFile, grant.role).pipe(
-          Output.map(([bucketName, programHash, env]) => ({
+        Output.all(
+          bucket.bucketName,
+          program.md5Hash,
+          envFile,
+          secretVersions,
+          grant.role,
+          // Nodes read their secrets once the grants exist.
+          Output.all(...secretGrants),
+        ).pipe(
+          Output.map(([bucketName, programHash, env, versions]) => ({
             "startup-script": startupScript({
               bucket: bucketName,
               image,
@@ -272,6 +343,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
             }),
             [HASH_KEY]: programHash ?? "",
             [ENV_KEY]: env,
+            [SECRETS_KEY]: versions,
             [INDEX_KEY]: String(index),
           })),
         );
@@ -284,7 +356,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
           network: Output.interpolate`global/networks/${asOutput(network)}`,
           subnetwork: Output.interpolate`regions/${region}/subnetworks/${asOutput(subnetwork)}`,
           associatePublicIp: true,
-          serviceAccount: account.email,
+          serviceAccount: email,
           oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
           metadata: metadata(i) as unknown as Record<string, string>,
         });
