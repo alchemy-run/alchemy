@@ -34,6 +34,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
+import * as Random from "effect/Random";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
@@ -117,9 +118,9 @@ export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
  * {@link ensureFloci} on every successful health check (the CA is minted
  * inside the container, so it changes whenever the container is recreated).
  * Home-anchored (not cwd-relative) so every process in a dev session — test
- * runner, RPC sidecars, workerd children — resolves the same file; consumers
- * point TLS trust at it (e.g. `NODE_EXTRA_CA_CERTS`, which the local workerd
- * runtime folds into its outbound `trustedCertificates`).
+ * runner, RPC sidecars, workerd children — resolves the same file. The AWS
+ * provider contributes it to `alchemy dev` as a trusted CA (`devTrust`), so
+ * local Workers and `Command.Dev` processes trust the emulator.
  */
 export const FLOCI_CA_PATH = path.join(os.homedir(), ".floci", "ca.pem");
 
@@ -145,26 +146,23 @@ const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
     if (res.status < 200 || res.status >= 300) return;
     const pem = yield* res.text;
     if (!pem.includes("BEGIN CERTIFICATE")) return;
+    // Replaced whole: other processes (workerd's config builds, bundles for
+    // Node children) read this file while every health check rewrites it.
+    const random = yield* Random.next;
+    const temporary = `${FLOCI_CA_PATH}.${process.pid}.${random.toString(36).slice(2)}.tmp`;
     yield* Effect.tryPromise({
       try: async () => {
         await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
-        await fs.writeFile(FLOCI_CA_PATH, pem);
+        try {
+          await fs.writeFile(temporary, pem);
+          await fs.rename(temporary, FLOCI_CA_PATH);
+        } catch (error) {
+          await fs.rm(temporary, { force: true });
+          throw error;
+        }
       },
       catch: (cause) => new FlociError({ message: "ca sync failed", cause }),
     });
-    // Point local workerd (and any other child process spawned after this)
-    // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
-    // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
-    // so setting it here (before local workers spawn during the apply) only
-    // affects children, which is exactly the target. Never clobber a value
-    // the caller set deliberately.
-    // Reads and writes the real process env: children inherit it, while
-    // Config may also resolve `.env` values that children never see.
-    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- checks what child processes will inherit
-    if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
-      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports the CA path to child processes; Config is read-only
-      process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
-    }
   }).pipe(Effect.provide(FetchHttpClient.layer), Effect.ignore);
 
 export class FlociError extends Data.TaggedError("FlociError")<{
