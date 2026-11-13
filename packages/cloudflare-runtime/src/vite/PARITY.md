@@ -1,7 +1,7 @@
 # Parity with `@cloudflare/vite-plugin`
 
 Alchemy's Vite plugin replaces `@cloudflare/vite-plugin` (checked against
-**1.65.0**, the catalog version). Frameworks are built against the official
+**1.69.1**, the catalog version). Frameworks are built against the official
 plugin's behavior, so anything they can observe must match. This file is the
 inventory of that surface: every behavior is **matched** (with the test that
 pins it), **different on purpose** (with the reason), or **out of scope**.
@@ -48,9 +48,9 @@ the differential tests ignore until the installed release catches up.
 | --- | --- | --- |
 | `appType: "custom"`; `server.fs.deny` (Vite's, credentials, key stores, `.wrangler`) | Matched, plus Alchemy's state and stack files | `config.test.ts`, `ViteRuntime.test.ts` (sensitive files) |
 | Worker environment `resolve` (conditions, `noExternal`, built-ins) | Matched | `config.test.ts` |
-| `cloudflare:durable-objects` is a runtime built-in | Matched ahead of the release (upstream `main`, after 1.65.0) | `constants.test.ts`, `config.test.ts` via `test/parity/ahead-of-release.ts` |
+| `cloudflare:durable-objects` is a runtime built-in | Matched | `constants.test.ts`, `config.test.ts` |
 | `define`: `process.env.NODE_ENV`; `process.env` as `{}` without `nodejs_compat` | Matched | `config.test.ts`, `ViteRuntime.test.ts` (NODE_ENV) |
-| `build`: target (`es2026` on Rolldown), `cssTarget`, manifest, source maps, `emitAssets`, `copyPublicDir`, `ssr`, output dir, `index` entry input | Matched | `config.test.ts`, `build.test.ts` |
+| `build`: target (`es2026` on Rolldown), `cssTarget` (only when the user sets none), no manifest, source maps, `emitAssets`, `copyPublicDir`, `ssr`, output dir, `index` entry input | Matched | `config.test.ts`, `build.test.ts` |
 | `optimizeDeps`: entries, `development` condition, Node.js and `cloudflare:*` excluded | Matched | `config.test.ts` |
 | esbuild `supported.using` scoped to Worker environments (Vite 6/7) | Matched | `config.test.ts` (Rolldown); code path mirrors upstream |
 | Assets-only projects declare no Worker environments | Matched | `config.test.ts`, `build.test.ts` |
@@ -59,8 +59,8 @@ the differential tests ignore until the installed release catches up.
 
 | Behavior | Status | Test |
 | --- | --- | --- |
-| Default `buildApp`: Worker environments, then the client; a client with no entry builds for `public/` or Worker-imported assets; imported assets move to the client output | Matched | `build.test.ts` |
-| A user's own `buildApp` is kept | Matched | `ViteRuntime.test.ts` (custom buildApp) |
+| Default `buildApp`: Worker environments, then the client; a client with no entry builds for `public/` or Worker-imported assets; assets the entry Worker and its built children import move to the client output | Matched | `build.test.ts` |
+| A user's own `buildApp` is kept; afterwards the Worker environments and client it left out build and imported assets move | Matched | `build.test.ts`, `ViteRuntime.test.ts` (custom buildApp) |
 | Additional modules (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`, subpath imports), `.wasm?init` | Matched | `build.test.ts`, `ViteRuntime.test.ts` (additional modules) |
 | Node.js compat: unenv aliases, injected globals and polyfills | Matched | `ViteNodeCompat.test.ts` |
 | Unexpected Node.js imports warn without `nodejs_compat` (build and dev) | Matched | `dev-plugin.test.ts`, `ViteNodeCompat.test.ts` (als) |
@@ -82,13 +82,14 @@ the differential tests ignore until the installed release catches up.
 | HTML through `transformIndexHtml`, `public/` HTML raw, `server.headers` on assets | Matched | `dev-assets.test.ts` |
 | Vite's bundled dev mode (`experimental.bundledDev`) | Matched | `ViteRuntime.test.ts` (bundled dev) |
 | The Worker's `ASSETS` binding runs through Vite's middlewares | Matched | `dev-assets.test.ts` |
-| WebSockets to the Worker; Vite's HMR socket left alone unless from a Sandbox preview origin; a socket another `upgrade` listener answers is left to it | Matched | `websockets.test.ts`, `constants.test.ts`, `ViteRuntime.test.ts` (WebSockets) |
+| WebSockets to the Worker; Vite's HMR and DevTools (`/__devtools/__ws`) sockets left alone unless from a Sandbox preview origin, HMR upgrades closed when `server.ws` is `false`; a socket another `upgrade` listener answers is left to it | Matched | `websockets.test.ts`, `constants.test.ts`, `ViteRuntime.test.ts` (WebSockets) |
 | A refused WebSocket upgrade | Different: the Worker's response reaches the client (upstream resets the socket) | `websockets.test.ts` |
 | `/cdn-cgi/local/*` trigger endpoints and the legacy `/cdn-cgi/mf/*`, `/cdn-cgi/handler` paths | Matched | `ViteRuntime.test.ts` (scheduled and email) |
 | Public URL from the dev server's host, port and HTTPS | Matched | `ViteStreaming.test.ts` (HTTPS) |
 | `X-Forwarded-Host`, `X-Forwarded-Proto` (case-insensitive), `ctx.access` from `dev.access` | Matched | `forwarded-host.test.ts`, `ViteRuntime.test.ts` (headers, Access) |
-| The Worker's response status text (dev and preview) | Matched (upstream `main`, after 1.65.0) | `dev-proxy.test.ts` |
-| Repeated `Set-Cookie` request headers reach the Worker as separate values | Matched (upstream `main`, after 1.65.0) | `dev-proxy.test.ts` |
+| The Worker's response status text (dev and preview) | Matched | `dev-proxy.test.ts` |
+| Repeated `Set-Cookie` request headers reach the Worker as separate values | Matched | `dev-proxy.test.ts` |
+| A request or upgrade target starting with `//` (or `/\`) stays a path on the dev server's origin | Matched | `dev-proxy.test.ts`, `websockets.test.ts` |
 | Outbound `fetch`: no `CF-Connecting-IP`, `cf.image` | Matched | `Runtime.test.ts` (outbound), `ViteRuntime.test.ts` (cf.image) |
 | Outbound `fetch`: `CF-Worker` | Different: not added; Cloudflare-fronted sites answer 403 to one sent from a developer machine (#2965) | `ViteRuntime.test.ts` (CF-Worker), `Runtime.test.ts` (outbound) |
 | Restart after a workerd crash | Matched | `ViteRuntime.test.ts` (workerd crashes) |

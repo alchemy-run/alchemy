@@ -6,7 +6,7 @@ export const SERVICE_USER_WORKER = "user-worker";
  * Default date shared by deployed Workers, framework runners, previews, and
  * internal isolates.
  */
-export const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
+export const DEFAULT_COMPATIBILITY_DATE = "2026-11-13";
 
 export const NODEJS_COMPAT_DEFAULT_ON = "2026-08-04";
 
