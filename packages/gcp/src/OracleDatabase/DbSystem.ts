@@ -414,9 +414,9 @@ export const DbSystemProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsDbSystems({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             dbSystemId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             retryQuota,

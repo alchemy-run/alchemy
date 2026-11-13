@@ -257,14 +257,12 @@ export const ServiceAccountProvider = () =>
       if (current === undefined) {
         current = yield* iam
           .createProjectsServiceAccounts({
-            name: `projects/${project}`,
-            body: {
-              accountId,
-              serviceAccount: {
-                displayName: news.displayName,
-                description: desiredDescription,
-              },
+            accountId,
+            serviceAccount: {
+              displayName: news.displayName,
+              description: desiredDescription,
             },
+            name: `projects/${project}`,
           })
           .pipe(
             Effect.retry({
@@ -300,14 +298,12 @@ export const ServiceAccountProvider = () =>
       ].filter((field): field is string => field !== undefined);
       if (updateMask.length > 0) {
         const patched = yield* iam.patchProjectsServiceAccounts({
-          name: current.name ?? name,
-          body: {
-            updateMask: updateMask.join(","),
-            serviceAccount: {
-              displayName: news.displayName ?? "",
-              description: desiredDescription,
-            },
+          updateMask: updateMask.join(","),
+          serviceAccount: {
+            displayName: news.displayName ?? "",
+            description: desiredDescription,
           },
+          name: current.name ?? name,
         });
         // The patch response only echoes the masked fields, and a re-read can
         // still return the previous values, so the patched fields win.

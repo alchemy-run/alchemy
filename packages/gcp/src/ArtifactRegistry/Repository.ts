@@ -450,20 +450,18 @@ export const RepositoryProvider = () =>
       if (current === undefined) {
         const created = yield* artifactregistry
           .createProjectsLocationsRepositories({
+            format,
+            mode,
+            description: news.description,
+            labels: desiredLabels,
+            kmsKeyName: news.kmsKeyName,
+            remoteRepositoryConfig: news.remoteRepositoryConfig,
+            dockerConfig: desiredDocker,
+            mavenConfig: desiredMaven,
+            cleanupPolicies: news.cleanupPolicies,
+            cleanupPolicyDryRun: desiredCleanupDryRun,
             parent: `projects/${env.project}/locations/${location}`,
             repositoryId,
-            body: {
-              format,
-              mode,
-              description: news.description,
-              labels: desiredLabels,
-              kmsKeyName: news.kmsKeyName,
-              remoteRepositoryConfig: news.remoteRepositoryConfig,
-              dockerConfig: desiredDocker,
-              mavenConfig: desiredMaven,
-              cleanupPolicies: news.cleanupPolicies,
-              cleanupPolicyDryRun: desiredCleanupDryRun,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -503,16 +501,13 @@ export const RepositoryProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         current = yield* artifactregistry.patchProjectsLocationsRepositories({
+          labels: desiredLabels,
+          description: news.description,
+          dockerConfig: desiredDocker,
+          cleanupPolicyDryRun: desiredCleanupDryRun,
+          cleanupPolicies: news.cleanupPolicies ?? {},
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            dockerConfig: desiredDocker,
-            cleanupPolicyDryRun: desiredCleanupDryRun,
-            cleanupPolicies: news.cleanupPolicies ?? {},
-          },
         });
       }
 

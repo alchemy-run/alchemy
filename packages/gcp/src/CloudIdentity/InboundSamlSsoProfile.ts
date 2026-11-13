@@ -182,7 +182,7 @@ export const InboundSamlSsoProfileProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createInboundSamlSsoProfiles({ body: desired })
+          .createInboundSamlSsoProfiles({ ...desired })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
@@ -219,12 +219,10 @@ export const InboundSamlSsoProfileProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         const patched = yield* cloudidentity.patchInboundSamlSsoProfiles({
+          displayName,
+          idpConfig: news.idpConfig,
           name,
           updateMask,
-          body: {
-            displayName,
-            idpConfig: news.idpConfig,
-          },
         });
         yield* waitForOperation(patched).pipe(
           Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),

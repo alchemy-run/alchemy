@@ -183,11 +183,9 @@ export const UsersSshPublicKeyProvider = () =>
       if (current === undefined) {
         const created = yield* retryConflict(
           oslogin.createUsersSshPublicKeys({
+            key: desiredKey,
+            expirationTimeUsec: news.expirationTimeUsec,
             parent: toUserParent(user),
-            body: {
-              key: desiredKey,
-              expirationTimeUsec: news.expirationTimeUsec,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => findKeyByText(user, desiredKey, env.project)));
         current = created ?? undefined;
@@ -208,11 +206,9 @@ export const UsersSshPublicKeyProvider = () =>
       if (expirationChanged) {
         current = yield* retryConflict(
           oslogin.patchUsersSshPublicKeys({
+            expirationTimeUsec: news.expirationTimeUsec,
             name,
             updateMask: "expirationTimeUsec",
-            body: {
-              expirationTimeUsec: news.expirationTimeUsec,
-            },
           }),
         );
       }

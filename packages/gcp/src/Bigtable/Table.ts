@@ -390,25 +390,23 @@ export const TableProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesTables({
-            parent,
-            body: {
-              tableId,
-              table: {
-                granularity: news.granularity ? normalizeGranularity(news.granularity) : undefined,
-                columnFamilies:
-                  families === undefined
-                    ? undefined
-                    : Object.fromEntries(
-                        Object.entries(families).map(([familyId, family]) => [
-                          familyId,
-                          toFamilyBody(family),
-                        ]),
-                      ),
-                deletionProtection: desiredProtection,
-                changeStreamConfig: news.changeStreamConfig,
-                automatedBackupPolicy: news.automatedBackupPolicy,
-              },
+            tableId,
+            table: {
+              granularity: news.granularity ? normalizeGranularity(news.granularity) : undefined,
+              columnFamilies:
+                families === undefined
+                  ? undefined
+                  : Object.fromEntries(
+                      Object.entries(families).map(([familyId, family]) => [
+                        familyId,
+                        toFamilyBody(family),
+                      ]),
+                    ),
+              deletionProtection: desiredProtection,
+              changeStreamConfig: news.changeStreamConfig,
+              automatedBackupPolicy: news.automatedBackupPolicy,
             },
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", (error) =>
@@ -436,16 +434,16 @@ export const TableProvider = () =>
         if (mods.length > 0) {
           if (current.deletionProtection === true) {
             const unlocked = yield* bigtable.patchProjectsInstancesTables({
+              deletionProtection: false,
               name,
               updateMask: "deletion_protection",
-              body: { deletionProtection: false },
             });
             yield* waitForOperation(unlocked);
             current = (yield* getByName(name)) ?? current;
           }
           current = yield* bigtable.modifyColumnFamiliesProjectsInstancesTables({
+            modifications: mods,
             name,
-            body: { modifications: mods },
           });
         }
       }
@@ -473,9 +471,9 @@ export const TableProvider = () =>
 
       if (mask.length > 0) {
         const patched = yield* bigtable.patchProjectsInstancesTables({
+          ...patchBody,
           name,
           updateMask: mask.join(","),
-          body: patchBody,
         });
         yield* waitForOperation(patched);
         current = yield* getByName(name);
@@ -492,9 +490,9 @@ export const TableProvider = () =>
       if (current === undefined) return;
       if (current.deletionProtection === true) {
         const patched = yield* bigtable.patchProjectsInstancesTables({
+          deletionProtection: false,
           name: output.name,
           updateMask: "deletion_protection",
-          body: { deletionProtection: false },
         });
         yield* waitForOperation(patched);
       }

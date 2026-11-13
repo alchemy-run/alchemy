@@ -269,14 +269,12 @@ export const IdentityMappingStoreProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsIdentityMappingStores({
+            name,
+            kmsKeyName: news.kmsKeyName,
             parent: locationParent(env.project, location),
             identityMappingStoreId: storeId,
             cmekConfigName: news.cmekConfigName,
             disableCmek: news.disableCmek === true ? true : undefined,
-            body: {
-              name,
-              kmsKeyName: news.kmsKeyName,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

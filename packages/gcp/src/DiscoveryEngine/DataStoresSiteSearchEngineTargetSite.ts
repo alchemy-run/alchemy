@@ -294,12 +294,10 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresSiteSearchEngineTargetSites({
+            providedUriPattern,
+            exactMatch,
+            type,
             parent: engine,
-            body: {
-              providedUriPattern,
-              exactMatch,
-              type,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -319,13 +317,10 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (typeChanged) {
         const patched =
           yield* discoveryengine.patchProjectsLocationsDataStoresSiteSearchEngineTargetSites({
+            providedUriPattern,
+            exactMatch,
+            type,
             name: current.name ?? "",
-            body: {
-              name: current.name,
-              providedUriPattern,
-              exactMatch,
-              type,
-            },
           });
         yield* waitForOperation(patched);
         current = (yield* getByName(current.name ?? "")) ?? current;

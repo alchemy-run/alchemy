@@ -293,13 +293,11 @@ export const JobTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* transcoder
           .createProjectsLocationsJobTemplates({
+            name,
+            config: news.config,
+            labels: desiredLabels,
             parent,
             jobTemplateId,
-            body: {
-              name,
-              config: news.config,
-              labels: desiredLabels,
-            },
           })
           // ALREADY_EXISTS proves the template exists (a lost race, or a
           // retried create whose first attempt landed) — wait for it to

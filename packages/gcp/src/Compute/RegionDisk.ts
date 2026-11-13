@@ -481,31 +481,29 @@ export const RegionDiskProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertRegionDisks({
+            name: diskName,
+            sizeGb: String(sizeGb),
+            type: diskTypeUrl(env.project, region, diskType),
+            replicaZones: replicaZoneUrls(env.project, replicaZones),
+            description: news.description,
+            labels: desiredLabels,
+            sourceImage: news.sourceImage,
+            sourceSnapshot: news.sourceSnapshot,
+            sourceDisk: news.sourceDisk,
+            architecture: news.architecture,
+            physicalBlockSizeBytes:
+              news.physicalBlockSizeBytes !== undefined
+                ? String(news.physicalBlockSizeBytes)
+                : undefined,
+            provisionedIops:
+              news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
+            provisionedThroughput:
+              news.provisionedThroughput !== undefined
+                ? String(news.provisionedThroughput)
+                : undefined,
+            enableConfidentialCompute: news.enableConfidentialCompute,
             project: env.project,
             region,
-            body: {
-              name: diskName,
-              sizeGb: String(sizeGb),
-              type: diskTypeUrl(env.project, region, diskType),
-              replicaZones: replicaZoneUrls(env.project, replicaZones),
-              description: news.description,
-              labels: desiredLabels,
-              sourceImage: news.sourceImage,
-              sourceSnapshot: news.sourceSnapshot,
-              sourceDisk: news.sourceDisk,
-              architecture: news.architecture,
-              physicalBlockSizeBytes:
-                news.physicalBlockSizeBytes !== undefined
-                  ? String(news.physicalBlockSizeBytes)
-                  : undefined,
-              provisionedIops:
-                news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
-              provisionedThroughput:
-                news.provisionedThroughput !== undefined
-                  ? String(news.provisionedThroughput)
-                  : undefined,
-              enableConfidentialCompute: news.enableConfidentialCompute,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
@@ -523,10 +521,10 @@ export const RegionDiskProvider = () =>
       const observedSize = parseSizeGb(current.sizeGb);
       if (sizeGb > observedSize) {
         const resized = yield* compute.resizeRegionDisks({
+          sizeGb: String(sizeGb),
           project: env.project,
           region,
           disk: diskName,
-          body: { sizeGb: String(sizeGb) },
         });
         yield* waitRegionOperation(env.project, region, resized);
         current = yield* waitDiskReady(env.project, region, diskName);
@@ -540,13 +538,11 @@ export const RegionDiskProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         const labeled = yield* compute.setLabelsRegionDisks({
+          labels: desiredLabels,
+          labelFingerprint: current.labelFingerprint,
           project: env.project,
           region,
           resource: diskName,
-          body: {
-            labels: desiredLabels,
-            labelFingerprint: current.labelFingerprint,
-          },
         });
         yield* waitRegionOperation(env.project, region, labeled);
         current = yield* getByName(env.project, region, diskName);
@@ -566,6 +562,13 @@ export const RegionDiskProvider = () =>
 
       if (descriptionChanged || iopsChanged || throughputChanged) {
         const updated = yield* compute.updateRegionDisks({
+          description: news.description,
+          provisionedIops:
+            news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
+          provisionedThroughput:
+            news.provisionedThroughput !== undefined
+              ? String(news.provisionedThroughput)
+              : undefined,
           project: env.project,
           region,
           disk: diskName,
@@ -576,15 +579,6 @@ export const RegionDiskProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            description: news.description,
-            provisionedIops:
-              news.provisionedIops !== undefined ? String(news.provisionedIops) : undefined,
-            provisionedThroughput:
-              news.provisionedThroughput !== undefined
-                ? String(news.provisionedThroughput)
-                : undefined,
-          },
         });
         yield* waitRegionOperation(env.project, region, updated);
         current = yield* getByName(env.project, region, diskName);

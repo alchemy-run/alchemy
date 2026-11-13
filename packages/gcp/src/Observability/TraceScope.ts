@@ -269,12 +269,10 @@ export const TraceScopeProvider = () =>
       if (current === undefined) {
         const created = yield* observability
           .createProjectsLocationsTraceScopes({
+            resourceNames: desiredResources,
+            description: desiredDescription,
             parent: `projects/${env.project}/locations/${location}`,
             traceScopeId,
-            body: {
-              resourceNames: desiredResources,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -293,12 +291,10 @@ export const TraceScopeProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* observability.patchProjectsLocationsTraceScopes({
+          resourceNames: desiredResources,
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            resourceNames: desiredResources,
-            description: desiredDescription,
-          },
         });
       }
 

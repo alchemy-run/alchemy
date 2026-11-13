@@ -423,16 +423,14 @@ export const LakesZoneProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesZones({
+            type,
+            resourceSpec: { locationType },
+            displayName: news.displayName,
+            description: news.description,
+            labels: desiredLabels,
+            discoverySpec: desiredDiscovery,
             parent: lake,
             zoneId,
-            body: {
-              type,
-              resourceSpec: { locationType },
-              displayName: news.displayName,
-              description: news.description,
-              labels: desiredLabels,
-              discoverySpec: desiredDiscovery,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -460,14 +458,12 @@ export const LakesZoneProvider = () =>
           discoveryChanged ? "discovery_spec" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* dataplex.patchProjectsLocationsLakesZones({
+          displayName: news.displayName,
+          description: news.description,
+          labels: desiredLabels,
+          discoverySpec: desiredDiscovery,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName: news.displayName,
-            description: news.description,
-            labels: desiredLabels,
-            discoverySpec: desiredDiscovery,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

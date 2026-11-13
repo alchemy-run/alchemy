@@ -60,15 +60,16 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       const group = yield* apigee.createOrganizationsAppgroups({
+        name: "alchemy-appgroup",
+        displayName: "alchemy-appgroup",
         parent: org,
-        body: { name: "alchemy-appgroup", displayName: "alchemy-appgroup" },
       });
       const groupId = group.name ?? "alchemy-appgroup";
       const groupParent = groupId.includes("/appgroups/") ? groupId : `${org}/appgroups/${groupId}`;
 
       const app = yield* apigee.createOrganizationsAppgroupsApps({
+        name: "alchemy-app",
         parent: groupParent,
-        body: { name: "alchemy-app" },
       });
       const appName = app.name ?? "alchemy-app";
 

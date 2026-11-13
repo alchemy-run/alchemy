@@ -231,10 +231,7 @@ export const AgentsPlaybooksVersionProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsPlaybooksVersions({
-            parent: playbook,
-            body: { description },
-          })
+          .createProjectsLocationsAgentsPlaybooksVersions({ description, parent: playbook })
           .pipe(Effect.catchTag("Conflict", () => findByDescription(playbook, description)));
         current = created ?? undefined;
       }

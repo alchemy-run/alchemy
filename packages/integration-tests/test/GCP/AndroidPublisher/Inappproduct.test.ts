@@ -50,16 +50,13 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidpublisher.insertInappproducts({
+          sku: "alchemy_probe_iap",
+          defaultLanguage: "en-US",
+          purchaseType: "managedUser",
+          defaultPrice: { currency: "USD", priceMicros: "990000" },
+          listings: { "en-US": { title: "Alchemy Probe" } },
           packageName: probePackageName,
           autoConvertMissingPrices: true,
-          body: {
-            packageName: probePackageName,
-            sku: "alchemy_probe_iap",
-            defaultLanguage: "en-US",
-            purchaseType: "managedUser",
-            defaultPrice: { currency: "USD", priceMicros: "990000" },
-            listings: { "en-US": { title: "Alchemy Probe" } },
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

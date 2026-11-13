@@ -402,13 +402,11 @@ export const NetworkEdgeSecurityServiceProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNetworkEdgeSecurityServices({
+            name: networkEdgeSecurityServiceName,
+            description: desiredDescription,
+            securityPolicy: news.securityPolicy,
             project: env.project,
             region,
-            body: {
-              name: networkEdgeSecurityServiceName,
-              description: desiredDescription,
-              securityPolicy: news.securityPolicy,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -434,14 +432,12 @@ export const NetworkEdgeSecurityServiceProvider = () =>
           region,
           networkEdgeSecurityServiceName,
           compute.patchNetworkEdgeSecurityServices({
+            fingerprint: latest.fingerprint,
+            description: desiredDescription,
+            securityPolicy: news.securityPolicy ?? current.securityPolicy,
             project: env.project,
             region,
             networkEdgeSecurityService: networkEdgeSecurityServiceName,
-            body: {
-              fingerprint: latest.fingerprint,
-              description: desiredDescription,
-              securityPolicy: news.securityPolicy ?? current.securityPolicy,
-            },
           }),
         );
         current =

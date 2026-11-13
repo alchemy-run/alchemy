@@ -234,13 +234,11 @@ export const OrganizationExclusionProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createOrganizationsExclusions({
+            name: exclusionId,
+            filter: news.filter,
+            description: desiredDescription,
+            disabled: news.disabled === true ? true : undefined,
             parent: organization,
-            body: {
-              name: exclusionId,
-              filter: news.filter,
-              description: desiredDescription,
-              disabled: news.disabled === true ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -262,13 +260,11 @@ export const OrganizationExclusionProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchOrganizationsExclusions({
+          filter: news.filter,
+          description: desiredDescription,
+          disabled: desiredDisabled,
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter,
-            description: desiredDescription,
-            disabled: desiredDisabled,
-          },
         });
       }
 

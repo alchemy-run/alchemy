@@ -49,11 +49,7 @@ export default class BigQueryBindingsHost extends GCP.Function<BigQueryBindingsH
     return {
       fetch: serveProbes({
         query: query({ query: "SELECT id FROM queried" }),
-        insertAll: insertAll({
-          body: {
-            rows: [{ insertId: "insert-all", json: { id: "insert-all" } }],
-          },
-        }),
+        insertAll: insertAll({ rows: [{ insertId: "insert-all", json: { id: "insert-all" } }] }),
         listTabledata: listRows({ maxResults: 10 }),
         readTable: Effect.gen(function* () {
           const page = yield* read.list({ maxResults: 10 });

@@ -267,7 +267,7 @@ export const BuyersClientsUserProvider = () =>
 
       if (current === undefined) {
         current = yield* marketplace
-          .createBuyersClientsUsers({ parent, body: { email } })
+          .createBuyersClientsUsers({ email, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               listUsers(parent).pipe(Effect.map((users) => findUserByEmail(users, email))),

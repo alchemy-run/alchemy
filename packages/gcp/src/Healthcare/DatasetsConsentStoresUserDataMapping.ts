@@ -218,12 +218,10 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
       if (current === undefined) {
         current = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsConsentStoresUserDataMappings({
+            userId: news.userId,
+            dataId,
+            resourceAttributes: news.resourceAttributes,
             parent: consentStore,
-            body: {
-              userId: news.userId,
-              dataId,
-              resourceAttributes: news.resourceAttributes,
-            },
           }),
         );
       }
@@ -242,17 +240,15 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
       if (userChanged || dataChanged || attrsChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsConsentStoresUserDataMappings({
+            userId: news.userId,
+            dataId,
+            resourceAttributes: news.resourceAttributes,
             name: currentName,
             updateMask: updateMaskOf(
               userChanged ? "userId" : undefined,
               dataChanged ? "dataId" : undefined,
               attrsChanged ? "resourceAttributes" : undefined,
             ),
-            body: {
-              userId: news.userId,
-              dataId,
-              resourceAttributes: news.resourceAttributes,
-            },
           }),
         );
       }

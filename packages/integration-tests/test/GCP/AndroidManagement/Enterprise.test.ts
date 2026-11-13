@@ -50,11 +50,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidmanagement.createEnterprises({
+          enterpriseDisplayName: "Alchemy Android Management Probe",
           projectId,
           agreementAccepted: true,
-          body: {
-            enterpriseDisplayName: "Alchemy Android Management Probe",
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

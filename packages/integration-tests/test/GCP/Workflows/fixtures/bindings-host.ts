@@ -25,9 +25,7 @@ export default class WorkflowsBindingsHost extends GCP.Function<WorkflowsBinding
 
     return {
       fetch: serveProbes({
-        createExecution: createExecution({
-          body: { argument: JSON.stringify({ name: "alchemy" }) },
-        }),
+        createExecution: createExecution({ argument: JSON.stringify({ name: "alchemy" }) }),
       }),
     };
   }).pipe(Effect.provide(GCP.Workflows.CreateExecutionHttp)),

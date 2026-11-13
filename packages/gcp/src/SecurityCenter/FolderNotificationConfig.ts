@@ -259,9 +259,11 @@ export const FolderNotificationConfigProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createFoldersNotificationConfigs({
+            pubsubTopic,
+            description,
+            streamingConfig,
             parent: folder,
             configId,
-            body: { pubsubTopic, description, streamingConfig },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -280,9 +282,11 @@ export const FolderNotificationConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchFoldersNotificationConfigs({
+          pubsubTopic,
+          description,
+          streamingConfig,
           name: currentName,
           updateMask,
-          body: { pubsubTopic, description, streamingConfig },
         });
       }
 

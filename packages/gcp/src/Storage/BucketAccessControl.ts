@@ -212,10 +212,7 @@ export const BucketAccessControlProvider = () =>
 
       if (current === undefined) {
         const created = yield* storage
-          .insertBucketAccessControls({
-            bucket: bucketName,
-            body: { entity, role },
-          })
+          .insertBucketAccessControls({ entity, role, bucket: bucketName })
           .pipe(Effect.catchTag("Conflict", () => getByEntity(bucketName, entity)));
         current = created ?? undefined;
       }
@@ -228,11 +225,7 @@ export const BucketAccessControlProvider = () =>
       }
 
       if (normalizeRole(current.role ?? "") !== role) {
-        current = yield* storage.patchBucketAccessControls({
-          bucket: bucketName,
-          entity,
-          body: { entity, role },
-        });
+        current = yield* storage.patchBucketAccessControls({ role, bucket: bucketName, entity });
       }
 
       return toAttrs(current, bucketName);

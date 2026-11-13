@@ -736,10 +736,7 @@ const disableIfNeeded = (current: privateca.CertificateAuthority) => {
     return Effect.succeed(current);
   }
   return privateca
-    .disableProjectsLocationsCaPoolsCertificateAuthorities({
-      name,
-      body: { ignoreDependentResources: true },
-    })
+    .disableProjectsLocationsCaPoolsCertificateAuthorities({ ignoreDependentResources: true, name })
     .pipe(
       Effect.catchTags({
         NotFound: () => Effect.undefined,
@@ -761,25 +758,20 @@ const syncDesiredState = (
 ) => {
   const state = (current.state ?? "").toUpperCase();
   if (desired === "ENABLED" && (state === "STAGED" || state === "DISABLED")) {
-    return privateca
-      .enableProjectsLocationsCaPoolsCertificateAuthorities({
-        name,
-        body: {},
-      })
-      .pipe(
-        Effect.flatMap((operation) => waitForOperation(operation)),
-        Effect.catchTags({
-          BadRequest: () => Effect.void,
-          Conflict: () => Effect.void,
-        }),
-        Effect.flatMap(() => waitUntilSteady(name)),
-      );
+    return privateca.enableProjectsLocationsCaPoolsCertificateAuthorities({ name }).pipe(
+      Effect.flatMap((operation) => waitForOperation(operation)),
+      Effect.catchTags({
+        BadRequest: () => Effect.void,
+        Conflict: () => Effect.void,
+      }),
+      Effect.flatMap(() => waitUntilSteady(name)),
+    );
   }
   if (desired === "DISABLED" && (state === "STAGED" || state === "ENABLED")) {
     return privateca
       .disableProjectsLocationsCaPoolsCertificateAuthorities({
+        ignoreDependentResources: true,
         name,
-        body: { ignoreDependentResources: true },
       })
       .pipe(
         Effect.flatMap((operation) => waitForOperation(operation)),
@@ -808,11 +800,9 @@ const activateIfNeeded = (
   }
   return privateca
     .activateProjectsLocationsCaPoolsCertificateAuthorities({
+      pemCaCertificate: news.pemCaCertificate,
+      subordinateConfig: news.subordinateConfig,
       name,
-      body: {
-        pemCaCertificate: news.pemCaCertificate,
-        subordinateConfig: news.subordinateConfig,
-      },
     })
     .pipe(
       Effect.flatMap((operation) => waitForOperation(operation)),
@@ -825,15 +815,10 @@ const undeleteIfNeeded = (current: privateca.CertificateAuthority) => {
   if ((current.state ?? "").toUpperCase() !== "DELETED") {
     return Effect.succeed(current);
   }
-  return privateca
-    .undeleteProjectsLocationsCaPoolsCertificateAuthorities({
-      name,
-      body: {},
-    })
-    .pipe(
-      Effect.flatMap((operation) => waitForOperation(operation)),
-      Effect.flatMap(() => waitUntilSteady(name)),
-    );
+  return privateca.undeleteProjectsLocationsCaPoolsCertificateAuthorities({ name }).pipe(
+    Effect.flatMap((operation) => waitForOperation(operation)),
+    Effect.flatMap(() => waitUntilSteady(name)),
+  );
 };
 
 export const CertificateAuthorityProvider = () =>
@@ -981,9 +966,9 @@ export const CertificateAuthorityProvider = () =>
       if (current === undefined) {
         const created = yield* privateca
           .createProjectsLocationsCaPoolsCertificateAuthorities({
+            ...toCreateBody(news, certificateAuthorityId, desiredLabels),
             parent,
             certificateAuthorityId,
-            body: toCreateBody(news, certificateAuthorityId, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* runOperation(created);
@@ -1022,14 +1007,11 @@ export const CertificateAuthorityProvider = () =>
 
         const patched = yield* privateca
           .patchProjectsLocationsCaPoolsCertificateAuthorities({
+            labels: desiredLabels,
+            userDefinedAccessUrls: news.userDefinedAccessUrls,
+            subordinateConfig: news.subordinateConfig,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              userDefinedAccessUrls: news.userDefinedAccessUrls,
-              subordinateConfig: news.subordinateConfig,
-            },
           })
           .pipe(Effect.catchTag("BadRequest", () => Effect.undefined));
         yield* runOperation(patched);

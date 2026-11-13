@@ -433,20 +433,15 @@ export const NetworkProvider = () =>
         if (news.networkProfile !== undefined) {
           body.networkProfile = news.networkProfile;
         }
-        yield* compute
-          .insertNetworks({
-            project: env.project,
-            body,
-          })
-          .pipe(
-            Effect.catchTag("Conflict", () => Effect.undefined),
-            Effect.flatMap((inserted) => waitInsertedNetwork(env.project, networkName, inserted)),
-            Effect.retry({
-              while: (error) => error._tag === "NotFound" || error._tag === "GCP.OperationFailed",
-              times: 6,
-              schedule: Schedule.spaced("5 seconds"),
-            }),
-          );
+        yield* compute.insertNetworks({ ...body, project: env.project }).pipe(
+          Effect.catchTag("Conflict", () => Effect.undefined),
+          Effect.flatMap((inserted) => waitInsertedNetwork(env.project, networkName, inserted)),
+          Effect.retry({
+            while: (error) => error._tag === "NotFound" || error._tag === "GCP.OperationFailed",
+            times: 6,
+            schedule: Schedule.spaced("5 seconds"),
+          }),
+        );
         current = yield* requireNetwork(env.project, networkName);
       }
 
@@ -457,9 +452,9 @@ export const NetworkProvider = () =>
       const applyPatch = (body: compute.Network) =>
         Effect.gen(function* () {
           const patched = yield* compute.patchNetworks({
+            ...body,
             project: env.project,
             network: networkName,
-            body,
           });
           yield* waitGlobalOperation(env.project, patched);
           return yield* requireNetwork(env.project, networkName);

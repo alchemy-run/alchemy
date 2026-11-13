@@ -242,11 +242,7 @@ export const EnvironmentsKeystoreProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsEnvironmentsKeystores({
-            parent,
-            name: keystoreId,
-            body: { name: keystoreId },
-          })
+          .createOrganizationsEnvironmentsKeystores({ parent, name: keystoreId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }

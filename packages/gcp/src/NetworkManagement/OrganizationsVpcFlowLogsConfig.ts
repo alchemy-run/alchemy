@@ -504,20 +504,18 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
       if (current === undefined) {
         const created = yield* networkmanagement
           .createOrganizationsLocationsVpcFlowLogsConfigs({
+            description: news.description,
+            labels: desiredLabels,
+            state: createState,
+            aggregationInterval,
+            flowSampling,
+            metadata,
+            metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
+            filterExpr,
+            crossProjectMetadata,
+            ...target,
             parent: organizationParent(organization, location),
             vpcFlowLogsConfigId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              state: createState,
-              aggregationInterval,
-              flowSampling,
-              metadata,
-              metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
-              filterExpr,
-              crossProjectMetadata,
-              ...target,
-            },
           })
           .pipe(
             Effect.retry({
@@ -561,20 +559,17 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkmanagement.patchOrganizationsLocationsVpcFlowLogsConfigs({
+          labels: desiredLabels,
+          description: news.description,
+          state,
+          aggregationInterval,
+          flowSampling,
+          metadata,
+          metadataFields,
+          filterExpr,
+          crossProjectMetadata,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            state,
-            aggregationInterval,
-            flowSampling,
-            metadata,
-            metadataFields,
-            filterExpr,
-            crossProjectMetadata,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

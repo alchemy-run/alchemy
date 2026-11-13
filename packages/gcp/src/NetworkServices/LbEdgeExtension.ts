@@ -401,15 +401,13 @@ export const LbEdgeExtensionProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsLbEdgeExtensions({
+            labels: desiredLabels,
+            description: news.description,
+            forwardingRules: desiredRules,
+            extensionChains: desiredChains,
+            loadBalancingScheme,
             parent: parentOf(env.project, location),
             lbEdgeExtensionId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              forwardingRules: desiredRules,
-              extensionChains: desiredChains,
-              loadBalancingScheme,
-            },
           })
           .pipe(
             Effect.retry({
@@ -441,16 +439,13 @@ export const LbEdgeExtensionProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsLbEdgeExtensions({
+          labels: desiredLabels,
+          description: news.description,
+          forwardingRules: desiredRules,
+          extensionChains: desiredChains,
+          loadBalancingScheme,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            forwardingRules: desiredRules,
-            extensionChains: desiredChains,
-            loadBalancingScheme,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

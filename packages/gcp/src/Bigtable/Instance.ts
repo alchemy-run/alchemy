@@ -414,17 +414,15 @@ export const InstanceProvider = () =>
         }
         const created = yield* bigtable
           .createProjectsInstances({
-            parent: `projects/${env.project}`,
-            body: {
-              instanceId,
-              instance: {
-                displayName,
-                type,
-                edition,
-                labels: desiredLabels,
-              },
-              clusters: clusterMap,
+            instanceId,
+            instance: {
+              displayName,
+              type,
+              edition,
+              labels: desiredLabels,
             },
+            clusters: clusterMap,
+            parent: `projects/${env.project}`,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -457,14 +455,12 @@ export const InstanceProvider = () =>
           editionChanged ? "edition" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched = yield* bigtable.partialUpdateInstanceProjectsInstances({
+          displayName,
+          type,
+          edition,
+          labels: desiredLabels,
           name,
           updateMask: mask.join(","),
-          body: {
-            displayName,
-            type,
-            edition,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

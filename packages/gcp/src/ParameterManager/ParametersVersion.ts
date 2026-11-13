@@ -383,9 +383,9 @@ export const ParametersVersionProvider = () =>
         }
         const created = yield* parametermanager
           .createProjectsLocationsParametersVersions({
+            ...createBody(desiredPayload, desiredDisabled),
             parent: parameter,
             parameterVersionId,
-            body: createBody(desiredPayload, desiredDisabled),
           })
           .pipe(
             Effect.retry({
@@ -405,12 +405,9 @@ export const ParametersVersionProvider = () =>
 
       if ((current.disabled === true) !== desiredDisabled) {
         yield* parametermanager.patchProjectsLocationsParametersVersions({
+          disabled: desiredDisabled,
           name,
           updateMask: "disabled",
-          body: {
-            name,
-            disabled: desiredDisabled,
-          },
         });
         current = (yield* getVersion(name)) ?? current;
       }

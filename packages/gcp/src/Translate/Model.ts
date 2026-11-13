@@ -244,10 +244,7 @@ export const ModelProvider = () =>
 
       if (current === undefined) {
         const operation = yield* retryTransient(
-          translate.createProjectsLocationsModels({
-            parent,
-            body: { displayName, dataset },
-          }),
+          translate.createProjectsLocationsModels({ displayName, dataset, parent }),
         );
         // Training a custom model takes hours.
         const done = yield* waitForOperation(operation, { budget: "12 hours" });

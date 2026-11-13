@@ -297,10 +297,7 @@ export const MattersHoldProvider = () =>
 
       if (current === undefined) {
         const created = yield* vault
-          .createMattersHolds({
-            matterId,
-            body: desired,
-          })
+          .createMattersHolds({ ...desired, matterId })
           .pipe(Effect.catchTag("Conflict", () => findHoldByName(matterId, name)));
         current = created ?? undefined;
       }
@@ -321,13 +318,11 @@ export const MattersHoldProvider = () =>
 
       if (queryChanged || accountsChanged || orgUnitChanged) {
         current = yield* vault.updateMattersHolds({
+          query: news.query ?? current.query,
+          accounts: accounts ?? current.accounts,
+          orgUnit: news.orgUnit ?? current.orgUnit,
           matterId,
           holdId,
-          body: {
-            query: news.query ?? current.query,
-            accounts: accounts ?? current.accounts,
-            orgUnit: news.orgUnit ?? current.orgUnit,
-          },
         });
       }
 

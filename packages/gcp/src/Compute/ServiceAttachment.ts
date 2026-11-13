@@ -621,23 +621,21 @@ export const ServiceAttachmentProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertServiceAttachments({
+            name: serviceAttachmentName,
+            description: desiredDescription,
+            targetService,
+            natSubnets,
+            connectionPreference,
+            enableProxyProtocol,
+            consumerAcceptLists: news.consumerAcceptLists,
+            consumerRejectLists: news.consumerRejectLists,
+            reconcileConnections: news.reconcileConnections,
+            propagatedConnectionLimit: news.propagatedConnectionLimit,
+            natIpsPerEndpoint: news.natIpsPerEndpoint,
+            domainNames: news.domainNames,
+            metadata: desiredLabels,
             project: env.project,
             region,
-            body: {
-              name: serviceAttachmentName,
-              description: desiredDescription,
-              targetService,
-              natSubnets,
-              connectionPreference,
-              enableProxyProtocol,
-              consumerAcceptLists: news.consumerAcceptLists,
-              consumerRejectLists: news.consumerRejectLists,
-              reconcileConnections: news.reconcileConnections,
-              propagatedConnectionLimit: news.propagatedConnectionLimit,
-              natIpsPerEndpoint: news.natIpsPerEndpoint,
-              domainNames: news.domainNames,
-              metadata: desiredLabels,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -697,25 +695,23 @@ export const ServiceAttachmentProvider = () =>
           region,
           serviceAttachmentName,
           compute.patchServiceAttachments({
+            name: serviceAttachmentName,
+            fingerprint: latest.fingerprint,
+            description: desiredDescription,
+            targetService,
+            natSubnets,
+            connectionPreference,
+            enableProxyProtocol,
+            consumerAcceptLists: news.consumerAcceptLists ?? current.consumerAcceptLists,
+            consumerRejectLists: news.consumerRejectLists ?? current.consumerRejectLists,
+            reconcileConnections: news.reconcileConnections ?? current.reconcileConnections,
+            propagatedConnectionLimit:
+              news.propagatedConnectionLimit ?? current.propagatedConnectionLimit,
+            natIpsPerEndpoint: news.natIpsPerEndpoint ?? current.natIpsPerEndpoint,
+            metadata: desiredLabels,
             project: env.project,
             region,
             serviceAttachment: serviceAttachmentName,
-            body: {
-              name: serviceAttachmentName,
-              fingerprint: latest.fingerprint,
-              description: desiredDescription,
-              targetService,
-              natSubnets,
-              connectionPreference,
-              enableProxyProtocol,
-              consumerAcceptLists: news.consumerAcceptLists ?? current.consumerAcceptLists,
-              consumerRejectLists: news.consumerRejectLists ?? current.consumerRejectLists,
-              reconcileConnections: news.reconcileConnections ?? current.reconcileConnections,
-              propagatedConnectionLimit:
-                news.propagatedConnectionLimit ?? current.propagatedConnectionLimit,
-              natIpsPerEndpoint: news.natIpsPerEndpoint ?? current.natIpsPerEndpoint,
-              metadata: desiredLabels,
-            },
           }),
         ).pipe(
           Effect.retry({

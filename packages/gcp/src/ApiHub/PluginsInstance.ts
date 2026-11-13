@@ -390,16 +390,14 @@ export const PluginsInstanceProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsPluginsInstances({
+            displayName,
+            actions,
+            authConfig: news.authConfig,
+            additionalConfig: news.additionalConfig,
+            sourceProjectId: news.sourceProjectId,
+            sourceEnvironmentsConfig: news.sourceEnvironmentsConfig,
             parent: pluginName,
             pluginInstanceId,
-            body: {
-              displayName,
-              actions,
-              authConfig: news.authConfig,
-              additionalConfig: news.additionalConfig,
-              sourceProjectId: news.sourceProjectId,
-              sourceEnvironmentsConfig: news.sourceEnvironmentsConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -430,13 +428,10 @@ export const PluginsInstanceProvider = () =>
 
       if (updateMask.length > 0) {
         ready = yield* apihub.patchProjectsLocationsPluginsInstances({
+          displayName,
+          actions,
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            displayName,
-            actions,
-          },
         });
       }
 

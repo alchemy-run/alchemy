@@ -438,14 +438,12 @@ export const SecurityGatewayProvider = () =>
       if (current === undefined) {
         const created = yield* beyondcorp
           .createProjectsLocationsSecurityGateways({
+            displayName: desiredDisplayName,
+            hubs,
+            serviceDiscovery: news.serviceDiscovery,
+            proxyProtocolConfig: news.proxyProtocolConfig,
             parent: parentOf(env.project, location),
             securityGatewayId,
-            body: {
-              displayName: desiredDisplayName,
-              hubs,
-              serviceDiscovery: news.serviceDiscovery,
-              proxyProtocolConfig: news.proxyProtocolConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -467,12 +465,10 @@ export const SecurityGatewayProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* beyondcorp.patchProjectsLocationsSecurityGateways({
+          displayName: desiredDisplayName,
+          hubs,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            displayName: desiredDisplayName,
-            hubs,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

@@ -327,17 +327,15 @@ export const DiscoveryClientProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsDiscoveryClients({
+            source,
+            serviceAccount: news.serviceAccount,
+            displayName,
+            description: news.description,
+            ttl: news.ttl,
+            expireTime: news.expireTime,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             discoveryClientId,
-            body: {
-              source,
-              serviceAccount: news.serviceAccount,
-              displayName,
-              description: news.description,
-              ttl: news.ttl,
-              expireTime: news.expireTime,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -367,16 +365,13 @@ export const DiscoveryClientProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* mc.patchProjectsLocationsDiscoveryClients({
+          displayName,
+          description: news.description,
+          serviceAccount: news.serviceAccount,
+          expireTime: news.expireTime,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description: news.description,
-            serviceAccount: news.serviceAccount,
-            expireTime: news.expireTime,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

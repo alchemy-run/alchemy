@@ -280,13 +280,11 @@ export const EntryGroupProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsEntryGroups({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             entryGroupId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             retryQuota,
@@ -311,6 +309,10 @@ export const EntryGroupProvider = () =>
       if (labelsChanged || descriptionChanged || displayNameChanged) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsEntryGroups({
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            displayName: news.displayName,
             name: current.name ?? name,
             updateMask: [
               labelsChanged ? "labels" : undefined,
@@ -319,13 +321,6 @@ export const EntryGroupProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              displayName: news.displayName,
-            },
           }),
         );
         yield* waitForOperation(operation);

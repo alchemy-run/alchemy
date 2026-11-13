@@ -411,18 +411,16 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsNetworkPoliciesExternalAccessRules({
+            priority,
+            action,
+            ipProtocol,
+            sourceIpRanges,
+            destinationIpRanges,
+            sourcePorts,
+            destinationPorts,
+            description: desiredDescription,
             parent,
             externalAccessRuleId: ruleId,
-            body: {
-              priority,
-              action,
-              ipProtocol,
-              sourceIpRanges,
-              destinationIpRanges,
-              sourcePorts,
-              destinationPorts,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -473,19 +471,16 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* vmwareengine.patchProjectsLocationsNetworkPoliciesExternalAccessRules({
+            description: desiredDescription,
+            priority,
+            action,
+            ipProtocol,
+            sourceIpRanges,
+            destinationIpRanges,
+            sourcePorts,
+            destinationPorts,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              priority,
-              action,
-              ipProtocol,
-              sourceIpRanges,
-              destinationIpRanges,
-              sourcePorts,
-              destinationPorts,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

@@ -85,13 +85,11 @@ export default class DocumentAIBindingsHost extends GCP.Function<DocumentAIBindi
       fetch: serveProbes({
         getProcessor: getProcessor(),
         process: process({
-          body: {
-            rawDocument: {
-              content: btoa(MINIMAL_PDF),
-              mimeType: "application/pdf",
-            },
-            skipHumanReview: true,
+          rawDocument: {
+            content: btoa(MINIMAL_PDF),
+            mimeType: "application/pdf",
           },
+          skipHumanReview: true,
         }).pipe(
           Effect.map((processed) => ({
             text: processed.document?.text,

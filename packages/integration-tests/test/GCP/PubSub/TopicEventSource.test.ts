@@ -38,8 +38,8 @@ const subscriptionStatus = (subscription: string) =>
 const publishAndAwaitMarker = (topic: string, bucket: string, data: string) =>
   Effect.gen(function* () {
     const { messageIds = [] } = yield* pubsub.publishProjectsTopics({
+      messages: [{ data: btoa(data), attributes: { kind: "test" } }],
       topic,
-      body: { messages: [{ data: btoa(data), attributes: { kind: "test" } }] },
     });
     expect(messageIds.length).toEqual(1);
     const media = yield* makeObjectMedia;

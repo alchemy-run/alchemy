@@ -274,13 +274,11 @@ export const WorkloadIdentityPoolProvider = () =>
       // soft-deleted pool is restored rather than re-created.
       if (current === undefined) {
         const operation = yield* iam.createProjectsLocationsWorkloadIdentityPools({
+          displayName: news.displayName,
+          description: desiredDescription,
+          disabled: desiredDisabled,
           parent: `projects/${project}/locations/global`,
           workloadIdentityPoolId: poolId,
-          body: {
-            displayName: news.displayName,
-            description: desiredDescription,
-            disabled: desiredDisabled,
-          },
         });
         yield* waitForPoolOperation(operation);
       } else if (current.state === "DELETED") {
@@ -311,13 +309,11 @@ export const WorkloadIdentityPoolProvider = () =>
       ].filter((field): field is string => field !== undefined);
       if (updateMask.length > 0) {
         const operation = yield* iam.patchProjectsLocationsWorkloadIdentityPools({
+          displayName: news.displayName ?? "",
+          description: desiredDescription,
+          disabled: desiredDisabled,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName: news.displayName ?? "",
-            description: desiredDescription,
-            disabled: desiredDisabled,
-          },
         });
         yield* waitForPoolOperation(operation);
         current = {

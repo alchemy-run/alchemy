@@ -238,10 +238,7 @@ export const DeviceProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createDevices({
-            customer,
-            body: desired,
-          })
+          .createDevices({ ...desired, customer })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(

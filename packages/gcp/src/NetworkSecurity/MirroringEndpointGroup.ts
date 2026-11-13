@@ -414,14 +414,12 @@ export const MirroringEndpointGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsMirroringEndpointGroups({
+            mirroringDeploymentGroup,
+            type,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             mirroringEndpointGroupId,
-            body: {
-              mirroringDeploymentGroup,
-              type,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -452,13 +450,10 @@ export const MirroringEndpointGroupProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsMirroringEndpointGroups({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

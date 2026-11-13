@@ -303,16 +303,14 @@ export const BackupPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsBackupPolicies({
+            dailyBackupLimit,
+            weeklyBackupLimit,
+            monthlyBackupLimit,
+            enabled,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backupPolicyId,
-            body: {
-              dailyBackupLimit,
-              weeklyBackupLimit,
-              monthlyBackupLimit,
-              enabled,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -350,17 +348,14 @@ export const BackupPolicyProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsBackupPolicies({
+          labels: desiredLabels,
+          description: news.description,
+          dailyBackupLimit,
+          weeklyBackupLimit,
+          monthlyBackupLimit,
+          enabled,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            dailyBackupLimit,
-            weeklyBackupLimit,
-            monthlyBackupLimit,
-            enabled,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

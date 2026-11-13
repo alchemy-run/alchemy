@@ -43,13 +43,11 @@ export const ensureAgent = (project: string, displayName: string, location = DEF
       if (current !== undefined) return current;
     }
     return yield* dialogflow.createProjectsLocationsAgents({
+      displayName,
+      defaultLanguageCode: "en",
+      timeZone: "America/Los_Angeles",
+      description: displayName,
       parent,
-      body: {
-        displayName,
-        defaultLanguageCode: "en",
-        timeZone: "America/Los_Angeles",
-        description: displayName,
-      },
     });
   });
 
@@ -84,12 +82,10 @@ export const ensureEntityType = (agent: string, displayName: string) =>
       if (current !== undefined) return current;
     }
     return yield* dialogflow.createProjectsLocationsAgentsEntityTypes({
+      displayName,
+      kind: "KIND_MAP",
+      entities: [{ value: "blue", synonyms: ["blue", "navy"] }],
       parent: agent,
-      body: {
-        displayName,
-        kind: "KIND_MAP",
-        entities: [{ value: "blue", synonyms: ["blue", "navy"] }],
-      },
     });
   });
 

@@ -21,8 +21,8 @@ let project: string;
 const projectRoles = () =>
   resourcemanager
     .getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(
       Effect.map((policy) =>

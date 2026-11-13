@@ -222,11 +222,9 @@ export const DatasetProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasets({
+            timeZone: news.timeZone,
             parent,
             datasetId,
-            body: {
-              timeZone: news.timeZone,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -243,11 +241,9 @@ export const DatasetProvider = () =>
       if (!sameText(current.timeZone, news.timeZone)) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasets({
+            timeZone: news.timeZone,
             name: currentName,
             updateMask: "timeZone",
-            body: {
-              timeZone: news.timeZone,
-            },
           }),
         );
       }

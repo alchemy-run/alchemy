@@ -93,10 +93,7 @@ test.provider(
         true,
       );
 
-      const trust = yield* privateca.fetchCaCertsProjectsLocationsCaPools({
-        caPool: created.name,
-        body: {},
-      });
+      const trust = yield* privateca.fetchCaCertsProjectsLocationsCaPools({ caPool: created.name });
       // A pool without certificate authorities has no trust anchors.
       expect(trust.caCerts ?? []).toEqual([]);
 

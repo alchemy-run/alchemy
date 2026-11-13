@@ -520,10 +520,7 @@ export const deleteFolderTree = (name: string) =>
   dataform.deleteProjectsLocationsFolders({ name }).pipe(
     Effect.catchTag("Conflict", () =>
       dataform
-        .deleteTreeProjectsLocationsFolders({
-          name,
-          body: { force: true },
-        })
+        .deleteTreeProjectsLocationsFolders({ force: true, name })
         .pipe(Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true }))),
     ),
     Effect.catchTag("NotFound", () => Effect.void),
@@ -534,10 +531,7 @@ export const deleteTeamFolderTree = (name: string) =>
   dataform.deleteProjectsLocationsTeamFolders({ name }).pipe(
     Effect.catchTag("Conflict", () =>
       dataform
-        .deleteTreeProjectsLocationsTeamFolders({
-          name,
-          body: { force: true },
-        })
+        .deleteTreeProjectsLocationsTeamFolders({ force: true, name })
         .pipe(Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true }))),
     ),
     Effect.catchTag("NotFound", () => Effect.void),

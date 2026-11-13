@@ -285,14 +285,12 @@ export const DependencyProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsDependencies({
+            description,
+            consumer,
+            supplier,
+            attributes: news.attributes,
             parent,
             dependencyId,
-            body: {
-              description,
-              consumer,
-              supplier,
-              attributes: news.attributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -307,12 +305,9 @@ export const DependencyProvider = () =>
 
       if (descriptionChanged) {
         current = yield* apihub.patchProjectsLocationsDependencies({
+          description,
           name: currentName,
           updateMask: updateMaskOf("description"),
-          body: {
-            name: currentName,
-            description,
-          },
         });
       }
 

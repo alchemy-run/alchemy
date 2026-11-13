@@ -387,11 +387,7 @@ export const RegionTargetHttpProxyProvider = () =>
           body.httpKeepAliveTimeoutSec = news.httpKeepAliveTimeoutSec;
         }
         yield* compute
-          .insertRegionTargetHttpProxies({
-            project: env.project,
-            region,
-            body,
-          })
+          .insertRegionTargetHttpProxies({ ...body, project: env.project, region })
           .pipe(
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {
@@ -413,10 +409,10 @@ export const RegionTargetHttpProxyProvider = () =>
       if (resourceTail(current.urlMap) !== resourceTail(desiredUrlMap)) {
         yield* compute
           .setUrlMapRegionTargetHttpProxies({
+            urlMap: desiredUrlMap,
             project: env.project,
             region,
             targetHttpProxy: targetHttpProxyName,
-            body: { urlMap: desiredUrlMap },
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, targetHttpProxyName);

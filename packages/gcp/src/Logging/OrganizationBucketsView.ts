@@ -325,12 +325,10 @@ export const OrganizationBucketsViewProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createOrganizationsLocationsBucketsViews({
+            filter: news.filter,
+            description: desiredDescription,
             parent: bucket,
             viewId,
-            body: {
-              filter: news.filter,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -349,12 +347,10 @@ export const OrganizationBucketsViewProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchOrganizationsLocationsBucketsViews({
+          filter: news.filter ?? "",
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter ?? "",
-            description: desiredDescription,
-          },
         });
       }
 

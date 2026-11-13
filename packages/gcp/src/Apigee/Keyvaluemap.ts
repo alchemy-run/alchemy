@@ -157,14 +157,15 @@ const getOwnershipEntry = (mapName: string) =>
 const upsertOwnershipEntry = (mapName: string, marker: string) =>
   apigee
     .createOrganizationsKeyvaluemapsEntries({
+      name: OWNERSHIP_ENTRY,
+      value: marker,
       parent: mapName,
-      body: { name: OWNERSHIP_ENTRY, value: marker },
     })
     .pipe(
       Effect.catchTag("Conflict", () =>
         apigee.updateOrganizationsKeyvaluemapsEntries({
+          value: marker,
           name: `${mapName}/entries/${OWNERSHIP_ENTRY}`,
-          body: { name: OWNERSHIP_ENTRY, value: marker },
         }),
       ),
     );
@@ -239,12 +240,10 @@ export const KeyvaluemapProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsKeyvaluemaps({
+            name: mapId,
+            encrypted: true,
+            maskedValues: desiredMasked ? true : undefined,
             parent: orgParent(organization),
-            body: {
-              name: mapId,
-              encrypted: true,
-              maskedValues: desiredMasked ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -257,12 +256,9 @@ export const KeyvaluemapProvider = () =>
       const currentName = current.name?.includes("/") ? current.name : name;
       if ((current.maskedValues === true) !== desiredMasked) {
         current = yield* apigee.updateOrganizationsKeyvaluemaps({
+          encrypted: true,
+          maskedValues: desiredMasked,
           name: currentName,
-          body: {
-            name: mapId,
-            encrypted: true,
-            maskedValues: desiredMasked,
-          },
         });
       }
 

@@ -252,7 +252,7 @@ export const InboundSsoAssignmentProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createInboundSsoAssignments({ body: desired })
+          .createInboundSsoAssignments({ ...desired })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
@@ -309,15 +309,13 @@ export const InboundSsoAssignmentProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         const patched = yield* cloudidentity.patchInboundSsoAssignments({
+          ssoMode: news.ssoMode,
+          rank: news.rank,
+          samlSsoInfo: news.samlSsoInfo,
+          oidcSsoInfo: news.oidcSsoInfo,
+          signInBehavior: news.signInBehavior,
           name,
           updateMask,
-          body: {
-            ssoMode: news.ssoMode,
-            rank: news.rank,
-            samlSsoInfo: news.samlSsoInfo,
-            oidcSsoInfo: news.oidcSsoInfo,
-            signInBehavior: news.signInBehavior,
-          },
         });
         yield* waitForOperation(patched).pipe(
           Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),

@@ -282,16 +282,14 @@ export const CatalogsModelProvider = () =>
       if (current === undefined) {
         const operation = yield* retail
           .createProjectsLocationsCatalogsModels({
+            name,
+            displayName,
+            type,
+            optimizationObjective: news.optimizationObjective,
+            trainingState: "TRAINING",
+            periodicTuningState: news.periodicTuningState,
+            filteringOption: news.filteringOption,
             parent: catalog,
-            body: {
-              name,
-              displayName,
-              type,
-              optimizationObjective: news.optimizationObjective,
-              trainingState: "TRAINING",
-              periodicTuningState: news.periodicTuningState,
-              filteringOption: news.filteringOption,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -328,13 +326,10 @@ export const CatalogsModelProvider = () =>
       );
       if (mask.length > 0) {
         current = yield* retail.patchProjectsLocationsCatalogsModels({
+          filteringOption: news.filteringOption,
+          periodicTuningState: news.periodicTuningState,
           name: resource,
           updateMask: mask,
-          body: {
-            name: resource,
-            filteringOption: news.filteringOption,
-            periodicTuningState: news.periodicTuningState,
-          },
         });
       }
 

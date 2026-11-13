@@ -443,20 +443,14 @@ export const FutureReservationProvider = () =>
       let current = yield* getByName(env.project, zone, futureReservationName);
 
       if (current === undefined) {
-        yield* compute
-          .insertFutureReservations({
-            project: env.project,
-            zone,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitZoneOperation(env.project, zone, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertFutureReservations({ ...desired, project: env.project, zone }).pipe(
+          Effect.flatMap((operation) =>
+            waitZoneOperation(env.project, zone, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, zone, futureReservationName);
       }
 
@@ -470,10 +464,10 @@ export const FutureReservationProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .updateFutureReservations({
+            ...desired,
             project: env.project,
             zone,
             futureReservation: futureReservationName,
-            body: desired,
           })
           .pipe(Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)));
         current = yield* getByName(env.project, zone, futureReservationName);

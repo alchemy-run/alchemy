@@ -41,11 +41,9 @@ export default class MlBindingsHost extends GCP.Function<MlBindingsHost>()(
       fetch: serveProbes({
         getModel: getModel(),
         predict: predict({
-          body: {
-            httpBody: {
-              contentType: "application/json",
-              data: btoa(JSON.stringify({ instances: [{ f1: 1 }] })),
-            },
+          httpBody: {
+            contentType: "application/json",
+            data: btoa(JSON.stringify({ instances: [{ f1: 1 }] })),
           },
         }),
         ...versionRoutes,

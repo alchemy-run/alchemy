@@ -355,10 +355,7 @@ export const AgentsPlaybooksExampleProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsPlaybooksExamples({
-            parent: playbook,
-            body,
-          })
+          .createProjectsLocationsAgentsPlaybooksExamples({ ...body, parent: playbook })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(playbook, displayName)));
         current = created ?? undefined;
       }
@@ -387,10 +384,8 @@ export const AgentsPlaybooksExampleProvider = () =>
         outputChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsPlaybooksExamples({
-          // Repeated fields named in an update mask (`actions`) are
-          // silently ignored; the body is complete, so replace it whole.
+          ...body,
           name: currentName,
-          body: { ...body, name: currentName },
         });
       }
 

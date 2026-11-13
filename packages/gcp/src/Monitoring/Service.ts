@@ -508,11 +508,7 @@ export const ServiceProvider = () =>
 
       if (current === undefined) {
         const created = yield* monitoring
-          .createServices({
-            parent: parentOf(env.project),
-            serviceId,
-            body,
-          })
+          .createServices({ ...body, parent: parentOf(env.project), serviceId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               getByName(name).pipe(
@@ -545,12 +541,9 @@ export const ServiceProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchServices({
+          ...body,
           name: resource,
           updateMask: updateMask.join(","),
-          body: {
-            ...body,
-            name: resource,
-          },
         });
       }
 

@@ -191,10 +191,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
 
       if (current === undefined) {
         const created = yield* iap
-          .createProjectsBrandsIdentityAwareProxyClients({
-            parent: brand,
-            body: { displayName },
-          })
+          .createProjectsBrandsIdentityAwareProxyClients({ displayName, parent: brand })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedClient(env.project, id, brand, userDisplayName),

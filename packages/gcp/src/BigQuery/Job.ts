@@ -489,8 +489,8 @@ export const JobProvider = () =>
       if (current === undefined) {
         const created = yield* bigquery
           .insertJobs({
+            ...toJobBody(project, jobId, location, news, desiredLabels),
             projectId: project,
-            body: toJobBody(project, jobId, location, news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => getByRef(project, jobId, location)));
         current = created ?? undefined;

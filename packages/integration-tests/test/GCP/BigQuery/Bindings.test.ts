@@ -36,17 +36,15 @@ let tables: {
 const runQuery = (sql: string) =>
   bigquery
     .queryJobs({
-      projectId: dataset.project,
-      body: {
-        query: sql,
-        useLegacySql: false,
-        location: dataset.location,
-        defaultDataset: {
-          projectId: dataset.project,
-          datasetId: dataset.datasetId,
-        },
-        timeoutMs: 60_000,
+      query: sql,
+      useLegacySql: false,
+      location: dataset.location,
+      defaultDataset: {
+        projectId: dataset.project,
+        datasetId: dataset.datasetId,
       },
+      timeoutMs: 60_000,
+      projectId: dataset.project,
     })
     .pipe(
       Effect.map((response) => {
@@ -65,8 +63,8 @@ const seed = (table: string) => runQuery(`INSERT INTO ${table} (id) VALUES ('see
 const projectGrantsOf = (account: string) =>
   resourcemanager
     .getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${dataset.project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(
       Effect.map((policy) =>
@@ -85,10 +83,7 @@ const JOB_USER = [{ role: "roles/bigquery.jobUser", condition: undefined }];
 /** Roles `account` holds on a table's own IAM policy. */
 const tableRolesOf = (table: string, account: string) =>
   bigquery
-    .getIamPolicyTables({
-      resource: table,
-      body: { options: { requestedPolicyVersion: 1 } },
-    })
+    .getIamPolicyTables({ options: { requestedPolicyVersion: 1 }, resource: table })
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])

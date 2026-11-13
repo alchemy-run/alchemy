@@ -347,9 +347,9 @@ export const GoldengateConnectionAssignmentProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsGoldengateConnectionAssignments({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             goldengateConnectionAssignmentId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             retryQuota,

@@ -29,11 +29,9 @@ export const ValidateMessageHttp = Layer.effect(
         request: ValidateMessageRequest,
       ) {
         return yield* validate({
+          ...request,
+          name: yield* name,
           parent: `projects/${yield* project}`,
-          body: {
-            ...request,
-            name: yield* name,
-          },
         });
       });
     });

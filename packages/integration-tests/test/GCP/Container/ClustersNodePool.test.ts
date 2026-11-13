@@ -124,26 +124,24 @@ const withHostCluster = <A, E, R>(project: string, body: Effect.Effect<A, E, R>)
     if (existing?.status === "RUNNING") return;
     if (existing !== undefined) yield* deleteHost;
     const created = yield* container.createProjectsZonesClusters({
+      cluster: {
+        name: HOST_CLUSTER_ID,
+        ipAllocationPolicy: { useIpAliases: true },
+        nodePools: [
+          {
+            name: "default-pool",
+            initialNodeCount: 1,
+            config: {
+              machineType: "e2-medium",
+              diskSizeGb: 20,
+              diskType: "pd-standard",
+              spot: true,
+            },
+          },
+        ],
+      },
       projectId: project,
       zone: HOST_ZONE,
-      body: {
-        cluster: {
-          name: HOST_CLUSTER_ID,
-          ipAllocationPolicy: { useIpAliases: true },
-          nodePools: [
-            {
-              name: "default-pool",
-              initialNodeCount: 1,
-              config: {
-                machineType: "e2-medium",
-                diskSizeGb: 20,
-                diskType: "pd-standard",
-                spot: true,
-              },
-            },
-          ],
-        },
-      },
     });
     yield* waitClusterOp(project, HOST_ZONE, created);
   });
@@ -283,14 +281,12 @@ test.provider.skipIf(!runLifecycle)(
               .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
             if (existingForeign === undefined) {
               const op = yield* container.createProjectsZonesClustersNodePools({
-                ...poolRef,
-                body: {
-                  nodePool: {
-                    name: foreignId,
-                    initialNodeCount: POOL_NODE_COUNT,
-                    config: { machineType: "e2-medium", diskSizeGb: 20, spot: true },
-                  },
+                nodePool: {
+                  name: foreignId,
+                  initialNodeCount: POOL_NODE_COUNT,
+                  config: { machineType: "e2-medium", diskSizeGb: 20, spot: true },
                 },
+                ...poolRef,
               });
               yield* waitClusterOp(project, hostZone, op);
             }

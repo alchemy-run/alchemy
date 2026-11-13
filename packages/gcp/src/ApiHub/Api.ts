@@ -323,11 +323,7 @@ export const ApiProvider = () =>
 
       if (current === undefined) {
         const created = yield* apihub
-          .createProjectsLocationsApis({
-            parent,
-            apiId,
-            body: desired,
-          })
+          .createProjectsLocationsApis({ ...desired, parent, apiId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -377,6 +373,7 @@ export const ApiProvider = () =>
         technicalChanged
       ) {
         current = yield* apihub.patchProjectsLocationsApis({
+          ...desired,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -395,7 +392,6 @@ export const ApiProvider = () =>
             functionalChanged ? "api_functional_requirements" : undefined,
             technicalChanged ? "api_technical_requirements" : undefined,
           ),
-          body: { name: currentName, ...desired },
         });
       }
 

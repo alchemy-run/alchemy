@@ -365,10 +365,7 @@ export const RolloutPlanProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* compute
-          .insertRolloutPlans({
-            project: env.project,
-            body: desired,
-          })
+          .insertRolloutPlans({ ...desired, project: env.project })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {

@@ -203,8 +203,9 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsKeyvaluemapsEntries({
+            name: entryId,
+            value: news.value,
             parent,
-            body: { name: entryId, value: news.value },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -216,8 +217,8 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
 
       if (!sameText(current.value, news.value)) {
         current = yield* apigee.updateOrganizationsEnvironmentsKeyvaluemapsEntries({
+          value: news.value,
           name,
-          body: { name: entryId, value: news.value },
         });
       }
 

@@ -58,9 +58,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         apihub.createProjectsLocationsApiHubInstances({
+          config: { vertexLocation: "us" },
           parent: `projects/${project}/locations/${location}`,
           apiHubInstanceId: "alchemy-apihub-probe",
-          body: { config: { vertexLocation: "us" } },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

@@ -337,9 +337,9 @@ export const NoteProvider = () =>
           create: (request) =>
             retryTransient(
               containeranalysis.createProjectsNotes({
+                ...request.body,
                 parent: request.parent,
                 noteId: request.noteId,
-                body: request.body,
               }),
             ).pipe(
               Effect.catchTag("Conflict", () =>
@@ -349,9 +349,9 @@ export const NoteProvider = () =>
           patch: (request) =>
             retryTransient(
               containeranalysis.patchProjectsNotes({
+                ...request.body,
                 name: request.name,
                 updateMask: request.updateMask,
-                body: request.body,
               }),
             ),
         },

@@ -244,9 +244,9 @@ export const BigQueryExportProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createProjectsBigQueryExports({
+            ...body,
             parent: `projects/${env.project}`,
             bigQueryExportId: exportId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -268,12 +268,9 @@ export const BigQueryExportProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchProjectsBigQueryExports({
+          ...body,
           name: currentName,
           updateMask,
-          body: {
-            ...body,
-            name: currentName,
-          },
         });
       }
 

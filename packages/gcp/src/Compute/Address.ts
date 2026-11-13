@@ -481,22 +481,20 @@ export const AddressProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertAddresses({
+            name: addressName,
+            description: news.description,
+            address: news.address,
+            addressType: news.addressType,
+            ipVersion: news.ipVersion,
+            prefixLength: news.prefixLength,
+            purpose: news.purpose,
+            network: news.network,
+            subnetwork: news.subnetwork,
+            networkTier: news.networkTier,
+            ipv6EndpointType: news.ipv6EndpointType,
+            ipCollection: news.ipCollection,
             project: env.project,
             region,
-            body: {
-              name: addressName,
-              description: news.description,
-              address: news.address,
-              addressType: news.addressType,
-              ipVersion: news.ipVersion,
-              prefixLength: news.prefixLength,
-              purpose: news.purpose,
-              network: news.network,
-              subnetwork: news.subnetwork,
-              networkTier: news.networkTier,
-              ipv6EndpointType: news.ipv6EndpointType,
-              ipCollection: news.ipCollection,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -525,13 +523,11 @@ export const AddressProvider = () =>
           const latest = (yield* getByName(env.project, region, addressName)) ?? resolved;
           yield* compute
             .setLabelsAddresses({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               region,
               resource: addressName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             })
             .pipe(
               Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

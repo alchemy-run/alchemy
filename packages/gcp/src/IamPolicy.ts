@@ -155,12 +155,7 @@ const computeInstance = (name: string): IamPolicyTarget => {
       optionsRequestedPolicyVersion: 3,
     }),
     set: (policy) =>
-      compute.setIamPolicyInstances({
-        project,
-        zone,
-        resource,
-        body: { policy: policy as compute.Policy },
-      }),
+      compute.setIamPolicyInstances({ policy: policy as compute.Policy, project, zone, resource }),
   };
 };
 
@@ -231,17 +226,15 @@ const bigqueryDataset = (name: string): IamPolicyTarget => {
       read.pipe(
         Effect.flatMap((dataset) =>
           bigquery.patchDatasets({
+            etag: dataset.etag,
+            access: [
+              ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
+              ...(policy.bindings ?? []).flatMap((binding) =>
+                (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
+              ),
+            ],
             projectId,
             datasetId,
-            body: {
-              etag: dataset.etag,
-              access: [
-                ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
-                ...(policy.bindings ?? []).flatMap((binding) =>
-                  (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
-                ),
-              ],
-            },
           }),
         ),
       ),
@@ -358,10 +351,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
       optionsRequestedPolicyVersion: 3,
     }),
     set: (policy) =>
-      storage.setIamPolicyBuckets({
-        bucket: bucketName(name),
-        body: policy as storage.Policy,
-      }),
+      storage.setIamPolicyBuckets({ ...(policy as storage.Policy), bucket: bucketName(name) }),
   }),
   "workstations.workstation": queryStyle(
     workstations.getIamPolicyProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,

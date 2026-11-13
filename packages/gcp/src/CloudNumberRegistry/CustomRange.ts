@@ -356,17 +356,15 @@ export const CustomRangeProvider = () =>
       if (current === undefined) {
         const created = yield* cnr
           .createProjectsLocationsCustomRanges({
+            realm,
+            parentRange,
+            ipv4CidrRange: news.ipv4CidrRange,
+            ipv6CidrRange: news.ipv6CidrRange,
+            description: news.description,
+            attributes,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             customRangeId,
-            body: {
-              realm,
-              parentRange,
-              ipv4CidrRange: news.ipv4CidrRange,
-              ipv6CidrRange: news.ipv6CidrRange,
-              description: news.description,
-              attributes,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -391,14 +389,11 @@ export const CustomRangeProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* cnr.patchProjectsLocationsCustomRanges({
+          labels: desiredLabels,
+          description: news.description,
+          attributes,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            attributes,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

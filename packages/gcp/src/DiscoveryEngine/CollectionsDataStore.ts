@@ -399,24 +399,22 @@ export const CollectionsDataStoreProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStores({
+            displayName,
+            industryVertical,
+            contentConfig,
+            solutionTypes,
+            aclEnabled: news.aclEnabled === true ? true : undefined,
+            kmsKeyName: news.kmsKeyName,
+            startingSchema: news.startingSchema,
+            servingConfigDataStore:
+              news.disabledForServing !== undefined
+                ? { disabledForServing: desiredDisabled }
+                : undefined,
             parent: collectionParent(env.project, location, collection),
             dataStoreId,
             skipDefaultSchemaCreation: news.skipDefaultSchemaCreation,
             createAdvancedSiteSearch: news.createAdvancedSiteSearch,
             disableCmek: news.disableCmek !== false,
-            body: {
-              displayName,
-              industryVertical,
-              contentConfig,
-              solutionTypes,
-              aclEnabled: news.aclEnabled === true ? true : undefined,
-              kmsKeyName: news.kmsKeyName,
-              startingSchema: news.startingSchema,
-              servingConfigDataStore:
-                news.disabledForServing !== undefined
-                  ? { disabledForServing: desiredDisabled }
-                  : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -437,6 +435,10 @@ export const CollectionsDataStoreProvider = () =>
 
       if (displayNameChanged || servingChanged) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStores({
+          displayName,
+          servingConfigDataStore: servingChanged
+            ? { disabledForServing: desiredDisabled }
+            : current.servingConfigDataStore,
           name: resource,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -444,13 +446,6 @@ export const CollectionsDataStoreProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: resource,
-            displayName,
-            servingConfigDataStore: servingChanged
-              ? { disabledForServing: desiredDisabled }
-              : current.servingConfigDataStore,
-          },
         });
       }
 

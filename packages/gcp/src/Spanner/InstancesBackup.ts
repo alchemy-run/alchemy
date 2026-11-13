@@ -443,16 +443,14 @@ export const InstancesBackupProvider = () =>
       if (current === undefined) {
         const created = yield* spanner
           .createProjectsInstancesBackups({
+            database,
+            expireTime,
+            versionTime: news.versionTime,
             parent,
             backupId,
             "encryptionConfig.encryptionType": news.encryptionConfig?.encryptionType,
             "encryptionConfig.kmsKeyName": news.encryptionConfig?.kmsKeyName,
             "encryptionConfig.kmsKeyNames": news.encryptionConfig?.kmsKeyNames,
-            body: {
-              database,
-              expireTime,
-              versionTime: news.versionTime,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.done === true) {
@@ -472,11 +470,9 @@ export const InstancesBackupProvider = () =>
       if (news.expireTime !== undefined && !expireEquals(current.expireTime, news.expireTime)) {
         current = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesBackups({
+            expireTime: news.expireTime,
             name,
             updateMask: "expire_time",
-            body: {
-              expireTime: news.expireTime,
-            },
           }),
         );
       }

@@ -217,11 +217,9 @@ export const RuntimeProjectAttachmentProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsRuntimeProjectAttachments({
+            runtimeProject,
             parent,
             runtimeProjectAttachmentId: attachmentId,
-            body: {
-              runtimeProject,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* getByName(name));

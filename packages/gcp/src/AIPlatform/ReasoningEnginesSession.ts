@@ -306,16 +306,14 @@ export const ReasoningEnginesSessionProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsReasoningEnginesSessions({
+            userId: news.userId,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            ttl: news.ttl,
+            expireTime: news.expireTime,
+            sessionState: news.sessionState,
             parent: news.parent,
             sessionId,
-            body: {
-              userId: news.userId,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              ttl: news.ttl,
-              expireTime: news.expireTime,
-              sessionState: news.sessionState,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -345,6 +343,10 @@ export const ReasoningEnginesSessionProvider = () =>
 
       if (labelsChanged || displayChanged || expireChanged || stateChanged) {
         current = yield* aiplatform.patchProjectsLocationsReasoningEnginesSessions({
+          displayName: news.displayName,
+          labels: desiredLabels,
+          expireTime: news.expireTime,
+          sessionState: news.sessionState,
           name: current.name ?? name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -354,13 +356,6 @@ export const ReasoningEnginesSessionProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            displayName: news.displayName,
-            labels: desiredLabels,
-            expireTime: news.expireTime,
-            sessionState: news.sessionState,
-          },
         });
       }
 

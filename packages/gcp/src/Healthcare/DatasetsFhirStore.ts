@@ -323,16 +323,14 @@ export const DatasetsFhirStoreProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsFhirStores({
+            version,
+            labels: desiredLabels,
+            enableUpdateCreate: news.enableUpdateCreate,
+            disableReferentialIntegrity: news.disableReferentialIntegrity,
+            disableResourceVersioning: news.disableResourceVersioning,
+            defaultSearchHandlingStrict: news.defaultSearchHandlingStrict,
             parent: dataset,
             fhirStoreId,
-            body: {
-              version,
-              labels: desiredLabels,
-              enableUpdateCreate: news.enableUpdateCreate,
-              disableReferentialIntegrity: news.disableReferentialIntegrity,
-              disableResourceVersioning: news.disableResourceVersioning,
-              defaultSearchHandlingStrict: news.defaultSearchHandlingStrict,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -355,17 +353,15 @@ export const DatasetsFhirStoreProvider = () =>
       if (labelsChanged || updateCreateChanged || searchChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsFhirStores({
+            labels: desiredLabels,
+            enableUpdateCreate: news.enableUpdateCreate,
+            defaultSearchHandlingStrict: news.defaultSearchHandlingStrict,
             name: currentName,
             updateMask: updateMaskOf(
               labelsChanged ? "labels" : undefined,
               updateCreateChanged ? "enableUpdateCreate" : undefined,
               searchChanged ? "defaultSearchHandlingStrict" : undefined,
             ),
-            body: {
-              labels: desiredLabels,
-              enableUpdateCreate: news.enableUpdateCreate,
-              defaultSearchHandlingStrict: news.defaultSearchHandlingStrict,
-            },
           }),
         );
       }

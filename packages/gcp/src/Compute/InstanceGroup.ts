@@ -292,12 +292,7 @@ const getByName = (project: string, zone: string, instanceGroup: string) =>
 
 const listMembers = (project: string, zone: string, instanceGroup: string) =>
   compute.listInstancesInstanceGroups
-    .items({
-      project,
-      zone,
-      instanceGroup,
-      body: { instanceState: "ALL" },
-    })
+    .items({ instanceState: "ALL", project, zone, instanceGroup })
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) =>
@@ -428,14 +423,12 @@ export const InstanceGroupProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInstanceGroups({
+            name: instanceGroupName,
+            description,
+            namedPorts: namedPorts.length > 0 ? namedPorts : undefined,
+            network,
             project: env.project,
             zone,
-            body: {
-              name: instanceGroupName,
-              description,
-              namedPorts: namedPorts.length > 0 ? namedPorts : undefined,
-              network,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -474,13 +467,11 @@ export const InstanceGroupProvider = () =>
           env.project,
           zone,
           compute.setNamedPortsInstanceGroups({
+            namedPorts,
+            fingerprint: current.fingerprint,
             project: env.project,
             zone,
             instanceGroup: instanceGroupName,
-            body: {
-              namedPorts,
-              fingerprint: current.fingerprint,
-            },
           }),
         ).pipe(
           Effect.retry({
@@ -506,12 +497,10 @@ export const InstanceGroupProvider = () =>
             env.project,
             zone,
             compute.addInstancesInstanceGroups({
+              instances: toAdd.map((instance) => ({ instance })),
               project: env.project,
               zone,
               instanceGroup: instanceGroupName,
-              body: {
-                instances: toAdd.map((instance) => ({ instance })),
-              },
             }),
           );
         }
@@ -520,12 +509,10 @@ export const InstanceGroupProvider = () =>
             env.project,
             zone,
             compute.removeInstancesInstanceGroups({
+              instances: toRemove.map((instance) => ({ instance })),
               project: env.project,
               zone,
               instanceGroup: instanceGroupName,
-              body: {
-                instances: toRemove.map((instance) => ({ instance })),
-              },
             }),
           );
         }

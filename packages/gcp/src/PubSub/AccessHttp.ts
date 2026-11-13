@@ -66,10 +66,7 @@ export const makeWriteTopicBinding = Effect.gen(function* () {
             const body = yield* Effect.sync(() => ({
               messages: messages.map(toPubsubMessage),
             }));
-            const response = yield* publish({
-              topic: yield* topicName,
-              body,
-            });
+            const response = yield* publish({ ...body, topic: yield* topicName });
             return response.messageIds ?? [];
           });
     return {
@@ -97,11 +94,9 @@ export const makeReadSubscriptionBinding = Effect.gen(function* () {
       pull: (options) =>
         Effect.gen(function* () {
           const response = yield* pull({
+            maxMessages: options?.maxMessages ?? 10,
+            returnImmediately: options?.returnImmediately ?? false,
             subscription: yield* subscriptionName,
-            body: {
-              maxMessages: options?.maxMessages ?? 10,
-              returnImmediately: options?.returnImmediately ?? false,
-            },
           });
           return yield* Effect.sync(() => (response.receivedMessages ?? []).map(decode));
         }),
@@ -109,18 +104,16 @@ export const makeReadSubscriptionBinding = Effect.gen(function* () {
         ackIds.length === 0
           ? Effect.void
           : Effect.gen(function* () {
-              yield* acknowledge({
-                subscription: yield* subscriptionName,
-                body: { ackIds: [...ackIds] },
-              });
+              yield* acknowledge({ ackIds: [...ackIds], subscription: yield* subscriptionName });
             }),
       modifyAckDeadline: (ackIds, seconds) =>
         ackIds.length === 0
           ? Effect.void
           : Effect.gen(function* () {
               yield* modifyAckDeadline({
+                ackIds: [...ackIds],
+                ackDeadlineSeconds: seconds,
                 subscription: yield* subscriptionName,
-                body: { ackIds: [...ackIds], ackDeadlineSeconds: seconds },
               });
             }),
     } satisfies ReadSubscriptionClient;

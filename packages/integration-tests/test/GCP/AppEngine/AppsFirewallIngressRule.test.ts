@@ -63,13 +63,11 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         appengine.createAppsFirewallIngressRules({
+          action: "DENY",
+          sourceRange: "203.0.113.0/24",
+          description: "Alchemy Appengine Probe",
+          priority: 12345,
           appsId: project,
-          body: {
-            action: "DENY",
-            sourceRange: "203.0.113.0/24",
-            description: "Alchemy Appengine Probe",
-            priority: 12345,
-          },
         }),
       );
       expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);

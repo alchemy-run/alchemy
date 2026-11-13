@@ -102,9 +102,9 @@ test.provider(
 
       const error = yield* Effect.flip(
         cloudbuild.createProjectsLocationsConnectionsRepositories({
+          remoteUri,
           parent: connection.name,
           repositoryId: "alchemy-probe-source",
-          body: { remoteUri },
         }),
       );
       expect(error._tag).toBe("BadRequest");

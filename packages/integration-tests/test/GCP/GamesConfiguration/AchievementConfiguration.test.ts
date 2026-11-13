@@ -48,20 +48,18 @@ test.provider.skipIf(!!applicationId)(
 
       const error = yield* Effect.flip(
         gamesConfiguration.insertAchievementConfigurations({
-          applicationId: probeApplicationId,
-          body: {
-            achievementType: "STANDARD",
-            initialState: "REVEALED",
-            draft: {
-              name: {
-                translations: [{ locale: "en-US", value: "Alchemy Probe" }],
-              },
-              description: {
-                translations: [{ locale: "en-US", value: "probe" }],
-              },
-              pointValue: 5,
+          achievementType: "STANDARD",
+          initialState: "REVEALED",
+          draft: {
+            name: {
+              translations: [{ locale: "en-US", value: "Alchemy Probe" }],
             },
+            description: {
+              translations: [{ locale: "en-US", value: "probe" }],
+            },
+            pointValue: 5,
           },
+          applicationId: probeApplicationId,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

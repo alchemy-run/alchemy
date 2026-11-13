@@ -456,13 +456,11 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       if (current === undefined) {
         const created = yield* developerconnect
           .createProjectsLocationsConnectionsGitRepositoryLinks({
+            cloneUri: news.cloneUri,
+            labels: desiredLabels,
+            annotations: news.annotations,
             parent: parent.parent,
             gitRepositoryLinkId,
-            body: {
-              cloneUri: news.cloneUri,
-              labels: desiredLabels,
-              annotations: news.annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

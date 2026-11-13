@@ -56,17 +56,15 @@ test.provider.skipIf(runProductReviewLifecycle || reviewsV1betaRetired)(
 
       const error = yield* Effect.flip(
         reviews.insertAccountsProductReviews({
+          productReviewId: "alchemy-probe-product-review",
+          productReviewAttributes: {
+            reviewTime: "2020-01-01T00:00:00Z",
+            content: "probe",
+            title: "Alchemy Probe Product Review",
+            skus: ["alchemy-probe-sku"],
+          },
           parent: `accounts/${probeAccount}`,
           dataSource: probeDataSource(productReviewDataSource),
-          body: {
-            productReviewId: "alchemy-probe-product-review",
-            productReviewAttributes: {
-              reviewTime: "2020-01-01T00:00:00Z",
-              content: "probe",
-              title: "Alchemy Probe Product Review",
-              skus: ["alchemy-probe-sku"],
-            },
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

@@ -361,16 +361,14 @@ export const SourceProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsSources({
+            description: news.description,
+            labels: desiredLabels,
+            encryption: news.encryption,
+            aws: news.aws,
+            azure: news.azure,
+            vmware: news.vmware,
             parent: locationParent(env.project, location),
             sourceId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              encryption: news.encryption,
-              aws: news.aws,
-              azure: news.azure,
-              vmware: news.vmware,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -414,16 +412,13 @@ export const SourceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsSources({
+          description: news.description,
+          labels: desiredLabels,
+          aws: news.aws,
+          azure: news.azure,
+          vmware: news.vmware,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            description: news.description,
-            labels: desiredLabels,
-            aws: news.aws,
-            azure: news.azure,
-            vmware: news.vmware,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

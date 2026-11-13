@@ -421,7 +421,7 @@ export const ReportConfigProvider = () =>
         const random = yield* SecureRandom.SecureRandom;
         const requestId = yield* random.uuidV4();
         current = yield* retryGrantPropagation(
-          insights.createProjectsLocationsReportConfigs({ parent, requestId, body: desired }),
+          insights.createProjectsLocationsReportConfigs({ ...desired, parent, requestId }),
         );
       }
 
@@ -460,9 +460,9 @@ export const ReportConfigProvider = () =>
       if (updateMask.length > 0) {
         current = yield* retryGrantPropagation(
           insights.patchProjectsLocationsReportConfigs({
+            ...desired,
             name: current.name!,
             updateMask,
-            body: desired,
           }),
         );
       }

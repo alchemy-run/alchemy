@@ -261,12 +261,10 @@ export const SchemaProvider = () =>
       if (current === undefined) {
         const created = yield* pubsub
           .createProjectsSchemas({
+            type: news.type,
+            definition: news.definition,
             parent: `projects/${env.project}`,
             schemaId,
-            body: {
-              type: news.type,
-              definition: news.definition,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -278,14 +276,12 @@ export const SchemaProvider = () =>
 
       if (!definitionsEqual(current.definition, news.definition)) {
         current = yield* pubsub.commitProjectsSchemas({
-          name,
-          body: {
-            schema: {
-              name,
-              type: news.type,
-              definition: news.definition,
-            },
+          schema: {
+            name,
+            type: news.type,
+            definition: news.definition,
           },
+          name,
         });
       }
 

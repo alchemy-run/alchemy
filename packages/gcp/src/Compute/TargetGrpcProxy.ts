@@ -321,15 +321,10 @@ export const TargetGrpcProxyProvider = () =>
         if (news.validateForProxyless !== undefined) {
           body.validateForProxyless = news.validateForProxyless;
         }
-        yield* compute
-          .insertTargetGrpcProxies({
-            project: env.project,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertTargetGrpcProxies({ ...body, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, targetGrpcProxyName);
       }
 
@@ -354,9 +349,9 @@ export const TargetGrpcProxyProvider = () =>
         }
         yield* compute
           .patchTargetGrpcProxies({
+            ...body,
             project: env.project,
             targetGrpcProxy: targetGrpcProxyName,
-            body,
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetGrpcProxyName);

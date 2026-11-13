@@ -360,16 +360,14 @@ export const AgentProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsAgents({
+            id: agentId,
+            base_agent: baseAgent,
+            description: desiredDescription,
+            system_instruction: news.systemInstruction,
+            tools,
+            metadata: desiredMetadata,
+            base_environment: news.baseEnvironment,
             parent: parentOf(env.project, location),
-            body: {
-              id: agentId,
-              base_agent: baseAgent,
-              description: desiredDescription,
-              system_instruction: news.systemInstruction,
-              tools,
-              metadata: desiredMetadata,
-              base_environment: news.baseEnvironment,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -398,6 +396,10 @@ export const AgentProvider = () =>
       if (metadataChanged || descriptionChanged || instructionChanged || toolsChanged) {
         // Patch is a long-running operation; re-read the agent once it lands.
         const patched = yield* aiplatform.patchProjectsLocationsAgents({
+          metadata: desiredMetadata,
+          description: desiredDescription,
+          system_instruction: news.systemInstruction,
+          tools,
           name: currentName,
           updateMask: [
             metadataChanged ? "metadata" : undefined,
@@ -407,13 +409,6 @@ export const AgentProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: currentName,
-            metadata: desiredMetadata,
-            description: desiredDescription,
-            system_instruction: news.systemInstruction,
-            tools,
-          },
         });
         yield* waitForOperation(patched, { get: getOperation });
         current = yield* waitUntilExists(currentName);

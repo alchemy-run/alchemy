@@ -73,13 +73,11 @@ test.provider.skipIf(runOrgLifecycle)(
       const organization = yield* resolveOrganization();
       const error = yield* Effect.flip(
         networkmanagement.createOrganizationsLocationsVpcFlowLogsConfigs({
+          state: "ENABLED",
+          aggregationInterval: "INTERVAL_5_SEC",
+          flowSampling: 1,
           parent: `organizations/${organization}/locations/global`,
           vpcFlowLogsConfigId: "alchemy-org-flow-logs-probe",
-          body: {
-            state: "ENABLED",
-            aggregationInterval: "INTERVAL_5_SEC",
-            flowSampling: 1,
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

@@ -375,9 +375,9 @@ export const AgentsIntentProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsIntents({
+            ...body,
             parent: agent,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
@@ -412,6 +412,7 @@ export const AgentsIntentProvider = () =>
         dtmfChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsIntents({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
@@ -424,7 +425,6 @@ export const AgentsIntentProvider = () =>
             descriptionChanged ? "description" : undefined,
             dtmfChanged ? "dtmf_pattern" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

@@ -331,20 +331,16 @@ export const InappproductProvider = () =>
 
       if (current === undefined) {
         const created = yield* androidpublisher
-          .insertInappproducts({
-            packageName,
-            autoConvertMissingPrices,
-            body: desired,
-          })
+          .insertInappproducts({ ...desired, packageName, autoConvertMissingPrices })
           .pipe(Effect.catchTag("Conflict", () => getInappproduct(packageName, sku)));
         current = created ?? undefined;
       } else if (needsSync(current, desired)) {
         current = yield* androidpublisher.patchInappproducts({
+          ...desired,
           packageName,
           sku: current.sku ?? sku,
           autoConvertMissingPrices,
           latencyTolerance: news.latencyTolerance,
-          body: desired,
         });
       }
 

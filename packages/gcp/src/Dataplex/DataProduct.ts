@@ -294,17 +294,15 @@ export const DataProductProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsDataProducts({
+            displayName: news.displayName,
+            description: news.description,
+            labels: desiredLabels,
+            ownerEmails: news.ownerEmails,
+            icon: news.icon,
+            accessGroups: news.accessGroups,
+            accessApprovalConfig: news.accessApprovalConfig,
             parent: parentOf(env.project, location),
             dataProductId,
-            body: {
-              displayName: news.displayName,
-              description: news.description,
-              labels: desiredLabels,
-              ownerEmails: news.ownerEmails,
-              icon: news.icon,
-              accessGroups: news.accessGroups,
-              accessApprovalConfig: news.accessApprovalConfig,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -340,6 +338,14 @@ export const DataProductProvider = () =>
         approvalChanged
       ) {
         const operation = yield* dataplex.patchProjectsLocationsDataProducts({
+          etag: current.etag,
+          displayName: news.displayName,
+          description: news.description,
+          labels: desiredLabels,
+          ownerEmails: news.ownerEmails,
+          icon: news.icon,
+          accessGroups: news.accessGroups,
+          accessApprovalConfig: news.accessApprovalConfig,
           name: current.name ?? name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -352,17 +358,6 @@ export const DataProductProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            displayName: news.displayName,
-            description: news.description,
-            labels: desiredLabels,
-            ownerEmails: news.ownerEmails,
-            icon: news.icon,
-            accessGroups: news.accessGroups,
-            accessApprovalConfig: news.accessApprovalConfig,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

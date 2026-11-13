@@ -204,12 +204,9 @@ export const EnvgroupProvider = () =>
       if (current === undefined) {
         const operation = yield* apigee
           .createOrganizationsEnvgroups({
+            hostnames: desiredHostnames,
             parent: organization,
             name: envgroupId,
-            body: {
-              name: envgroupId,
-              hostnames: desiredHostnames,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
@@ -224,9 +221,9 @@ export const EnvgroupProvider = () =>
 
       if (!sameStringList(current.hostnames, desiredHostnames)) {
         const operation = yield* apigee.patchOrganizationsEnvgroups({
+          hostnames: desiredHostnames,
           name,
           updateMask: "hostnames",
-          body: { hostnames: desiredHostnames },
         });
         yield* waitForOperation(operation);
         current = (yield* getByName(name)) ?? current;

@@ -250,11 +250,7 @@ export const MuteConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* scc
-          .createProjectsMuteConfigs({
-            parent: `projects/${env.project}`,
-            muteConfigId,
-            body,
-          })
+          .createProjectsMuteConfigs({ ...body, parent: `projects/${env.project}`, muteConfigId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -274,14 +270,7 @@ export const MuteConfigProvider = () =>
       );
 
       if (updateMask.length > 0) {
-        current = yield* scc.patchProjectsMuteConfigs({
-          name: currentName,
-          updateMask,
-          body: {
-            ...body,
-            name: currentName,
-          },
-        });
+        current = yield* scc.patchProjectsMuteConfigs({ ...body, name: currentName, updateMask });
       }
 
       return toAttrs(current, env.project);

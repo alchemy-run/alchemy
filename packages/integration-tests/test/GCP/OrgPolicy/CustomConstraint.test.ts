@@ -52,15 +52,13 @@ const organizationOf = () =>
 
 const probeCreate = (parent: string) =>
   orgpolicy.createOrganizationsCustomConstraints({
+    name: `${parent}/customConstraints/custom.alchemyMissingProbe`,
+    resourceTypes: ["compute.googleapis.com/Instance"],
+    methodTypes: ["CREATE"],
+    condition: "resource.name.startsWith('alchemy-probe-')",
+    actionType: "DENY",
+    displayName: "alchemy probe",
     parent,
-    body: {
-      name: `${parent}/customConstraints/custom.alchemyMissingProbe`,
-      resourceTypes: ["compute.googleapis.com/Instance"],
-      methodTypes: ["CREATE"],
-      condition: "resource.name.startsWith('alchemy-probe-')",
-      actionType: "DENY",
-      displayName: "alchemy probe",
-    },
   });
 
 test.provider(

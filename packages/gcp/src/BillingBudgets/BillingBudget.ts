@@ -512,8 +512,8 @@ export const BillingBudgetProvider = () =>
       if (current === undefined) {
         const created = yield* billingbudgets
           .createBillingAccountsBudgets({
+            ...toCreateBody(desiredNews, desiredDisplayName, undefined),
             parent,
-            body: toCreateBody(desiredNews, desiredDisplayName, undefined),
           })
           .pipe(
             Effect.catchTag("Conflict", () => findBudgetByDisplayName(parent, desiredDisplayName)),
@@ -572,12 +572,10 @@ export const BillingBudgetProvider = () =>
 
       if (mask.length > 0) {
         current = yield* billingbudgets.patchBillingAccountsBudgets({
+          ...desiredBody,
+          etag: current.etag,
           name: current.name,
           updateMask: mask.join(","),
-          body: {
-            ...desiredBody,
-            etag: current.etag,
-          },
         });
       }
 

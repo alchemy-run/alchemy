@@ -360,11 +360,7 @@ export const EnvironmentsTargetserverProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsEnvironmentsTargetservers({
-            parent,
-            name: targetserverId,
-            body,
-          })
+          .createOrganizationsEnvironmentsTargetservers({ ...body, parent, name: targetserverId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -380,10 +376,7 @@ export const EnvironmentsTargetserverProvider = () =>
       const tlsChanged = jsonOf(tlsOf(current.sSLInfo)) !== jsonOf(news.sSLInfo);
 
       if (hostChanged || portChanged || descriptionChanged || enabledChanged || tlsChanged) {
-        current = yield* apigee.updateOrganizationsEnvironmentsTargetservers({
-          name,
-          body,
-        });
+        current = yield* apigee.updateOrganizationsEnvironmentsTargetservers({ ...body, name });
       }
 
       return toAttrs(current, organizationId, environmentId);

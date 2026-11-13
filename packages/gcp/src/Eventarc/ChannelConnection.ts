@@ -282,14 +282,14 @@ export const ChannelConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsChannelConnections({
-            parent: parentOf(env.project, location),
-            channelConnectionId,
-            body: compact({
+            ...compact({
               name,
               channel,
               activationToken: news.activationToken,
               labels: desiredLabels,
             }),
+            parent: parentOf(env.project, location),
+            channelConnectionId,
           })
           .pipe(
             Effect.retry({

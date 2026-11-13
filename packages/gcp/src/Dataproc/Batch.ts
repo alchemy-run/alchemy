@@ -360,9 +360,9 @@ export const BatchProvider = () =>
       if (current === undefined) {
         const created = yield* dataproc
           .createProjectsLocationsBatches({
+            ...desired,
             parent: locationParent(env.project, location),
             batchId,
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {

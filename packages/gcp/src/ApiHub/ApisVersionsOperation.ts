@@ -309,12 +309,10 @@ export const ApisVersionsOperationProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsApisVersionsOperations({
+            details,
+            attributes: news.attributes,
             parent: version,
             apiOperationId,
-            body: {
-              details,
-              attributes: news.attributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -350,6 +348,8 @@ export const ApisVersionsOperationProvider = () =>
         attributesChanged
       ) {
         current = yield* apihub.patchProjectsLocationsApisVersionsOperations({
+          details,
+          attributes: news.attributes,
           name: currentName,
           updateMask: updateMaskOf(
             descriptionChanged ? "details.description" : undefined,
@@ -360,11 +360,6 @@ export const ApisVersionsOperationProvider = () =>
             mcpChanged ? "details.mcp_tool" : undefined,
             attributesChanged ? "attributes" : undefined,
           ),
-          body: {
-            name: currentName,
-            details,
-            attributes: news.attributes,
-          },
         });
       }
 

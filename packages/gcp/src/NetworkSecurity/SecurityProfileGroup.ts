@@ -351,16 +351,14 @@ export const SecurityProfileGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsSecurityProfileGroups({
+            description: news.description,
+            labels: desiredLabels,
+            threatPreventionProfile,
+            urlFilteringProfile,
+            customMirroringProfile,
+            customInterceptProfile,
             parent: parentOf(env.project, location),
             securityProfileGroupId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              threatPreventionProfile,
-              urlFilteringProfile,
-              customMirroringProfile,
-              customInterceptProfile,
-            },
           })
           .pipe(
             Effect.retry({
@@ -409,18 +407,15 @@ export const SecurityProfileGroupProvider = () =>
           interceptChanged ? "customInterceptProfile" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsSecurityProfileGroups({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
+          threatPreventionProfile,
+          urlFilteringProfile,
+          customMirroringProfile,
+          customInterceptProfile,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-            threatPreventionProfile,
-            urlFilteringProfile,
-            customMirroringProfile,
-            customInterceptProfile,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

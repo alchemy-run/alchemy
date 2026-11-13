@@ -345,18 +345,16 @@ export const BackupVaultProvider = () =>
       if (current === undefined) {
         const created = yield* backupdr
           .createProjectsLocationsBackupVaults({
+            backupMinimumEnforcedRetentionDuration: retention,
+            backupRetentionInheritance: news.backupRetentionInheritance,
+            accessRestriction: news.accessRestriction,
+            encryptionConfig: news.encryptionConfig,
+            effectiveTime: news.effectiveTime,
+            description: news.description,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             backupVaultId,
-            body: {
-              backupMinimumEnforcedRetentionDuration: retention,
-              backupRetentionInheritance: news.backupRetentionInheritance,
-              accessRestriction: news.accessRestriction,
-              encryptionConfig: news.encryptionConfig,
-              effectiveTime: news.effectiveTime,
-              description: news.description,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -406,20 +404,17 @@ export const BackupVaultProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* backupdr.patchProjectsLocationsBackupVaults({
+          etag: current.etag,
+          labels: desiredLabels,
+          annotations: annotations ?? current.annotations,
+          description: news.description,
+          backupMinimumEnforcedRetentionDuration: retention,
+          backupRetentionInheritance: news.backupRetentionInheritance,
+          accessRestriction: news.accessRestriction,
+          effectiveTime: news.effectiveTime,
           name: current.name ?? name,
           updateMask: mask,
           force: true,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            annotations: annotations ?? current.annotations,
-            description: news.description,
-            backupMinimumEnforcedRetentionDuration: retention,
-            backupRetentionInheritance: news.backupRetentionInheritance,
-            accessRestriction: news.accessRestriction,
-            effectiveTime: news.effectiveTime,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

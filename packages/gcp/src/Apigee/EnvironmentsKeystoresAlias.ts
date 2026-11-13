@@ -391,22 +391,22 @@ export const EnvironmentsKeystoresAliasProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsKeystoresAliases({
+            ...createBody(aliasId, news),
             parent,
             alias: aliasId,
             format: news.format ?? DEFAULT_FORMAT,
             ignoreNewlineValidation: news.ignoreNewlineValidation,
             ignoreExpiryValidation: news.ignoreExpiryValidation,
             _password: news.password,
-            body: createBody(aliasId, news),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       } else if (news.certPem !== undefined) {
         current = yield* apigee.updateOrganizationsEnvironmentsKeystoresAliases({
+          ...keyCertBody(news),
           name,
           ignoreNewlineValidation: news.ignoreNewlineValidation,
           ignoreExpiryValidation: news.ignoreExpiryValidation ?? true,
-          body: keyCertBody(news),
         });
       }
 

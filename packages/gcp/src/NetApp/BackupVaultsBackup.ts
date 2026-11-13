@@ -351,15 +351,13 @@ export const BackupVaultsBackupProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsBackupVaultsBackups({
+            sourceVolume,
+            sourceSnapshot: news.sourceSnapshot,
+            ontapSource: news.ontapSource,
+            description: news.description,
+            labels: desiredLabels,
             parent: vault,
             backupId,
-            body: {
-              sourceVolume,
-              sourceSnapshot: news.sourceSnapshot,
-              ontapSource: news.ontapSource,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -387,13 +385,10 @@ export const BackupVaultsBackupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsBackupVaultsBackups({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

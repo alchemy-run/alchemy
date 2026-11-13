@@ -382,8 +382,8 @@ export const OrganizationProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizations({
+            ...toBody(news, desiredDescription, analyticsRegion),
             parent: `projects/${env.project}`,
-            body: toBody(news, desiredDescription, analyticsRegion),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -412,12 +412,10 @@ export const OrganizationProvider = () =>
 
       if (needsUpdate) {
         current = yield* apigee.updateOrganizations({
+          ...current,
+          ...desired,
+          description: desiredDescription,
           name,
-          body: {
-            ...current,
-            ...desired,
-            description: desiredDescription,
-          },
         });
       }
 

@@ -369,9 +369,9 @@ export const SessionProvider = () =>
       if (current === undefined) {
         const created = yield* dataproc
           .createProjectsLocationsSessions({
+            ...desired,
             parent: locationParent(env.project, location),
             sessionId,
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {

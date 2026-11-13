@@ -40,15 +40,13 @@ const waitUntilGone = (name: string) =>
 const probeCreate = (project: string, transportId: string, profileId: string) =>
   networkconnectivity
     .createProjectsLocationsTransports({
+      network: `projects/${project}/global/networks/default`,
+      remoteProfile: `projects/${project}/locations/${location}/remoteTransportProfiles/${profileId}`,
+      bandwidth: "BPS_1G",
+      remoteAccountId: "123456789012",
+      description: "alchemy transport probe",
       parent: `projects/${project}/locations/${location}`,
       transportId,
-      body: {
-        network: `projects/${project}/global/networks/default`,
-        remoteProfile: `projects/${project}/locations/${location}/remoteTransportProfiles/${profileId}`,
-        bandwidth: "BPS_1G",
-        remoteAccountId: "123456789012",
-        description: "alchemy transport probe",
-      },
     })
     .pipe(Effect.result);
 

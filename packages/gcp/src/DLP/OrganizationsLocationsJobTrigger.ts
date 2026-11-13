@@ -336,17 +336,15 @@ export const OrganizationsLocationsJobTriggerProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsLocationsJobTriggers({
-            parent,
-            body: {
-              triggerId,
-              jobTrigger: {
-                displayName,
-                description,
-                status,
-                triggers,
-                inspectJob,
-              },
+            triggerId,
+            jobTrigger: {
+              displayName,
+              description,
+              status,
+              triggers,
+              inspectJob,
             },
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -372,17 +370,15 @@ export const OrganizationsLocationsJobTriggerProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsJobTriggers({
-          name: currentName,
-          body: {
-            updateMask,
-            jobTrigger: {
-              displayName,
-              description,
-              status,
-              triggers,
-              inspectJob,
-            },
+          updateMask,
+          jobTrigger: {
+            displayName,
+            description,
+            status,
+            triggers,
+            inspectJob,
           },
+          name: currentName,
         });
       }
 

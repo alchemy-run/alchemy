@@ -363,15 +363,13 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsSpokesGatewayAdvertisedRoutes({
+            ipRange: news.ipRange,
+            priority,
+            recipient: news.recipient,
+            description: news.description,
+            labels: desiredLabels,
             parent: news.parent,
             gatewayAdvertisedRouteId,
-            body: {
-              ipRange: news.ipRange,
-              priority,
-              recipient: news.recipient,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -403,14 +401,11 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkconnectivity.patchProjectsLocationsSpokesGatewayAdvertisedRoutes({
+            description: news.description,
+            priority,
+            recipient: news.recipient,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: news.description,
-              priority,
-              recipient: news.recipient,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);

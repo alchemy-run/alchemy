@@ -889,9 +889,9 @@ export const ConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* bigqueryconnection
           .createProjectsLocationsConnections({
+            ...toCreateBody(news, ownership),
             parent,
             connectionId,
-            body: toCreateBody(news, ownership),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -989,18 +989,14 @@ export const ConnectionProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* bigqueryconnection
-          .patchProjectsLocationsConnections({
-            name,
-            updateMask: updateMask.join(","),
-            body,
-          })
+          .patchProjectsLocationsConnections({ ...body, name, updateMask: updateMask.join(",") })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched === undefined) {
           const created = yield* bigqueryconnection
             .createProjectsLocationsConnections({
+              ...toCreateBody(news, ownership),
               parent,
               connectionId,
-              body: toCreateBody(news, ownership),
             })
             .pipe(Effect.catchTag("Conflict", () => getByName(name)));
           current = created ?? undefined;

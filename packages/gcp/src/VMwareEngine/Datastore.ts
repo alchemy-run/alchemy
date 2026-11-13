@@ -329,12 +329,10 @@ export const DatastoreProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsDatastores({
+            nfsDatastore: news.nfsDatastore,
+            description: desiredDescription,
             parent: parentOf(env.project, location),
             datastoreId,
-            body: {
-              nfsDatastore: news.nfsDatastore,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -369,14 +367,11 @@ export const DatastoreProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsDatastores({
+          description: desiredDescription,
+          nfsDatastore: news.nfsDatastore,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            nfsDatastore: news.nfsDatastore,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

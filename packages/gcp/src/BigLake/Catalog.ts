@@ -255,11 +255,7 @@ export const CatalogProvider = () =>
 
       if (current === undefined) {
         const created = yield* retryTransient(
-          biglake.createProjectsLocationsCatalogs({
-            parent,
-            catalogId,
-            body: {},
-          }),
+          biglake.createProjectsLocationsCatalogs({ parent, catalogId }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }

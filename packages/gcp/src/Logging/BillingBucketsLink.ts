@@ -382,9 +382,9 @@ export const BillingBucketsLinkProvider = () =>
       if (current === undefined) {
         const operation = yield* logging
           .createBillingAccountsLocationsBucketsLinks({
+            description: desiredDescription,
             parent,
             linkId,
-            body: { description: desiredDescription },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed<logging.Operation>({ done: true })),

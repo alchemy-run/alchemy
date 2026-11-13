@@ -684,19 +684,13 @@ const insertBody = (
 };
 
 const applyPatch = (project: string, instanceName: string, body: sqladmin.DatabaseInstance) =>
-  sqladmin
-    .patchInstances({
-      project,
-      instance: instanceName,
-      body,
-    })
-    .pipe(
-      Effect.retry({
-        while: (error) => error._tag === "Conflict",
-        times: 8,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
+  sqladmin.patchInstances({ ...body, project, instance: instanceName }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Conflict",
+      times: 8,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+  );
 
 export const InstanceProvider = () =>
   Provider.succeed(Instance, {
@@ -808,8 +802,7 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* sqladmin
           .insertInstances({
-            project: env.project,
-            body: insertBody(
+            ...insertBody(
               news,
               desiredPrivateNetwork,
               instanceName,
@@ -817,6 +810,7 @@ export const InstanceProvider = () =>
               version,
               desiredLabels,
             ),
+            project: env.project,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

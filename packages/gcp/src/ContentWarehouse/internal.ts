@@ -388,12 +388,10 @@ export const ensureProject = (parent: string) =>
 
     const operation = yield* cw
       .initializeProjectsLocations({
+        accessControlMode: "ACL_MODE_UNIVERSAL_ACCESS",
+        databaseType: "DB_INFRA_SPANNER",
+        documentCreatorDefaultRole: "DOCUMENT_ADMIN",
         location: parent,
-        body: {
-          accessControlMode: "ACL_MODE_UNIVERSAL_ACCESS",
-          databaseType: "DB_INFRA_SPANNER",
-          documentCreatorDefaultRole: "DOCUMENT_ADMIN",
-        },
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation !== undefined) {

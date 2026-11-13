@@ -328,9 +328,9 @@ export const AgentsGeneratorProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsGenerators({
+            ...body,
             parent: agent,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
@@ -352,6 +352,7 @@ export const AgentsGeneratorProvider = () =>
 
       if (displayChanged || promptChanged || modelChanged || placeholdersChanged || llmChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsGenerators({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
@@ -361,7 +362,6 @@ export const AgentsGeneratorProvider = () =>
             placeholdersChanged ? "placeholders" : undefined,
             llmChanged ? "llm_model_settings" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

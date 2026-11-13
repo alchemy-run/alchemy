@@ -211,9 +211,10 @@ const waitUntilGone = (name: string) =>
 const unprotect = (name: string, etag: string | undefined) =>
   Effect.gen(function* () {
     const patched = yield* bigtable.patchProjectsInstancesLogicalViews({
+      deletionProtection: false,
+      etag,
       name,
       updateMask: "deletion_protection",
-      body: { deletionProtection: false, etag },
     });
     yield* waitForOperation(patched);
   });
@@ -301,12 +302,10 @@ export const InstancesLogicalViewProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesLogicalViews({
+            query,
+            deletionProtection: desiredProtection,
             parent,
             logicalViewId,
-            body: {
-              query,
-              deletionProtection: desiredProtection,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -324,13 +323,11 @@ export const InstancesLogicalViewProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* bigtable
           .patchProjectsInstancesLogicalViews({
+            query,
+            deletionProtection: desiredProtection,
+            etag: current.etag,
             name,
             updateMask: mask.join(","),
-            body: {
-              query,
-              deletionProtection: desiredProtection,
-              etag: current.etag,
-            },
           })
           .pipe(
             Effect.retry({

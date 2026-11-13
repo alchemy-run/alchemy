@@ -438,11 +438,11 @@ export const StreamProvider = () =>
       if (current === undefined) {
         const created = yield* ds
           .createProjectsLocationsStreams({
+            ...body,
             parent: locationParent(env.project, location),
             streamId,
             force: news.force,
             validateOnly: news.validateOnly,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* settleOperation(created);
@@ -499,11 +499,11 @@ export const StreamProvider = () =>
         }
         if (stateChanged) patch.state = news.state;
         const operation = yield* ds.patchProjectsLocationsStreams({
+          ...patch,
           name: current.name ?? name,
           updateMask: mask,
           force: news.force,
           validateOnly: news.validateOnly,
-          body: patch,
         });
         yield* settleOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

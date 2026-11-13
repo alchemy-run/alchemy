@@ -26,8 +26,8 @@ let names: { topic: string; subscription: string; reservation: string };
 const hostProjectGrants = Effect.gen(function* () {
   const project = yield* currentProject;
   const policy = yield* resourcemanager.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))

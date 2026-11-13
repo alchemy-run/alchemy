@@ -446,11 +446,7 @@ export const ProductReviewProvider = () =>
 
       const upsert = () =>
         reviews
-          .insertAccountsProductReviews({
-            parent: parentOf(account),
-            dataSource,
-            body: desired,
-          })
+          .insertAccountsProductReviews({ ...desired, parent: parentOf(account), dataSource })
           .pipe(Effect.catchTag("Conflict", () => getProductReview(name)));
 
       if (current === undefined) {

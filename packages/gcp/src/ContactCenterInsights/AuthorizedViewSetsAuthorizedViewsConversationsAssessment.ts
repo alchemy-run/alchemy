@@ -252,8 +252,8 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider = 
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments({
+            agentInfo,
             parent: news.parent,
-            body: { agentInfo },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>

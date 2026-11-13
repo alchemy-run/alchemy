@@ -305,13 +305,11 @@ export const SourcesUtilizationReportProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsSourcesUtilizationReports({
+            displayName,
+            timeFrame,
+            vms: news.vms,
             parent: source,
             utilizationReportId,
-            body: {
-              displayName,
-              timeFrame,
-              vms: news.vms,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

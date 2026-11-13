@@ -245,11 +245,9 @@ export const AccessPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* acm
           .createAccessPolicies({
-            body: {
-              title: desiredTitle,
-              parent: organization,
-              scopes: desiredScopes.length > 0 ? desiredScopes : undefined,
-            },
+            title: desiredTitle,
+            parent: organization,
+            scopes: desiredScopes.length > 0 ? desiredScopes : undefined,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -279,13 +277,10 @@ export const AccessPolicyProvider = () =>
 
       if ((current.title ?? "") !== desiredTitle) {
         const operation = yield* acm.patchAccessPolicies({
+          title: desiredTitle,
+          etag: current.etag,
           name: current.name,
           updateMask: "title",
-          body: {
-            name: current.name,
-            title: desiredTitle,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name), current.name);

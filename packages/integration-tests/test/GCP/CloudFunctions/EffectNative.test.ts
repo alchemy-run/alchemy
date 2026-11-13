@@ -74,8 +74,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       // A published message is pushed to the function and recorded.
       const published = yield* pubsub.publishProjectsTopics({
+        messages: [{ data: btoa("ping!") }],
         topic: out.topic,
-        body: { messages: [{ data: btoa("ping!") }] },
       });
       const messageId = published.messageIds?.[0];
       expect(messageId).toEqual(expect.any(String));

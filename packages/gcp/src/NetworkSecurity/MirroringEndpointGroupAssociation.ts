@@ -415,13 +415,11 @@ export const MirroringEndpointGroupAssociationProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsMirroringEndpointGroupAssociations({
+            mirroringEndpointGroup,
+            network,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             mirroringEndpointGroupAssociationId,
-            body: {
-              mirroringEndpointGroup,
-              network,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -450,12 +448,9 @@ export const MirroringEndpointGroupAssociationProvider = () =>
       if (labelsChanged) {
         const operation =
           yield* networksecurity.patchProjectsLocationsMirroringEndpointGroupAssociations({
+            labels: desiredLabels,
             name: current.name ?? name,
             updateMask: "labels",
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

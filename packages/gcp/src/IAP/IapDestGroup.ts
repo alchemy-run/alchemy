@@ -216,9 +216,11 @@ export const IapDestGroupProvider = () =>
       if (current === undefined) {
         const created = yield* iap
           .createProjectsIap_tunnelLocationsDestGroups({
+            name,
+            cidrs,
+            fqdns,
             parent,
             tunnelDestGroupId: destGroupId,
-            body: { name, cidrs, fqdns },
           })
           .pipe(Effect.catchTag("Conflict", () => getDestGroup(name)));
         current = created ?? undefined;
@@ -233,12 +235,13 @@ export const IapDestGroupProvider = () =>
       const fqdnsChanged = !sameStringList(current.fqdns, fqdns);
       if (cidrsChanged || fqdnsChanged) {
         current = yield* iap.patchProjectsIap_tunnelLocationsDestGroups({
+          cidrs,
+          fqdns,
           name: currentName,
           updateMask: updateMaskOf(
             cidrsChanged ? "cidrs" : undefined,
             fqdnsChanged ? "fqdns" : undefined,
           ),
-          body: { name: currentName, cidrs, fqdns },
         });
       }
 

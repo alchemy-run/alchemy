@@ -323,10 +323,7 @@ export const DeploymentsActuationProvider = () =>
 
       if (current === undefined) {
         const created = yield* workloadmanager
-          .createProjectsLocationsDeploymentsActuations({
-            parent: deployment,
-            body: { name },
-          })
+          .createProjectsLocationsDeploymentsActuations({ name, parent: deployment })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.

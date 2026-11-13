@@ -303,16 +303,14 @@ export const DeveloperProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsDevelopers({
+            email,
+            firstName,
+            lastName,
+            userName,
+            appFamily: news.appFamily,
+            accessType: news.accessType,
+            attributes: recordToAttributes(attributes),
             parent: organization,
-            body: {
-              email,
-              firstName,
-              lastName,
-              userName,
-              appFamily: news.appFamily,
-              accessType: news.accessType,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -348,16 +346,14 @@ export const DeveloperProvider = () =>
 
       if (changed) {
         current = yield* apigee.updateOrganizationsDevelopers({
+          email,
+          firstName,
+          lastName,
+          userName,
+          appFamily: news.appFamily,
+          accessType: news.accessType,
+          attributes: recordToAttributes(attributes),
           name,
-          body: {
-            email,
-            firstName,
-            lastName,
-            userName,
-            appFamily: news.appFamily,
-            accessType: news.accessType,
-            attributes: recordToAttributes(attributes),
-          },
         });
       }
 

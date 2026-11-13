@@ -36,14 +36,12 @@ export const CreateAssessmentHttp = Layer.effect(
         const project = projectAt >= 0 && parts[projectAt + 1] ? parts[projectAt + 1]! : "";
         const siteKey = lastSegment(keyName);
         return yield* createProjectsAssessments({
-          parent: `projects/${project}`,
-          body: {
-            ...request?.body,
-            event: {
-              ...request?.body?.event,
-              siteKey: request?.body?.event?.siteKey ?? siteKey,
-            },
+          ...request,
+          event: {
+            ...request?.event,
+            siteKey: request?.event?.siteKey ?? siteKey,
           },
+          parent: `projects/${project}`,
         });
       });
     });

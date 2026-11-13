@@ -324,16 +324,14 @@ export const MetadataStoresContextProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsMetadataStoresContexts({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
+            schemaVersion: news.schemaVersion,
+            metadata: news.metadata,
             parent: metadataStore,
             contextId,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
-              schemaVersion: news.schemaVersion,
-              metadata: news.metadata,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -361,6 +359,13 @@ export const MetadataStoresContextProvider = () =>
         metadataChanged
       ) {
         current = yield* aiplatform.patchProjectsLocationsMetadataStoresContexts({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
+          schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
+          schemaVersion: news.schemaVersion,
+          metadata: news.metadata,
+          etag: current.etag,
           name,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -372,16 +377,6 @@ export const MetadataStoresContextProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-            schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
-            schemaVersion: news.schemaVersion,
-            metadata: news.metadata,
-            etag: current.etag,
-          },
         });
       }
 

@@ -59,11 +59,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         firebase.createProjectsAndroidApps({
+          packageName: "com.alchemy.test.probe",
+          displayName: "alchemy-probe",
           parent: `projects/${project}`,
-          body: {
-            packageName: "com.alchemy.test.probe",
-            displayName: "alchemy-probe",
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");

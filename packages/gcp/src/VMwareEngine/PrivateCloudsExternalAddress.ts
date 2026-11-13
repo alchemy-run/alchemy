@@ -326,12 +326,10 @@ export const PrivateCloudsExternalAddressProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateCloudsExternalAddresses({
+            internalIp: news.internalIp,
+            description: desiredDescription,
             parent,
             externalAddressId,
-            body: {
-              internalIp: news.internalIp,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -366,13 +364,10 @@ export const PrivateCloudsExternalAddressProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsPrivateCloudsExternalAddresses({
+          description: desiredDescription,
+          internalIp: news.internalIp,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            internalIp: news.internalIp,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

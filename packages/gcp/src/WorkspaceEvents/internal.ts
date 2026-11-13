@@ -243,10 +243,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     let current = yield* getTopic(name);
     if (current === undefined) {
       const created = yield* pubsub
-        .createProjectsTopics({
-          name,
-          body: { labels },
-        })
+        .createProjectsTopics({ labels, name })
         .pipe(Effect.catchTag("Conflict", () => getTopic(name)));
       current = created ?? undefined;
     }
@@ -256,13 +253,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     const changed = Object.entries(desired).some(([key, value]) => observed[key] !== value);
     if (!changed) return current;
     return yield* pubsub
-      .patchProjectsTopics({
-        name,
-        body: {
-          topic: { name, labels: desired },
-          updateMask: "labels",
-        },
-      })
+      .patchProjectsTopics({ topic: { name, labels: desired }, updateMask: "labels", name })
       .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(current)));
   });
 

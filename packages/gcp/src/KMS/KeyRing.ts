@@ -273,7 +273,6 @@ export const KeyRingProvider = () =>
           .createProjectsLocationsKeyRings({
             parent: `projects/${env.project}/locations/${location}`,
             keyRingId,
-            body: {},
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

@@ -190,10 +190,7 @@ export const StorelayoutpageProvider = () =>
 
       if (current === undefined) {
         const created = yield* androidenterprise
-          .insertStorelayoutpages({
-            enterpriseId,
-            body: desiredBody({ name, news }),
-          })
+          .insertStorelayoutpages({ ...desiredBody({ name, news }), enterpriseId })
           .pipe(Effect.catchTag("Conflict", () => findOwnedPage(id, enterpriseId)));
         current = created ?? undefined;
       }
@@ -214,9 +211,9 @@ export const StorelayoutpageProvider = () =>
       });
       if (needsSync(current, desired)) {
         current = yield* androidenterprise.updateStorelayoutpages({
+          ...desired,
           enterpriseId,
           pageId,
-          body: desired,
         });
       }
 

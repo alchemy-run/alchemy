@@ -346,14 +346,12 @@ export const PrivateCloudsLoggingServerProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateCloudsLoggingServers({
+            hostname: news.hostname,
+            port,
+            protocol,
+            sourceType,
             parent,
             loggingServerId,
-            body: {
-              hostname: news.hostname,
-              port,
-              protocol,
-              sourceType,
-            },
           })
           .pipe(
             Effect.retry({
@@ -386,15 +384,12 @@ export const PrivateCloudsLoggingServerProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsPrivateCloudsLoggingServers({
+          hostname: news.hostname,
+          port,
+          protocol,
+          sourceType,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            hostname: news.hostname,
-            port,
-            protocol,
-            sourceType,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

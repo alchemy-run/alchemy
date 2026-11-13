@@ -1132,9 +1132,9 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* file
           .createProjectsLocationsInstances({
+            ...toCreateBody(news, desiredLabels, tier, protocol),
             parent: `projects/${env.project}/locations/${location}`,
             instanceId,
-            body: toCreateBody(news, desiredLabels, tier, protocol),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -1192,17 +1192,14 @@ export const InstanceProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* file.patchProjectsLocationsInstances({
+          labels: desiredLabels,
+          description: news.description,
+          fileShares: sharesForPatch(nextShares, observedShares).map(toApiShare),
+          performanceConfig: toApiPerformance(news.performanceConfig),
+          deletionProtectionEnabled: desiredProtection,
+          deletionProtectionReason: news.deletionProtectionReason,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            fileShares: sharesForPatch(nextShares, observedShares).map(toApiShare),
-            performanceConfig: toApiPerformance(news.performanceConfig),
-            deletionProtectionEnabled: desiredProtection,
-            deletionProtectionReason: news.deletionProtectionReason,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
@@ -1218,13 +1215,10 @@ export const InstanceProvider = () =>
       if (existing.deletionProtectionEnabled === true) {
         const patched = yield* file
           .patchProjectsLocationsInstances({
+            deletionProtectionEnabled: false,
+            deletionProtectionReason: "",
             name: output.name,
             updateMask: "deletion_protection_enabled,deletion_protection_reason",
-            body: {
-              name: output.name,
-              deletionProtectionEnabled: false,
-              deletionProtectionReason: "",
-            },
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {

@@ -70,8 +70,9 @@ test.provider.skipIf(!runLifecycle || runLlmLifecycle)(
 
       const error = yield* Effect.flip(
         discoveryengine.createProjectsLocationsCollectionsDataStoresConversations({
+          userPseudoId: "probe",
+          state: "IN_PROGRESS",
           parent: store.name,
-          body: { userPseudoId: "probe", state: "IN_PROGRESS" },
         }),
       );
       expect(error._tag).toEqual("LlmAddOnRequired");

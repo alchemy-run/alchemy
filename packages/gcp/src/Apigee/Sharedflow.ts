@@ -321,14 +321,12 @@ const observedDescription = (org: string, flow: apigee.GoogleCloudApigeeV1Shared
 
 const importBundle = (input: { org: string; sharedflowId: string; space?: string; data: string }) =>
   apigee.createOrganizationsSharedflows({
+    contentType: "application/octet-stream",
+    data: input.data,
     parent: orgParent(input.org),
     action: "import",
     name: input.sharedflowId,
     space: input.space,
-    body: {
-      contentType: "application/octet-stream",
-      data: input.data,
-    },
   });
 
 const waitUntilExists = (name: string) =>
@@ -455,10 +453,7 @@ export const SharedflowProvider = () =>
       const desiredSpace = news.space ?? "";
       const observedSpace = current.space ?? "";
       if (desiredSpace !== observedSpace) {
-        current = yield* apigee.moveOrganizationsSharedflows({
-          name,
-          body: { space: news.space },
-        });
+        current = yield* apigee.moveOrganizationsSharedflows({ space: news.space, name });
       }
 
       const description = yield* observedDescription(org, current);

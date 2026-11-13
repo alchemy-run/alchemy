@@ -59,22 +59,20 @@ test.provider(
       const forwardingRule = `//compute.googleapis.com/projects/${project}/regions/us-central1/forwardingRules/alchemy-missing-fr`;
       const error = yield* Effect.flip(
         networksecurity.createProjectsLocationsAuthzPolicies({
+          action: "ALLOW",
+          target: {
+            loadBalancingScheme: "INTERNAL_MANAGED",
+            resources: [forwardingRule],
+          },
+          httpRules: [
+            {
+              to: {
+                operations: [{ methods: ["GET"], paths: [{ prefix: "/admin" }] }],
+              },
+            },
+          ],
           parent: `projects/${project}/locations/us-central1`,
           authzPolicyId: "alchemy-missing-authz-policy",
-          body: {
-            action: "ALLOW",
-            target: {
-              loadBalancingScheme: "INTERNAL_MANAGED",
-              resources: [forwardingRule],
-            },
-            httpRules: [
-              {
-                to: {
-                  operations: [{ methods: ["GET"], paths: [{ prefix: "/admin" }] }],
-                },
-              },
-            ],
-          },
         }),
       );
       expect(error._tag).toBe("BadRequest");

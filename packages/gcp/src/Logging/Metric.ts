@@ -575,8 +575,8 @@ export const MetricProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createProjectsMetrics({
+            ...toBody(metricId, news, ownership),
             parent: `projects/${env.project}`,
-            body: toBody(metricId, news, ownership),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(metricName)));
         current = created ?? undefined;
@@ -598,8 +598,8 @@ export const MetricProvider = () =>
 
       if (needsUpdate) {
         current = yield* logging.updateProjectsMetrics({
+          ...toBody(metricId, news, ownership, current),
           metricName,
-          body: toBody(metricId, news, ownership, current),
         });
       }
 

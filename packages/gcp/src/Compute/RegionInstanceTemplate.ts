@@ -499,13 +499,11 @@ export const RegionInstanceTemplateProvider = () =>
           env.project,
           region,
           compute.insertRegionInstanceTemplates({
+            name: templateName,
+            description: news.description,
+            properties: toProperties(news, desiredLabels),
             project: env.project,
             region,
-            body: {
-              name: templateName,
-              description: news.description,
-              properties: toProperties(news, desiredLabels),
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));

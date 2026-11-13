@@ -273,9 +273,13 @@ export const FolderMuteConfigProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createFoldersMuteConfigs({
+            filter,
+            type,
+            expiryTime,
+            displayName,
+            description,
             parent: folder,
             muteConfigId,
-            body: { filter, type, expiryTime, displayName, description },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -295,9 +299,12 @@ export const FolderMuteConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchFoldersMuteConfigs({
+          filter,
+          expiryTime,
+          displayName,
+          description,
           name: currentName,
           updateMask,
-          body: { filter, expiryTime, displayName, description },
         });
       }
 

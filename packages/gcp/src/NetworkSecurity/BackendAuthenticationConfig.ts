@@ -294,15 +294,13 @@ export const BackendAuthenticationConfigProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsBackendAuthenticationConfigs({
+            trustConfig: news.trustConfig,
+            clientCertificate: news.clientCertificate,
+            wellKnownRoots,
+            description: news.description,
+            labels: desiredLabels,
             parent: projectParent(env.project, location),
             backendAuthenticationConfigId,
-            body: {
-              trustConfig: news.trustConfig,
-              clientCertificate: news.clientCertificate,
-              wellKnownRoots,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -341,16 +339,13 @@ export const BackendAuthenticationConfigProvider = () =>
 
         const operation = yield* networksecurity.patchProjectsLocationsBackendAuthenticationConfigs(
           {
+            labels: desiredLabels,
+            description: news.description,
+            trustConfig: news.trustConfig,
+            clientCertificate: news.clientCertificate,
+            wellKnownRoots,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              trustConfig: news.trustConfig,
-              clientCertificate: news.clientCertificate,
-              wellKnownRoots,
-            },
           },
         );
         yield* waitForOperation(operation);

@@ -1042,9 +1042,9 @@ export const WorkerPoolProvider = () =>
       if (current === undefined) {
         const created = yield* cloudrun
           .createProjectsLocationsWorkerPools({
+            ...toCreateBody(news, desiredLabels, template),
             parent,
             workerPoolId,
-            body: toCreateBody(news, desiredLabels, template),
           })
           .pipe(
             retryActAs,
@@ -1105,19 +1105,16 @@ export const WorkerPoolProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* cloudrun.patchProjectsLocationsWorkerPools({
+          labels: desiredLabels,
+          description: news.description,
+          annotations: desiredAnnotations,
+          launchStage: news.launchStage,
+          binaryAuthorization: news.binaryAuthorization,
+          scaling: news.scaling,
+          instanceSplits: news.instanceSplits,
+          template,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            annotations: desiredAnnotations,
-            launchStage: news.launchStage,
-            binaryAuthorization: news.binaryAuthorization,
-            scaling: news.scaling,
-            instanceSplits: news.instanceSplits,
-            template,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);

@@ -489,13 +489,13 @@ export const CustomConstraintProvider = () =>
       if (current === undefined) {
         const created = yield* orgpolicy
           .createOrganizationsCustomConstraints({
-            parent: organization,
-            body: toBody(
+            ...toBody(
               resourceName(organization, constraintId),
               news,
               desiredDescription,
               desiredTypes,
             ),
+            parent: organization,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -520,13 +520,13 @@ export const CustomConstraintProvider = () =>
       ) {
         current = yield* orgpolicy
           .patchOrganizationsCustomConstraints({
-            name: current.name ?? name,
-            body: toBody(
+            ...toBody(
               current.name ?? name,
               news,
               desiredDescription,
               current.resourceTypes ?? desiredTypes,
             ),
+            name: current.name ?? name,
           })
           .pipe(
             Effect.retry({

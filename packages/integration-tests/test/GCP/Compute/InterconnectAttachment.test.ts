@@ -66,14 +66,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInterconnectAttachments({
+          name: "alchemy-vlan-probe",
+          description: "alchemy entitlement probe",
+          router: "does-not-exist",
+          type: "PARTNER",
           project,
           region,
-          body: {
-            name: "alchemy-vlan-probe",
-            description: "alchemy entitlement probe",
-            router: "does-not-exist",
-            type: "PARTNER",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

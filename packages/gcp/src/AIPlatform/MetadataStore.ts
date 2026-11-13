@@ -297,13 +297,11 @@ export const MetadataStoreProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsMetadataStores({
+            description: desiredDescription,
+            encryptionSpec: news.encryptionSpec,
+            dataplexConfig: news.dataplexConfig,
             parent: `projects/${env.project}/locations/${location}`,
             metadataStoreId,
-            body: {
-              description: desiredDescription,
-              encryptionSpec: news.encryptionSpec,
-              dataplexConfig: news.dataplexConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

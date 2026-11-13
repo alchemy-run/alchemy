@@ -327,11 +327,7 @@ const emptyZone = (project: string, zoneName: string, dnsName: string | undefine
       return true;
     });
     if (extra.length === 0) return;
-    const change = yield* dns.createChanges({
-      project,
-      managedZone: zoneName,
-      body: { deletions: extra },
-    });
+    const change = yield* dns.createChanges({ deletions: extra, project, managedZone: zoneName });
     yield* waitForChange(project, zoneName, change);
   });
 
@@ -436,16 +432,14 @@ export const ManagedZoneProvider = () =>
       if (current === undefined) {
         const created = yield* dns
           .createManagedZones({
+            name: zoneName,
+            dnsName,
+            description,
+            visibility,
+            labels: desiredLabels,
+            cloudLoggingConfig: { enableLogging },
+            privateVisibilityConfig: privateVisibilityConfig(networks),
             project: env.project,
-            body: {
-              name: zoneName,
-              dnsName,
-              description,
-              visibility,
-              labels: desiredLabels,
-              cloudLoggingConfig: { enableLogging },
-              privateVisibilityConfig: privateVisibilityConfig(networks),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(env.project, zoneName)));
         current = created ?? undefined;
@@ -474,9 +468,9 @@ export const ManagedZoneProvider = () =>
           body.privateVisibilityConfig = privateVisibilityConfig(networks);
         }
         const operation = yield* dns.patchManagedZones({
+          ...body,
           project: env.project,
           managedZone: zoneName,
-          body,
         });
         yield* waitForOperation(env.project, zoneName, operation);
         current = (yield* getByName(env.project, zoneName)) ?? current;

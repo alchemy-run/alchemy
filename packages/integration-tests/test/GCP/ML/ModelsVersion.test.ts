@@ -50,12 +50,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         ml.createProjectsModelsVersions({
+          name: "v1",
+          deploymentUri: `gs://${project}-ml-missing/model`,
+          description: "probe",
           parent: `projects/${project}/models/alchemy-missing-model`,
-          body: {
-            name: "v1",
-            deploymentUri: `gs://${project}-ml-missing/model`,
-            description: "probe",
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");

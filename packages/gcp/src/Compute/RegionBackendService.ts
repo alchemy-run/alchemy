@@ -632,39 +632,35 @@ export const RegionBackendServiceProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertRegionBackendServices({
+            name,
+            description: desiredDescription,
+            protocol,
+            loadBalancingScheme,
+            timeoutSec,
+            portName: news.portName,
+            enableCDN,
+            sessionAffinity: news.sessionAffinity,
+            affinityCookieTtlSec: news.affinityCookieTtlSec,
+            healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
+            backends: desiredBackends.length > 0 ? desiredBackends : undefined,
+            connectionDraining:
+              news.connectionDrainingTimeoutSec !== undefined
+                ? {
+                    drainingTimeoutSec: news.connectionDrainingTimeoutSec,
+                  }
+                : undefined,
+            compressionMode: news.compressionMode,
+            customRequestHeaders:
+              (news.customRequestHeaders?.length ?? 0) > 0 ? news.customRequestHeaders : undefined,
+            customResponseHeaders:
+              (news.customResponseHeaders?.length ?? 0) > 0
+                ? news.customResponseHeaders
+                : undefined,
+            logConfig: news.logConfig,
+            localityLbPolicy: news.localityLbPolicy,
+            network,
             project: env.project,
             region,
-            body: {
-              name,
-              description: desiredDescription,
-              protocol,
-              loadBalancingScheme,
-              timeoutSec,
-              portName: news.portName,
-              enableCDN,
-              sessionAffinity: news.sessionAffinity,
-              affinityCookieTtlSec: news.affinityCookieTtlSec,
-              healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
-              backends: desiredBackends.length > 0 ? desiredBackends : undefined,
-              connectionDraining:
-                news.connectionDrainingTimeoutSec !== undefined
-                  ? {
-                      drainingTimeoutSec: news.connectionDrainingTimeoutSec,
-                    }
-                  : undefined,
-              compressionMode: news.compressionMode,
-              customRequestHeaders:
-                (news.customRequestHeaders?.length ?? 0) > 0
-                  ? news.customRequestHeaders
-                  : undefined,
-              customResponseHeaders:
-                (news.customResponseHeaders?.length ?? 0) > 0
-                  ? news.customResponseHeaders
-                  : undefined,
-              logConfig: news.logConfig,
-              localityLbPolicy: news.localityLbPolicy,
-              network,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -762,10 +758,10 @@ export const RegionBackendServiceProvider = () =>
 
         yield* compute
           .patchRegionBackendServices({
+            ...patch,
             project: env.project,
             region,
             backendService: name,
-            body: patch,
           })
           .pipe(
             Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

@@ -278,7 +278,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
         const created = yield* ssm
           .createProjectsLocationsRepositoriesIssuesIssueComments({
             parent: issue,
-            body: { body },
+            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -303,7 +303,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
         const operation = yield* ssm.patchProjectsLocationsRepositoriesIssuesIssueComments({
           name: currentName,
           updateMask: "body",
-          body: { body },
+          body,
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);

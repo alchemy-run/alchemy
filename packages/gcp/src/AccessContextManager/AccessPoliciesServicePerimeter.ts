@@ -327,16 +327,14 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       if (current === undefined) {
         const created = yield* acm
           .createAccessPoliciesServicePerimeters({
+            name,
+            title: desiredTitle,
+            description: desiredDescription,
+            perimeterType: desiredType,
+            useExplicitDryRunSpec: desiredDryRun ? true : undefined,
+            status: news.status,
+            spec: news.spec,
             parent: policy,
-            body: {
-              name,
-              title: desiredTitle,
-              description: desiredDescription,
-              perimeterType: desiredType,
-              useExplicitDryRunSpec: desiredDryRun ? true : undefined,
-              status: news.status,
-              spec: news.spec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -370,17 +368,14 @@ export const AccessPoliciesServicePerimeterProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* acm.patchAccessPoliciesServicePerimeters({
+          title: desiredTitle,
+          description: desiredDescription,
+          useExplicitDryRunSpec: desiredDryRun,
+          status: news.status,
+          spec: news.spec,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            title: desiredTitle,
-            description: desiredDescription,
-            useExplicitDryRunSpec: desiredDryRun,
-            status: news.status,
-            spec: news.spec,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

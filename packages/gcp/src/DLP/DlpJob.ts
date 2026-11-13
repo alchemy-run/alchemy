@@ -234,12 +234,10 @@ export const DlpJobProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsDlpJobs({
+            jobId: prefixedJobId(jobId, risk),
+            inspectJob,
+            riskJob: news.riskJob,
             parent: `projects/${env.project}`,
-            body: {
-              jobId: prefixedJobId(jobId, risk),
-              inspectJob,
-              riskJob: news.riskJob,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

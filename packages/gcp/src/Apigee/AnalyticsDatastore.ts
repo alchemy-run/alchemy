@@ -246,12 +246,10 @@ export const AnalyticsDatastoreProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsAnalyticsDatastores({
+            displayName: desiredDisplayName,
+            targetType,
+            datastoreConfig,
             parent: orgParent(organizationId),
-            body: {
-              displayName: desiredDisplayName,
-              targetType,
-              datastoreConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
@@ -275,12 +273,10 @@ export const AnalyticsDatastoreProvider = () =>
 
       if (needsUpdate) {
         current = yield* apigee.updateOrganizationsAnalyticsDatastores({
+          displayName: desiredDisplayName,
+          targetType,
+          datastoreConfig,
           name,
-          body: {
-            displayName: desiredDisplayName,
-            targetType,
-            datastoreConfig,
-          },
         });
       }
 

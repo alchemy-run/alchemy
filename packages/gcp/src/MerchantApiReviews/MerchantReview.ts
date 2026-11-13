@@ -378,11 +378,7 @@ export const MerchantReviewProvider = () =>
 
       const upsert = () =>
         reviews
-          .insertAccountsMerchantReviews({
-            parent: parentOf(account),
-            dataSource,
-            body: desired,
-          })
+          .insertAccountsMerchantReviews({ ...desired, parent: parentOf(account), dataSource })
           .pipe(Effect.catchTag("Conflict", () => getMerchantReview(name)));
 
       if (current === undefined) {

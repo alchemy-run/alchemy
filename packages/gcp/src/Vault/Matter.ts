@@ -225,7 +225,7 @@ export const MatterProvider = () =>
           });
         } else {
           const created = yield* vault
-            .createMatters({ body: desired })
+            .createMatters({ ...desired })
             .pipe(Effect.catchTag("Conflict", () => findOwnedMatter(id)));
           current = created ?? undefined;
         }
@@ -259,10 +259,7 @@ export const MatterProvider = () =>
       const nameChanged = !sameText(current.name, name);
       const descriptionChanged = !sameText(current.description, description);
       if (nameChanged || descriptionChanged) {
-        current = yield* vault.updateMatters({
-          matterId,
-          body: { name, description },
-        });
+        current = yield* vault.updateMatters({ name, description, matterId });
       }
 
       return toAttrs(current, env.project);

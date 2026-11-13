@@ -391,26 +391,24 @@ export const GatewayProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsGateways({
+            type,
+            labels: desiredLabels,
+            description: news.description,
+            ports,
+            allPorts: allPorts ? true : undefined,
+            addresses: news.addresses,
+            scope,
+            serverTlsPolicy: news.serverTlsPolicy,
+            certificateUrls: news.certificateUrls,
+            gatewaySecurityPolicy: news.gatewaySecurityPolicy,
+            network: news.network,
+            subnetwork: news.subnetwork,
+            ipVersion: news.ipVersion,
+            envoyHeaders: news.envoyHeaders,
+            routingMode: news.routingMode,
+            allowGlobalAccess: allowGlobalAccess ? true : undefined,
             parent: parentOf(env.project, location),
             gatewayId,
-            body: {
-              type,
-              labels: desiredLabels,
-              description: news.description,
-              ports,
-              allPorts: allPorts ? true : undefined,
-              addresses: news.addresses,
-              scope,
-              serverTlsPolicy: news.serverTlsPolicy,
-              certificateUrls: news.certificateUrls,
-              gatewaySecurityPolicy: news.gatewaySecurityPolicy,
-              network: news.network,
-              subnetwork: news.subnetwork,
-              ipVersion: news.ipVersion,
-              envoyHeaders: news.envoyHeaders,
-              routingMode: news.routingMode,
-              allowGlobalAccess: allowGlobalAccess ? true : undefined,
-            },
           })
           .pipe(
             Effect.retry({
@@ -461,25 +459,22 @@ export const GatewayProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsGateways({
+          type,
+          labels: desiredLabels,
+          description: news.description,
+          ports,
+          allPorts: allPorts ? true : false,
+          addresses: news.addresses ?? [],
+          scope,
+          serverTlsPolicy: news.serverTlsPolicy,
+          certificateUrls: news.certificateUrls ?? [],
+          gatewaySecurityPolicy: news.gatewaySecurityPolicy,
+          ipVersion: news.ipVersion,
+          envoyHeaders: news.envoyHeaders,
+          routingMode: news.routingMode,
+          allowGlobalAccess,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            type,
-            labels: desiredLabels,
-            description: news.description,
-            ports,
-            allPorts: allPorts ? true : false,
-            addresses: news.addresses ?? [],
-            scope,
-            serverTlsPolicy: news.serverTlsPolicy,
-            certificateUrls: news.certificateUrls ?? [],
-            gatewaySecurityPolicy: news.gatewaySecurityPolicy,
-            ipVersion: news.ipVersion,
-            envoyHeaders: news.envoyHeaders,
-            routingMode: news.routingMode,
-            allowGlobalAccess,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

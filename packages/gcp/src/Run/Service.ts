@@ -1478,9 +1478,9 @@ export const ServiceProvider = () =>
       if (current === undefined) {
         const created = yield* cloudrun
           .createProjectsLocationsServices({
+            ...toCreateBody(news, desiredLabels, template),
             parent,
             serviceId,
-            body: toCreateBody(news, desiredLabels, template),
           })
           .pipe(
             retryActAs,
@@ -1553,22 +1553,19 @@ export const ServiceProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* cloudrun.patchProjectsLocationsServices({
+          labels: desiredLabels,
+          description: news.description,
+          annotations: desiredAnnotations,
+          ingress: news.ingress,
+          invokerIamDisabled: news.invokerIamDisabled,
+          defaultUriDisabled: news.defaultUriDisabled,
+          iapEnabled: news.iapEnabled,
+          customAudiences: news.customAudiences,
+          scaling: news.scaling,
+          traffic: news.traffic,
+          template,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            annotations: desiredAnnotations,
-            ingress: news.ingress,
-            invokerIamDisabled: news.invokerIamDisabled,
-            defaultUriDisabled: news.defaultUriDisabled,
-            iapEnabled: news.iapEnabled,
-            customAudiences: news.customAudiences,
-            scaling: news.scaling,
-            traffic: news.traffic,
-            template,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);

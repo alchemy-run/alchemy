@@ -209,14 +209,7 @@ export const ViewProvider = () =>
 
       if (current === undefined) {
         const created = yield* cci
-          .createProjectsLocationsViews({
-            parent,
-            body: {
-              name,
-              displayName,
-              value: news.value,
-            },
-          })
+          .createProjectsLocationsViews({ name, displayName, value: news.value, parent })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
       }
@@ -231,16 +224,13 @@ export const ViewProvider = () =>
 
       if (displayChanged || valueChanged) {
         current = yield* cci.patchProjectsLocationsViews({
+          displayName,
+          value: news.value,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             valueChanged ? "value" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            value: news.value,
-          },
         });
       }
 

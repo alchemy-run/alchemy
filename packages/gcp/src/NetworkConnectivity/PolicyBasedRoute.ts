@@ -736,9 +736,9 @@ export const PolicyBasedRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsGlobalPolicyBasedRoutes({
+            ...toBody(env.project, news, desiredLabels),
             parent: parentOf(env.project),
             policyBasedRouteId,
-            body: toBody(env.project, news, desiredLabels),
           })
           .pipe(
             Effect.retry({

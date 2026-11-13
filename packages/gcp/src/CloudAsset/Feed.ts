@@ -342,19 +342,14 @@ export const FeedProvider = () =>
       let current = yield* observe(env.project, feedId, output?.name);
 
       if (current === undefined) {
-        const created = yield* cloudasset
-          .createFeeds({
-            parent,
-            body: { feedId, feed: body },
-          })
-          .pipe(
-            Effect.retry({
-              while: (error) => error._tag === "BadRequest",
-              times: 8,
-              schedule: Schedule.spaced("2 seconds"),
-            }),
-            Effect.catchTag("Conflict", () => observe(env.project, feedId, output?.name)),
-          );
+        const created = yield* cloudasset.createFeeds({ feedId, feed: body, parent }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "BadRequest",
+            times: 8,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.catchTag("Conflict", () => observe(env.project, feedId, output?.name)),
+        );
         current = created ?? undefined;
       }
 
@@ -389,11 +384,9 @@ export const FeedProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* cloudasset.patchFeeds({
+          updateMask,
+          feed: { ...body, name: currentName },
           name: currentName,
-          body: {
-            updateMask,
-            feed: { ...body, name: currentName },
-          },
         });
       }
 

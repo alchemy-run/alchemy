@@ -669,9 +669,9 @@ export const InternalRangeProvider = () =>
         }
         const created = yield* networkconnectivity
           .createProjectsLocationsInternalRanges({
+            ...toCreateBody(news, env.project, desiredLabels),
             parent: parentOf(env.project, location),
             internalRangeId,
-            body: toCreateBody(news, env.project, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -734,19 +734,16 @@ export const InternalRangeProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networkconnectivity.patchProjectsLocationsInternalRanges({
+          labels: desiredLabels,
+          description: news.description,
+          ipCidrRange: news.ipCidrRange,
+          prefixLength: news.prefixLength,
+          targetCidrRange: news.targetCidrRange,
+          excludeCidrRanges: news.excludeCidrRanges,
+          overlaps: news.overlaps,
+          allocationOptions: news.allocationOptions,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            ipCidrRange: news.ipCidrRange,
-            prefixLength: news.prefixLength,
-            targetCidrRange: news.targetCidrRange,
-            excludeCidrRanges: news.excludeCidrRanges,
-            overlaps: news.overlaps,
-            allocationOptions: news.allocationOptions,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

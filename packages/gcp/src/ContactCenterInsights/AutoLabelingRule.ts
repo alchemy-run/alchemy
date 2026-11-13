@@ -316,16 +316,14 @@ export const AutoLabelingRuleProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAutoLabelingRules({
+            displayName,
+            description,
+            active,
+            labelKey,
+            labelKeyType,
+            conditions,
             parent,
             autoLabelingRuleId,
-            body: {
-              displayName,
-              description,
-              active,
-              labelKey,
-              labelKeyType,
-              conditions,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -343,6 +341,10 @@ export const AutoLabelingRuleProvider = () =>
 
       if (displayChanged || descriptionChanged || activeChanged || conditionsChanged) {
         current = yield* cci.patchProjectsLocationsAutoLabelingRules({
+          displayName,
+          description,
+          active,
+          conditions,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -350,13 +352,6 @@ export const AutoLabelingRuleProvider = () =>
             activeChanged ? "active" : undefined,
             conditionsChanged ? "conditions" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            active,
-            conditions,
-          },
         });
       }
 

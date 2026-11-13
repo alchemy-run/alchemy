@@ -746,9 +746,9 @@ export const ForwardingRuleProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertForwardingRules({
+            ...toInsertBody(forwardingRuleName, news),
             project: env.project,
             region,
-            body: toInsertBody(forwardingRuleName, news),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -781,10 +781,10 @@ export const ForwardingRuleProvider = () =>
       ) {
         yield* compute
           .setTargetForwardingRules({
+            target: news.target,
             project: env.project,
             region,
             forwardingRule: forwardingRuleName,
-            body: { target: news.target },
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = (yield* getByName(env.project, region, forwardingRuleName)) ?? current;
@@ -798,10 +798,10 @@ export const ForwardingRuleProvider = () =>
       ) {
         yield* compute
           .patchForwardingRules({
+            allowGlobalAccess: news.allowGlobalAccess,
             project: env.project,
             region,
             forwardingRule: forwardingRuleName,
-            body: { allowGlobalAccess: news.allowGlobalAccess },
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = (yield* getByName(env.project, region, forwardingRuleName)) ?? current;
@@ -813,13 +813,11 @@ export const ForwardingRuleProvider = () =>
       ) {
         yield* compute
           .patchForwardingRules({
+            fingerprint: current.fingerprint,
+            allowPscGlobalAccess: news.allowPscGlobalAccess,
             project: env.project,
             region,
             forwardingRule: forwardingRuleName,
-            body: {
-              fingerprint: current.fingerprint,
-              allowPscGlobalAccess: news.allowPscGlobalAccess,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = (yield* getByName(env.project, region, forwardingRuleName)) ?? current;
@@ -832,13 +830,11 @@ export const ForwardingRuleProvider = () =>
           const latest = (yield* getByName(env.project, region, forwardingRuleName)) ?? resolved;
           yield* compute
             .setLabelsForwardingRules({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               region,
               resource: forwardingRuleName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             })
             .pipe(
               Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

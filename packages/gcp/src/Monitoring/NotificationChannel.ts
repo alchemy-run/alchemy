@@ -321,15 +321,13 @@ export const NotificationChannelProvider = () =>
       if (current === undefined) {
         const created = yield* monitoring
           .createProjectsNotificationChannels({
+            type: news.type,
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            userLabels: desiredUserLabels,
+            enabled: desiredEnabled,
             name: parentOf(env.project),
-            body: {
-              type: news.type,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              userLabels: desiredUserLabels,
-              enabled: desiredEnabled,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
         current = created ?? undefined;
@@ -360,17 +358,14 @@ export const NotificationChannelProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchProjectsNotificationChannels({
+          type: news.type,
+          displayName,
+          description: news.description ?? "",
+          labels: desiredLabels,
+          userLabels: desiredUserLabels,
+          enabled: desiredEnabled,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            type: news.type,
-            displayName,
-            description: news.description ?? "",
-            labels: desiredLabels,
-            userLabels: desiredUserLabels,
-            enabled: desiredEnabled,
-          },
         });
       }
 

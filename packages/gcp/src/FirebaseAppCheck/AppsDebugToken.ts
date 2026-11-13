@@ -207,11 +207,9 @@ export const AppsDebugTokenProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           firebaseappcheck.createProjectsAppsDebugTokens({
+            displayName: desiredDisplay,
+            token: secret,
             parent: app,
-            body: {
-              displayName: desiredDisplay,
-              token: secret,
-            },
           }),
         ).pipe(
           Effect.catchTag("Conflict", () =>
@@ -232,12 +230,10 @@ export const AppsDebugTokenProvider = () =>
       if (!sameText(current.displayName, desiredDisplay)) {
         current = yield* retryTransient(
           firebaseappcheck.patchProjectsAppsDebugTokens({
+            displayName: desiredDisplay,
+            etag: current.etag,
             name: current.name ?? "",
             updateMask: "display_name",
-            body: {
-              displayName: desiredDisplay,
-              etag: current.etag,
-            },
           }),
         );
       }

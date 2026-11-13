@@ -280,13 +280,11 @@ export const DatasetsConsentStoreProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsConsentStores({
+            labels: desiredLabels,
+            defaultConsentTtl: news.defaultConsentTtl,
+            enableConsentCreateOnUpdate: news.enableConsentCreateOnUpdate,
             parent: dataset,
             consentStoreId,
-            body: {
-              labels: desiredLabels,
-              defaultConsentTtl: news.defaultConsentTtl,
-              enableConsentCreateOnUpdate: news.enableConsentCreateOnUpdate,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -308,17 +306,15 @@ export const DatasetsConsentStoreProvider = () =>
       if (labelsChanged || ttlChanged || createOnUpdateChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsConsentStores({
+            labels: desiredLabels,
+            defaultConsentTtl: news.defaultConsentTtl,
+            enableConsentCreateOnUpdate: news.enableConsentCreateOnUpdate,
             name: currentName,
             updateMask: updateMaskOf(
               labelsChanged ? "labels" : undefined,
               ttlChanged ? "defaultConsentTtl" : undefined,
               createOnUpdateChanged ? "enableConsentCreateOnUpdate" : undefined,
             ),
-            body: {
-              labels: desiredLabels,
-              defaultConsentTtl: news.defaultConsentTtl,
-              enableConsentCreateOnUpdate: news.enableConsentCreateOnUpdate,
-            },
           }),
         );
       }

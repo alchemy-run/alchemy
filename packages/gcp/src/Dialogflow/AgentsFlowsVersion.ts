@@ -255,10 +255,7 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (current === undefined) {
         const operation = yield* dialogflow
-          .createProjectsLocationsAgentsFlowsVersions({
-            parent: flow,
-            body,
-          })
+          .createProjectsLocationsAgentsFlowsVersions({ ...body, parent: flow })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForOperation(operation);
@@ -288,12 +285,13 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlowsVersions({
+          displayName,
+          description,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             descriptionChanged ? "description" : undefined,
           ),
-          body: { displayName, description, name: currentName },
         });
       }
 

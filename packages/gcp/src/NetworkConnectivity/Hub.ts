@@ -426,15 +426,13 @@ export const HubProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsGlobalHubs({
+            description: news.description,
+            labels: desiredLabels,
+            exportPsc,
+            policyMode,
+            presetTopology,
             parent: parentOf(env.project),
             hubId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              exportPsc,
-              policyMode,
-              presetTopology,
-            },
           })
           .pipe(
             Effect.retry({
@@ -479,16 +477,13 @@ export const HubProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networkconnectivity.patchProjectsLocationsGlobalHubs({
+          labels: desiredLabels,
+          description: news.description,
+          exportPsc,
+          policyMode,
+          presetTopology,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            exportPsc,
-            policyMode,
-            presetTopology,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

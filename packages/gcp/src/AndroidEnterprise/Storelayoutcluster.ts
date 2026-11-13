@@ -243,11 +243,7 @@ export const StorelayoutclusterProvider = () =>
 
       if (current === undefined) {
         const created = yield* androidenterprise
-          .insertStorelayoutclusters({
-            enterpriseId,
-            pageId,
-            body: desiredBody({ name, news }),
-          })
+          .insertStorelayoutclusters({ ...desiredBody({ name, news }), enterpriseId, pageId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCluster(id, enterpriseId, pageId).pipe(
@@ -275,10 +271,10 @@ export const StorelayoutclusterProvider = () =>
       });
       if (needsSync(current, desired)) {
         current = yield* androidenterprise.updateStorelayoutclusters({
+          ...desired,
           enterpriseId,
           pageId,
           clusterId,
-          body: desired,
         });
       }
 

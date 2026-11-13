@@ -399,17 +399,15 @@ export const TlsInspectionPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsTlsInspectionPolicies({
+            description: desiredDescription,
+            caPool,
+            trustConfig,
+            excludePublicCaSet,
+            tlsFeatureProfile: news.tlsFeatureProfile,
+            minTlsVersion: news.minTlsVersion,
+            customTlsFeatures: customTlsFeatures.length > 0 ? customTlsFeatures : undefined,
             parent: parentOf(env.project, location),
             tlsInspectionPolicyId,
-            body: {
-              description: desiredDescription,
-              caPool,
-              trustConfig,
-              excludePublicCaSet,
-              tlsFeatureProfile: news.tlsFeatureProfile,
-              minTlsVersion: news.minTlsVersion,
-              customTlsFeatures: customTlsFeatures.length > 0 ? customTlsFeatures : undefined,
-            },
           })
           .pipe(
             Effect.retry({
@@ -460,19 +458,16 @@ export const TlsInspectionPolicyProvider = () =>
           featuresChanged ? "customTlsFeatures" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsTlsInspectionPolicies({
+          description: desiredDescription,
+          caPool,
+          trustConfig,
+          excludePublicCaSet,
+          tlsFeatureProfile: news.tlsFeatureProfile,
+          minTlsVersion: news.minTlsVersion,
+          customTlsFeatures:
+            news.customTlsFeatures !== undefined ? customTlsFeatures : current.customTlsFeatures,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            caPool,
-            trustConfig,
-            excludePublicCaSet,
-            tlsFeatureProfile: news.tlsFeatureProfile,
-            minTlsVersion: news.minTlsVersion,
-            customTlsFeatures:
-              news.customTlsFeatures !== undefined ? customTlsFeatures : current.customTlsFeatures,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

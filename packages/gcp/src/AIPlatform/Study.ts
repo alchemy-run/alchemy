@@ -295,13 +295,7 @@ export const StudyProvider = () =>
 
       if (current === undefined) {
         const created = yield* aiplatform
-          .createProjectsLocationsStudies({
-            parent,
-            body: {
-              displayName,
-              studySpec,
-            },
-          })
+          .createProjectsLocationsStudies({ displayName, studySpec, parent })
           .pipe(Effect.catchTag("Conflict", () => lookupByDisplayName(parent, displayName)));
         current = created ?? undefined;
       }

@@ -343,13 +343,11 @@ export const DevelopersAppsKeyProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsDevelopersAppsKeys({
+            consumerKey,
+            consumerSecret,
+            expiresInSeconds: news.expiresInSeconds,
+            attributes: recordToAttributes(attributes),
             parent,
-            body: {
-              consumerKey,
-              consumerSecret,
-              expiresInSeconds: news.expiresInSeconds,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -370,14 +368,12 @@ export const DevelopersAppsKeyProvider = () =>
 
       if (scopesChanged || productsChanged || statusChanged || attributesChanged) {
         current = yield* apigee.updateDeveloperAppKeyOrganizationsDevelopersAppsKeys({
+          consumerKey,
+          scopes: news.scopes,
+          apiProducts: news.apiProducts,
+          attributes: recordToAttributes(attributes),
           name,
           action: statusChanged ? status : undefined,
-          body: {
-            consumerKey,
-            scopes: news.scopes,
-            apiProducts: news.apiProducts,
-            attributes: recordToAttributes(attributes),
-          },
         });
       }
 

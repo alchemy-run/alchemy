@@ -350,19 +350,17 @@ export const RepositoryProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsRepositories({
+            displayName,
+            labels: desiredLabels,
+            containingFolder,
+            gitRemoteSettings,
+            npmrcEnvironmentVariablesSecretVersion: news.npmrcEnvironmentVariablesSecretVersion,
+            serviceAccount: news.serviceAccount,
+            workspaceCompilationOverrides: news.workspaceCompilationOverrides,
+            kmsKeyName: news.kmsKeyName,
+            setAuthenticatedUserAdmin: news.setAuthenticatedUserAdmin ?? true,
             parent: locationParent(env.project, location),
             repositoryId,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              containingFolder,
-              gitRemoteSettings,
-              npmrcEnvironmentVariablesSecretVersion: news.npmrcEnvironmentVariablesSecretVersion,
-              serviceAccount: news.serviceAccount,
-              workspaceCompilationOverrides: news.workspaceCompilationOverrides,
-              kmsKeyName: news.kmsKeyName,
-              setAuthenticatedUserAdmin: news.setAuthenticatedUserAdmin ?? true,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -413,6 +411,12 @@ export const RepositoryProvider = () =>
       ) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsRepositories({
+            displayName,
+            labels: desiredLabels,
+            gitRemoteSettings,
+            npmrcEnvironmentVariablesSecretVersion: news.npmrcEnvironmentVariablesSecretVersion,
+            serviceAccount: news.serviceAccount,
+            workspaceCompilationOverrides: news.workspaceCompilationOverrides,
             name: currentName,
             updateMask: updateMaskOf(
               labelsChanged ? "labels" : undefined,
@@ -422,14 +426,6 @@ export const RepositoryProvider = () =>
               serviceAccountChanged ? "serviceAccount" : undefined,
               overridesChanged ? "workspaceCompilationOverrides" : undefined,
             ),
-            body: {
-              displayName,
-              labels: desiredLabels,
-              gitRemoteSettings,
-              npmrcEnvironmentVariablesSecretVersion: news.npmrcEnvironmentVariablesSecretVersion,
-              serviceAccount: news.serviceAccount,
-              workspaceCompilationOverrides: news.workspaceCompilationOverrides,
-            },
           }),
         );
       }
@@ -439,8 +435,8 @@ export const RepositoryProvider = () =>
       if (desiredFolder !== observedFolder) {
         const moved = yield* retryTransient(
           dataform.moveProjectsLocationsRepositories({
+            destinationContainingFolder: desiredFolder,
             name: currentName,
-            body: { destinationContainingFolder: desiredFolder },
           }),
         );
         yield* waitForOperation(moved);

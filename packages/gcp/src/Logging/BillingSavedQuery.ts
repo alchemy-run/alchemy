@@ -394,9 +394,9 @@ export const BillingSavedQueryProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createBillingAccountsLocationsSavedQueries({
+            ...toBody(news, desiredDescription),
             parent: `${billingAccountParent(billingAccountId)}/locations/${location}`,
             savedQueryId,
-            body: toBody(news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -426,9 +426,9 @@ export const BillingSavedQueryProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchBillingAccountsLocationsSavedQueries({
+          ...toBody(news, desiredDescription),
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: toBody(news, desiredDescription),
         });
       }
 

@@ -381,9 +381,9 @@ export const DeploymentProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsDeployments({
+            ...toBody(news, description, displayName),
             parent,
             deploymentId,
-            body: toBody(news, description, displayName),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* getByName(name));
@@ -430,12 +430,9 @@ export const DeploymentProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* apihub.patchProjectsLocationsDeployments({
+          ...toBody(news, description, displayName),
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            ...toBody(news, description, displayName),
-          },
         });
       }
 

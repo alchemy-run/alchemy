@@ -25,14 +25,12 @@ export default class CloudTasksBindingsHost extends GCP.Function<CloudTasksBindi
             new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           );
           return yield* createTask({
-            body: {
-              task: {
-                scheduleTime,
-                httpRequest: {
-                  url: TASK_URL,
-                  httpMethod: "POST",
-                  body: btoa(JSON.stringify({ id: "1" })),
-                },
+            task: {
+              scheduleTime,
+              httpRequest: {
+                url: TASK_URL,
+                httpMethod: "POST",
+                body: btoa(JSON.stringify({ id: "1" })),
               },
             },
           });

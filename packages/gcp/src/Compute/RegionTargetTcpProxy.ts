@@ -412,20 +412,14 @@ export const RegionTargetTcpProxyProvider = () =>
         if (news.loadBalancingScheme !== undefined) {
           body.loadBalancingScheme = news.loadBalancingScheme;
         }
-        return compute
-          .insertRegionTargetTcpProxies({
-            project: env.project,
-            region,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        return compute.insertRegionTargetTcpProxies({ ...body, project: env.project, region }).pipe(
+          Effect.flatMap((operation) =>
+            waitRegionOperation(env.project, region, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
       };
 
       const deleteProxy = () =>

@@ -574,12 +574,10 @@ export const RepositoryProvider = () =>
       if (current === undefined) {
         const created = yield* cloudbuild
           .createProjectsLocationsConnectionsRepositories({
+            remoteUri: news.remoteUri,
+            annotations: desiredAnnotations,
             parent: parent.parent,
             repositoryId,
-            body: {
-              remoteUri: news.remoteUri,
-              annotations: desiredAnnotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

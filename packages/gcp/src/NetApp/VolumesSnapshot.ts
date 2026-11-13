@@ -290,12 +290,10 @@ export const VolumesSnapshotProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsVolumesSnapshots({
+            description: news.description,
+            labels: desiredLabels,
             parent: volume,
             snapshotId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -322,13 +320,10 @@ export const VolumesSnapshotProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsVolumesSnapshots({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

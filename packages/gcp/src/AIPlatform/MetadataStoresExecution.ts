@@ -330,17 +330,15 @@ export const MetadataStoresExecutionProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsMetadataStoresExecutions({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            state: news.state,
+            schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
+            schemaVersion: news.schemaVersion,
+            metadata: news.metadata,
             parent: metadataStore,
             executionId,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              state: news.state,
-              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
-              schemaVersion: news.schemaVersion,
-              metadata: news.metadata,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -370,6 +368,14 @@ export const MetadataStoresExecutionProvider = () =>
         metadataChanged
       ) {
         current = yield* aiplatform.patchProjectsLocationsMetadataStoresExecutions({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
+          state: news.state,
+          schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
+          schemaVersion: news.schemaVersion,
+          metadata: news.metadata,
+          etag: current.etag,
           name,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -382,17 +388,6 @@ export const MetadataStoresExecutionProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-            state: news.state,
-            schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
-            schemaVersion: news.schemaVersion,
-            metadata: news.metadata,
-            etag: current.etag,
-          },
         });
       }
 

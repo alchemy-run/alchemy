@@ -356,15 +356,13 @@ export const ConnectClusterProvider = () =>
       if (current === undefined) {
         const created = yield* kafka
           .createProjectsLocationsConnectClusters({
+            kafkaCluster,
+            gcpConfig,
+            capacityConfig: capacity,
+            config: news.config,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             connectClusterId,
-            body: {
-              kafkaCluster,
-              gcpConfig,
-              capacityConfig: capacity,
-              config: news.config,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             retryCreateQuota,
@@ -396,6 +394,10 @@ export const ConnectClusterProvider = () =>
 
       if (labelsChanged || capacityChanged || configChanged || secretsChanged) {
         const op = yield* kafka.patchProjectsLocationsConnectClusters({
+          labels: desiredLabels,
+          capacityConfig: capacity,
+          config: news.config,
+          gcpConfig,
           name,
           updateMask: fieldMask([
             labelsChanged && "labels",
@@ -403,12 +405,6 @@ export const ConnectClusterProvider = () =>
             configChanged && "config",
             secretsChanged && "gcp_config.secret_paths",
           ]),
-          body: {
-            labels: desiredLabels,
-            capacityConfig: capacity,
-            config: news.config,
-            gcpConfig,
-          },
         });
         yield* waitForOperation(op);
         current = yield* waitUntilReady(getConnectCluster(name), name, (cluster) => cluster.state);

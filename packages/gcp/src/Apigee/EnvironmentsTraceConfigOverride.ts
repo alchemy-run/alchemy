@@ -216,11 +216,9 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsTraceConfigOverrides({
+            apiProxy: news.apiProxy,
+            samplingConfig: news.samplingConfig,
             parent,
-            body: {
-              apiProxy: news.apiProxy,
-              samplingConfig: news.samplingConfig,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -243,6 +241,8 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
         jsonOf(samplingOf(current.samplingConfig)) !== jsonOf(news.samplingConfig);
       if (proxyChanged || samplingChanged) {
         current = yield* apigee.patchOrganizationsEnvironmentsTraceConfigOverrides({
+          apiProxy: news.apiProxy,
+          samplingConfig: news.samplingConfig,
           name: current.name,
           updateMask: [
             proxyChanged ? "api_proxy" : undefined,
@@ -250,10 +250,6 @@ export const EnvironmentsTraceConfigOverrideProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            apiProxy: news.apiProxy,
-            samplingConfig: news.samplingConfig,
-          },
         });
       }
 

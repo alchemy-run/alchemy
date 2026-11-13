@@ -62,14 +62,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertNodeGroups({
+          name: "alchemy-ng-probe",
+          description: "alchemy entitlement probe",
+          nodeTemplate: "does-not-exist",
           project,
           zone,
           initialNodeCount: 0,
-          body: {
-            name: "alchemy-ng-probe",
-            description: "alchemy entitlement probe",
-            nodeTemplate: "does-not-exist",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

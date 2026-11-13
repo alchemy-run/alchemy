@@ -474,10 +474,7 @@ export const SslCertificateProvider = () =>
 
       if (current === undefined) {
         const created = yield* compute
-          .insertSslCertificates({
-            project: env.project,
-            body: desired,
-          })
+          .insertSslCertificates({ ...desired, project: env.project })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.undefined),

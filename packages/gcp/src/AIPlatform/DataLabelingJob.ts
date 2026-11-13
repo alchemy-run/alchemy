@@ -309,20 +309,18 @@ export const DataLabelingJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsDataLabelingJobs({
+            displayName,
+            datasets: news.datasets,
+            labelerCount: news.labelerCount,
+            instructionUri: news.instructionUri,
+            inputsSchemaUri: news.inputsSchemaUri,
+            inputs: news.inputs,
+            specialistPools: news.specialistPools,
+            annotationLabels: news.annotationLabels,
+            activeLearningConfig: news.activeLearningConfig,
+            labels: desiredLabels,
+            encryptionSpec: news.encryptionSpec,
             parent: parentOf(env.project, location),
-            body: {
-              displayName,
-              datasets: news.datasets,
-              labelerCount: news.labelerCount,
-              instructionUri: news.instructionUri,
-              inputsSchemaUri: news.inputsSchemaUri,
-              inputs: news.inputs,
-              specialistPools: news.specialistPools,
-              annotationLabels: news.annotationLabels,
-              activeLearningConfig: news.activeLearningConfig,
-              labels: desiredLabels,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;

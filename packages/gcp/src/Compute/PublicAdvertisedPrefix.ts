@@ -298,15 +298,13 @@ export const PublicAdvertisedPrefixProvider = () =>
         yield* runGlobalOp(
           env.project,
           compute.insertPublicAdvertisedPrefixes({
+            name: prefixName,
+            description: desiredDescription,
+            ipCidrRange: news.ipCidrRange,
+            dnsVerificationIp: news.dnsVerificationIp,
+            pdpScope: news.pdpScope,
+            ipv6AccessType: news.ipv6AccessType,
             project: env.project,
-            body: {
-              name: prefixName,
-              description: desiredDescription,
-              ipCidrRange: news.ipCidrRange,
-              dnsVerificationIp: news.dnsVerificationIp,
-              pdpScope: news.pdpScope,
-              ipv6AccessType: news.ipv6AccessType,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -321,12 +319,10 @@ export const PublicAdvertisedPrefixProvider = () =>
         yield* runGlobalOp(
           env.project,
           compute.patchPublicAdvertisedPrefixes({
+            description: desiredDescription,
+            fingerprint: current.fingerprint,
             project: env.project,
             publicAdvertisedPrefix: prefixName,
-            body: {
-              description: desiredDescription,
-              fingerprint: current.fingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, prefixName)) ?? current;

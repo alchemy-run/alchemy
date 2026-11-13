@@ -26,8 +26,8 @@ let namespaceName: string;
 /** Roles the host's service account holds on the bound service. */
 const hostRolesOnService = Effect.gen(function* () {
   const policy = yield* servicedirectory.getIamPolicyProjectsLocationsNamespacesServices({
+    options: { requestedPolicyVersion: 3 },
     resource: serviceName,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
@@ -38,8 +38,8 @@ const hostRolesOnService = Effect.gen(function* () {
 /** Roles the host's service account holds on the parent namespace. */
 const hostRolesOnNamespace = Effect.gen(function* () {
   const policy = yield* servicedirectory.getIamPolicyProjectsLocationsNamespaces({
+    options: { requestedPolicyVersion: 3 },
     resource: namespaceName,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))

@@ -237,11 +237,9 @@ export const ObservationSourceProvider = () =>
       if (current === undefined) {
         const created = yield* apim
           .createProjectsLocationsObservationSources({
+            gclbObservationSource,
             parent: parentOf(env.project, location),
             observationSourceId,
-            body: {
-              gclbObservationSource,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

@@ -286,11 +286,7 @@ export const CustomersConnectorConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* chromemanagement
-          .createCustomersConnectorConfigs({
-            parent,
-            connectorConfigId,
-            body: desired,
-          })
+          .createCustomersConnectorConfigs({ ...desired, parent, connectorConfigId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               getConnectorConfig(name).pipe(
@@ -320,9 +316,9 @@ export const CustomersConnectorConfigProvider = () =>
 
       if (updateMask.length > 0 && currentName.length > 0) {
         current = yield* chromemanagement.patchCustomersConnectorConfigs({
+          ...desired,
           name: currentName,
           updateMask,
-          body: desired,
         });
       }
 

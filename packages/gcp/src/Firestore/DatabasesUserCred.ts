@@ -235,11 +235,7 @@ export const DatabasesUserCredProvider = () =>
 
       if (current === undefined) {
         const created = yield* firestore
-          .createProjectsDatabasesUserCreds({
-            parent,
-            userCredsId,
-            body: {},
-          })
+          .createProjectsDatabasesUserCreds({ parent, userCredsId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               listOnDatabase(parent).pipe(

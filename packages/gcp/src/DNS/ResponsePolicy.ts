@@ -354,16 +354,14 @@ export const ResponsePolicyProvider = () =>
       if (current === undefined) {
         const created = yield* dns
           .createResponsePolicies({
+            responsePolicyName,
+            description,
+            labels: desiredLabels,
+            networks: networks.map((networkUrl) => ({ networkUrl })),
+            gkeClusters: gkeClusters.map((gkeClusterName) => ({
+              gkeClusterName,
+            })),
             project: env.project,
-            body: {
-              responsePolicyName,
-              description,
-              labels: desiredLabels,
-              networks: networks.map((networkUrl) => ({ networkUrl })),
-              gkeClusters: gkeClusters.map((gkeClusterName) => ({
-                gkeClusterName,
-              })),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(env.project, responsePolicyName)));
         current = created ?? undefined;
@@ -393,9 +391,9 @@ export const ResponsePolicyProvider = () =>
           }));
         }
         const patched = yield* dns.patchResponsePolicies({
+          ...body,
           project: env.project,
           responsePolicy: responsePolicyName,
-          body,
         });
         current =
           patched.responsePolicy ?? (yield* getByName(env.project, responsePolicyName)) ?? current;
@@ -411,9 +409,10 @@ export const ResponsePolicyProvider = () =>
         yield* emptyRules(project, responsePolicyName);
         yield* dns
           .patchResponsePolicies({
+            networks: [],
+            gkeClusters: [],
             project,
             responsePolicy: responsePolicyName,
-            body: { networks: [], gkeClusters: [] },
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.void));
       });

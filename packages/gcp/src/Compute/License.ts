@@ -472,8 +472,8 @@ export const LicenseProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertLicenses({
+            ...insertBody(licenseName, news, desiredDescription),
             project: env.project,
-            body: insertBody(licenseName, news, desiredDescription),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -505,16 +505,14 @@ export const LicenseProvider = () =>
           env.project,
           licenseName,
           compute.updateLicenses({
+            appendableToDisk: appendable,
+            removableFromDisk: removable,
+            allowedReplacementLicenses:
+              news.allowedReplacementLicenses ?? current.allowedReplacementLicenses,
+            minimumRetention: news.minimumRetention ?? current.minimumRetention,
             project: env.project,
             license: licenseName,
             updateMask: updateMask.join(","),
-            body: {
-              appendableToDisk: appendable,
-              removableFromDisk: removable,
-              allowedReplacementLicenses:
-                news.allowedReplacementLicenses ?? current.allowedReplacementLicenses,
-              minimumRetention: news.minimumRetention ?? current.minimumRetention,
-            },
           }),
         );
         current = (yield* getByName(env.project, licenseName)) ?? current;

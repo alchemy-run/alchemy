@@ -442,11 +442,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* compute
-          .insertZoneVmExtensionPolicies({
-            project: env.project,
-            zone,
-            body: desired,
-          })
+          .insertZoneVmExtensionPolicies({ ...desired, project: env.project, zone })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
@@ -477,10 +473,10 @@ export const ZoneVmExtensionPolicyProvider = () =>
         (descriptionChanged || priorityChanged || selectorsChanged || extensionsChanged)
       ) {
         const patched = yield* compute.updateZoneVmExtensionPolicies({
+          ...desired,
           project: env.project,
           zone,
           vmExtensionPolicy: vmExtensionPolicyName,
-          body: desired,
         });
         yield* waitZoneOperation(env.project, zone, patched);
         current =

@@ -311,16 +311,14 @@ export const DomainProvider = () =>
       if (current === undefined) {
         const created = yield* managedidentities
           .createProjectsLocationsGlobalDomains({
+            reservedIpRange: news.reservedIpRange,
+            locations,
+            authorizedNetworks,
+            admin: news.admin,
+            auditLogsEnabled,
+            labels: desiredLabels,
             parent: globalParent(env.project),
             domainName,
-            body: {
-              reservedIpRange: news.reservedIpRange,
-              locations,
-              authorizedNetworks,
-              admin: news.admin,
-              auditLogsEnabled,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -355,15 +353,12 @@ export const DomainProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* managedidentities.patchProjectsLocationsGlobalDomains({
+          labels: desiredLabels,
+          locations,
+          authorizedNetworks,
+          auditLogsEnabled,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            locations,
-            authorizedNetworks,
-            auditLogsEnabled,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

@@ -35,13 +35,11 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertGlobalPublicDelegatedPrefixes({
+          name: "alchemy-pdp-probe",
+          description: "alchemy entitlement probe",
+          parentPrefix: parentPrefix || "does-not-exist",
+          ipCidrRange,
           project,
-          body: {
-            name: "alchemy-pdp-probe",
-            description: "alchemy entitlement probe",
-            parentPrefix: parentPrefix || "does-not-exist",
-            ipCidrRange,
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

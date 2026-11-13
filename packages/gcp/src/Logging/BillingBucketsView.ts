@@ -349,12 +349,10 @@ export const BillingBucketsViewProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createBillingAccountsLocationsBucketsViews({
+            filter: news.filter,
+            description: desiredDescription,
             parent,
             viewId,
-            body: {
-              filter: news.filter,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -373,12 +371,10 @@ export const BillingBucketsViewProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchBillingAccountsLocationsBucketsViews({
+          filter: news.filter ?? "",
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter ?? "",
-            description: desiredDescription,
-          },
         });
       }
 

@@ -817,20 +817,14 @@ export const RouterProvider = () =>
         if (news.nccGateway !== undefined) {
           body.nccGateway = news.nccGateway;
         }
-        yield* compute
-          .insertRouters({
-            project: env.project,
-            region,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.void),
-          );
+        yield* compute.insertRouters({ ...body, project: env.project, region }).pipe(
+          Effect.flatMap((operation) =>
+            waitRegionOperation(env.project, region, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.void),
+        );
         current = yield* requireRouter(env.project, region, routerName);
       }
 
@@ -846,10 +840,10 @@ export const RouterProvider = () =>
       }
       if (Object.keys(patchBody).length > 0) {
         const patched = yield* compute.patchRouters({
+          ...patchBody,
           project: env.project,
           region,
           router: routerName,
-          body: patchBody,
         });
         yield* waitRegionOperation(env.project, region, patched);
         current = yield* requireRouter(env.project, region, routerName);

@@ -422,9 +422,9 @@ export const ExadbVmClusterProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsExadbVmClusters({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             exadbVmClusterId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             retryQuota,
@@ -461,15 +461,12 @@ export const ExadbVmClusterProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const operation = yield* retryQuota(
           oracle.patchProjectsLocationsExadbVmClusters({
+            labels: desiredLabels,
+            properties: {
+              nodeCount: props.nodeCount,
+            },
             name: ready.name ?? name,
             updateMask: mask.join(","),
-            body: {
-              name: ready.name ?? name,
-              labels: desiredLabels,
-              properties: {
-                nodeCount: props.nodeCount,
-              },
-            },
           }),
         );
         yield* waitForOperation(operation);

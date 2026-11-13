@@ -272,10 +272,7 @@ export const CustomersNodesDeviceProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createCustomersNodesDevices({
-            parent,
-            body: desired,
-          })
+          .createCustomersNodesDevices({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCustomerNodeDevice(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -304,6 +301,7 @@ export const CustomersNodesDeviceProvider = () =>
         !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
       if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchNodesDevices({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
@@ -311,7 +309,6 @@ export const CustomersNodesDeviceProvider = () =>
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
-          body: desired,
         });
       }
 

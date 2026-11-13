@@ -235,7 +235,6 @@ export const ProjectServiceProvider = () =>
       if (current?.state !== "ENABLED") return;
       const operation = yield* serviceusage.disableServices({
         name: serviceName(output.project, output.service),
-        body: {},
       });
       yield* waitForServiceOperation(operation);
     }),

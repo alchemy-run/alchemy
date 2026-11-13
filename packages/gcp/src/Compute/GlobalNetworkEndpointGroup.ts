@@ -446,10 +446,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
       if (current === undefined) {
         yield* runGlobalOp(
           env.project,
-          compute.insertGlobalNetworkEndpointGroups({
-            project: env.project,
-            body: desired,
-          }),
+          compute.insertGlobalNetworkEndpointGroups({ ...desired, project: env.project }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, networkEndpointGroupName);
@@ -472,9 +469,9 @@ export const GlobalNetworkEndpointGroupProvider = () =>
           yield* runGlobalOp(
             env.project,
             compute.attachNetworkEndpointsGlobalNetworkEndpointGroups({
+              networkEndpoints: toAdd,
               project: env.project,
               networkEndpointGroup: networkEndpointGroupName,
-              body: { networkEndpoints: toAdd },
             }),
             { ignoreAlreadyExists: true },
           ).pipe(Effect.catchTag(["Conflict", "NotFound"], () => Effect.void));
@@ -483,9 +480,9 @@ export const GlobalNetworkEndpointGroupProvider = () =>
           yield* runGlobalOp(
             env.project,
             compute.detachNetworkEndpointsGlobalNetworkEndpointGroups({
+              networkEndpoints: toRemove,
               project: env.project,
               networkEndpointGroup: networkEndpointGroupName,
-              body: { networkEndpoints: toRemove },
             }),
             { ignoreNotFound: true },
           ).pipe(Effect.catchTag(["Conflict", "NotFound"], () => Effect.void));

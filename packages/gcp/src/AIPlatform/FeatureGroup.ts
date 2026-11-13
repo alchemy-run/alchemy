@@ -367,14 +367,12 @@ export const FeatureGroupProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsFeatureGroups({
+            description: news.description,
+            labels: desiredLabels,
+            bigQuery,
+            serviceAgentType: news.serviceAgentType,
             parent: `projects/${env.project}/locations/${location}`,
             featureGroupId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              bigQuery,
-              serviceAgentType: news.serviceAgentType,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -429,15 +427,12 @@ export const FeatureGroupProvider = () =>
 
         const patched = yield* aiplatform
           .patchProjectsLocationsFeatureGroups({
+            labels: desiredLabels,
+            description: news.description,
+            serviceAgentType: news.serviceAgentType,
+            bigQuery,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-              serviceAgentType: news.serviceAgentType,
-              bigQuery,
-            },
           })
           .pipe(
             Effect.retry({

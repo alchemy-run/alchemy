@@ -44,19 +44,17 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         cloudchannel.createAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
-          parent: probePartner,
-          body: {
-            repricingConfig: {
-              effectiveInvoiceMonth: probeMonth,
-              rebillingBasis: "COST_AT_LIST",
-              adjustment: {
-                percentageAdjustment: { percentage: { value: "0.00" } },
-              },
-              entitlementGranularity: {
-                entitlement: `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy-missing`,
-              },
+          repricingConfig: {
+            effectiveInvoiceMonth: probeMonth,
+            rebillingBasis: "COST_AT_LIST",
+            adjustment: {
+              percentageAdjustment: { percentage: { value: "0.00" } },
+            },
+            entitlementGranularity: {
+              entitlement: `${probeAccountName}/customers/alchemy-missing/entitlements/alchemy-missing`,
             },
           },
+          parent: probePartner,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

@@ -324,13 +324,11 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       if (current === undefined) {
         const created = yield* appengine
           .createProjectsLocationsApplicationsAuthorizedCertificates({
+            displayName,
+            certificateRawData,
             projectsId: project,
             locationsId: location,
             applicationsId,
-            body: {
-              displayName,
-              certificateRawData,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -360,15 +358,13 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* appengine.patchProjectsLocationsApplicationsAuthorizedCertificates({
+          displayName,
+          certificateRawData,
           projectsId: project,
           locationsId: location,
           applicationsId,
           authorizedCertificatesId: certificateId,
           updateMask,
-          body: {
-            displayName,
-            certificateRawData,
-          },
         });
       }
 

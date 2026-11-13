@@ -289,12 +289,10 @@ export const EndpointAttachmentProvider = () =>
       if (current === undefined) {
         const operation = yield* apigee
           .createOrganizationsEndpointAttachments({
+            location,
+            serviceAttachment: news.serviceAttachment,
             parent: organization,
             endpointAttachmentId,
-            body: {
-              location,
-              serviceAttachment: news.serviceAttachment,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {

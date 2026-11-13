@@ -292,10 +292,11 @@ const waitUntilGone = (name: string) =>
 const unprotect = (name: string, etag: string | undefined, ignoreWarnings: boolean) =>
   Effect.gen(function* () {
     const patched = yield* bigtable.patchProjectsInstancesTablesAuthorizedViews({
+      deletionProtection: false,
+      etag,
       name,
       updateMask: "deletion_protection",
       ignoreWarnings,
-      body: { deletionProtection: false, etag },
     });
     yield* waitForOperation(patched);
   });
@@ -391,12 +392,10 @@ export const InstancesTablesAuthorizedViewProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesTablesAuthorizedViews({
+            subsetView: desiredSubset,
+            deletionProtection: desiredProtection,
             parent,
             authorizedViewId,
-            body: {
-              subsetView: desiredSubset,
-              deletionProtection: desiredProtection,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -417,14 +416,12 @@ export const InstancesTablesAuthorizedViewProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* bigtable
           .patchProjectsInstancesTablesAuthorizedViews({
+            subsetView: desiredSubset,
+            deletionProtection: desiredProtection,
+            etag: current.etag,
             name,
             updateMask: mask.join(","),
             ignoreWarnings,
-            body: {
-              subsetView: desiredSubset,
-              deletionProtection: desiredProtection,
-              etag: current.etag,
-            },
           })
           .pipe(
             Effect.retry({

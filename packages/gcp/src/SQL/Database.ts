@@ -529,9 +529,9 @@ export const DatabaseProvider = () =>
       if (current === undefined) {
         yield* sqladmin
           .insertDatabases({
+            ...toBody(news, databaseName, instance, env.project),
             project: env.project,
             instance,
-            body: toBody(news, databaseName, instance, env.project),
           })
           .pipe(
             Effect.flatMap((operation) => waitForOperation(env.project, operation)),
@@ -562,10 +562,10 @@ export const DatabaseProvider = () =>
 
       if (charsetChanged || collationChanged || sqlServerChanged) {
         const patched = yield* sqladmin.patchDatabases({
+          ...toBody(news, databaseName, instance, env.project),
           project: env.project,
           instance,
           database: databaseName,
-          body: toBody(news, databaseName, instance, env.project),
         });
         yield* waitForOperation(env.project, patched);
         current = yield* waitUntilExists(env.project, instance, databaseName);

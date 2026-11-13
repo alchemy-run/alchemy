@@ -407,20 +407,18 @@ export const CollectionsEngineProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEngines({
+            displayName,
+            solutionType,
+            industryVertical,
+            dataStoreIds,
+            searchEngineConfig,
+            commonConfig: news.commonConfig,
+            chatEngineConfig: news.chatEngineConfig,
+            mediaRecommendationEngineConfig: news.mediaRecommendationEngineConfig,
+            disableAnalytics: disableAnalytics ? true : undefined,
+            appType: news.appType,
             parent,
             engineId,
-            body: {
-              displayName,
-              solutionType,
-              industryVertical,
-              dataStoreIds,
-              searchEngineConfig,
-              commonConfig: news.commonConfig,
-              chatEngineConfig: news.chatEngineConfig,
-              mediaRecommendationEngineConfig: news.mediaRecommendationEngineConfig,
-              disableAnalytics: disableAnalytics ? true : undefined,
-              appType: news.appType,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -451,6 +449,11 @@ export const CollectionsEngineProvider = () =>
         dataStoresChanged
       ) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEngines({
+          displayName,
+          disableAnalytics,
+          commonConfig: news.commonConfig,
+          searchEngineConfig,
+          dataStoreIds,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -461,14 +464,6 @@ export const CollectionsEngineProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            disableAnalytics,
-            commonConfig: news.commonConfig,
-            searchEngineConfig,
-            dataStoreIds,
-          },
         });
       }
 

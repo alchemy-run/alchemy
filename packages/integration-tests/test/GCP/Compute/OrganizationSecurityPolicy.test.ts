@@ -60,12 +60,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_SECURITY_POLICY)(
 
       const error = yield* Effect.flip(
         compute.insertOrganizationSecurityPolicies({
+          shortName: "alchemy-orgarmor-probe",
+          description: "probe",
+          type: "CLOUD_ARMOR",
           parentId: resource.parent,
-          body: {
-            shortName: "alchemy-orgarmor-probe",
-            description: "probe",
-            type: "CLOUD_ARMOR",
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

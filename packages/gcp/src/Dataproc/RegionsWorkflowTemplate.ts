@@ -245,8 +245,8 @@ export const RegionsWorkflowTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dataproc
           .createProjectsRegionsWorkflowTemplates({
+            ...desiredBody(news, templateId, name, desiredLabels),
             parent: regionParent(env.project, region),
-            body: desiredBody(news, templateId, name, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -269,8 +269,8 @@ export const RegionsWorkflowTemplateProvider = () =>
 
       if (labelsChanged || templateChanged(current, desired)) {
         current = yield* dataproc.updateProjectsRegionsWorkflowTemplates({
+          ...desired,
           name: current.name ?? name,
-          body: desired,
         });
       }
 

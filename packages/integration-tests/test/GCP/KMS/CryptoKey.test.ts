@@ -117,13 +117,10 @@ const roundTrip = (name: string, text: string) =>
   Effect.gen(function* () {
     const plaintext = yield* Effect.sync(() => Buffer.from(text, "utf8").toString("base64"));
     const { ciphertext } = yield* kms.encryptProjectsLocationsKeyRingsCryptoKeys({
+      plaintext,
       name,
-      body: { plaintext },
     });
-    const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({
-      name,
-      body: { ciphertext },
-    });
+    const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({ ciphertext, name });
     return decrypted.plaintext === plaintext;
   });
 

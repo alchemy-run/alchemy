@@ -345,16 +345,14 @@ export const PrivateConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* dm
           .createProjectsLocationsPrivateConnections({
+            displayName,
+            labels: desiredLabels,
+            vpcPeeringConfig,
+            pscInterfaceConfig: news.pscInterfaceConfig,
             parent: locationParent(env.project, location),
             privateConnectionId,
             skipValidation: news.skipValidation,
             validateOnly: news.validateOnly,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              vpcPeeringConfig,
-              pscInterfaceConfig: news.pscInterfaceConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

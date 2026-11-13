@@ -950,8 +950,8 @@ export const SubscriptionProvider = () =>
       if (current === undefined) {
         const created = yield* pubsub
           .createProjectsSubscriptions({
+            ...toCreateBody(topicName, news, desiredLabels, bigqueryConfig),
             name,
-            body: toCreateBody(topicName, news, desiredLabels, bigqueryConfig),
           })
           .pipe(
             retryWriterGrants(bigqueryConfig),
@@ -1006,39 +1006,37 @@ export const SubscriptionProvider = () =>
       ) {
         current = yield* pubsub
           .patchProjectsSubscriptions({
-            name,
-            body: {
-              subscription: {
-                name,
-                topic: topicName,
-                labels: desiredLabels,
-                ackDeadlineSeconds: desiredAck,
-                retainAckedMessages: desiredRetain,
-                enableExactlyOnceDelivery: desiredExactlyOnce,
-                messageRetentionDuration:
-                  news.messageRetentionDuration ?? current.messageRetentionDuration,
-                expirationPolicy: news.expirationPolicy ?? current.expirationPolicy,
-                retryPolicy: news.retryPolicy ?? current.retryPolicy,
-                deadLetterPolicy: news.deadLetterPolicy ?? current.deadLetterPolicy,
-                pushConfig: news.pushConfig ?? current.pushConfig,
-                // Masked but omitted clears it: back to a pull subscription.
-                bigqueryConfig,
-              },
-              updateMask: [
-                labelsChanged ? "labels" : undefined,
-                ackChanged ? "ackDeadlineSeconds" : undefined,
-                retainChanged ? "retainAckedMessages" : undefined,
-                exactlyOnceChanged ? "enableExactlyOnceDelivery" : undefined,
-                retentionChanged ? "messageRetentionDuration" : undefined,
-                expChanged ? "expirationPolicy" : undefined,
-                retriesChanged ? "retryPolicy" : undefined,
-                deadLettersChanged ? "deadLetterPolicy" : undefined,
-                pushConfigChanged ? "pushConfig" : undefined,
-                bigqueryConfigChanged ? "bigqueryConfig" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
+            subscription: {
+              name,
+              topic: topicName,
+              labels: desiredLabels,
+              ackDeadlineSeconds: desiredAck,
+              retainAckedMessages: desiredRetain,
+              enableExactlyOnceDelivery: desiredExactlyOnce,
+              messageRetentionDuration:
+                news.messageRetentionDuration ?? current.messageRetentionDuration,
+              expirationPolicy: news.expirationPolicy ?? current.expirationPolicy,
+              retryPolicy: news.retryPolicy ?? current.retryPolicy,
+              deadLetterPolicy: news.deadLetterPolicy ?? current.deadLetterPolicy,
+              pushConfig: news.pushConfig ?? current.pushConfig,
+              // Masked but omitted clears it: back to a pull subscription.
+              bigqueryConfig,
             },
+            updateMask: [
+              labelsChanged ? "labels" : undefined,
+              ackChanged ? "ackDeadlineSeconds" : undefined,
+              retainChanged ? "retainAckedMessages" : undefined,
+              exactlyOnceChanged ? "enableExactlyOnceDelivery" : undefined,
+              retentionChanged ? "messageRetentionDuration" : undefined,
+              expChanged ? "expirationPolicy" : undefined,
+              retriesChanged ? "retryPolicy" : undefined,
+              deadLettersChanged ? "deadLetterPolicy" : undefined,
+              pushConfigChanged ? "pushConfig" : undefined,
+              bigqueryConfigChanged ? "bigqueryConfig" : undefined,
+            ]
+              .filter((field): field is string => field !== undefined)
+              .join(","),
+            name,
           })
           .pipe(
             Effect.retry({

@@ -451,9 +451,9 @@ export const DnsAuthorizationProvider = () =>
         }
         const created = yield* certificatemanager
           .createProjectsLocationsDnsAuthorizations({
+            ...body,
             parent: `projects/${env.project}/locations/${location}`,
             dnsAuthorizationId,
-            body,
           })
           .pipe(
             Effect.retry({
@@ -485,13 +485,10 @@ export const DnsAuthorizationProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* certificatemanager.patchProjectsLocationsDnsAuthorizations({
+          labels: desiredLabels,
+          description: news.description,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

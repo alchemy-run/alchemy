@@ -255,11 +255,7 @@ export const AuthorizedViewSetProvider = () =>
 
       if (current === undefined) {
         const created = yield* cci
-          .createProjectsLocationsAuthorizedViewSets({
-            parent,
-            authorizedViewSetId,
-            body: { displayName },
-          })
+          .createProjectsLocationsAuthorizedViewSets({ displayName, parent, authorizedViewSetId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -271,9 +267,9 @@ export const AuthorizedViewSetProvider = () =>
       const currentName = current.name ?? name;
       if ((current.displayName ?? "") !== displayName) {
         current = yield* cci.patchProjectsLocationsAuthorizedViewSets({
+          displayName,
           name: currentName,
           updateMask: "display_name",
-          body: { name: currentName, displayName },
         });
       }
 

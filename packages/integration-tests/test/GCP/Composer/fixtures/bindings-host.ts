@@ -61,7 +61,7 @@ export default class ComposerBindingsHost extends GCP.Function<ComposerBindingsH
     return {
       fetch: serveProbes({
         getEnvironment: getEnvironment(),
-        executeAirflowCommand: execute({ body: { command: "version" } }),
+        executeAirflowCommand: execute({ command: "version" }),
         getUserWorkloadsConfigMap: getConfigMap(),
         getUserWorkloadsSecret: getSecret(),
       }),

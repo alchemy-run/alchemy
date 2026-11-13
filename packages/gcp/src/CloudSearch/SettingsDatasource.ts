@@ -248,7 +248,7 @@ export const SettingsDatasourceProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudsearch
-          .createSettingsDatasources({ body: desired })
+          .createSettingsDatasources({ ...desired })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
@@ -297,9 +297,9 @@ export const SettingsDatasourceProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* cloudsearch.patchSettingsDatasources({
+          ...desired,
           name: toDatasourceName(resourceName),
           updateMask,
-          body: desired,
         });
         yield* waitForOperation(patched);
         const refreshed = yield* waitUntilExists(getDatasource(resourceName), resourceName);

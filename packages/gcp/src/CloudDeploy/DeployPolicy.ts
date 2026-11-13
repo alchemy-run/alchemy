@@ -467,16 +467,14 @@ export const DeployPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* clouddeploy
           .createProjectsLocationsDeployPolicies({
+            selectors: news.selectors,
+            rules: news.rules,
+            description: news.description,
+            suspended: desiredSuspended,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             deployPolicyId,
-            body: {
-              selectors: news.selectors,
-              rules: news.rules,
-              description: news.description,
-              suspended: desiredSuspended,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -503,17 +501,15 @@ export const DeployPolicyProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* clouddeploy.patchProjectsLocationsDeployPolicies({
+          etag: current.etag,
+          selectors: news.selectors,
+          rules: news.rules,
+          description: news.description,
+          suspended: desiredSuspended,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            selectors: news.selectors,
-            rules: news.rules,
-            description: news.description,
-            suspended: desiredSuspended,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

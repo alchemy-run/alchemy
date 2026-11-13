@@ -412,9 +412,9 @@ export const AclPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* redis
           .createProjectsLocationsAclPolicies({
+            rules: bodyRules,
             parent: `projects/${env.project}/locations/${location}`,
             aclPolicyId,
-            body: { rules: bodyRules },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
@@ -437,11 +437,7 @@ export const AclPolicyProvider = () =>
 
       if (rulesChanged) {
         const patched = yield* redis
-          .patchProjectsLocationsAclPolicies({
-            name,
-            updateMask: "rules",
-            body: { name, rules: bodyRules },
-          })
+          .patchProjectsLocationsAclPolicies({ rules: bodyRules, name, updateMask: "rules" })
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",

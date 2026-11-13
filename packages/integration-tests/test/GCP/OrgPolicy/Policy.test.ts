@@ -65,11 +65,9 @@ test.provider.skipIf(runLifecycle)(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         orgpolicy.createProjectsPolicies({
+          name: `projects/${project}/policies/${CONSTRAINT_A}`,
+          spec: { rules: [{ enforce: false }] },
           parent: `projects/${project}`,
-          body: {
-            name: `projects/${project}/policies/${CONSTRAINT_A}`,
-            spec: { rules: [{ enforce: false }] },
-          },
         }),
       );
       expect(error._tag).toBe("Forbidden");

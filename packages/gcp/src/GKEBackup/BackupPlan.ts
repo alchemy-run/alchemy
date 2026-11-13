@@ -501,17 +501,15 @@ export const BackupPlanProvider = () =>
       if (current === undefined) {
         const created = yield* gkebackup
           .createProjectsLocationsBackupPlans({
+            cluster,
+            retentionPolicy: news.retentionPolicy,
+            backupSchedule: news.backupSchedule,
+            backupConfig: news.backupConfig,
+            deactivated: news.deactivated,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backupPlanId,
-            body: {
-              cluster,
-              retentionPolicy: news.retentionPolicy,
-              backupSchedule: news.backupSchedule,
-              backupConfig: news.backupConfig,
-              deactivated: news.deactivated,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -550,17 +548,15 @@ export const BackupPlanProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkebackup.patchProjectsLocationsBackupPlans({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
+          retentionPolicy: news.retentionPolicy,
+          backupSchedule: news.backupSchedule,
+          backupConfig: news.backupConfig,
+          deactivated: news.deactivated,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-            retentionPolicy: news.retentionPolicy,
-            backupSchedule: news.backupSchedule,
-            backupConfig: news.backupConfig,
-            deactivated: news.deactivated,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

@@ -35,16 +35,14 @@ export const QueryHttp = Layer.effect(
         request: QueryRequest,
       ) {
         return yield* queryJobs({
-          projectId: yield* project,
-          body: {
-            useLegacySql: false,
-            location: yield* location,
-            ...request,
-            defaultDataset: request.defaultDataset ?? {
-              projectId: yield* project,
-              datasetId: yield* datasetId,
-            },
+          useLegacySql: false,
+          location: yield* location,
+          ...request,
+          defaultDataset: request.defaultDataset ?? {
+            projectId: yield* project,
+            datasetId: yield* datasetId,
           },
+          projectId: yield* project,
         });
       });
     });

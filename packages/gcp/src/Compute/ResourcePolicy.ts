@@ -614,11 +614,7 @@ export const ResourcePolicyProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* compute
-          .insertResourcePolicies({
-            project: env.project,
-            region,
-            body: desired,
-          })
+          .insertResourcePolicies({ ...desired, project: env.project, region })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
@@ -658,10 +654,10 @@ export const ResourcePolicyProvider = () =>
 
       if (descriptionChanged || snapshotNeedsPatch || instanceNeedsPatch) {
         const patched = yield* compute.patchResourcePolicies({
+          ...desired,
           project: env.project,
           region,
           resourcePolicy: resourcePolicyName,
-          body: desired,
         });
         yield* waitRegionOperation(env.project, region, patched);
         current =

@@ -394,9 +394,9 @@ export const InsightsConfigProvider = () =>
       if (current === undefined) {
         const created = yield* developerconnect
           .createProjectsLocationsInsightsConfigs({
+            ...body,
             parent: parentOf(env.project, location),
             insightsConfigId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -422,20 +422,20 @@ export const InsightsConfigProvider = () =>
       if (changed) {
         const operation = yield* developerconnect
           .patchProjectsLocationsInsightsConfigs({
-            name: current.name ?? name,
-            body: compact({
+            ...compact({
               ...body,
               appHubApplication: undefined,
               projects: undefined,
             }),
+            name: current.name ?? name,
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* developerconnect
             .createProjectsLocationsInsightsConfigs({
+              ...body,
               parent: parentOf(env.project, location),
               insightsConfigId,
-              body,
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {

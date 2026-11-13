@@ -290,10 +290,7 @@ export const ChannelPartnerLinksCustomerProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudchannel
-          .createAccountsChannelPartnerLinksCustomers({
-            parent,
-            body,
-          })
+          .createAccountsChannelPartnerLinksCustomers({ ...body, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findCustomerByDomain(parent, domain, listPartnerCustomers),
@@ -348,9 +345,9 @@ export const ChannelPartnerLinksCustomerProvider = () =>
 
       if (updateMask.length > 0 && currentName.length > 0) {
         current = yield* cloudchannel.patchAccountsChannelPartnerLinksCustomers({
+          ...body,
           name: currentName,
           updateMask,
-          body,
         });
       }
 

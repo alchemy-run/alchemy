@@ -373,16 +373,14 @@ export const TlsRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsTlsRoutes({
+            description: news.description,
+            labels: desiredLabels,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
+            targetProxies: desiredProxies,
             parent: parentOf(env.project, location),
             tlsRouteId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-              targetProxies: desiredProxies,
-            },
           })
           .pipe(
             Effect.retry({
@@ -413,17 +411,14 @@ export const TlsRouteProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsTlsRoutes({
+          labels: desiredLabels,
+          description: news.description,
+          rules: desiredRules,
+          meshes: desiredMeshes,
+          gateways: desiredGateways,
+          targetProxies: desiredProxies,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            rules: desiredRules,
-            meshes: desiredMeshes,
-            gateways: desiredGateways,
-            targetProxies: desiredProxies,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

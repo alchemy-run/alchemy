@@ -481,13 +481,11 @@ export const PrivateCloudsClusterProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateCloudsClusters({
+            nodeTypeConfigs,
+            autoscalingSettings: news.autoscalingSettings,
+            stretchedClusterConfig: news.stretchedClusterConfig,
             parent,
             clusterId,
-            body: {
-              nodeTypeConfigs,
-              autoscalingSettings: news.autoscalingSettings,
-              stretchedClusterConfig: news.stretchedClusterConfig,
-            },
           })
           .pipe(
             Effect.retry({
@@ -525,13 +523,10 @@ export const PrivateCloudsClusterProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsPrivateCloudsClusters({
+          nodeTypeConfigs,
+          autoscalingSettings: news.autoscalingSettings,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            nodeTypeConfigs,
-            autoscalingSettings: news.autoscalingSettings,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

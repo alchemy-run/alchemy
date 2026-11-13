@@ -547,15 +547,13 @@ export const QueuedResourceProvider = () =>
       if (current === undefined) {
         const created = yield* tpu
           .createProjectsLocationsQueuedResources({
+            reservationName: news.reservationName,
+            spot: news.spot === true ? {} : undefined,
+            guaranteed: news.guaranteed,
+            queueingPolicy: news.queueingPolicy,
+            tpu: { nodeSpec: desiredSpecs(news, parent, desiredLabels) },
             parent,
             queuedResourceId,
-            body: {
-              reservationName: news.reservationName,
-              spot: news.spot === true ? {} : undefined,
-              guaranteed: news.guaranteed,
-              queueingPolicy: news.queueingPolicy,
-              tpu: { nodeSpec: desiredSpecs(news, parent, desiredLabels) },
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

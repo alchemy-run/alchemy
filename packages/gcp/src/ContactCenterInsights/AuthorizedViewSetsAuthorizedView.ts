@@ -261,12 +261,10 @@ export const AuthorizedViewSetsAuthorizedViewProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAuthorizedViewSetsAuthorizedViews({
+            displayName,
+            conversationFilter: news.conversationFilter,
             parent: news.parent,
             authorizedViewId,
-            body: {
-              displayName,
-              conversationFilter: news.conversationFilter,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -284,16 +282,13 @@ export const AuthorizedViewSetsAuthorizedViewProvider = () =>
 
       if (displayChanged || filterChanged) {
         current = yield* cci.patchProjectsLocationsAuthorizedViewSetsAuthorizedViews({
+          displayName,
+          conversationFilter: news.conversationFilter,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             filterChanged ? "conversation_filter" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            conversationFilter: news.conversationFilter,
-          },
         });
       }
 

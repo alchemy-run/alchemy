@@ -401,22 +401,20 @@ export const RepositoriesBranchRuleProvider = () =>
       if (current === undefined) {
         const created = yield* ssm
           .createProjectsLocationsRepositoriesBranchRules({
+            includePattern,
+            disabled: news.disabled === true ? true : undefined,
+            requirePullRequest: news.requirePullRequest === true ? true : undefined,
+            minimumApprovalsCount: news.minimumApprovalsCount,
+            minimumReviewsCount: news.minimumReviewsCount,
+            allowStaleReviews: news.allowStaleReviews === true ? true : undefined,
+            requireLinearHistory: news.requireLinearHistory === true ? true : undefined,
+            requireCommentsResolved: news.requireCommentsResolved === true ? true : undefined,
+            requireCodeOwnerApproval: news.requireCodeOwnerApproval === true ? true : undefined,
+            requiredStatusChecks:
+              requiredStatusChecks.length > 0 ? requiredStatusChecks : undefined,
+            annotations,
             parent: repository,
             branchRuleId,
-            body: {
-              includePattern,
-              disabled: news.disabled === true ? true : undefined,
-              requirePullRequest: news.requirePullRequest === true ? true : undefined,
-              minimumApprovalsCount: news.minimumApprovalsCount,
-              minimumReviewsCount: news.minimumReviewsCount,
-              allowStaleReviews: news.allowStaleReviews === true ? true : undefined,
-              requireLinearHistory: news.requireLinearHistory === true ? true : undefined,
-              requireCommentsResolved: news.requireCommentsResolved === true ? true : undefined,
-              requireCodeOwnerApproval: news.requireCodeOwnerApproval === true ? true : undefined,
-              requiredStatusChecks:
-                requiredStatusChecks.length > 0 ? requiredStatusChecks : undefined,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -453,22 +451,20 @@ export const RepositoriesBranchRuleProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* ssm.patchProjectsLocationsRepositoriesBranchRules({
+          etag: current.etag,
+          includePattern,
+          disabled: news.disabled === true,
+          requirePullRequest: news.requirePullRequest === true,
+          minimumApprovalsCount: news.minimumApprovalsCount,
+          minimumReviewsCount: news.minimumReviewsCount,
+          allowStaleReviews: news.allowStaleReviews === true,
+          requireLinearHistory: news.requireLinearHistory === true,
+          requireCommentsResolved: news.requireCommentsResolved === true,
+          requireCodeOwnerApproval: news.requireCodeOwnerApproval === true,
+          requiredStatusChecks,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            includePattern,
-            disabled: news.disabled === true,
-            requirePullRequest: news.requirePullRequest === true,
-            minimumApprovalsCount: news.minimumApprovalsCount,
-            minimumReviewsCount: news.minimumReviewsCount,
-            allowStaleReviews: news.allowStaleReviews === true,
-            requireLinearHistory: news.requireLinearHistory === true,
-            requireCommentsResolved: news.requireCommentsResolved === true,
-            requireCodeOwnerApproval: news.requireCodeOwnerApproval === true,
-            requiredStatusChecks,
-            annotations,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

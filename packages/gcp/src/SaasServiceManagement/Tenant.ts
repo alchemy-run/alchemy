@@ -289,14 +289,12 @@ export const TenantProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsTenants({
+            saas,
+            consumerResource: news.consumerResource,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             tenantId,
-            body: {
-              saas,
-              consumerResource: news.consumerResource,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(
             // A Saas created seconds earlier is unreadable here until it
@@ -325,14 +323,11 @@ export const TenantProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsTenants({
+          etag: current.etag,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

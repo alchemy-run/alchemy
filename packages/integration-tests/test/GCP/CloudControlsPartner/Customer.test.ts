@@ -94,9 +94,9 @@ test.provider.skipIf(runLifecycle)(
       const organization = (yield* organizationOf()) || "organizations/0";
       const error = yield* Effect.flip(
         cloudcontrolspartner.createOrganizationsLocationsCustomers({
+          displayName: "Alchemy Cloudcontrolspartner Probe",
           parent: `${organization}/locations/${location}`,
           customerId: "0",
-          body: { displayName: "Alchemy Cloudcontrolspartner Probe" },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

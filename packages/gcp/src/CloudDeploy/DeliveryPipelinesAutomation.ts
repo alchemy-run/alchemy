@@ -467,17 +467,15 @@ export const DeliveryPipelinesAutomationProvider = () =>
       if (current === undefined) {
         const created = yield* clouddeploy
           .createProjectsLocationsDeliveryPipelinesAutomations({
+            serviceAccount: news.serviceAccount,
+            selector: desiredSelector,
+            rules: desiredRules,
+            description: news.description,
+            suspended: desiredSuspended,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: deliveryPipeline,
             automationId,
-            body: {
-              serviceAccount: news.serviceAccount,
-              selector: desiredSelector,
-              rules: desiredRules,
-              description: news.description,
-              suspended: desiredSuspended,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -505,18 +503,16 @@ export const DeliveryPipelinesAutomationProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* clouddeploy.patchProjectsLocationsDeliveryPipelinesAutomations({
+          etag: current.etag,
+          serviceAccount: news.serviceAccount,
+          selector: desiredSelector,
+          rules: desiredRules,
+          description: news.description,
+          suspended: desiredSuspended,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            serviceAccount: news.serviceAccount,
-            selector: desiredSelector,
-            rules: desiredRules,
-            description: news.description,
-            suspended: desiredSuspended,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

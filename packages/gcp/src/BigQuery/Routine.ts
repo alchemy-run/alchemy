@@ -658,11 +658,7 @@ export const RoutineProvider = () =>
 
       if (current === undefined) {
         const created = yield* bigquery
-          .insertRoutines({
-            projectId: env.project,
-            datasetId,
-            body: bodyOf(),
-          })
+          .insertRoutines({ ...bodyOf(), projectId: env.project, datasetId })
           .pipe(Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, routineId)));
         current = created ?? undefined;
       }
@@ -676,20 +672,11 @@ export const RoutineProvider = () =>
 
       if (metadataChanged) {
         current = yield* bigquery
-          .updateRoutines({
-            projectId: env.project,
-            datasetId,
-            routineId,
-            body: desired,
-          })
+          .updateRoutines({ ...desired, projectId: env.project, datasetId, routineId })
           .pipe(
             Effect.catchTag("NotFound", () =>
               bigquery
-                .insertRoutines({
-                  projectId: env.project,
-                  datasetId,
-                  body: bodyOf(),
-                })
+                .insertRoutines({ ...bodyOf(), projectId: env.project, datasetId })
                 .pipe(
                   Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, routineId)),
                 ),

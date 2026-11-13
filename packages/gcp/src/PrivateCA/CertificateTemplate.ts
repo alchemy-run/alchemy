@@ -676,9 +676,9 @@ export const CertificateTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* privateca
           .createProjectsLocationsCertificateTemplates({
+            ...body,
             parent: locationParent(env.project, location),
             certificateTemplateId,
-            body,
           })
           .pipe(
             Effect.retry({
@@ -732,12 +732,9 @@ export const CertificateTemplateProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* privateca.patchProjectsLocationsCertificateTemplates({
+          ...body,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            ...body,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

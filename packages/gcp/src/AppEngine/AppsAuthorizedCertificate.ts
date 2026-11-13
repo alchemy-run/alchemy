@@ -248,13 +248,7 @@ export const AppsAuthorizedCertificateProvider = () =>
 
       if (current === undefined) {
         const created = yield* appengine
-          .createAppsAuthorizedCertificates({
-            appsId,
-            body: {
-              displayName,
-              certificateRawData,
-            },
-          })
+          .createAppsAuthorizedCertificates({ displayName, certificateRawData, appsId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               Effect.gen(function* () {
@@ -280,13 +274,11 @@ export const AppsAuthorizedCertificateProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* appengine.patchAppsAuthorizedCertificates({
+          displayName,
+          certificateRawData,
           appsId,
           authorizedCertificatesId: certificateId,
           updateMask,
-          body: {
-            displayName,
-            certificateRawData,
-          },
         });
       }
 

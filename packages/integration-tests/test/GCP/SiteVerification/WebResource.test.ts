@@ -62,10 +62,8 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         siteVerification.getTokenWebResource({
-          body: {
-            site: { identifier, type: "SITE" },
-            verificationMethod: "FILE",
-          },
+          site: { identifier, type: "SITE" },
+          verificationMethod: "FILE",
         }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");
@@ -86,8 +84,8 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         siteVerification.insertWebResource({
+          site: { identifier, type: "SITE" },
           verificationMethod: "FILE",
-          body: { site: { identifier, type: "SITE" } },
         }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");

@@ -76,15 +76,13 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
 
   const created = yield* firestore
     .createProjectsDatabases({
+      locationId: "us-central1",
+      type: "FIRESTORE_NATIVE",
+      databaseEdition: "ENTERPRISE",
+      mongodbCompatibleDataAccessMode: "DATA_ACCESS_MODE_ENABLED",
+      deleteProtectionState: "DELETE_PROTECTION_DISABLED",
       parent: `projects/${project}`,
       databaseId: enterpriseDatabaseId,
-      body: {
-        locationId: "us-central1",
-        type: "FIRESTORE_NATIVE",
-        databaseEdition: "ENTERPRISE",
-        mongodbCompatibleDataAccessMode: "DATA_ACCESS_MODE_ENABLED",
-        deleteProtectionState: "DELETE_PROTECTION_DISABLED",
-      },
     })
     .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
   if (created !== undefined) {
@@ -133,7 +131,6 @@ test.provider.skipIf(!!process.env.FAST)(
         firestore.createProjectsDatabasesUserCreds({
           parent: created.name,
           userCredsId: "alchemyusercreds",
-          body: {},
         }),
       );
       expect(error._tag).toEqual("EnterpriseDatabaseRequired");

@@ -48,9 +48,7 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         cloudsearch.createSettingsSearchapplications({
-          body: {
-            displayName: "Alchemy Cloud Search App Probe",
-          },
+          displayName: "Alchemy Cloud Search App Probe",
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

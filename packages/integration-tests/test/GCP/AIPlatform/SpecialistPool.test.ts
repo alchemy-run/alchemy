@@ -57,11 +57,9 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
       const error = yield* Effect.flip(
         aiplatform.createProjectsLocationsSpecialistPools({
+          displayName: "alchemy-pool-probe",
+          specialistManagerEmails: ["alchemy@example.com"],
           parent: `projects/${project}/locations/us-central1`,
-          body: {
-            displayName: "alchemy-pool-probe",
-            specialistManagerEmails: ["alchemy@example.com"],
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

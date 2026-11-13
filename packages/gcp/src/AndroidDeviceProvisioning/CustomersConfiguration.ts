@@ -312,12 +312,12 @@ export const CustomersConfigurationProvider = () =>
       if (current === undefined) {
         const created = yield* androiddeviceprovisioning
           .createCustomersConfigurations({
-            parent,
-            body: desiredBody({
+            ...desiredBody({
               news,
               configurationName,
               dpcResourcePath,
             }),
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", () => findConfigurationByName(configurationName, parent)),
@@ -369,9 +369,9 @@ export const CustomersConfigurationProvider = () =>
 
       if (updateMask.length > 0 && currentName.length > 0) {
         current = yield* androiddeviceprovisioning.patchCustomersConfigurations({
+          ...desired,
           name: currentName,
           updateMask,
-          body: desired,
         });
       }
 

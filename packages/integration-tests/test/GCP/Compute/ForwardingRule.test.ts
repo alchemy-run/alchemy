@@ -61,9 +61,10 @@ const ensureTargetPool = () =>
     if (existing !== undefined) return existing;
     yield* compute
       .insertTargetPools({
+        name: poolName,
+        description: "alchemy forwarding-rule test",
         project,
         region,
-        body: { name: poolName, description: "alchemy forwarding-rule test" },
       })
       .pipe(
         Effect.flatMap(waitOp),

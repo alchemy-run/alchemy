@@ -221,11 +221,7 @@ export const FolderProvider = () =>
 
       if (current === undefined) {
         const created = yield* storage
-          .insertFolders({
-            bucket: bucketName,
-            recursive: true,
-            body: { name: folderName },
-          })
+          .insertFolders({ name: folderName, bucket: bucketName, recursive: true })
           .pipe(Effect.catchTag("Conflict", () => getByName(bucketName, folderName)));
         current = created ?? undefined;
       }

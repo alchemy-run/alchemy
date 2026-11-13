@@ -581,9 +581,7 @@ export const PipelineProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsPipelines({
-            parent: parentOf(env.project, location),
-            pipelineId,
-            body: compact({
+            ...compact({
               name,
               destinations,
               inputPayloadFormat: desiredFormat,
@@ -595,6 +593,8 @@ export const PipelineProvider = () =>
               labels: desiredLabels,
               annotations: desiredAnnotations,
             }),
+            parent: parentOf(env.project, location),
+            pipelineId,
           })
           .pipe(
             Effect.retry({
@@ -627,20 +627,17 @@ export const PipelineProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* eventarc.patchProjectsLocationsPipelines({
+          destinations,
+          inputPayloadFormat: desiredFormat,
+          mediations: desiredMediations,
+          retryPolicy: desiredRetry,
+          displayName: news.displayName,
+          cryptoKeyName: desiredCrypto,
+          loggingConfig: desiredLogging,
+          labels: desiredLabels,
+          annotations: desiredAnnotations ?? {},
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            destinations,
-            inputPayloadFormat: desiredFormat,
-            mediations: desiredMediations,
-            retryPolicy: desiredRetry,
-            displayName: news.displayName,
-            cryptoKeyName: desiredCrypto,
-            loggingConfig: desiredLogging,
-            labels: desiredLabels,
-            annotations: desiredAnnotations ?? {},
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

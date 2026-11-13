@@ -354,14 +354,12 @@ export const FeaturestoresEntityTypeProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsFeaturestoresEntityTypes({
+            description: news.description,
+            labels: desiredLabels,
+            monitoringConfig: news.monitoringConfig,
+            offlineStorageTtlDays: news.offlineStorageTtlDays,
             parent,
             entityTypeId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              monitoringConfig: news.monitoringConfig,
-              offlineStorageTtlDays: news.offlineStorageTtlDays,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -395,15 +393,12 @@ export const FeaturestoresEntityTypeProvider = () =>
 
         current = yield* aiplatform
           .patchProjectsLocationsFeaturestoresEntityTypes({
+            labels: desiredLabels,
+            description: news.description,
+            offlineStorageTtlDays: news.offlineStorageTtlDays,
+            monitoringConfig: news.monitoringConfig,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-              offlineStorageTtlDays: news.offlineStorageTtlDays,
-              monitoringConfig: news.monitoringConfig,
-            },
           })
           .pipe(
             Effect.retry({

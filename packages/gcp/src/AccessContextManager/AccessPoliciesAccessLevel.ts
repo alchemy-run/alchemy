@@ -296,14 +296,12 @@ export const AccessPoliciesAccessLevelProvider = () =>
       if (current === undefined) {
         const created = yield* acm
           .createAccessPoliciesAccessLevels({
+            name,
+            title: desiredTitle,
+            description: desiredDescription,
+            basic: news.basic,
+            custom: news.custom,
             parent: policy,
-            body: {
-              name,
-              title: desiredTitle,
-              description: desiredDescription,
-              basic: news.basic,
-              custom: news.custom,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -335,15 +333,12 @@ export const AccessPoliciesAccessLevelProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* acm.patchAccessPoliciesAccessLevels({
+          title: desiredTitle,
+          description: desiredDescription,
+          basic: news.basic,
+          custom: news.custom,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            title: desiredTitle,
-            description: desiredDescription,
-            basic: news.basic,
-            custom: news.custom,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

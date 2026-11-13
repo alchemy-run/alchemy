@@ -414,15 +414,13 @@ export const CustomTargetTypeProvider = () =>
       if (current === undefined) {
         const created = yield* clouddeploy
           .createProjectsLocationsCustomTargetTypes({
+            description: news.description,
+            customActions: news.customActions,
+            tasks: news.tasks,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             customTargetTypeId,
-            body: {
-              description: news.description,
-              customActions: news.customActions,
-              tasks: news.tasks,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -449,16 +447,14 @@ export const CustomTargetTypeProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* clouddeploy.patchProjectsLocationsCustomTargetTypes({
+          etag: current.etag,
+          description: news.description,
+          customActions: news.customActions,
+          tasks: news.tasks,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            description: news.description,
-            customActions: news.customActions,
-            tasks: news.tasks,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

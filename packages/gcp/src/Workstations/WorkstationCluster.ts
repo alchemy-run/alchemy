@@ -428,21 +428,19 @@ export const WorkstationClusterProvider = () =>
       if (current === undefined) {
         const created = yield* workstations
           .createProjectsLocationsWorkstationClusters({
+            network,
+            subnetwork,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            annotations: desiredAnnotations,
+            tags: stringMap(news.tags),
+            workstationLaunchUrl: news.workstationLaunchUrl,
+            workstationAuthorizationUrl: news.workstationAuthorizationUrl,
+            domainConfig: news.domainConfig,
+            gatewayConfig: news.gatewayConfig,
+            privateClusterConfig: news.privateClusterConfig,
             parent: parentOf(env.project, location),
             workstationClusterId,
-            body: {
-              network,
-              subnetwork,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              annotations: desiredAnnotations,
-              tags: stringMap(news.tags),
-              workstationLaunchUrl: news.workstationLaunchUrl,
-              workstationAuthorizationUrl: news.workstationAuthorizationUrl,
-              domainConfig: news.domainConfig,
-              gatewayConfig: news.gatewayConfig,
-              privateClusterConfig: news.privateClusterConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -487,20 +485,18 @@ export const WorkstationClusterProvider = () =>
       if (mask.length > 0) {
         const operation = yield* workstations
           .patchProjectsLocationsWorkstationClusters({
+            etag: current.etag,
+            labels: desiredLabels,
+            displayName: news.displayName,
+            annotations: desiredAnnotations,
+            workstationLaunchUrl: news.workstationLaunchUrl,
+            workstationAuthorizationUrl: news.workstationAuthorizationUrl,
+            gatewayConfig: news.gatewayConfig,
+            privateClusterConfig: {
+              allowedProjects: news.privateClusterConfig?.allowedProjects,
+            },
             name: current.name ?? name,
             updateMask: mask,
-            body: {
-              etag: current.etag,
-              labels: desiredLabels,
-              displayName: news.displayName,
-              annotations: desiredAnnotations,
-              workstationLaunchUrl: news.workstationLaunchUrl,
-              workstationAuthorizationUrl: news.workstationAuthorizationUrl,
-              gatewayConfig: news.gatewayConfig,
-              privateClusterConfig: {
-                allowedProjects: news.privateClusterConfig?.allowedProjects,
-              },
-            },
           })
           .pipe(
             Effect.retry({

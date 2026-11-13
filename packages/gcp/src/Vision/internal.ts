@@ -251,19 +251,13 @@ export const syncProductSetMembership = (
     for (const product of wanted) {
       if (present.has(product)) continue;
       yield* vision
-        .addProductProjectsLocationsProductSets({
-          name: setName,
-          body: { product },
-        })
+        .addProductProjectsLocationsProductSets({ product, name: setName })
         .pipe(Effect.catchTag("Conflict", () => Effect.void));
     }
     for (const product of present) {
       if (wanted.has(product)) continue;
       yield* vision
-        .removeProductProjectsLocationsProductSets({
-          name: setName,
-          body: { product },
-        })
+        .removeProductProjectsLocationsProductSets({ product, name: setName })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }
   });

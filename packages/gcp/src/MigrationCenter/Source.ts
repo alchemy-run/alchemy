@@ -294,14 +294,12 @@ export const SourceProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsSources({
+            type,
+            displayName,
+            description,
+            priority: news.priority,
             parent: locationParent(env.project, location),
             sourceId,
-            body: {
-              type,
-              displayName,
-              description,
-              priority: news.priority,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -325,14 +323,11 @@ export const SourceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* mc.patchProjectsLocationsSources({
+          displayName,
+          description,
+          priority: news.priority,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description,
-            priority: news.priority,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

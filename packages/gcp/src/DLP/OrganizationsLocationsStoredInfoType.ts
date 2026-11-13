@@ -317,13 +317,7 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
 
       if (current === undefined) {
         const created = yield* dlp
-          .createOrganizationsLocationsStoredInfoTypes({
-            parent,
-            body: {
-              storedInfoTypeId,
-              config,
-            },
-          })
+          .createOrganizationsLocationsStoredInfoTypes({ storedInfoTypeId, config, parent })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -346,11 +340,9 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsStoredInfoTypes({
+          updateMask,
+          config,
           name: currentName,
-          body: {
-            updateMask,
-            config,
-          },
         });
       }
 

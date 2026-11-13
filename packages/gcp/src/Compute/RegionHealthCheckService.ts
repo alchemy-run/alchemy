@@ -323,18 +323,16 @@ export const RegionHealthCheckServiceProvider = () =>
           env.project,
           region,
           compute.insertRegionHealthCheckServices({
+            name: serviceName,
+            description: desiredDescription,
+            healthChecks,
+            networkEndpointGroups:
+              networkEndpointGroups.length > 0 ? networkEndpointGroups : undefined,
+            notificationEndpoints:
+              notificationEndpoints.length > 0 ? notificationEndpoints : undefined,
+            healthStatusAggregationPolicy: aggregation,
             project: env.project,
             region,
-            body: {
-              name: serviceName,
-              description: desiredDescription,
-              healthChecks,
-              networkEndpointGroups:
-                networkEndpointGroups.length > 0 ? networkEndpointGroups : undefined,
-              notificationEndpoints:
-                notificationEndpoints.length > 0 ? notificationEndpoints : undefined,
-              healthStatusAggregationPolicy: aggregation,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -383,10 +381,10 @@ export const RegionHealthCheckServiceProvider = () =>
           env.project,
           region,
           compute.patchRegionHealthCheckServices({
+            ...patch,
             project: env.project,
             region,
             healthCheckService: serviceName,
-            body: patch,
           }),
         );
         current = (yield* getByName(env.project, region, serviceName)) ?? current;

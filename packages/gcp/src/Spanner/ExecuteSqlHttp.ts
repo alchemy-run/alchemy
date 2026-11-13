@@ -37,10 +37,7 @@ export const ExecuteSqlHttp = Layer.effect(
         Effect.gen(function* () {
           const cached = sessions.get(database);
           if (cached !== undefined && cached !== stale) return cached;
-          const session = yield* createSession({
-            database,
-            body: { session: { multiplexed: true } },
-          });
+          const session = yield* createSession({ session: { multiplexed: true }, database });
           const name = session.name ?? "";
           sessions.set(database, name);
           return name;
@@ -61,11 +58,11 @@ export const ExecuteSqlHttp = Layer.effect(
       ) {
         const databaseName = yield* name;
         const session = yield* sessionFor(databaseName);
-        return yield* executeSql({ session, body: request }).pipe(
+        return yield* executeSql({ ...request, session }).pipe(
           Effect.catchTag("SessionNotFound", () =>
             Effect.gen(function* () {
               const fresh = yield* sessionFor(databaseName, session);
-              return yield* executeSql({ session: fresh, body: request });
+              return yield* executeSql({ ...request, session: fresh });
             }),
           ),
         );
