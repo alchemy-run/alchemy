@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
@@ -23,6 +24,10 @@ const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: CONTROL_P
 const AsyncPool = RivetDocker.SwarmPool("AsyncPool").pipe(Layer.provide(Cluster));
 const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluster));
 const RustPool = RivetDocker.SwarmPool("RustPool").pipe(Layer.provide(Cluster));
+const ImagePool = RivetDocker.SwarmPool("ImagePool").pipe(Layer.provide(Cluster));
+
+/** The prebuilt image the image Durable Object runs, built before the deploy. */
+const IMAGE = "rivet-external-image:test";
 
 const fixture = (file: string) =>
   fileURLToPath(new URL(`./fixtures/external/${file}`, import.meta.url));
@@ -43,6 +48,7 @@ let deployed: {
   asyncPool: string;
   effectPool: string;
   rustPool: string;
+  imagePool: string;
 };
 
 const clientFor = (poolName: string) =>
@@ -63,6 +69,13 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
+        yield* Effect.sync(() =>
+          execFileSync(
+            "docker",
+            ["build", "-t", IMAGE, "-f", fixture("image.Dockerfile"), fixture(".")],
+            { stdio: "inherit" },
+          ),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const asyncActors = yield* Rivet.DurableObject("AsyncActors", {
@@ -76,12 +89,17 @@ describe.skipIf(!!process.env.FAST)(
               crate: fixture("rust/counter"),
               build: { features: ["double"] },
             }).pipe(Effect.provide(RustPool));
+            // A prebuilt image, run as it is.
+            const imageActors = yield* Rivet.DurableObject("ImageActors", {
+              image: IMAGE,
+            }).pipe(Effect.provide(ImagePool));
             return {
               token: asyncActors.token,
               namespace: asyncActors.namespace,
               asyncPool: asyncActors.pool,
               effectPool: effectActors.pool,
               rustPool: rustActors.pool,
+              imagePool: imageActors.pool,
             };
           }),
         );
@@ -129,6 +147,18 @@ describe.skipIf(!!process.env.FAST)(
         const second = yield* call(() => counter.increment(4));
         // Built with the `double` feature: each increment counts twice.
         expect(second - first).toBe(8);
+      }),
+      { timeout: 300_000 },
+    );
+
+    test(
+      "a prebuilt image runs as it is",
+      Effect.gen(function* () {
+        expect(deployed.imagePool).toBeTruthy();
+        const counter = clientFor(deployed.imagePool).counter.getOrCreate(["external-image"]);
+        const first = yield* call(() => counter.increment(3));
+        const second = yield* call(() => counter.increment(4));
+        expect(second - first).toBe(4);
       }),
       { timeout: 300_000 },
     );
