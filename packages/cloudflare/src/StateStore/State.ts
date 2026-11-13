@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as SecretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { AuthError } from "alchemy/Auth/AuthProvider";
@@ -25,6 +26,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Access from "../Access.ts";
@@ -703,6 +705,7 @@ const observeServedVersion = (accountId: string, scriptName: string, domain?: st
     const attached =
       domain === undefined ||
       (yield* observeStateStoreDomain({ accountId, scriptName, domain }).pipe(
+        keepCredentialRejection,
         // Another Worker owning the domain fails as itself, not as an unknown.
         Effect.mapError((e) =>
           e._tag === "StateStoreError" ? e : existenceUnknown(scriptName)(e),
@@ -720,7 +723,7 @@ const observeServedVersion = (accountId: string, scriptName: string, domain?: st
       );
       if (url === undefined) return undefined;
       return (yield* checkStateStoreVersion(url, scriptName, accountId)).observed;
-    }).pipe(Effect.mapError(existenceUnknown(scriptName)));
+    }).pipe(keepCredentialRejection, Effect.mapError(existenceUnknown(scriptName)));
     return yield* refuseNewerStore(scriptName, observed);
   });
 
@@ -744,13 +747,48 @@ const existenceUnknown =
   (cause: Error & { readonly _tag: string }): StateStoreError =>
     new StateStoreError({
       message:
-        `Could not determine whether Cloudflare State Store '${scriptName}' exists, ` +
-        `so it was left untouched: ${cause.message}. ` +
-        (cause._tag === "Forbidden"
-          ? `Check that the Cloudflare credentials can read Workers scripts (Workers Scripts Read).`
-          : `Run the command again.`),
+        cause._tag === "Unauthorized"
+          ? `Cloudflare authentication failed while looking up Cloudflare State Store '${scriptName}': ` +
+            `${cause.message}. Check that the Cloudflare credentials are still valid: ` +
+            `an API token may have expired or been revoked.`
+          : `Could not determine whether Cloudflare State Store '${scriptName}' exists, ` +
+            `so it was left untouched: ${cause.message}. ` +
+            (cause._tag === "Forbidden"
+              ? `Check that the Cloudflare credentials can read Workers scripts (Workers Scripts Read).`
+              : `Run the command again.`),
       cause,
     });
+
+const surfaceCredentialRejection: Retry.Factory = (lastError) => {
+  const base = Retry.makeDefault(lastError);
+  return {
+    ...base,
+    while: (error) => !Predicate.isTagged(error, "Unauthorized") && (base.while?.(error) ?? false),
+  };
+};
+
+/**
+ * Cloudflare answers a rejected credential with `Unauthorized` four times and
+ * rate limits it after that, so a lookup retried by the SDK ends on the rate
+ * limit. A valid token can be rejected for a moment under load, so the lookup
+ * is still retried as usual; if it then ends on the rate limit, it fails as
+ * the rejection.
+ *
+ * @internal exported for unit testing.
+ */
+export const keepCredentialRejection = <A, E extends { readonly _tag: string }, R>(
+  lookup: Effect.Effect<A, E, R>,
+) =>
+  lookup.pipe(
+    Retry.policy(surfaceCredentialRejection),
+    Effect.catchIf(
+      (error) => error._tag === "Unauthorized",
+      (rejected) =>
+        lookup.pipe(
+          Effect.mapError((error) => (error._tag === "TooManyRequests" ? rejected : error)),
+        ),
+    ),
+  );
 
 const makeCloudflareStateStore = Effect.fn(function* ({
   url,
