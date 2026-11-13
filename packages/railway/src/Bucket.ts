@@ -13,7 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { projectBuckets } from "./GraphQL.ts";
+import { environmentPatchCommit, projectBuckets, readEnvironmentConfig } from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName, sanitizeRailwayName } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -36,15 +36,6 @@ const credentialsFields = <E>(credentials: Query<BucketS3CompatibleCredentials, 
 });
 type CloudBucket = UnwrapPlan<ReturnType<typeof bucketFields>>;
 type BucketS3CredentialsResultItem = UnwrapPlan<ReturnType<typeof credentialsFields>>;
-
-const readEnvironmentConfig = Query.fn((id: string, projectId: string) => ({
-  config: Railway.environment({ id, projectId }).config,
-}));
-
-const environmentPatchCommit = Query.fn(
-  (input: { environmentId: string; commitMessage: string; patch: Record<string, unknown> }) =>
-    Railway.environmentPatchCommit(input),
-);
 
 const readBucketS3Credentials = Query.fn(
   (input: { bucketId: string; environmentId: string; projectId: string }) =>
@@ -439,7 +430,7 @@ const findInProject = (projectId: string, match: (bucket: CloudBucket) => boolea
   listProjectBuckets(projectId).pipe(Effect.map((buckets) => buckets.find(match)));
 
 const getEnvironmentConfig = (environmentId: string, projectId: string) =>
-  readEnvironmentConfig(environmentId, projectId).pipe(
+  readEnvironmentConfig({ id: environmentId, projectId }).pipe(
     Effect.map((env) => parseEnvironmentConfig(env.config)),
     Effect.retry({
       while: (e) => e._tag === "RailwayNotFound",
