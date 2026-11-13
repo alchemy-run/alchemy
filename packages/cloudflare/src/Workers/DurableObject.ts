@@ -19,6 +19,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import type { Scope } from "effect/Scope";
+import type * as Stream from "effect/Stream";
 import type { Container } from "../Containers/Container.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
@@ -1643,9 +1644,22 @@ export const DurableObject: DurableObjectClass = taggedFunction(
   },
 ) as any;
 
+/**
+ * A method as seen through a stub. The object provides its own
+ * `RuntimeContext` when the call arrives, so the caller never needs one.
+ */
+type StubMethod<M> = M extends (...args: infer A) => infer Ret
+  ? (
+      ...args: A
+    ) => Ret extends Stream.Stream<infer X, infer E, infer R>
+      ? Stream.Stream<X, E, Exclude<R, RuntimeContext>>
+      : Ret extends Effect.Effect<infer X, infer E, infer R>
+        ? Effect.Effect<X, E, Exclude<R, RuntimeContext>>
+        : Ret
+  : M;
+
 export type DurableObjectStub<Shape> = {
-  // TODO(sam): do we need to transform? hopefully not
-  [key in keyof Shape]: Shape[key];
+  [key in keyof Shape]: StubMethod<Shape[key]>;
 } & {
   fetch: (
     request: HttpServerRequest.HttpServerRequest,
