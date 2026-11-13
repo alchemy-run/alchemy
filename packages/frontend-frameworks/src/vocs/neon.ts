@@ -8,7 +8,6 @@ import type { Plugin } from "vite";
 import { runBuildChild } from "../core/BuildChild.ts";
 import type { BuildOutput } from "../core/BuildOutput.ts";
 import { DeployTargetError } from "../core/DeployTarget.ts";
-import { isInsideDevChild, runDevChild } from "../core/DevChild.ts";
 import { FrameworkError, type FrameworkDevOptions } from "../core/Framework.ts";
 import { Framework } from "../core/Framework.ts";
 import { finishNeonOutput, makeNeonTarget } from "../core/NeonServe.ts";
@@ -105,72 +104,59 @@ export const make = Effect.fn(function* (options: VocsNodeFrameworkOptions = {})
       const root = yield* Effect.sync(() =>
         path.resolve(devOptions?.root ?? options.root ?? process.cwd()),
       );
-      if (isInsideDevChild()) {
-        const fail = (cause: unknown) =>
-          new FrameworkError({
-            framework: "vocs",
-            message: "Failed to start the native Vocs dev server",
-            cause,
-          });
-        const modules = yield* Effect.try({
-          try: () => {
-            const project = createRequire(path.join(root, "package.json"));
-            const vocs = project.resolve("vocs/vite");
-            const require = createRequire(vocs);
-            return {
-              vocs: pathToFileURL(vocs).href,
-              vite: pathToFileURL(require.resolve("vite")).href,
-              react: pathToFileURL(require.resolve("@vitejs/plugin-react")).href,
-            };
-          },
-          catch: fail,
+      const fail = (cause: unknown) =>
+        new FrameworkError({
+          framework: "vocs",
+          message: "Failed to start the native Vocs dev server",
+          cause,
         });
-        // All plugins must share Vocs's Vite instance for runnable SSR environments.
-        const vite = yield* Effect.tryPromise({
-          try: () => import(modules.vite) as Promise<typeof import("vite")>,
-          catch: fail,
-        });
-        const react = yield* Effect.tryPromise({
-          try: () => import(modules.react) as Promise<typeof import("@vitejs/plugin-react")>,
-          catch: fail,
-        });
-        const vocs = yield* Effect.tryPromise({
-          try: () => import(modules.vocs) as Promise<typeof import("vocs/vite")>,
-          catch: fail,
-        });
-        const server = yield* Effect.acquireRelease(
-          Effect.tryPromise({
-            try: () =>
-              vite.createServer({
-                root,
-                configFile: false,
-                plugins: [react.default(), vocs.vocs()],
-                server: {
-                  host: devOptions?.host,
-                  port: devOptions?.port,
-                  strictPort: devOptions?.port !== undefined,
-                },
-              }),
-            catch: fail,
-          }),
-          (server) => Effect.promise(() => server.close()),
-        );
-        yield* Effect.tryPromise({ try: () => server.listen(), catch: fail });
-        const url = server.resolvedUrls?.local[0] ?? server.resolvedUrls?.network[0];
-        if (!url) return yield* fail(new Error("Vocs did not report a dev URL"));
-        return { url };
-      }
-      return yield* runDevChild({
-        // Vocs's Vite dev server (like its build) exhausts memory under
-        // Bun; run the dev child under Node from PATH.
-        runtime: "node",
-        framework: "vocs",
-        module: import.meta.url,
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: { ...devOptions, root },
+      const modules = yield* Effect.try({
+        try: () => {
+          const project = createRequire(path.join(root, "package.json"));
+          const vocs = project.resolve("vocs/vite");
+          const require = createRequire(vocs);
+          return {
+            vocs: pathToFileURL(vocs).href,
+            vite: pathToFileURL(require.resolve("vite")).href,
+            react: pathToFileURL(require.resolve("@vitejs/plugin-react")).href,
+          };
+        },
+        catch: fail,
       });
+      // All plugins must share Vocs's Vite instance for runnable SSR environments.
+      const vite = yield* Effect.tryPromise({
+        try: () => import(modules.vite) as Promise<typeof import("vite")>,
+        catch: fail,
+      });
+      const react = yield* Effect.tryPromise({
+        try: () => import(modules.react) as Promise<typeof import("@vitejs/plugin-react")>,
+        catch: fail,
+      });
+      const vocs = yield* Effect.tryPromise({
+        try: () => import(modules.vocs) as Promise<typeof import("vocs/vite")>,
+        catch: fail,
+      });
+      const server = yield* Effect.acquireRelease(
+        Effect.tryPromise({
+          try: () =>
+            vite.createServer({
+              root,
+              configFile: false,
+              plugins: [react.default(), vocs.vocs()],
+              server: {
+                host: devOptions?.host,
+                port: devOptions?.port,
+                strictPort: devOptions?.port !== undefined,
+              },
+            }),
+          catch: fail,
+        }),
+        (server) => Effect.promise(() => server.close()),
+      );
+      yield* Effect.tryPromise({ try: () => server.listen(), catch: fail });
+      const url = server.resolvedUrls?.local[0] ?? server.resolvedUrls?.network[0];
+      if (!url) return yield* fail(new Error("Vocs did not report a dev URL"));
+      return { url };
     }),
     build: (buildOptions?: {
       readonly root?: string;

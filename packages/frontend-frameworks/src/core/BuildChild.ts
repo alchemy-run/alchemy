@@ -33,12 +33,11 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
-import * as SemVer from "effect/SemVer";
-import * as SemVerRange from "effect/SemVerRange";
 import * as Stream from "effect/Stream";
 import { readBuildOutput } from "./BuildOutput.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
 import { logChildOutput } from "./ChildOutput.ts";
+import { childCommand, type ChildRuntime } from "./ChildRuntime.ts";
 import { FrameworkError } from "./Framework.ts";
 
 /**
@@ -65,24 +64,9 @@ export interface BuildChildPayload {
   readonly errorPath: string;
 }
 
-/**
- * Node CLI flags that transparently strip TypeScript types, so a `.ts`
- * source module works as a child entry when running from `src/` under plain
- * Node (Bun handles `.ts` natively). Mirrors alchemy's
- * `Util/Node.transformTypesFlags`.
- */
-const transformTypesFlags = (): Array<string> =>
-  SemVerRange.matches(
-    SemVerRange.parseUnsafe(">=22.7.0 <26.0.0-0"),
-    SemVer.parseUnsafe(process.versions.node),
-    { includePrerelease: true },
-  )
-    ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
-    : [];
-
 export interface BuildChildOptions {
-  /** Use Node from PATH for toolchains that cannot build under Bun. Requires native TypeScript support when running source modules. */
-  readonly runtime?: "node" | undefined;
+  /** The runtime the child runs under. @default this process's runtime */
+  readonly runtime?: ChildRuntime | undefined;
   /**
    * File URL of the module exporting `buildInChild` — pass
    * `import.meta.url`. The shared runner entry (resolved as a sibling of
@@ -166,24 +150,14 @@ export const runBuildChild = (
           options.module,
         ),
       );
-      const isBun =
-        options.runtime !== "node" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
-      const executable = options.runtime === "node" ? "node" : process.execPath;
+      const { executable, args: runnerArgs } = childCommand(options.runtime, entry);
       const payload: BuildChildPayload = {
         module: options.module,
         config: options.config,
         outputPath,
         errorPath,
       };
-      const args = [
-        ...(isBun
-          ? ["run"]
-          : entry.endsWith(".ts") && options.runtime !== "node"
-            ? transformTypesFlags()
-            : []),
-        entry,
-        JSON.stringify(payload),
-      ];
+      const args = [...runnerArgs, JSON.stringify(payload)];
 
       const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
         Layer.provide(

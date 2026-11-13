@@ -472,7 +472,7 @@ export const make: (
       );
     });
 
-    const devInProcess: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+    const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
       const root = devOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
       // Resolve the project's kit before anything expensive: a root without
@@ -594,29 +594,6 @@ export const make: (
 
       return { url };
     });
-
-    // Nuxt's kit/module caches and Nitro dev runtime are shared within a
-    // process. Concurrent projects can report readiness while serving a
-    // different project's build, so give each dev server its own process.
-    const dev: Framework["Service"]["dev"] = (devOptions) => {
-      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
-        return devInProcess(devOptions);
-      }
-      const root = devOptions?.root ?? baseRoot;
-      const port = devOptions?.port ?? options?.dev?.port;
-      return FrameworkCore.runDevChild({
-        framework: "nuxt",
-        module: "@alchemy.run/frontend-frameworks/nuxt",
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: {
-          root,
-          ...(port !== undefined ? { port } : {}),
-          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
-        },
-      });
-    };
 
     return Framework.of({ build, dev });
   });

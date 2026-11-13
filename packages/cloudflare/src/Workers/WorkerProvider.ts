@@ -41,6 +41,7 @@ import {
   readAssetsConfigFiles,
   uploadAssets,
 } from "./Assets.ts";
+import { resolveBuildEnv } from "./BuildEnv.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
@@ -2391,7 +2392,12 @@ export const LiveWorkerProvider = () =>
             id,
             fqn,
             workerName,
-            props,
+            // Literals replace `Worker.URL` and env-bound Effects; bindings
+            // stay, so a source can still read them (Vinext's KV cache).
+            props: {
+              ...props,
+              env: { ...props.env, ...(yield* resolveBuildEnv(props.env, opts.selfUrl)) },
+            },
             compatibility: getCompatibility(props),
             stack: { name: stack.name, stage: stack.stage },
             selfUrl: opts.selfUrl,

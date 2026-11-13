@@ -10,9 +10,10 @@ it.each<{
   nodeEnv: string;
   env: BuildChildOptions["env"];
   expected: string;
-  runtime?: "node";
+  runtime?: "node" | "bun";
 }>([
   { nodeEnv: "test", env: undefined, expected: "production", runtime: "node" },
+  { nodeEnv: "test", env: undefined, expected: "production", runtime: "bun" },
   { nodeEnv: "test", env: undefined, expected: "production" },
   {
     nodeEnv: "development",

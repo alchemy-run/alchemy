@@ -9687,6 +9687,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/node-utils':
+        specifier: workspace:*
+        version: link:../node-utils
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
@@ -11229,6 +11232,9 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1

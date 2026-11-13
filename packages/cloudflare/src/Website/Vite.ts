@@ -296,7 +296,7 @@ export const Vite: {
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,
-          main: undefined!,
+          main: null,
           vite: {
             main: props?.main,
             rootDir: props?.rootDir,
