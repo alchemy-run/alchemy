@@ -1,6 +1,4 @@
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs";
-import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 /**
  * Child-process isolation for framework DEV servers.
@@ -29,6 +27,8 @@ import { fileURLToPath } from "node:url";
  */
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { makeChildOutput } from "./ChildOutput.ts";
 import { childCommand, type ChildRuntime } from "./ChildRuntime.ts";
@@ -45,28 +45,24 @@ export const inProjectCwd = <A, E, R>(
   framework: string,
   root: string,
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | FrameworkError, R> =>
-  Effect.suspend((): Effect.Effect<A, E | FrameworkError, R> => {
-    const cwd = process.cwd();
+): Effect.Effect<A, E | FrameworkError, R | FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const cwd = yield* Effect.sync(() => process.cwd());
     // Compare real paths: the child's cwd is physical, while `root` may go
     // through a symlink (macOS `/tmp`, a linked project directory).
-    const real = (dir: string) => {
-      try {
-        return NodeFs.realpathSync.native(dir);
-      } catch {
-        return NodePath.resolve(dir);
-      }
-    };
-    return real(cwd) === real(root)
-      ? effect
-      : Effect.fail(
-          new FrameworkError({
-            framework,
-            message:
-              `${framework} must run with its project root (${root}) as the working ` +
-              `directory, in a build or dev child process; the working directory is ${cwd}`,
-          }),
-        );
+    const real = (dir: string) =>
+      fs.realPath(dir).pipe(Effect.orElseSucceed(() => path.resolve(dir)));
+    if ((yield* real(cwd)) !== (yield* real(root))) {
+      return yield* new FrameworkError({
+        framework,
+        message:
+          `${framework} must run with its project root (${root}) as the working ` +
+          `directory, in a build or dev child process; the working directory is ${cwd}`,
+      });
+    }
+    return yield* effect;
   });
 
 /** The runner's `argv[2]` payload (JSON). */

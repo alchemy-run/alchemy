@@ -302,6 +302,9 @@ export const make: (
               ? fail(pluginConflictMessage(), error)
               : fail("Failed to build", error),
         }),
+      ).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
       );
 
       const dirs = resolveNitroOutputDirs(nitroConfig, root, (...segments) =>
@@ -355,6 +358,9 @@ export const make: (
             },
             catch: (error) => fail("Failed to start the SolidStart dev server", error),
           }),
+        ).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
         ),
         (server) =>
           Effect.promise(async () => {

@@ -730,6 +730,9 @@ export const make = (
             },
             catch: fail("Failed to build"),
           }),
+        ).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
         );
         // Disk re-read: waku writes `__waku_build_metadata.js` and prunes
         // static-only server chunks during `buildApp` hooks, after the
@@ -789,6 +792,9 @@ export const make = (
               },
               catch: fail("Failed to start the waku dev server"),
             }),
+          ).pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+            Effect.provideService(Path.Path, path),
           ),
           (server) => Effect.promise(async () => await server.close()),
         );
