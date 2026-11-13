@@ -1,5 +1,7 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { AlchemyContext } from "./AlchemyContext.ts";
 
 declare global {
   /**
@@ -42,13 +44,14 @@ export const ALCHEMY_PHASE = Config.String("ALCHEMY_PHASE").pipe(
 );
 
 /**
- * Whether the program is running under `alchemy dev` (local development with
- * hot reload), exposed as the `ALCHEMY_DEV` environment variable / config key.
+ * Whether the program is running in local dev mode, i.e. on local providers.
  *
- * The `alchemy dev` CLI command sets `ALCHEMY_DEV=true` on the spawned process;
- * every other entrypoint (`deploy`, `plan`, deployed runtime) leaves it unset,
- * so it defaults to `false`. Accepts the usual truthy strings (`true`, `1`,
- * `yes`, `on`).
+ * While a stack is evaluated it reads `AlchemyContext.dev`, the same flag that
+ * picks local or live providers, so it is `true` under `alchemy dev` and
+ * under `Test.make({ dev: true })` / `ALCHEMY_TEST_DEV=1`. Outside a stack
+ * (e.g. a deployed runtime) it falls back to the `ALCHEMY_DEV` environment
+ * variable / config key, which `alchemy dev` sets on its process and which
+ * defaults to `false`.
  *
  * Read it from user code to branch on dev mode:
  *
@@ -62,4 +65,11 @@ export const ALCHEMY_PHASE = Config.String("ALCHEMY_PHASE").pipe(
  * });
  * ```
  */
-export const ALCHEMY_DEV = Config.Boolean("ALCHEMY_DEV").pipe(Config.withDefault(false));
+export const ALCHEMY_DEV = Config.Boolean("ALCHEMY_DEV").pipe(
+  Config.withDefault(false),
+  Config.mapEffect((fromEnv) =>
+    Effect.serviceOption(AlchemyContext).pipe(
+      Effect.map((context) => (Option.isSome(context) ? context.value.dev : fromEnv)),
+    ),
+  ),
+);
