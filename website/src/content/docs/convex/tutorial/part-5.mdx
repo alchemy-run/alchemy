@@ -1,0 +1,72 @@
+---
+title: "Part 5: CI/CD"
+description: Deploy from GitHub Actions with a Convex access token.
+sidebar:
+  order: 5
+---
+
+Deploy a preview for each pull request, and remove it when the pull request closes.
+
+## Keep state between runs
+
+`Alchemy.localState()` doesn't survive a CI run. Switch the Stack to a [remote state store](/state-store) first, so `destroy` can find what `deploy` made.
+
+## Add the secrets
+
+Create a team access token for CI in your Convex team settings, then add it to your repository as `CONVEX_ACCESS_TOKEN`. Convex recommends a service account.
+
+The Stack also deploys the Worker from part 2, so add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` too. See [CI](/environments/ci).
+
+## Deploy on pull requests
+
+```yaml
+# .github/workflows/preview.yml
+name: Preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun alchemy deploy --stage pr-${{ github.event.number }} --yes
+        env:
+          CONVEX_ACCESS_TOKEN: ${{ secrets.CONVEX_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+In CI, Alchemy reads these variables instead of a profile.
+
+## Remove previews on close
+
+```yaml
+# .github/workflows/cleanup.yml
+name: Cleanup
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun alchemy destroy --stage pr-${{ github.event.number }} --yes
+        env:
+          CONVEX_ACCESS_TOKEN: ${{ secrets.CONVEX_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+## Where next
+
+- [Deployments](/convex/deployments/deployments)
+- [Environment variables](/convex/functions/environment-variables)
+- [CI](/environments/ci)

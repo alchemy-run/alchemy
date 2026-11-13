@@ -88,7 +88,7 @@ layer shows up in minutes, not after AWS. Paths are relative to
 | 3 | core integration | `test/*.test.ts test/Bundle test/Cli test/Local test/Runtime test/Util test/Website` | 8 |
 | 4 | building blocks | `test/Docker test/Redis test/Kubernetes test/SQL test/Drizzle test/Domain test/Auth test/DNS test/ACME test/Workflows test/Cluster` | 8 |
 | 5 | Git, GitHub, Axiom, Stripe, Archil, Boat | one step each | 8 |
-| 6 | Turso, Neon, Planetscale, Prisma, E2B, Daytona, Modal, Rivet | one step each | 8 |
+| 6 | Turso, Neon, Planetscale, Prisma, E2B, Daytona, Modal, Rivet, Convex | one step each | 8 |
 | 7 | Hetzner, Railway, Fly | one step each | 8 |
 | 8 | GCP | `test/GCP` | 16 |
 | 9 | AWS | `test/AWS` | 32 |

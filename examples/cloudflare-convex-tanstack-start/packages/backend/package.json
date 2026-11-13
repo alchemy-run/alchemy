@@ -1,0 +1,8 @@
+{
+  "name": "cloudflare-convex-tanstack-start-backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "convex": "1.49.0"
+  }
+}

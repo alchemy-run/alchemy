@@ -42,6 +42,7 @@ export DAYTONA_API_KEY=alchemy-fake-local-daytona-key
 export MODAL_TOKEN_ID=ak-alchemy-fake-local
 export MODAL_TOKEN_SECRET=as-alchemy-fake-local
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
+export CONVEX_ACCESS_TOKEN=alchemy-fake-local-convex-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
 export ARCHIL_API_KEY=alchemy-fake-local-archil-key
 export BOAT_API_KEY=boat_alchemy-fake-local-key

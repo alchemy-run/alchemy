@@ -1,0 +1,112 @@
+---
+title: Backend
+description: Run one self-hosted Convex backend on AWS, with its own network, buckets and TLS.
+---
+
+`Convex.Backend` runs the open-source Convex backend as one Fargate task behind a load balancer. Import it from `@alchemy.run/convex/aws`, whose `providers()` already include AWS.
+
+You need a Route 53 hosted zone for the domain in the same account. Deploying needs no Docker: Alchemy computes the admin key itself, and the task pulls the image from its registry.
+
+## Deploy a backend
+
+```typescript
+// alchemy.run.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Convex from "@alchemy.run/convex/aws";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "App",
+  { providers: Convex.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const backend = yield* Convex.Backend("Backend", {
+      image: "ghcr.io/convex/convex-backend:latest@sha256:<digest>",
+      domain: { cloud: "cloud.example.com", site: "site.example.com" },
+      db: { engine: "postgres", instanceClass: "db.t4g.micro", storage: 20 },
+    });
+
+    yield* Convex.Functions("Functions", { backend, rootDir: "." });
+
+    return { url: backend.url, siteUrl: backend.siteUrl };
+  }),
+);
+```
+
+`cloud` serves the Convex API and websockets. `site` serves HTTP actions. Alchemy finds the hosted zone from `cloud`, and you can pass `domain.hostedZoneId` to name it.
+
+The image must be pinned to a digest, because Convex migrations only go forward.
+
+## Choose a database
+
+```typescript
+// Created by the resource
+db: { engine: "postgres", instanceClass: "db.t4g.micro", storage: 20 }
+db: { engine: "mysql", instanceClass: "db.t4g.micro", storage: 20 }
+
+// A server you already run
+db: { engine: "postgres", url: yield* Config.Redacted("DATABASE_URL") }
+db: { engine: "mysql", url: yield* Config.Redacted("DATABASE_URL") }
+
+// A file on the task's disk, for development; it starts empty with each new task
+db: { engine: "sqlite" }
+```
+
+A created database sits in the task's availability zone and admits only the backend's security group. With `url`, the backend connects to a database named after the instance, with hyphens swapped for underscores, so create it first.
+
+SQLite is refused for a production backend: the `prod` stage, or any backend with `production: true`.
+
+## Size the task
+
+```typescript
+yield* Convex.Backend("Backend", {
+  image,
+  domain,
+  db,
+  cpu: 1024,
+  memory: 2048,
+  env: { DOCUMENT_RETENTION_DELAY: "172800" },
+});
+```
+
+There's always one task, because the backend holds an exclusive lease on its database. A rollout stops the old task first, so expect a short outage on each deploy.
+
+## Push functions
+
+```typescript
+yield* Convex.Functions("Functions", { backend, rootDir: "." });
+```
+
+`Functions` takes the backend's URL and admin key, and pushes the same way it does on [Convex Cloud](/convex/functions/functions).
+
+## Use another DNS host
+
+```typescript
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+yield* Convex.Backend("Backend", {
+  image,
+  db,
+  domain: {
+    cloud: "cloud.example.com",
+    site: "site.example.com",
+    dns: Cloudflare.DNS.Adapter(),
+  },
+});
+```
+
+The certificate's validation records and the two hosts go to that DNS host.
+
+## Keep your data
+
+`deletionProtection` is on by default, so a created database and buckets with objects refuse to be destroyed. To remove them, set it to `false`, deploy, then destroy:
+
+```typescript
+yield* Convex.Backend("Backend", { image, domain, db, deletionProtection: false });
+```
+
+Protection keeps the data, not the running backend. A refused destroy has already removed the service and hosts. Deploying again restores them with a new instance secret and admin key, so update anything that stored the old key.
+
+:::caution
+Changing `instanceName` fails the plan, because it would point the backend at a new, empty database. A new instance secret would invalidate every admin key, so Alchemy generates it once.
+:::

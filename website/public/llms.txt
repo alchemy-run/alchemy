@@ -696,6 +696,32 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 - [Vocs](https://alchemy.run/neon/frontend/vocs) — Package Vocs documentation and its Waku RSC handler for Neon Functions.
 - [Static Site](https://alchemy.run/neon/frontend/static-site) — Run a static-site build command and package its output for a Neon Function.
 
+## Convex
+
+Convex projects, deployments, keys and functions as Stack resources, with bindings that call functions from any host.
+
+- [Convex](https://alchemy.run/convex) — Create Convex projects and deployments, push your functions, and call them from your Workers and Lambdas.
+- [Setup](https://alchemy.run/convex/setup) — Give Alchemy a Convex team access token.
+- [Part 1: Your First Stack](https://alchemy.run/convex/tutorial/part-1) — Create a Convex project and a deployment, and push your first function.
+- [Part 2: Add a Worker](https://alchemy.run/convex/tutorial/part-2) — Call your Convex functions from a Cloudflare Worker with the Query and Mutation bindings.
+- [Part 3: Testing](https://alchemy.run/convex/tutorial/part-3) — Deploy your Stack in a test, send it a request, and tear it down.
+- [Part 4: Stages](https://alchemy.run/convex/tutorial/part-4) — Give every developer and pull request their own Convex deployment.
+- [Part 5: CI/CD](https://alchemy.run/convex/tutorial/part-5) — Deploy from GitHub Actions with a Convex access token.
+- [Projects](https://alchemy.run/convex/deployments/projects) — Create a Convex project, name it, tag it, and decide what happens on destroy.
+- [Deployments](https://alchemy.run/convex/deployments/deployments) — Create prod, dev and preview deployments, move them between projects, and pause them.
+- [Deploy keys](https://alchemy.run/convex/deployments/deploy-keys) — Create deploy keys for CI, and preview keys that create previews.
+- [Custom domains](https://alchemy.run/convex/deployments/custom-domains) — Serve a Convex deployment from your own domain.
+- [Canonical URLs](https://alchemy.run/convex/deployments/canonical-urls) — Set the URL a Convex deployment reports as its own.
+- [Usage limits](https://alchemy.run/convex/deployments/usage-limits) — Get warned, or pause a deployment, when it uses too much.
+- [Push functions](https://alchemy.run/convex/functions/functions) — Push your Convex functions on every deploy.
+- [Environment variables](https://alchemy.run/convex/functions/environment-variables) — Set a deployment's variables, and defaults for new deployments.
+- [Connect](https://alchemy.run/convex/functions/connect) — Give a Worker or Lambda your deployment's URLs for the convex client.
+- [Calling functions](https://alchemy.run/convex/functions/calling-functions) — Run queries, mutations and actions from a Worker or Lambda, and read usage, audit logs and data.
+- [Log streams](https://alchemy.run/convex/observability/log-streams) — Send a Convex deployment's logs to a webhook or another service.
+- [Backend](https://alchemy.run/convex/self-hosted/backend) — Run one self-hosted Convex backend on AWS, with its own network, buckets and TLS.
+- [Platform](https://alchemy.run/convex/self-hosted/platform) — Share one network, load balancer, database server and buckets between stages.
+- [Two AWS accounts](https://alchemy.run/convex/self-hosted/two-accounts) — Keep production in its own account and share a development account between every other stage.
+
 ## Turso
 
 Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.

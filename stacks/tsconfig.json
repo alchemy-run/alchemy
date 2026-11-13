@@ -23,6 +23,7 @@
     { "path": "../packages/railway/tsconfig.json" },
     { "path": "../packages/stripe/tsconfig.json" },
     { "path": "../packages/turso/tsconfig.json" },
+    { "path": "../packages/convex/tsconfig.json" },
     { "path": "../packages/daytona/tsconfig.json" },
     { "path": "../packages/archil/tsconfig.json" },
     { "path": "../packages/boat/tsconfig.json" },

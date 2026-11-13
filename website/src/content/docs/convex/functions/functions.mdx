@@ -1,0 +1,31 @@
+---
+title: Push functions
+description: Push your Convex functions on every deploy.
+---
+
+`Convex.Functions` pushes with your project's own `convex` CLI.
+
+## Push to a deployment
+
+```typescript
+yield* Convex.Functions("Functions", {
+  deployment,
+  rootDir: "./packages/backend",
+});
+```
+
+`rootDir` holds `convex/` and a `package.json` that lists `convex`.
+
+On Convex Cloud each push gets its own deploy key, limited to pushing and environment variables. It expires after two hours and Alchemy deletes it once the push ends, so no key is kept in state. A self-hosted backend uses its admin key.
+
+## See when it pushes
+
+A push runs when a file not ignored by git changes, or when a variable does. An unchanged folder doesn't push.
+
+## Push to the right deployment
+
+The CLI runs without any `CONVEX_*` variable or Convex login from your machine, and reads its key from a private file. A `.env.local` that selects another deployment can't redirect the push. If the CLI still reports a different deployment, the deploy fails with `PushTargetMismatch`.
+
+## Handle a failed push
+
+A failed push fails the deploy with `CodePushFailed` and shows the end of Convex's output, with the key and your secret variables removed. Variables the deploy changed go back to their earlier values.

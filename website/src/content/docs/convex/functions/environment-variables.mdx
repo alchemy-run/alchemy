@@ -1,0 +1,51 @@
+---
+title: Environment variables
+description: Set a deployment's variables, and defaults for new deployments.
+---
+
+## Set variables on a deployment
+
+```typescript
+const secret = yield* Config.Redacted("RESEND_API_KEY");
+yield* Convex.Functions("Functions", {
+  deployment,
+  rootDir: ".",
+  env: { RESEND_API_KEY: secret },
+});
+```
+
+Alchemy sets `env` before the push, because `auth.config.ts` may read it. Values go through Convex's API, so they stay out of `argv`.
+
+## Remove a variable
+
+Remove its name from `env`. Alchemy deletes it after the push succeeds, so one deploy can stop reading a variable in `auth.config.ts` and drop it. A variable set by hand and never listed is left alone.
+
+If the pushed code still reads it, Convex refuses and the deploy fails with `AuthConfigMissingEnvironmentVariable`. The next deploy tries again.
+
+## Take over a variable set by hand
+
+A name in `env` that already holds a different value, set in the dashboard or by another tool, fails the deploy with `VariablesOwnedBySomeoneElse`. A value the deployment took from the project defaults below doesn't count. Adopt it to overwrite it:
+
+```typescript
+yield* Convex.Functions("Functions", {
+  deployment,
+  rootDir: ".",
+  env: { AUTH_DOMAIN: "https://accounts.google.com" },
+}).pipe(adopt(true));
+```
+
+`alchemy deploy --adopt` does the same for the whole stack.
+
+## Set project defaults
+
+New deployments start with these, including previews that something else creates:
+
+```typescript
+yield* Convex.DefaultEnvironmentVariables("Defaults", {
+  project,
+  deploymentTypes: ["preview"],
+  env: { API_URL: "https://staging.example.com" },
+});
+```
+
+Existing deployments keep their values.

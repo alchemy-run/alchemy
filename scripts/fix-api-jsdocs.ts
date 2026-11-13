@@ -24,6 +24,7 @@ const packages = [
   "doppler",
   "infisical",
   "turso",
+  "convex",
   "e2b",
   "daytona",
   "archil",
