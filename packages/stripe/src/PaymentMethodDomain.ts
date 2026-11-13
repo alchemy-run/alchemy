@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentMethodDomains,
   GetPaymentMethodDomain,
@@ -321,11 +320,8 @@ export const PaymentMethodDomainProvider = () =>
         current = yield* CreatePaymentMethodDomain({
           domain_name: domainName,
           enabled: desiredEnabled,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-payment-method-domain-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-payment-method-domain-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

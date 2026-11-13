@@ -1,4 +1,4 @@
-import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
+import type { StripeOpError } from "@distilled.cloud/stripe";
 import {
   DeleteAccountPerson,
   GetAccounts,
@@ -444,11 +444,8 @@ export const AccountPersonProvider = () =>
             ? { relationship: toRelationshipWire(news.relationship) }
             : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-account-person-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-account-person-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

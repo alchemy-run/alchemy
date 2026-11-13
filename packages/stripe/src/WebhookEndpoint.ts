@@ -1,5 +1,4 @@
 import { unwrapRedactedDeep } from "@distilled.cloud/core/protocol-rest";
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteWebhookEndpoint,
   GetWebhookEndpoints,
@@ -358,11 +357,8 @@ export const WebhookEndpointProvider = () =>
           ...(news.apiVersion !== undefined ? { api_version: news.apiVersion } : {}),
           ...(news.connect !== undefined ? { connect: news.connect } : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-webhook-endpoint-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-webhook-endpoint-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

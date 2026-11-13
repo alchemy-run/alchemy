@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingAlerts,
   GetBillingAlert,
@@ -414,11 +413,8 @@ export const AlertProvider = () =>
           alert_type: alertType,
           title,
           usage_threshold: toCreateUsageThreshold(news.usageThreshold),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-billing-alert-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-billing-alert-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

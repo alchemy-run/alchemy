@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetShippingRates,
   GetShippingRate,
@@ -524,11 +523,8 @@ export const ShippingRateProvider = () =>
             : {}),
           ...(news.taxBehavior !== undefined ? { tax_behavior: news.taxBehavior } : {}),
           ...(news.taxCode !== undefined ? { tax_code: news.taxCode } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-shipping-rate-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-shipping-rate-${instanceId}`,
+        });
       }
 
       if (current === undefined) {
