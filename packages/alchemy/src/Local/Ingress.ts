@@ -136,11 +136,13 @@ const routerFor = Effect.fnUntraced(function* (module: string) {
     ),
     Effect.flatMap((loaded) =>
       Layer.isLayer(loaded.default)
-        ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- dynamically imported ingress module; Router is checked after the build
+        ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- dynamically imported ingress module: its errors are unknown until built and mapped to IngressError below; Router is checked after the build
           Effect.succeed(loaded.default as Layer.Layer<Router, unknown, Services>)
         : Effect.fail(fail("has no default-export Layer")()),
     ),
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the imported Layer's unknown error is mapped to IngressError below
     Effect.flatMap((layer) =>
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- see above
       Layer.buildWithScope(layer, Scope.makeUnsafe()).pipe(
         Effect.mapError(fail("failed to build")),
       ),
