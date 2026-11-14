@@ -357,3 +357,81 @@ test.provider.skipIf(!!process.env.FAST)(
     timeout: 900_000,
   },
 );
+
+// ACM gives every certificate for a name in an account the same validation
+// record. Deleting a certificate removes the record it published, unless
+// another certificate still uses it.
+const cleanupDomainFor = (stage: string) =>
+  `acm-cleanup-${stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${cloudflareZoneName}`;
+
+test.provider.skipIf(!!process.env.FAST)(
+  "removes its validation record on delete unless another certificate shares it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const domain = cleanupDomainFor(stack.stage);
+
+      const validationCnames = (zoneId: string) =>
+        route53
+          .listResourceRecordSets({ HostedZoneId: zoneId.replace(/^\/hostedzone\//, "") })
+          .pipe(
+            Effect.map((listed) =>
+              (listed.ResourceRecordSets ?? [])
+                .filter((record) => record.Type === "CNAME")
+                .map((record) => record.Name),
+            ),
+          );
+      const describe = (certificateArn: string) =>
+        withUsEast1(acm.describeCertificate({ CertificateArn: certificateArn })).pipe(
+          Effect.map((response) => response.Certificate),
+        );
+
+      const zone = yield* stack.deploy(delegatedZone(domain));
+
+      const deployCertificates = (names: string[]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const zone = yield* delegatedZone(domain);
+            return yield* Effect.forEach(names, (name) =>
+              Certificate(name, { domainName: domain, hostedZoneId: zone.id }),
+            );
+          }),
+        );
+
+      const [first, second] = yield* deployCertificates(["FirstCertificate", "SecondCertificate"]);
+      const firstDetail = yield* describe(first!.certificateArn);
+      const secondDetail = yield* describe(second!.certificateArn);
+      expect(firstDetail?.Status).toBe("ISSUED");
+      expect(secondDetail?.Status).toBe("ISSUED");
+      const recordName = firstDetail?.DomainValidationOptions?.[0]?.ResourceRecord?.Name;
+      expect(recordName).toBeDefined();
+      expect(secondDetail?.DomainValidationOptions?.[0]?.ResourceRecord?.Name).toBe(recordName);
+      expect(yield* validationCnames(zone.id)).toEqual([recordName]);
+
+      // The first certificate still uses the record, so deleting the second keeps it.
+      yield* deployCertificates(["FirstCertificate"]);
+      expect((yield* describe(second!.certificateArn).pipe(Effect.flip))._tag).toBe(
+        "ResourceNotFoundException",
+      );
+      expect(yield* validationCnames(zone.id)).toEqual([recordName]);
+
+      // Nothing uses it once the last certificate is gone.
+      yield* deployCertificates([]);
+      expect((yield* describe(first!.certificateArn).pipe(Effect.flip))._tag).toBe(
+        "ResourceNotFoundException",
+      );
+      expect(yield* validationCnames(zone.id)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:acm",
+      "provider:aws:route53",
+      "provider:cloudflare",
+      "live",
+    ],
+    timeout: 900_000,
+  },
+);
