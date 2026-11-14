@@ -1,0 +1,91 @@
+---
+title: Crons
+description: Run a job on a schedule with an Effect Cluster cron — once per scheduled time across the cluster, with the schedule on its Layer.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A cron runs a job on a schedule, once per scheduled time across the whole cluster, however many runners there are. Each run is a persisted message, so a run that's due while its runner restarts still happens.
+
+<Timeline
+  end={12}
+  lanes={[{ id: "cluster", label: "Cleanup" }]}
+  bars={[
+    { lane: "cluster", start: 0, end: 1, label: "run", tone: "accent" },
+    { lane: "cluster", start: 3.5, end: 6.5, label: "outage", tone: "warn" },
+    { lane: "cluster", start: 8, end: 9, label: "run", tone: "accent" },
+  ]}
+  ticks={[
+    { at: 0, label: "Mon 03:00" },
+    { at: 4, label: "Tue 03:00" },
+    { at: 8, label: "Wed 03:00" },
+  ]}
+  caption="Monday's and Wednesday's runs happen once each, on whichever runner owns the cron. Tuesday's falls in an outage and is more than an hour old when the runners return, so it's skipped."
+/>
+
+## Declare and implement it
+
+A cron is declared by name, with its schedule and the job:
+
+```typescript title="src/Cleanup.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { ClusterCron } from "effect/cluster";
+import * as Effect from "effect/Effect";
+import { Default } from "./Cluster.ts";
+
+export default class Cleanup extends Cluster.Cron<Cleanup>()(
+  "Cleanup",
+  { main: import.meta.url, cron: "0 3 * * *", skipIfOlderThan: "1 hour" },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const scheduled = yield* ClusterCron.CurrentScheduledTime;
+      yield* Effect.logInfo(`cleanup for ${scheduled.epochMilliseconds}`);
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`ClusterCron.CurrentScheduledTime` is the time the run was scheduled for, not when it started.
+
+Nothing calls a cron, so `yield* Cleanup` in the Stack to deploy it, as with a [singleton](/cluster/singletons#deploy-it).
+
+## The schedule
+
+`cron` is a cron expression, read in UTC unless you set `timeZone`. A sixth, leading field schedules by the second: `"*/10 * * * * *"` runs every ten seconds.
+
+`skipIfOlderThan` skips a run that's due longer ago than that, as after an outage. `calculateNextRunFromPrevious` schedules each run from the previous run's scheduled time rather than from when it finished.
+
+An expression that doesn't parse fails the deploy:
+
+```text
+Cluster.InvalidCron: Cluster.Cron 'Cleanup': Invalid number of segments in cron expression
+```
+
+## Declare it on its own
+
+A cron can also be declared by name alone, with its schedule and job on `.make`, which returns a Layer:
+
+```typescript title="src/Cleanup.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+
+export class Cleanup extends Cluster.Cron<Cleanup>()("Cleanup") {}
+```
+
+```typescript title="src/CleanupLive.ts"
+import { ClusterCron } from "effect/cluster";
+import * as Effect from "effect/Effect";
+import { Cleanup } from "./Cleanup.ts";
+import { Default } from "./Cluster.ts";
+
+export default Cleanup.make(
+  { main: import.meta.url, cron: "0 3 * * *", skipIfOlderThan: "1 hour" },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const scheduled = yield* ClusterCron.CurrentScheduledTime;
+      yield* Effect.logInfo(`cleanup for ${scheduled.epochMilliseconds}`);
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+Provide the Layer to the Stack like any other implementation.

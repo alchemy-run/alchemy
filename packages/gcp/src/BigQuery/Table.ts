@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -242,8 +243,33 @@ export type Table = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 >;
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface TableLookup {
+  /**
+   * Table id (the `{table}` segment of
+   * `projects/{project}/datasets/{dataset}/tables/{table}`). Must contain
+   * only letters, numbers, and underscores; max 1,024 characters.
+   */
+  tableId: string;
+  /**
+   * Dataset id (the `{dataset}` segment of
+   * `projects/{project}/datasets/{dataset}`) or a full dataset resource
+   * name.
+   */
+  datasetId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google BigQuery table: a native table, a view, or an external table.
@@ -314,6 +340,19 @@ export type Table = Resource<
  * const insertAll = yield* GCP.BigQuery.InsertAll(events);
  * yield* insertAll({
  *   body: { rows: [{ json: { id: "1", created_at: "2024-01-01T00:00:00Z" } }] },
+ * });
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared table.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const table = GCP.BigQuery.Table.lookup({
+ *   tableId: "my-table",
+ *   datasetId: "my-dataset",
  * });
  * ```
  *
@@ -665,6 +704,15 @@ export const TableProvider = () =>
           nextTableId === previousTableId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ tableId, datasetId: lookupDatasetId }) {
+      const env = yield* GcpEnvironment.current;
+      const datasetId = datasetIdOf(lookupDatasetId ?? "");
+      if (datasetId.length === 0) return undefined;
+      const existing = yield* getByRef(env.project, datasetId, tableId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

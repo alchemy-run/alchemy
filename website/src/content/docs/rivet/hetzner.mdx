@@ -1,0 +1,95 @@
+---
+title: Hetzner
+description: Run a Rivet control plane and pools of nodes on Hetzner Cloud Servers.
+---
+
+Host your Durable Objects on Hetzner Cloud, and the control plane runs on Servers with a Volume each, behind a private Load Balancer and an HTTPS edge. Each node in a pool is a Server of its own. It's where [Part 4 of the tutorial](/rivet/tutorial/part-4) runs the rooms.
+
+```typescript title="src/cluster.ts"
+import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+
+export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
+
+## The control plane
+
+You get one engine on a Server, with its data on a Volume, behind a Load Balancer on the private Network. A small edge Server runs Caddy in front of it and serves the engines over HTTPS at its own address under `sslip.io`, like `https://203-0-113-7.sslip.io`, with a certificate from Let's Encrypt, so you need no domain. A firewall blocks every other connection to the engines.
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet", {
+  location: "fsn1",
+  serverType: "cx33",
+  diskSize: 40,
+});
+```
+
+## Run more engines
+
+More engines share object storage, so `objectStorage` is required. Hetzner Object Storage works:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet", {
+  instances: 3,
+  objectStorage: {
+    kind: "s3",
+    bucket: "my-rivet-data",
+    endpoint: "https://nbg1.your-objectstorage.com",
+    region: "nbg1",
+    accessKeyId: Config.String("HETZNER_S3_ACCESS_KEY_ID"),
+    secretAccessKey: Config.Redacted("HETZNER_S3_SECRET_ACCESS_KEY"),
+  },
+});
+```
+
+Create the bucket and its keys in the Hetzner console first.
+
+## The pool
+
+```typescript title="src/cluster.ts"
+export const Default = RivetHetzner.ServerPool("Default", { replicas: 2, serverType: "cx23" }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+Each node's firewall only allows SSH, which Alchemy uses to deploy it.
+
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) on a Server of its own, behind a firewall that drops every inbound connection:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetHetzner.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+## Call it from a Hetzner Service
+
+```typescript title="src/api.ts"
+export const ApiServer = Hetzner.Server("ApiServer", {
+  serverType: "cx23",
+  image: "ubuntu-24.04",
+  location: "nbg1",
+});
+
+export default class Api extends Hetzner.Service<Api>()(
+  "Api",
+  { server: ApiServer, main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const visitors = yield* rooms.getByName("lobby").join();
+        return yield* HttpServerResponse.json({ visitors });
+      }),
+    };
+  }),
+) {}
+```
+
+[Part 4 of the tutorial](/rivet/tutorial/part-4) deploys this.
+
+Every option, with its default, is in the reference: [ServerControlPlane](/providers/rivet/hetzner#servercontrolplane), [ServerPool](/providers/rivet/hetzner#serverpool) and [ServicesPool](/providers/rivet/hetzner#servicespool).

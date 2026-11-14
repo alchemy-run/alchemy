@@ -10,6 +10,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { fetchFrom, httpService, nginx } from "./fixtures/flycast.ts";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -60,6 +61,10 @@ describe.concurrent("IpAssignment", () => {
             });
             return { app, ip };
           }),
+        );
+        yield* expectFound(
+          Fly.IpAssignment.lookup({ appName: created.ip.appName, ip: created.ip.ip }),
+          created.ip,
         );
 
         expect(created.ip.ip).toEqual(expect.any(String));

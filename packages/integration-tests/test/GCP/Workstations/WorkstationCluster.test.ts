@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -22,7 +23,7 @@ test.provider(
 
       const error = yield* Effect.flip(
         workstations.getProjectsLocationsWorkstationClusters({
-          name: `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
+          name: `projects/${project}/locations/us-east1/workstationClusters/alchemy-missing-cluster`,
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -32,7 +33,7 @@ test.provider(
         pageSize: 10,
       });
       expect((page.workstationClusters ?? []).map((item) => item.name)).not.toContain(
-        `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
+        `projects/${project}/locations/us-east1/workstationClusters/alchemy-missing-cluster`,
       );
 
       yield* stack.destroy();
@@ -86,7 +87,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
-            location: "us-central1",
+            location: "us-east1",
             network: "default",
             subnetwork: "default",
             displayName: "alchemy-test-cluster",
@@ -114,6 +115,21 @@ test.provider.skipIf(!runLifecycle)(
           return { cluster, config, workstation };
         }),
       );
+      yield* expectFound(
+        GCP.Workstations.WorkstationCluster.lookup({
+          workstationClusterId: created.cluster.workstationClusterId,
+          location: created.cluster.location,
+        }),
+        created.cluster,
+      );
+      yield* expectFound(
+        GCP.Workstations.WorkstationClustersWorkstationConfig.lookup({
+          workstationConfigId: created.config.workstationConfigId,
+          workstationCluster: created.config.workstationCluster,
+          location: created.config.location,
+        }),
+        created.config,
+      );
 
       expect(created.cluster.name).toContain("/workstationClusters/");
       expect(created.cluster.labels).toMatchObject({ env: "test" });
@@ -130,7 +146,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
             workstationClusterId: created.cluster.workstationClusterId,
-            location: "us-central1",
+            location: "us-east1",
             network: "default",
             subnetwork: "default",
             displayName: "alchemy-test-cluster-v2",

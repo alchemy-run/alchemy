@@ -48,14 +48,23 @@ interface Props {
 }
 
 const { places, links = [], center = 0, crop, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
-const CELL = 6; // px per 2.5° on screen
+// Two layouts: the map at full scale (desktop), and on phones a smaller map,
+// cropped to the places, under labels that keep their size. CSS shows one.
+const layout = (narrow: boolean) => {
+let CELL = 6; // px per 2.5° on screen
 // Longitudes are moved into [center - 180, center + 180).
 const wrap = (lon: number) => ((((lon - center + 180) % 360) + 360) % 360) + center - 180;
-const west = crop?.west ?? center - 180;
-const east = crop?.east ?? center + 180;
-const north = crop?.north ?? TOP_LAT;
-const south = crop?.south ?? -56;
+const lons = places.map((p) => wrap(p.lon));
+const lats = places.map((p) => p.lat);
+const west = narrow ? Math.max(crop?.west ?? center - 180, Math.min(...lons) - 30) : (crop?.west ?? center - 180);
+const east = narrow ? Math.min(crop?.east ?? center + 180, Math.max(...lons) + 30) : (crop?.east ?? center + 180);
+const north = narrow ? Math.min(crop?.north ?? TOP_LAT, Math.max(...lats) + 22) : (crop?.north ?? TOP_LAT);
+const south = narrow ? Math.max(crop?.south ?? -56, Math.min(...lats) - 22) : (crop?.south ?? -56);
+// On a phone the map shrinks to fit the column; the labels keep their size.
+if (narrow) CELL = Math.min(3.4, (280 * STEP) / (east - west));
 const px = (lon: number) => ((lon - west) / STEP) * CELL;
 const py = (lat: number) => ((north - lat) / STEP) * CELL;
 const W = px(east);
@@ -114,27 +123,31 @@ const minX = Math.min(0, ...boxes.map((b) => b.bx)) - 4;
 const minY = Math.min(0, ...boxes.map((b) => b.by)) - 4;
 const maxX = Math.max(W, ...boxes.map((b) => b.bx + b.w)) + 4;
 const maxY = Math.max(H, ...boxes.map((b) => b.by + b.h)) + 4;
+return { narrow, dots, arcs, boxes, at, minX, minY, maxX, maxY };
+};
+const layouts = [layout(false), layout(true)];
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
   <div class="alc-fig__panel">
+  {layouts.map(({ narrow, dots, arcs, boxes, at, minX, minY, maxX, maxY }) => (
   <svg
-    class="alc-fig__svg"
+    class:list={["alc-fig__svg", narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide"]}
     viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
     style={`max-width: ${Math.round((maxX - minX) * 1.1)}px`}
     role="img"
     aria-label={caption ?? "Map"}
   >
     <defs>
-      <marker id="alc-map-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-map-arrow${narrow ? "-n" : ""}-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
-    <g>{dots.map((d) => <circle cx={d.x} cy={d.y} r="1.7" class="alc-fig__land" />)}</g>
+    <g>{dots.map((d) => <circle cx={d.x} cy={d.y} r={narrow ? 1.1 : 1.7} class="alc-fig__land" />)}</g>
     {
       arcs.map((a) => (
         <g>
-          <path d={a.d} class:list={["alc-fig__line", a.dashed && "alc-fig__line--dashed"]} marker-end="url(#alc-map-arrow)" />
+          <path d={a.d} class:list={["alc-fig__line", a.dashed && "alc-fig__line--dashed"]} marker-end={`url(#alc-map-arrow${narrow ? "-n" : ""}-${uid})`} />
           {a.label && (
             <>
               <rect x={a.lx - a.label.length * 3.3 - 4} y={a.ly - 11} width={a.label.length * 6.6 + 8} height="15" rx="3" class="alc-fig__label-bg" />
@@ -166,6 +179,7 @@ const maxY = Math.max(H, ...boxes.map((b) => b.by + b.h)) + 4;
       })
     }
   </svg>
+  ))}
   </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>

@@ -32,6 +32,7 @@ type TypeId = typeof TypeId;
  */
 export type IdentityProviderType =
   | "onetimepin"
+  | "passkeys"
   | "azureAD"
   | "saml"
   | "centrify"
@@ -82,6 +83,22 @@ export interface OAuthClientConfig {
  * parameters — users receive a PIN at their email address.
  */
 export interface OneTimePinConfig {}
+
+/**
+ * Configuration for the passkeys login method. Users sign in with a
+ * WebAuthn passkey stored on their device, a security key, or a password
+ * manager. A user enrolls a passkey after confirming their identity once
+ * with another allowed login method (or an emailed code when passkeys are
+ * the application's only method).
+ */
+export interface PasskeysConfig {
+  /**
+   * Open the browser's passkey prompt automatically on the Access login
+   * page for returning users. Users can cancel it and pick another method.
+   * @default false
+   */
+  loginPageAutoPrompt?: boolean;
+}
 
 /**
  * Configuration for the simple social OAuth providers: `github`,
@@ -407,6 +424,12 @@ export type IdentityProviderProps = IdentityProviderBaseProps &
       }
     | {
         /** The identity provider type. Immutable — changing it triggers a replacement. */
+        type: "passkeys";
+        /** Passkeys configuration. */
+        config?: PasskeysConfig;
+      }
+    | {
+        /** The identity provider type. Immutable — changing it triggers a replacement. */
         type: "github" | "facebook" | "linkedin" | "yandex";
         /** OAuth client credentials for the social provider. */
         config: SocialOAuthConfig;
@@ -549,7 +572,7 @@ export type IdentityProviderLookup = {
 
 /**
  * A Cloudflare Zero Trust Access identity provider — the login method
- * (one-time PIN, generic OIDC/SAML, or a named provider like GitHub,
+ * (one-time PIN, passkeys, generic OIDC/SAML, or a named provider like GitHub,
  * Google, Okta, or Azure AD) users authenticate with before Access
  * policies evaluate.
  *
@@ -572,6 +595,18 @@ export type IdentityProviderLookup = {
  *   type: "onetimepin",
  * });
  * ```
+ *
+ * **Example:** Passkeys
+ * ```typescript
+ * const passkeys = yield* Cloudflare.Access.IdentityProvider("Passkeys", {
+ *   type: "passkeys",
+ *   config: { loginPageAutoPrompt: true },
+ * });
+ * ```
+ *
+ * Passkey sign-in authenticates the user only: it carries no group
+ * memberships or custom attributes from another identity provider, so
+ * policies that match on those won't match a passkey session.
  *
  * **Example:** Generic OIDC provider
  * ```typescript
@@ -630,6 +665,14 @@ export type IdentityProviderLookup = {
  * yield* Cloudflare.Access.Application("Admin", {
  *   domain: "admin.example.com",
  *   allowedIdps: [oidc.identityProviderId],
+ * });
+ * ```
+ *
+ * **Example:** Offer passkeys next to one-time PIN
+ * ```typescript
+ * yield* Cloudflare.Access.Application("Admin", {
+ *   domain: "admin.example.com",
+ *   allowedIdps: [passkeys.identityProviderId, otp.identityProviderId],
  * });
  * ```
  *

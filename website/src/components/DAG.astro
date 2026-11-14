@@ -1,4 +1,5 @@
 ---
+import "./diagrams/diagram.css";
 import DomainIcon from "./domain/DomainIcon.astro";
 import DomainNode from "./domain/DomainNode.astro";
 import { KIND_ORDER, KINDS, type Kind } from "./domain/kinds.ts";
@@ -76,7 +77,8 @@ export interface EdgeIn {
 /**
  * A labelled border drawn around nodes, like an account or a region. Nest one
  * inside another with `parent`. An edge may point at a group's `id`, and ends
- * at its border. Lay grouped diagrams out on the grid (`col`/`row`), leaving a
+ * at its border, or start at one, and leave from it. An edge between two
+ * groups, one above the other, joins their borders. Lay grouped diagrams out on the grid (`col`/`row`), leaving a
  * free row or column where a border needs the room.
  */
 export interface GroupIn {
@@ -98,9 +100,40 @@ interface Props {
   direction?: "LR" | "TB";
   /** Optional caption rendered below the graph. */
   caption?: string;
+  /**
+   * Internal: render only the phone layout's SVG, the graph turned on its side
+   * (grid columns become rows, left-to-right becomes top-to-bottom), when it is
+   * narrower than the desktop layout at `wideWidth`.
+   */
+  narrow?: boolean;
+  wideWidth?: number;
+  /**
+   * Internal: which phone layout to try. `transpose` turns the graph on its
+   * side, `auto` drops the grid and lays it out by its edges top to bottom,
+   * `compact` keeps the desktop direction with tighter nodes and gaps. Each
+   * falls through to the next when it doesn't fit.
+   */
+  mode?: "transpose" | "auto" | "compact";
 }
 
-const { nodes: rawNodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+const props = Astro.props as Props;
+const { narrow = false, wideWidth = Infinity } = props;
+// The phone layout transposes the graph: a grid's columns become rows, and
+// left-to-right becomes top-to-bottom. An elbow keeps its shape by swapping
+// which side it leaves from.
+const mode = props.mode ?? "transpose";
+const rawNodes = !narrow || mode === "compact"
+  ? props.nodes
+  : mode === "auto"
+    ? props.nodes.map((n) => ({ ...n, col: undefined, row: undefined }))
+    : props.nodes.map((n) => ({ ...n, col: n.row, row: n.col }));
+const edges = narrow && mode === "transpose"
+  ? props.edges.map((e) => ({ ...e, exit: (e.exit === "side" ? "bottom" : "side") as EdgeIn["exit"] }))
+  : props.edges;
+const { groups = [], caption } = props;
+const direction = !narrow || mode === "compact" ? (props.direction ?? "LR") : mode === "auto" ? "TB" : props.direction === "TB" ? "LR" : "TB";
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 // A grid starts at its first used column and row, so an unused column 0 never leaves a blank strip.
 const minCol = Math.min(...rawNodes.map((n) => n.col ?? 0));
@@ -115,14 +148,42 @@ const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 
 // ---------- Layout ----------
 
+// Text is monospace, so its width is about 0.6em per character: labels at 13px,
+// subtitles and edge labels at 10.5px. Nodes and gaps grow to fit the widest.
+const textWidth = (text: string, px: number) => text.length * px * 0.6;
 // Domain nodes carry an icon beside their label, so they get a little more room.
-const NODE_W = nodes.some((n) => n.kind) ? 164 : 140;
+const ICON_W = 20;
+const NODE_W = Math.ceil(
+  Math.max(
+    narrow ? 96 : nodes.some((n) => n.kind) ? 164 : 140,
+    ...nodes.map(
+      (n) =>
+        Math.max(
+          textWidth(n.label ?? n.id, 13) + (n.kind ? ICON_W : 0),
+          textWidth(n.type ?? "", 10.5),
+        ) + (narrow ? 20 : 28),
+    ),
+  ),
+);
 const NODE_H = 56;
 const NODE_H_TYPED = 64; // slightly taller when subtitle present
-// Grouped diagrams need room for borders and the labels on edges crossing them.
-const COL_GAP = (Astro.props as Props).groups?.length ? 116 : 80;
+// Gaps fit the widest edge label; grouped diagrams need room for borders
+// and the labels on edges crossing them.
+// On a phone only edges that run across need room for their labels: labels on
+// edges that run down sit beside them.
+const across = (e: EdgeIn) => {
+  const a = nodes.find((n) => n.id === e.from);
+  const b = nodes.find((n) => n.id === e.to);
+  if (!a || !b) return true;
+  return a.row !== undefined && b.row !== undefined ? a.row === b.row || e.exit === "side" : direction === "LR";
+};
+const COL_GAP = Math.ceil(
+  narrow
+    ? Math.max(groups.length > 0 ? 40 : 28, ...edges.filter(across).map((e) => textWidth(e.label ?? "", 10.5) + 24))
+    : Math.max(groups.length > 0 ? 116 : 80, ...edges.map((e) => textWidth(e.label ?? "", 10.5) + 28)),
+);
 const ROW_GAP = 28;
-const PAD = 24;
+const PAD = narrow ? 10 : 24;
 
 const idIndex = new Map(nodes.map((n, i) => [n.id, i]));
 
@@ -381,11 +442,38 @@ const groupEdge = (e: EdgeIn, box: Box): Edge => {
   return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
 };
 
+// An edge out of a group leaves its border: up or down into a node above or
+// below it, otherwise across from its side.
+const fromGroupEdge = (e: EdgeIn, box: Box): Edge => {
+  const b = positions.get(e.to)!;
+  const x = b.x + NODE_W / 2;
+  if (x > box.x && x < box.x + box.w && (b.y + b.h < box.y || b.y > box.y + box.h)) {
+    const [y1, y2] = b.y < box.y ? [box.y, b.y + b.h + TIP] : [box.y + box.h, b.y - TIP];
+    return { d: `M ${x} ${y1} L ${x} ${y2}`, midX: x + 8, midY: (y1 + y2) / 2 + 2, label: e.label, dashed: e.dashed, beside: true };
+  }
+  const y = b.y + b.h / 2;
+  const [x1, x2] = b.x > box.x ? [box.x + box.w, b.x - TIP] : [box.x, b.x + NODE_W + TIP];
+  return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
+};
+
+// An edge between two groups, one above the other, runs straight between
+// their borders, in the middle of the span they share.
+const betweenGroupsEdge = (e: EdgeIn, from: Box, to: Box): Edge => {
+  const left = Math.max(from.x, to.x);
+  const right = Math.min(from.x + from.w, to.x + to.w);
+  const x = right > left ? (left + right) / 2 : from.x + from.w / 2;
+  const [y1, y2] = to.y < from.y ? [from.y, to.y + to.h + TIP] : [from.y + from.h, to.y - TIP];
+  return { d: `M ${x} ${y1} L ${x} ${y2}`, midX: x + 8, midY: (y1 + y2) / 2 + 2, label: e.label, dashed: e.dashed, beside: true };
+};
+
 const buildEdges = (): Edge[] =>
   edges.map((e) => {
     // A node wins over a group with the same id.
     const box = positions.has(e.to) ? undefined : boxes.get(e.to);
+    const fromBox = positions.has(e.from) ? undefined : boxes.get(e.from);
+    if (box && fromBox) return betweenGroupsEdge(e, fromBox, box);
     if (box) return groupEdge(e, box);
+    if (fromBox) return fromGroupEdge(e, fromBox);
     if (grid) return gridEdge(e);
     const a = positions.get(e.from)!;
     const b = positions.get(e.to)!;
@@ -486,10 +574,11 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
 };
 ---
 
-<figure class="alc-dag not-content" data-nosnippet>
-  <div class="alc-dag__panel">
+{narrow && (width > 500 || width >= wideWidth * 0.8) && mode !== "compact" ? (
+  <Astro.self {...props} narrow mode={mode === "transpose" && grid && groups.length === 0 ? "auto" : "compact"} wideWidth={wideWidth} />
+) : narrow ? (width < wideWidth * 0.8 && (
   <svg
-    class="alc-dag__svg"
+    class="alc-dag__svg alc-fig__svg--narrow"
     viewBox={`0 0 ${width} ${height}`}
     style={`max-width: ${Math.round(width * 1.15)}px`}
     role="img"
@@ -497,7 +586,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   >
     <defs>
       <marker
-        id="alc-dag-arrow"
+        id={`alc-dag-arrow-${uid}`}
         viewBox="0 0 10 10"
         refX="8"
         refY="5"
@@ -548,7 +637,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
           stroke="var(--alc-accent-60)"
           stroke-width="1.5"
           stroke-dasharray={e.dashed ? "4 4" : undefined}
-          marker-end="url(#alc-dag-arrow)"
+          marker-end={`url(#alc-dag-arrow-${uid})`}
         />
         {e.label && (
           <text
@@ -613,6 +702,135 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
       );
     })}
   </svg>
+)) : (
+<figure class="alc-dag not-content" data-nosnippet>
+  <div class="alc-dag__panel">
+  <svg
+    class="alc-dag__svg alc-fig__svg--wide"
+    viewBox={`0 0 ${width} ${height}`}
+    style={`max-width: ${Math.round(width * 1.15)}px`}
+    role="img"
+    aria-label={caption ?? "Dependency graph"}
+  >
+    <defs>
+      <marker
+        id={`alc-dag-arrow-${uid}`}
+        viewBox="0 0 10 10"
+        refX="8"
+        refY="5"
+        markerWidth="6"
+        markerHeight="6"
+        orient="auto-start-reverse"
+      >
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+
+    {/* Group borders first, outermost at the back. */}
+    {[...groups]
+      .sort((a, b) => depthOf(a) - depthOf(b))
+      .map((g) => {
+        const b = boxes.get(g.id);
+        if (!b) return null;
+        return (
+          <g class="alc-dag__group">
+            <rect
+              x={b.x}
+              y={b.y}
+              width={b.w}
+              height={b.h}
+              rx="10"
+              ry="10"
+              class="alc-dag__group-bg"
+              stroke-dasharray={g.dashed ? "5 4" : undefined}
+            />
+            <text
+              x={labelPlace(g, b).x}
+              y={b.y + 17}
+              text-anchor={labelPlace(g, b).anchor}
+              class="alc-dag__group-label"
+            >
+              {g.label}
+            </text>
+          </g>
+        );
+      })}
+
+    {/* Edges next so they sit beneath nodes. */}
+    {edgeShapes.map((e) => (
+      <g class="alc-dag__edge">
+        <path
+          d={e.d}
+          fill="none"
+          stroke="var(--alc-accent-60)"
+          stroke-width="1.5"
+          stroke-dasharray={e.dashed ? "4 4" : undefined}
+          marker-end={`url(#alc-dag-arrow-${uid})`}
+        />
+        {e.label && (
+          <text
+            x={e.midX}
+            y={e.midY - 6}
+            class="alc-dag__edge-label"
+            text-anchor={e.beside ? "start" : "middle"}
+          >
+            {e.label}
+          </text>
+        )}
+      </g>
+    ))}
+
+    {/* Nodes. */}
+    {nodes.map((n) => {
+      const p = positions.get(n.id)!;
+      const tone = n.tone ?? "default";
+      if (n.kind) {
+        return (
+          <g transform={`translate(${p.x}, ${p.y})`}>
+            <DomainNode
+              kind={n.kind}
+              width={NODE_W}
+              height={p.h}
+              label={n.label ?? n.id}
+              type={n.type}
+            />
+          </g>
+        );
+      }
+      return (
+        <g class={`alc-dag__node alc-dag__node--${tone}`} transform={`translate(${p.x}, ${p.y})`}>
+          <rect
+            width={NODE_W}
+            height={p.h}
+            rx="8"
+            ry="8"
+            class="alc-dag__node-bg"
+          />
+          <text
+            x={NODE_W / 2}
+            y={n.type ? p.h / 2 - 4 : p.h / 2 + 1}
+            class="alc-dag__node-label"
+            text-anchor="middle"
+            dominant-baseline="middle"
+          >
+            {n.label ?? n.id}
+          </text>
+          {n.type && (
+            <text
+              x={NODE_W / 2}
+              y={p.h / 2 + 14}
+              class="alc-dag__node-type"
+              text-anchor="middle"
+              dominant-baseline="middle"
+            >
+              {n.type}
+            </text>
+          )}
+        </g>
+      );
+    })}
+  </svg>
+  <Astro.self {...props} narrow wideWidth={width} />
 
   {
     kindsShown.length > 0 && (
@@ -629,6 +847,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   </div>
   {caption && <figcaption class="alc-dag__caption">{caption}</figcaption>}
 </figure>
+)}
 
 <style>
   .alc-dag {

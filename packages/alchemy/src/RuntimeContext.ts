@@ -29,6 +29,13 @@ export interface BaseRuntimeContext {
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
+  /**
+   * Serve even when the impl shape has no `fetch` handler and no RPC
+   * methods. Set by runtimes whose served handler carries routes of its
+   * own — e.g. a runtime that routes Durable Object calls itself, so a
+   * worker that only hosts Durable Objects still serves.
+   */
+  alwaysServe?: boolean;
   shape?: () => Record<string, unknown>;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
@@ -45,6 +52,12 @@ export interface BaseRuntimeContext {
    * overriding the env-driven default.
    */
   telemetry?: Layer.Layer<never, any, any>;
+  /**
+   * Set during init by providing the `Workers.InputGate` Layer
+   * (`alchemy/Workers`): the Durable Object bridge gives each instance an
+   * input gate.
+   */
+  inputGate?: boolean;
   /**
    * Mint an OIDC ID token for `audience`, signed by the host's platform
    * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform

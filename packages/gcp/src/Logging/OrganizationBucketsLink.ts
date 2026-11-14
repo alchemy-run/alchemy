@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,8 +88,37 @@ export type OrganizationBucketsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationBucketsLinkLookup
 >;
+
+/**
+ * Props for {@link OrganizationBucketsLink.lookup}: find an organization
+ * buckets link this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface OrganizationBucketsLinkLookup {
+  /**
+   * Link id (alphanumeric and underscores only). A log bucket may contain
+   * only one link.
+   */
+  linkId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Parent analytics-enabled log bucket resource name
+   * (`organizations/{organization}/locations/{location}/buckets/{bucket}`).
+   * Required.
+   */
+  bucket: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BigQuery dataset link for an organization Cloud Logging bucket.
@@ -107,6 +137,20 @@ export type OrganizationBucketsLink = Resource<
  * const link = yield* GCP.Logging.OrganizationBucketsLink("Bq", {
  *   bucket: bucket.name,
  *   description: "log analytics dataset",
+ * });
+ * ```
+ *
+ * ### Looking up an existing organization buckets link
+ * `OrganizationBucketsLink.lookup` references an organization buckets link
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared organization buckets link.
+ *
+ * **Example:** Reference an existing organization buckets link
+ * ```typescript
+ * const organizationBucketsLink = GCP.Logging.OrganizationBucketsLink.lookup({
+ *   linkId: "my-link",
+ *   bucket: "my-bucket",
  * });
  * ```
  *
@@ -248,6 +292,17 @@ export const OrganizationBucketsLinkProvider = () =>
       if (!idChanged && !bucketChanged && !orgChanged) return undefined;
       return { action: "replace" as const, deleteFirst: true };
     }),
+
+    lookup: Effect.fn(function* ({ linkId, organization, bucket: lookupBucket }) {
+      const env = yield* GcpEnvironment.current;
+      yield* resolveOrganization(organization, undefined);
+      const bucket = lookupBucket ?? "";
+      const name = resourceName(bucket, linkId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      const attrs = toAttrs(existing, bucket, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -273,8 +274,40 @@ export type ClustersNodePool = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClustersNodePoolLookup
 >;
+
+/**
+ * Props for {@link ClustersNodePool.lookup}: find a clusters node pool this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ClustersNodePoolLookup {
+  /**
+   * Node pool id (the `{nodePool}` segment of
+   * `.../clusters/{cluster}/nodePools/{nodePool}`). Must be 1-40 characters
+   * and match `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  nodePoolId: string;
+  /**
+   * Compute Engine zone of the parent cluster (`us-central1-a`, …). Ignored
+   * when `cluster` is a full resource name. The legacy zonal API only
+   * accepts zones, not regions.
+   */
+  zone?: string;
+  /**
+   * Parent cluster id or full resource name
+   * (`projects/{project}/zones/{zone}/clusters/{cluster}` or the
+   * locations-form equivalent).
+   */
+  cluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Kubernetes Engine node pool managed through the legacy zonal
@@ -330,6 +363,20 @@ export type ClustersNodePool = Resource<
  * ```typescript
  * const getPool = yield* GCP.Container.GetClustersNodePool(pool);
  * const live = yield* getPool();
+ * ```
+ *
+ * ### Looking up an existing clusters node pool
+ * `ClustersNodePool.lookup` references a clusters node pool Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * clusters node pool.
+ *
+ * **Example:** Reference an existing clusters node pool
+ * ```typescript
+ * const clustersNodePool = GCP.Container.ClustersNodePool.lookup({
+ *   nodePoolId: "my-node-pool",
+ *   cluster: "my-cluster",
+ * });
  * ```
  *
  * @resource
@@ -837,6 +884,27 @@ export const ClustersNodePoolProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ nodePoolId, zone, cluster }) {
+      const env = yield* GcpEnvironment.current;
+      const clusterRef = (typeof cluster === "string" ? cluster : undefined) ?? "";
+      // A pool whose cluster never resolved (e.g. the cluster create failed)
+      // was never created and cannot be looked up.
+      if (clusterRef.trim().length === 0) {
+        return undefined;
+      }
+      const ref = parseClusterRef(clusterRef, env.project, zone);
+      const name = resourceName(ref.project, ref.zone, ref.clusterId, nodePoolId);
+      const identity = identityOf(name, { ...ref, nodePoolId });
+      const existing = yield* getByRef(
+        identity.project,
+        identity.zone,
+        identity.clusterId,
+        identity.nodePoolId,
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, identity.project, identity.zone, identity.clusterId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

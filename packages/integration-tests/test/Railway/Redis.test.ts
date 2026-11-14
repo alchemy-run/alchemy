@@ -7,9 +7,11 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { railwayApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -118,6 +120,14 @@ test.provider(
           });
           return { project, environment, cache, proxy };
         }),
+      );
+      yield* expectFound(
+        Railway.Redis.lookup({
+          projectId: created.cache.projectId,
+          environmentId: created.cache.environmentId,
+          serviceId: created.cache.serviceId,
+        }),
+        created.cache,
       );
 
       expect(created.cache.serviceId).toEqual(expect.any(String));

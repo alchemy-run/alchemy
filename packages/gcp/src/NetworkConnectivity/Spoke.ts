@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -272,8 +273,34 @@ export type Spoke = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SpokeLookup
 >;
+
+/**
+ * Props for {@link Spoke.lookup}: find a spoke this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface SpokeLookup {
+  /**
+   * Spoke id (the `{spoke}` segment of
+   * `projects/{project}/locations/{location}/spokes/{spoke}`). Must be 1-63
+   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  spokeId: string;
+  /**
+   * Location of the spoke. VPC and producer-VPC spokes must use `global`;
+   * VPN, VLAN-attachment, router-appliance, and gateway spokes use a region
+   * (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Connectivity Center spoke — one VPC, VPN tunnel set, VLAN
@@ -331,6 +358,16 @@ export type Spoke = Resource<
  *     includeExportRanges: ["10.0.0.0/8", "192.168.0.0/16"],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing spoke
+ * `Spoke.lookup` references a spoke Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared spoke.
+ *
+ * **Example:** Reference an existing spoke
+ * ```typescript
+ * const spoke = GCP.NetworkConnectivity.Spoke.lookup({ spokeId: "my-spoke" });
  * ```
  *
  * @resource
@@ -988,6 +1025,15 @@ export const SpokeProvider = () =>
           !idChanged && !locationChanged && (hubChanged || groupChanged || linkedChanged),
       };
     }),
+
+    lookup: Effect.fn(function* ({ spokeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, spokeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

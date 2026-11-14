@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "failed to process \"${x\": unsupported modifier (�) in substitution"
+}

@@ -1,0 +1,89 @@
+---
+title: Archil
+description: Run commands, processes and programs serverlessly against durable disks, in Firecracker microVMs, with Alchemy. Declare disks, sandboxes, images and branches in TypeScript.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Archil runs code against your data. A disk is a POSIX filesystem backed by object storage. Archil runs a shell command, a process or a whole program against it serverlessly: each call boots a Firecracker microVM with the disk mounted, runs to completion and shuts down, so you pay only for the call. Sandboxes are the long-lived form: microVMs that keep disks mounted, pause when idle and wake on the next request with their memory intact.
+
+The same disks mount on your own hosts in about 50 ms, keep recent data on fast storage in front of Archil's bucket or your own, and branch from checkpoints in milliseconds whatever their size.
+
+**New to Archil?** Start with [What is Archil?](/archil/what-is-archil).
+
+## A quick example
+
+A sandbox is set up once, at deploy: Alchemy creates it and runs its `run` commands, here cloning a repository onto its disk:
+
+```typescript title="src/Golden.ts"
+import * as Archil from "@alchemy.run/archil";
+
+export const Golden = Archil.Sandbox("Golden", {
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work/is"],
+});
+```
+
+A Worker forks it on each request, with the repository already there, runs the command it was sent, and deletes the fork when the request ends:
+
+```typescript title="src/Api.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Golden } from "./Golden.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const sandbox = yield* Effect.acquireRelease(
+          sandboxes.create({ name: `run-${crypto.randomUUID()}` }),
+          (sandbox) => Effect.ignore(sandbox.delete()),
+        );
+        const result = yield* sandbox.exec(yield* request.text, { cwd: "/work/is" });
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.scoped, Effect.orDie),
+    };
+  }).pipe(Effect.provide(Archil.CreateSandboxHttp)),
+) {}
+```
+
+And the Stack deploys them:
+
+```typescript title="alchemy.run.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Golden } from "./src/Golden.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Archil.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const golden = yield* Golden;
+    const api = yield* Api;
+    return { sandbox: golden.name, url: api.url.as<string>() };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Start with [Setup](/archil/setup) to connect your API key, then the [tutorial](/archil/tutorial/part-1), which builds a program on a disk one step at a time.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

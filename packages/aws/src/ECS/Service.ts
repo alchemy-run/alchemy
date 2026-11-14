@@ -1037,6 +1037,39 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -1368,14 +1401,9 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   transformProps: (id, props) => transformServiceProps(id, props),
   // Autoscaling references the service's own Output attributes (cluster/name/
   // target-group ARNs), so it composes AFTER the resource exists.
-  onCreate: (resource, props) =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-    composeServiceScaling(
-      resource as Service,
-      props as ServiceProps,
-      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-      // surface through the deploy like any resource-construction error.
-    ) as Effect.Effect<void, never, any>,
+  // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer) surface
+  // through the deploy like any resource-construction error.
+  onCreate: (resource, props) => composeServiceScaling(resource as Service, props as ServiceProps),
 });
 
 /** The BYO task reference, when the props use the `task:` form. */
@@ -1666,10 +1694,7 @@ const composeServiceRegistry = (id: string, props: ServiceProps) =>
  * namespace and rewrite the props to reference their outputs (the internal
  * `ingress` prop and `serviceRegistries`). A no-op at runtime.
  */
-const transformServiceProps = (
-  id: string,
-  props: ServiceProps,
-): Effect.Effect<ServiceProps, unknown, any> =>
+const transformServiceProps = (id: string, props: ServiceProps) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -2317,10 +2342,7 @@ const composeManagedIngress = (
  * because the scalable target's `resourceId` and the request-count metric's
  * `ResourceLabel` are derived from the service's own Output attributes.
  */
-const composeServiceScaling = (
-  service: Service,
-  props: ServiceProps | undefined,
-): Effect.Effect<void, unknown, any> =>
+const composeServiceScaling = (service: Service, props: ServiceProps | undefined) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -2974,7 +2996,9 @@ export const ServiceProvider = () =>
           output?.repositoryName ??
           (yield* createPhysicalName({
             id: `${id}-repo`,
-            maxLength: 256,
+            // ECS caps an image reference at 255 characters: the registry host,
+            // this name and a 64-character tag must all fit.
+            maxLength: 128,
             lowercase: true,
           }));
         const logGroupName =

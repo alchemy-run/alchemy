@@ -255,7 +255,9 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 2_400_000 },
     );
 
-    test.provider(
+    // Public resolvers follow the Cloudflare delegation to the zone's name
+    // servers, which an emulator on this machine can never be.
+    test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
       "StaticSite without `dns` infers a Route 53 zone and serves over HTTPS",
       (stack) =>
         Effect.gen(function* () {

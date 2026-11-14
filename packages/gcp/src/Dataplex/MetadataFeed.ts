@@ -10,6 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -109,8 +110,31 @@ export type MetadataFeed = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MetadataFeedLookup
 >;
+
+/**
+ * Props for {@link MetadataFeed.lookup}: find a metadata feed this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MetadataFeedLookup {
+  /**
+   * Feed id (the `{metadataFeed}` segment of
+   * `projects/{project}/locations/{location}/metadataFeeds/{metadataFeed}`).
+   */
+  metadataFeedId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex metadata feed that publishes catalog changes to Pub/Sub.
@@ -133,6 +157,19 @@ export type MetadataFeed = Resource<
  * const feed = yield* GCP.Dataplex.MetadataFeed("Catalog", {
  *   pubsubTopic: topic.name,
  *   filters: { changeTypes: ["CREATE"] },
+ * });
+ * ```
+ *
+ * ### Looking up an existing metadata feed
+ * `MetadataFeed.lookup` references a metadata feed Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * metadata feed.
+ *
+ * **Example:** Reference an existing metadata feed
+ * ```typescript
+ * const metadataFeed = GCP.Dataplex.MetadataFeed.lookup({
+ *   metadataFeedId: "my-metadata-feed",
  * });
  * ```
  *
@@ -285,6 +322,15 @@ export const MetadataFeedProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ metadataFeedId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, metadataFeedId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

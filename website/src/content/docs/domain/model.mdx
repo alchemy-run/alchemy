@@ -324,7 +324,7 @@ import { Bank, BankHandlers } from "./Bank.model.ts";
 export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.InMemory));
 ```
 
-`Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Hosting](/domain/cloudflare).
+`Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) and [Effect Cluster](/domain/effect-cluster).
 
 ## Call it from your code
 

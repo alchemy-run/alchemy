@@ -7,6 +7,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -76,6 +77,10 @@ test.provider(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudAsset.SavedQuery.lookup({ savedQueryId: created.savedQueryId }),
+        created,
       );
 
       expect(created.name).toContain("/savedQueries/");

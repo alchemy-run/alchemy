@@ -80,8 +80,21 @@ export type NotificationChannel = Resource<
     verificationStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NotificationChannelLookup
 >;
+
+/**
+ * Props for {@link NotificationChannel.lookup}: find a notification channel
+ * this stack doesn't manage by its identifiers.
+ */
+export interface NotificationChannelLookup {
+  /**
+   * Full resource name of the notification channel
+   * (`projects/{project}/notificationChannels/{id}`).
+   */
+  name: string;
+}
 
 /**
  * A Cloud Monitoring notification channel — email, webhook, Pub/Sub, or
@@ -118,6 +131,19 @@ export type NotificationChannel = Resource<
  *   type: "email",
  *   labels: { email_address: "alerts@example.com" },
  *   enabled: false,
+ * });
+ * ```
+ *
+ * ### Looking up an existing notification channel
+ * `NotificationChannel.lookup` references a notification channel Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared notification channel.
+ *
+ * **Example:** Reference an existing notification channel
+ * ```typescript
+ * const notificationChannel = GCP.Monitoring.NotificationChannel.lookup({
+ *   name: "projects/my-project/notificationChannels/1234567890",
  * });
  * ```
  *
@@ -251,6 +277,13 @@ export const NotificationChannelProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
     }),
 
     read: Effect.fn(function* ({ id, output, previous }) {

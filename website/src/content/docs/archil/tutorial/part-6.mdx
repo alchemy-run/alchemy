@@ -1,0 +1,96 @@
+---
+title: "Part 6: Stages and CI"
+description: Deploy a stage per environment and per pull request, each with its own set-up Archil sandbox and program, from GitHub Actions.
+sidebar:
+  order: 6
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Deploy another stage
+
+<PackageManagers run="alchemy deploy --stage staging" />
+
+Each stage gets its own `Golden` sandbox, set up by its own commands, and its own program at its own URL, so changing `Golden` in one stage never reaches another. Without `--stage`, Alchemy deploys to `live_$USER`.
+
+## Move state somewhere CI can read
+
+A runner can't see your `.alchemy/` directory, and Archil has no state store of its own. Use a remote one, such as a [Postgres](/state-store#postgres-state-store) database you already run (install `@alchemy.run/sql` and `@effect/sql-pg`):
+
+```diff lang="typescript"
+// alchemy.run.ts
++import { postgresState } from "@alchemy.run/sql/PostgresState";
++import * as Config from "effect/Config";
+
+export default Alchemy.Stack(
+  "ArchilSandboxExample",
+-  { providers: Archil.providers(), state: Alchemy.localState() },
++  {
++    providers: Archil.providers(),
++    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
++  },
+```
+
+`Cloudflare.state()`, `AWS.state()` and `GCP.state()` work too if you already use that cloud. See [State stores](/state-store).
+
+## Store your key in GitHub
+
+Archil creates API keys only in the console, so CI uses one you create there. Create a key for CI under **API Keys**, then store it and the state database URL as repository secrets:
+
+<PackageManagers
+  script={`gh secret set ARCHIL_API_KEY
+gh secret set STATE_DATABASE_URL`}
+/>
+
+`Archil.providers()` reads `ARCHIL_API_KEY` (and `ARCHIL_REGION`, if set) from the environment when no profile is selected.
+
+## Deploy per pull request
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  STAGE: >-
+    ${{ github.event_name == 'pull_request'
+      && format('pr-{0}', github.event.number)
+      || 'prod' }}
+  ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
+  STATE_DATABASE_URL: ${{ secrets.STATE_DATABASE_URL }}
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
+
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Refuse to destroy prod
+        run: test "${{ env.STAGE }}" != "prod"
+      - run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
+```
+
+Pull requests deploy to `pr-<number>`, each with its own `Golden`, and `main` deploys to `prod`. The cleanup job destroys a closed pull request's stage, and refuses to destroy `prod`.
+
+## Rotate the key
+
+Archil can't scope or expire API keys. To rotate one, create a new key in the console, run `gh secret set ARCHIL_API_KEY` again, redeploy, then delete the old key.

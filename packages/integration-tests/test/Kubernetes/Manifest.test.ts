@@ -6,6 +6,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import * as Drift from "alchemy/Drift";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -29,6 +30,7 @@ import {
   updateRole,
   type KindCluster,
 } from "./fixtures/kind.ts";
+import { expectFound } from "./lookup.ts";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
@@ -214,6 +216,50 @@ describe(
     afterAll.skipIf(!!process.env.NO_DESTROY)(
       Effect.suspend(() => destroyKindStack(kindStack, cluster)),
       { timeout: 180_000 },
+    );
+
+    test.provider(
+      "a lookup of an applied object finds it, and of a missing one fails the plan",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const applied = yield* stack.deploy(
+            Kubernetes.Manifest("LookedUp", {
+              cluster: cluster.connection,
+              manifest: configMap("looked-up", { greeting: "hello" }),
+            }),
+          );
+          const ref = {
+            cluster: cluster.connection,
+            apiVersion: "v1",
+            kind: "ConfigMap",
+            namespace: "default",
+          };
+          yield* expectFound(
+            cluster.connection,
+            Kubernetes.Manifest.lookup({ ...ref, name: "looked-up" }),
+            applied,
+            // The drift baseline is the applying stack's record.
+            { ignore: ["baselineHash", "driftMask", "observedHash", "ref"] },
+          );
+
+          const exit = yield* Effect.exit(
+            stack.plan(
+              Kubernetes.Manifest("Missing", {
+                cluster: cluster.connection,
+                manifest: configMap("missing-probe", {
+                  value: Output.interpolate`${Kubernetes.Manifest.lookup({ ...ref, name: "alchemy-missing" }).uid}`,
+                }),
+              }),
+            ),
+          );
+          expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "plan succeeded").toContain(
+            "LookupNotFoundError",
+          );
+
+          yield* stack.destroy();
+        }),
+      { timeout: 120_000 },
     );
 
     test.provider(

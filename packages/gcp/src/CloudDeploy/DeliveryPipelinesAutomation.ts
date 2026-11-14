@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -192,8 +193,37 @@ export type DeliveryPipelinesAutomation = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeliveryPipelinesAutomationLookup
 >;
+
+/**
+ * Props for {@link DeliveryPipelinesAutomation.lookup}: find a delivery
+ * pipelines automation this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface DeliveryPipelinesAutomationLookup {
+  /**
+   * Automation id (the `{automation}` segment).
+   */
+  automationId: string;
+  /**
+   * Region used when `deliveryPipeline` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent delivery pipeline. Full name
+   * `projects/{project}/locations/{locat
+   * ion}/deliveryPipelines/{deliveryPipeline}` or the pipeline id (combined
+   * with `location`).
+   */
+  deliveryPipeline: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Deploy automation attached to a delivery pipeline. Automations
@@ -245,6 +275,20 @@ export type DeliveryPipelinesAutomation = Resource<
  *   rules: [{ promoteReleaseRule: { id: "promote-release" } }],
  *   description: "promote v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing delivery pipelines automation
+ * `DeliveryPipelinesAutomation.lookup` references a delivery pipelines
+ * automation Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared delivery pipelines automation.
+ *
+ * **Example:** Reference an existing delivery pipelines automation
+ * ```typescript
+ * const deliveryPipelinesAutomation = GCP.CloudDeploy.DeliveryPipelinesAutomation.lookup({
+ *   automationId: "my-automation",
+ *   deliveryPipeline: "my-delivery-pipeline",
  * });
  * ```
  *
@@ -344,6 +388,23 @@ export const DeliveryPipelinesAutomationProvider = () =>
         nextParent,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      automationId,
+      location: lookupLocation,
+      deliveryPipeline: lookupDeliveryPipeline,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const deliveryPipeline = lookupDeliveryPipeline
+        ? expandParent(lookupDeliveryPipeline, env.project, location, "deliveryPipelines")
+        : undefined;
+      const name = deliveryPipeline ? resourceName(deliveryPipeline, automationId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

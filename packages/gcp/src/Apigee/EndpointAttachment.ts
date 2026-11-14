@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -74,8 +75,33 @@ export type EndpointAttachment = Resource<
     connectionState: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointAttachmentLookup
 >;
+
+/**
+ * Props for {@link EndpointAttachment.lookup}: find an endpoint attachment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface EndpointAttachmentLookup {
+  /**
+   * Endpoint attachment id (the `{endpoint_attachment}` segment of
+   * `organizations/{org}/endpointAttachments/{endpoint_attachment}`). Must
+   * start with a lowercase letter, be 2-32 characters of lowercase letters,
+   * numbers, or hyphens, and must not end with a hyphen.
+   */
+  endpointAttachmentId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee endpoint attachment for southbound Private Service Connect.
@@ -91,6 +117,19 @@ export type EndpointAttachment = Resource<
  *   location: "us-central1",
  *   serviceAttachment:
  *     "projects/my-project/regions/us-central1/serviceAttachments/backend",
+ * });
+ * ```
+ *
+ * ### Looking up an existing endpoint attachment
+ * `EndpointAttachment.lookup` references an endpoint attachment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared endpoint attachment.
+ *
+ * **Example:** Reference an existing endpoint attachment
+ * ```typescript
+ * const endpointAttachment = GCP.Apigee.EndpointAttachment.lookup({
+ *   endpointAttachmentId: "my-endpoint-attachment",
  * });
  * ```
  *
@@ -182,6 +221,15 @@ export const EndpointAttachmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ endpointAttachmentId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      const name = resourceName(organization, endpointAttachmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

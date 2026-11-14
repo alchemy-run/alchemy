@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -98,8 +99,40 @@ export type InstancesSnapshot = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesSnapshotLookup
 >;
+
+/**
+ * Props for {@link InstancesSnapshot.lookup}: find an instances snapshot
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface InstancesSnapshotLookup {
+  /**
+   * Snapshot id (the `{snapshot}` segment of
+   * `.../instances/{instance}/snapshots/{snapshot}`). Must start with a
+   * letter, be 1-63 characters, and end with a letter or digit.
+   */
+  snapshotId: string;
+  /**
+   * Parent Filestore instance. Full name
+   * `projects/{project}/locations/{location}/instances/{instance}` or the
+   * instance id (combined with `location`).
+   */
+  instance: string;
+  /**
+   * Location of the parent instance when `instance` is a bare id. Ignored
+   * when `instance` is a full resource name. `US-CENTRAL1-A` is accepted
+   * and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Filestore snapshot of an instance.
@@ -138,6 +171,20 @@ export type InstancesSnapshot = Resource<
  *   instance: nfs.name,
  *   description: "nightly snapshot v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing instances snapshot
+ * `InstancesSnapshot.lookup` references an instances snapshot Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared instances snapshot.
+ *
+ * **Example:** Reference an existing instances snapshot
+ * ```typescript
+ * const instancesSnapshot = GCP.Filestore.InstancesSnapshot.lookup({
+ *   snapshotId: "my-snapshot",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -278,6 +325,19 @@ export const InstancesSnapshotProvider = () =>
         nextParent: next.instanceName,
       });
     }),
+
+    lookup: Effect.fn(function* ({ snapshotId, instance: lookupInstance, location }) {
+      const env = yield* GcpEnvironment.current;
+      const instance = parseInstanceRef(
+        lookupInstance ?? "",
+        env.project,
+        location ?? DEFAULT_ZONE,
+      );
+      const name = resourceName(instance.instanceName, snapshotId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || isPlaceholder(existing)) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -1,0 +1,90 @@
+---
+title: Programs
+description: Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
+---
+
+import Shell from "../../../../components/diagrams/Shell.astro";
+
+A `Modal.Sandbox` is a program Alchemy bundles into an image. Every sandbox you start from it runs the program, serving HTTP on a port you reach through the sandbox's tunnel.
+
+## Each sandbox runs its own copy
+
+The program's code lives in the image. Its environment, including the token its bindings use, lives in a Modal Secret attached to every sandbox:
+
+<Shell
+  shell={{
+    label: "agent-1",
+    type: "Sandbox · from MySandbox",
+    icon: "brand:modal",
+    children: [
+      { label: "MySandbox", type: "Bun · :8080", tone: "accent", icon: "file-code" },
+      { label: "env", type: "Modal Secret", icon: "key-round" },
+    ],
+  }}
+  caption="The image holds the program. The env comes from a Secret attached at start, so it never goes into the image."
+/>
+
+## Write the program
+
+```typescript title="src/MySandbox.ts"
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Coder } from "./Coder.ts";
+
+export default class MySandbox extends Modal.Sandbox<MySandbox>()(
+  "MySandbox",
+  { main: import.meta.url, app: Coder },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ready")),
+    };
+  }),
+) {}
+```
+
+Run `alchemy deploy`. Modal builds the image; you don't need Docker.
+
+## Start one and call it
+
+```typescript
+const sandboxes = yield* Modal.CreateSandbox(MySandbox);
+const sandbox = yield* sandboxes.create({ timeout: "10 minutes" });
+const port = yield* sandbox.getTcpPort();
+const response = yield* port.fetch(HttpClientRequest.get("/"));
+```
+
+Provide `Modal.CreateSandboxHttp`. `getTcpPort()` is the program's port, reached through the sandbox's tunnel.
+
+## Use bindings from the program
+
+```typescript
+const models = yield* Modal.ReadVolume(Models);
+```
+
+The token the binding needs is in the program's env, never in the image.
+
+## Run a plain Node program
+
+```typescript title="src/MySandbox.ts"
+import * as Modal from "@alchemy.run/modal";
+import { Coder } from "./Coder.ts";
+
+export const MySandbox = Modal.Sandbox("MySandbox", {
+  main: "./src/agent-server.ts",
+  app: Coder,
+  env: { GREETING: "hello" },
+});
+export type MySandboxEnv = Modal.InferEnv<typeof MySandbox>;
+```
+
+```typescript title="src/agent-server.ts"
+import { createServer } from "node:http";
+import type { MySandboxEnv } from "./MySandbox.ts";
+
+const env = process.env as unknown as MySandboxEnv;
+
+createServer((_request, response) => response.end(env.GREETING)).listen(Number(process.env.PORT));
+```
+
+It runs on Bun. Listen on `PORT` (8080 unless you set `port`).

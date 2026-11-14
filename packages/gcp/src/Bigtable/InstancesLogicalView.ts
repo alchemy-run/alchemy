@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -70,8 +71,33 @@ export type InstancesLogicalView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesLogicalViewLookup
 >;
+
+/**
+ * Props for {@link InstancesLogicalView.lookup}: find an instances logical
+ * view this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface InstancesLogicalViewLookup {
+  /**
+   * Logical view id (the `{logical_view}` segment of
+   * `.../instances/{instance}/logicalViews/{logical_view}`). Must be unique
+   * among table ids and view ids in the instance.
+   */
+  logicalViewId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable logical view — a SQL SELECT over a table that can
@@ -95,6 +121,20 @@ export type InstancesLogicalView = Resource<
  * const view = yield* GCP.Bigtable.InstancesLogicalView("Active", {
  *   instance: instance.name,
  *   query: "SELECT _key FROM users",
+ * });
+ * ```
+ *
+ * ### Looking up an existing instances logical view
+ * `InstancesLogicalView.lookup` references an instances logical view
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared instances logical view.
+ *
+ * **Example:** Reference an existing instances logical view
+ * ```typescript
+ * const instancesLogicalView = GCP.Bigtable.InstancesLogicalView.lookup({
+ *   logicalViewId: "my-logical-view",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -198,6 +238,17 @@ export const InstancesLogicalViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ logicalViewId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? logicalViewName(env.project, instanceIdOf(instance), logicalViewId)
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

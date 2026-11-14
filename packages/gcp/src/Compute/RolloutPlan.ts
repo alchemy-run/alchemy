@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -67,8 +68,26 @@ export type RolloutPlan = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RolloutPlanLookup
 >;
+
+/**
+ * Props for {@link RolloutPlan.lookup}: find a rollout plan this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RolloutPlanLookup {
+  /**
+   * Rollout plan name (RFC1035, 1-63 characters).
+   */
+  rolloutPlanName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-global Compute Engine rollout plan.
@@ -119,6 +138,19 @@ export type RolloutPlan = Resource<
  *       validation: { type: "manual" },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing rollout plan
+ * `RolloutPlan.lookup` references a rollout plan Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * rollout plan.
+ *
+ * **Example:** Reference an existing rollout plan
+ * ```typescript
+ * const rolloutPlan = GCP.Compute.RolloutPlan.lookup({
+ *   rolloutPlanName: "my-rollout-plan",
  * });
  * ```
  *
@@ -285,6 +317,13 @@ export const RolloutPlanProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ rolloutPlanName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, rolloutPlanName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

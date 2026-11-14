@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeletePlan,
   GetPlans,
@@ -143,8 +142,18 @@ export type Plan = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  PlanLookup
 >;
+
+/**
+ * Props for {@link Plan.lookup}: find a plan this stack
+ * doesn't manage by its id.
+ */
+export interface PlanLookup {
+  /** Stripe plan id, e.g. `"plan_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Plan — the legacy (pre-Price) catalog object that defines
@@ -194,6 +203,16 @@ export type Plan = Resource<
  *   trialPeriodDays: 14,
  *   metadata: { tier: "pro" },
  * });
+ * ```
+ *
+ * ### Looking up an existing plan
+ * `Plan.lookup` references a plan Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing plan
+ * ```typescript
+ * const ref = Stripe.Plan.lookup({ id: "plan_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -346,6 +365,11 @@ export const PlanProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -403,11 +427,8 @@ export const PlanProvider = () =>
           ...(desiredTrialPeriodDays !== undefined
             ? { trial_period_days: desiredTrialPeriodDays }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-plan-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-plan-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

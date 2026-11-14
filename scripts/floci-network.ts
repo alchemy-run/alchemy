@@ -19,10 +19,11 @@ export interface FlociDefaultNetwork {
   readonly securityGroupIds: ReadonlyArray<string>;
 }
 
-export const resolveFlociDefaultNetwork = Effect.fn(function* (external: boolean) {
+/** `image` is the one the run started the emulator with; see `startFlociForTests`. */
+export const resolveFlociDefaultNetwork = Effect.fn(function* (external: boolean, image?: string) {
   const region = yield* Config.String("AWS_REGION").pipe(Config.withDefault("us-east-1"));
   return yield* Effect.gen(function* () {
-    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external });
+    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external, image });
     const vpcs = yield* EC2.describeVpcs({
       Filters: [{ Name: "is-default", Values: ["true"] }],
     });

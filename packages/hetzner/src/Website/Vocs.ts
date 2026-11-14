@@ -47,6 +47,8 @@ export const Vocs = (id: string, props: VocsProps = {}) =>
     name: "Vocs",
     framework: VOCS_FRAMEWORK_SPECIFIER,
     target: VOCS_NODE_TARGET_SPECIFIER,
+    // Vocs's Vite dev server exhausts memory under Bun.
+    runtime: "node",
     options: props.outDir !== undefined ? { outDir: props.outDir } : undefined,
     htmlHandling: "drop-trailing-slash",
   }).pipe(Namespace.push(id));

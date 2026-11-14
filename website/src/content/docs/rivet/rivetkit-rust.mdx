@@ -1,0 +1,168 @@
+---
+title: Rust Actors
+description: Deploy Actors written with RivetKit's Rust SDK, unchanged, to a Rivet control plane and pool. Alchemy compiles the crate into the pool's node image.
+---
+
+Rust Actors are Actors written with `rivetkit`, Rivet's Rust crate, as [Rivet's Rust quickstart](https://rivet.dev/actors/docs/quickstart/rust/) describes. They run as native binaries, with no JavaScript runtime between your code and Rivet. Alchemy deploys them as they are: it compiles your crate into the pool's node image and runs its binary on the pool's nodes, connected to your control plane.
+
+## Write the Actors
+
+Write the crate the way Rivet documents it. Its library defines each Actor and a registry:
+
+```rust title="counter/src/lib.rs"
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use rivetkit::prelude::*;
+use rivetkit::{BindParam, ColumnValue};
+use serde::{Deserialize, Serialize};
+
+pub struct Counter;
+
+#[derive(Serialize, Deserialize)]
+pub struct Increment {
+	pub amount: i64,
+}
+
+impl Action for Increment {
+	type Output = i64;
+
+	const NAME: &'static str = "increment";
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct NewCount {
+	pub count: i64,
+}
+
+impl Event for NewCount {
+	const NAME: &'static str = "newCount";
+}
+
+#[async_trait]
+impl Actor for Counter {
+	type Input = ();
+	type Actions = (Increment,);
+	type Events = (NewCount,);
+	type ConnParams = ();
+	type Action = action::Raw;
+
+	async fn create(ctx: &Ctx<Self>) -> Result<Self> {
+		ctx.sql()
+			.exec(
+				"CREATE TABLE IF NOT EXISTS counter (
+					id INTEGER PRIMARY KEY,
+					count INTEGER NOT NULL
+				);
+				INSERT OR IGNORE INTO counter (id, count) VALUES (0, 0);",
+			)
+			.await?;
+		Ok(Self)
+	}
+}
+
+impl Handler<Increment> for Counter {
+	async fn handle(self: Arc<Self>, ctx: Ctx<Self>, action: Increment) -> Result<i64> {
+		let result = ctx
+			.sql()
+			.execute(
+				"UPDATE counter SET count = count + ? WHERE id = 0 RETURNING count",
+				Some(vec![BindParam::Integer(action.amount)]),
+			)
+			.await?;
+		let count = match result.rows.first().and_then(|row| row.first()) {
+			Some(ColumnValue::Integer(count)) => *count,
+			other => return Err(anyhow!("expected integer count, got {other:?}")),
+		};
+		ctx.emit(NewCount { count })?;
+		Ok(count)
+	}
+}
+
+pub fn registry() -> Registry {
+	let mut registry = Registry::new();
+	registry.register_actor::<Counter>("counter");
+	registry
+}
+```
+
+Its binary starts the registry:
+
+```rust title="counter/src/main.rs"
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+	counter::registry().start().await
+}
+```
+
+`start()` takes no settings. On the pool's nodes, Alchemy sets `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL`, and RivetKit reads them to join the right pool on the right control plane.
+
+## Declare it
+
+Point a `Rivet.DurableObject` at the crate's directory with `crate`, and give it a pool:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Counters } from "./cluster.ts";
+
+export const Counter = Rivet.DurableObject("Counter", { crate: "./counter" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Alchemy builds the node image with Docker, so you don't need Rust installed. It compiles the package's binary on the deploying machine's own platform, cross-compiling when the pool's nodes use another architecture, and copies it onto a slim Debian image.
+
+`crate` is relative to where you run the deploy. It can also name the crate's `Cargo.toml`.
+
+## Build it the way Cargo would
+
+A crate in a Cargo workspace is built from the workspace, as `cargo build -p` builds it, so `workspace = true` dependencies and path dependencies inside the workspace resolve. Alchemy finds the workspace the way Cargo does: the nearest `Cargo.toml` above the crate with a `[workspace]`.
+
+Dependencies compile in an image layer of their own, keyed by the workspace's manifests and lockfile. A change to your code rebuilds only your crate; a change to a dependency rebuilds them all.
+
+## Configure the build
+
+`build` takes the Cargo settings a crate needs:
+
+```typescript title="src/counter.ts"
+export const Counter = Rivet.DurableObject("Counter", {
+  crate: "./crates/counter",
+  build: {
+    toolchain: "1.85",
+    features: ["metrics"],
+    packages: ["protobuf-compiler"],
+    runtimePackages: ["libssl3"],
+  },
+}).pipe(Effect.provide(Counters));
+```
+
+`toolchain` is a tag of the official `rust` image, and defaults to the latest stable release. `features`, `noDefaultFeatures` and `profile` pass through to Cargo; the profile defaults to `release`. `packages` are Debian packages the compiler needs, and `runtimePackages` are ones the binary needs on the nodes. The nodes run the package's own binary, or `bin` to name another.
+
+## Give it a pool of its own
+
+The binary runs its own process on every node, so its pool runs nothing else. Any pool on any cloud works:
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+```
+
+Pools on container platforms build and run the image there: ECS, Kubernetes, Cloud Run, Fly and Railway build it from the crate, and Rivet Cloud takes an upload of it. Pools of plain VMs (EC2, Compute Engine and Hetzner Servers) run it in Docker on each VM: Alchemy builds it for the VM's architecture, ships it to the VM, and starts it there.
+
+## Reach it from other code
+
+Callers use RivetKit's clients, as [Rivet's Rust quickstart](https://rivet.dev/actors/docs/quickstart/rust/) describes: `rivetkit::client` from Rust, or `rivetkit/client` from TypeScript, which calls a Rust Actor by name. The Durable Object's attributes give them what to connect with:
+
+```typescript title="alchemy.run.ts"
+const counter = yield* Counter;
+return { endpoint: counter.endpoint, namespace: counter.namespace, pool: counter.pool };
+```
+
+There are no bindings and no `yield*` calls from other runtimes. For those, write the Actor as a [Durable Object](/rivet/durable-objects).
+
+Next, [Control Plane](/rivet/control-planes): what every form runs on.

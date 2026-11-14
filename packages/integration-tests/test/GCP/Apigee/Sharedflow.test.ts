@@ -7,6 +7,7 @@ import { unzipFiles } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -76,6 +77,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "alchemy test shared flow",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.Sharedflow.lookup({
+          sharedflowId: created.sharedflowId,
+          organization: created.organization,
+        }),
+        created,
       );
 
       expect(created.sharedflowId).toEqual(expect.any(String));

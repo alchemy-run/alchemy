@@ -1,0 +1,159 @@
+---
+title: Snapshots
+description: Pull an image, build a Dockerfile on Daytona, or capture a warm base that sandboxes start from.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A **snapshot** is the image a sandbox boots from, with the size every sandbox from it gets: CPU, memory, disk and GPUs. Daytona builds it once and every sandbox starts from a copy. Snapshots can't be changed: changing what one is built from replaces it.
+
+## Every sandbox starts from a copy
+
+Daytona makes a snapshot from an image, from a Dockerfile, or from another snapshot with commands run in it. That last one is how you get a **warm base**: a snapshot with a repository already cloned and its dependencies installed, so sandboxes start ready to work.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "build", label: "sandbox from Base" },
+    { id: "warm", label: "Warm" },
+    { id: "users", label: "sandboxes" },
+  ]}
+  bars={[
+    { lane: "build", start: 0, end: 2, label: "git clone" },
+    { lane: "build", start: 2.1, end: 4.6, label: "pnpm install" },
+    { lane: "build", start: 4.7, end: 6.3, label: "capture", tone: "warn" },
+    { lane: "warm", start: 6.4, end: 10, label: "snapshot Warm" },
+    { lane: "users", start: 6.8, end: 9.2, label: "ready at boot" },
+    { lane: "users", start: 7.6, end: 10, label: "ready at boot" },
+  ]}
+  marks={[{ at: 0, label: "deploy" }]}
+  caption="Deploy starts a sandbox from Base, runs the commands, captures its disk as Warm and deletes the sandbox. Every sandbox created from Warm starts with the repository cloned and installed."
+/>
+
+## Pull an image
+
+```typescript
+// src/Images.ts
+import * as Daytona from "@alchemy.run/daytona";
+
+export const Node = Daytona.Snapshot("Node", {
+  image: "node:22-bookworm",
+  cpu: 2,
+  memory: 4,
+  disk: 10,
+});
+```
+
+Use a fixed tag or digest. Daytona rejects `latest`, `lts` and `stable`, and deploy fails before calling it.
+
+## Pull from a private registry
+
+```typescript
+// src/Images.ts
+import * as Daytona from "@alchemy.run/daytona";
+import * as Config from "effect/Config";
+
+export const Ghcr = Daytona.Registry("Ghcr", {
+  url: "ghcr.io",
+  username: "alchemy-run",
+  password: Config.Redacted("GHCR_TOKEN"),
+});
+
+export const App = Daytona.Snapshot("App", {
+  image: "ghcr.io/alchemy-run/app:1.4.0",
+  registry: Ghcr,
+});
+```
+
+Daytona picks the registry whose `url` matches the image's host.
+
+## Build a Dockerfile on Daytona
+
+```typescript
+// src/Images.ts
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import * as Daytona from "@alchemy.run/daytona";
+
+export const Tools = Daytona.Snapshot("Tools", {
+  dockerfile: Dockerfile.inline`
+    FROM node:22-bookworm
+    RUN apt-get update && apt-get install -y git ripgrep
+  `,
+});
+```
+
+Daytona's builders run the build; you don't need Docker.
+
+## Build a directory with its Dockerfile
+
+```typescript
+// src/Images.ts
+import * as Daytona from "@alchemy.run/daytona";
+
+export const App = Daytona.Snapshot("App", {
+  context: "./sandbox",
+  build: { args: { NODE_ENV: "production" } },
+});
+```
+
+The files `./sandbox/Dockerfile` copies are uploaded to Daytona, minus anything in `.dockerignore`. Changing one of them rebuilds the snapshot. Build arguments are written into the Dockerfile's `ARG` defaults. Daytona builds for `linux/amd64` only. Daytona's builders can't receive build secrets, so setting `build.secrets` builds with your local Docker and pushes the image to Daytona instead.
+
+## Capture a warm base
+
+```typescript
+// src/Images.ts
+import * as Daytona from "@alchemy.run/daytona";
+
+export const Base = Daytona.Snapshot("Base", { image: "node:22-bookworm" });
+
+export const Warm = Daytona.Snapshot("Warm", {
+  from: Base,
+  run: [
+    "git clone https://github.com/alchemy-run/alchemy /home/daytona/alchemy",
+    "cd /home/daytona/alchemy && corepack enable && pnpm install",
+  ],
+});
+```
+
+Deploy starts a sandbox from `Base`, runs the commands, captures its disk as `Warm`, and deletes the sandbox. Sandboxes created from `Warm` start with the repository cloned and installed.
+
+## Keep sandboxes warm
+
+```typescript
+export const Pool = Daytona.WarmPool("Pool", { snapshot: Warm, size: 4 });
+```
+
+Daytona keeps four started sandboxes of `Warm` ready and hands one out on each create. They are billed while they wait.
+
+## Build snapshots at runtime
+
+```typescript
+// construction
+const images = yield* Daytona.CreateSnapshot({ prefix: "repo-" });
+const warm = yield* Warm;
+// per request
+const name = `repo-${owner}-${repo}`;
+const base =
+  (yield* images.get(name)) ??
+  (yield* images.create({
+    name,
+    from: warm.name,
+    run: [`git clone https://github.com/${owner}/${repo} /home/daytona/repo`],
+  }));
+```
+
+`CreateSnapshot` builds a base per repository the first time a user needs one. Snapshots have only a name, so `prefix` is how you find the ones it built; they are not deleted when the stack is destroyed.
+
+## Snapshot a running sandbox
+
+```typescript
+yield* sandbox.createSandboxSnapshot({ name: `checkpoint-${task}` });
+```
+
+## Unused snapshots are deactivated
+
+Daytona deactivates a snapshot nobody used for two weeks. Deploy reactivates it; at runtime, activate it before you create from it:
+
+```typescript
+yield* images.activate(name);
+```

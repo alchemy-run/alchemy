@@ -1,0 +1,153 @@
+---
+title: Networks
+description: Connect containers on a Docker.Network so they reach each other by name, cut a network off from the internet, pin its subnet, and attach to networks you didn't create.
+---
+
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
+A Docker **network** is a private network on one engine. Containers on the same network reach each other by container name or by an **alias** you give them, on any port, with nothing published to the host. Containers on different networks can't reach each other at all. Each network gets its own subnet, and Docker runs a DNS server for it, so names resolve to whichever container holds them now.
+
+<Boundaries
+  nodes={[
+    { id: "api", label: "api", type: "container", col: 0, row: 0 },
+    { id: "pg", label: "postgres", type: "alias postgres", col: 1, row: 0, tone: "accent" },
+    { id: "worker", label: "worker", type: "container", col: 0, row: 1 },
+    { id: "web", label: "registry.npmjs.org", type: "the internet", col: 1, row: 1 },
+  ]}
+  zones={[
+    { id: "app", label: "app-network", type: "bridge", nodes: ["api", "pg"] },
+    { id: "jobs", label: "jobs", type: "internal: true", nodes: ["worker"], tone: "warn" },
+    { id: "out", label: "outside the engine", nodes: ["web"], labelAt: "right" },
+  ]}
+  links={[
+    { from: "api", to: "pg", label: "postgres:5432" },
+    { from: "worker", to: "out", kind: "blocked", label: "no route out" },
+  ]}
+  caption="On app-network, api reaches Postgres by its alias. The jobs network is internal, so a container that is only on it can't reach the internet, or anything else."
+/>
+
+## Connect two containers
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const network = yield* Docker.Network("app-network");
+    const password = yield* Config.Redacted("POSTGRES_PASSWORD");
+
+    yield* Docker.Container("postgres", {
+      image: "postgres:18-alpine",
+      environment: { POSTGRES_PASSWORD: password },
+      networks: [{ name: network.name, aliases: ["postgres"] }],
+      start: true,
+    });
+
+    const api = yield* Docker.Container("api", {
+      image: "ghcr.io/acme/api:latest",
+      environment: { DATABASE_HOST: "postgres", DATABASE_PASSWORD: password },
+      networks: [{ name: network.name }],
+      ports: [{ external: 8080, internal: 3000 }],
+      start: true,
+    });
+
+    return { api: api.ports };
+  }),
+);
+```
+
+`api` connects to `postgres:5432`. Postgres publishes no port, so only containers on `app-network` can reach it. The alias stays the same when the container is recreated under a new name, which is why you connect by alias.
+
+A container can be on several networks, and `networks` changes apply without recreating it.
+
+## Cut a network off from the internet
+
+```typescript
+const jobs = yield* Docker.Network("jobs", { internal: true });
+```
+
+An **internal** network has no route out. A container that is only on it can talk to its neighbours and nothing else. A container also on another network can still reach out through that one.
+
+## Choose its addresses
+
+Docker picks each network's subnet and gateway. Set `ipam` to pin them, for example to avoid a range your VPN uses:
+
+```typescript
+const network = yield* Docker.Network("private", {
+  ipam: {
+    config: [{ subnet: "10.50.0.0/24", gateway: "10.50.0.1", ipRange: "10.50.0.128/25" }],
+  },
+});
+```
+
+Containers then get addresses from `ipRange`. A subnet is a network prefix: `10.50.0.0/24`, not `10.50.0.1/24`. A bad value fails with `InvalidNetworkOptions`, naming the field, before anything is changed.
+
+For IPv6, set `enableIPv6` and declare a subnet of each family:
+
+```typescript
+const dualStack = yield* Docker.Network("dual-stack", {
+  enableIPv6: true,
+  ipam: {
+    config: [
+      { subnet: "10.51.0.0/24", gateway: "10.51.0.1" },
+      { subnet: "fd51:3456:789a::/64", gateway: "fd51:3456:789a::1" },
+    ],
+  },
+});
+```
+
+`driver` picks the kind of network: `bridge` by default on one engine, `overlay` across a [swarm](/docker/swarm), or `macvlan` for addresses on the host's own network. `driverOpts` passes driver settings through as they are.
+
+## Configure each container attachment
+
+How a container joins a network is set on the container. Each entry in `networks` can pin addresses from the network's subnets:
+
+```typescript
+const api = yield* Docker.Container("api", {
+  image: "nginx:alpine",
+  hostname: "api",
+  networks: [
+    {
+      name: dualStack.name,
+      aliases: ["api"],
+      ipv4Address: "10.51.0.10",
+      ipv6Address: "fd51:3456:789a::10",
+      gatewayPriority: 1,
+    },
+  ],
+  start: true,
+});
+```
+
+Leave the addresses out and Docker assigns them. `gatewayPriority` picks which network carries the default route, highest first. An entry's `driverOpts` configures this one attachment, not the network.
+
+A container with `networks` joins only those networks. Docker's default `bridge` is left out, so a container on an `internal` network really has no way out. A container created before this joined `bridge` too; its next deploy disconnects it. Networks attached by other tools stay.
+
+Changing an attachment reconnects it in place, and the container keeps running. If Docker refuses the new settings, Alchemy reconnects the old ones.
+
+## What a change does
+
+A network's settings are fixed when it's created, so changing any of them replaces the network. Docker refuses to remove a network while containers are attached, and Alchemy doesn't disconnect containers it doesn't manage. Settle a network's settings before you attach anything long-lived to it.
+
+## Use a network you didn't create
+
+Attach to a network that Docker Compose or another tool made, by looking it up:
+
+```typescript
+const shared = Docker.Network.lookup({ name: "compose_default" });
+
+const api = yield* Docker.Container("api", {
+  image: "nginx:alpine",
+  networks: [{ name: shared.name }],
+});
+```
+
+Alchemy reads it and never changes or removes it. To manage an existing network instead, declare it with its `name` and pipe it through `Alchemy.adopt(true)`.

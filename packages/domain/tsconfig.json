@@ -15,6 +15,18 @@
   "references": [
     {
       "path": "../alchemy/tsconfig.json"
+    },
+    {
+      "path": "../cloudflare/tsconfig.json"
+    },
+    {
+      "path": "../effect-cluster/tsconfig.json"
+    },
+    {
+      "path": "../rivet/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/cloudflare/tsconfig.json"
     }
   ]
 }

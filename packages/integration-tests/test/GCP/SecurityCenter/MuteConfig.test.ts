@@ -6,6 +6,7 @@ import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -65,6 +66,10 @@ test.provider.skipIf(!runLifecycle)(
             description: "mute low severity",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.SecurityCenter.MuteConfig.lookup({ muteConfigId: created.muteConfigId }),
+        created,
       );
 
       expect(created.muteConfigId).toEqual(expect.any(String));

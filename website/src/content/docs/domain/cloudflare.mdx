@@ -6,14 +6,14 @@ import PackageManagers from "../../../components/PackageManagers.astro";
 
 Host your model on Cloudflare, and every aggregate instance, view key and policy gets its own Durable Object. You declare none of them yourself.
 
-## Host the model in a Worker
+## Host the model
 
-Provide `DomainCloudflare.layerDurableObjects()` as the platform, and serve your Apis from the Worker.
+Provide `DomainCloudflare.layerDurableObjects()` to the model's Layer, as you would `DomainRivet.layerDurableObjects` or `Domain.InMemory`, and serve your Apis from the Worker.
 
 ```typescript
 // packages/server/src/BankWorker.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
@@ -101,6 +101,7 @@ import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -108,7 +109,12 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "CloudflareDomainExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      DomainCloudflare.providers(),
+      Stripe.providers(),
+      Axiom.providers(),
+    ),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
@@ -125,6 +131,8 @@ export default Alchemy.Stack(
   }),
 );
 ```
+
+`DomainCloudflare.providers()` sits next to `Cloudflare.providers()`: a deploy that adds a view or projection waits through it until the view has received its history.
 
 <PackageManagers run="alchemy deploy" />
 
@@ -162,28 +170,28 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
+Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `DomainCloudflare.layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
 
 Renaming a model renames its classes, and the model starts empty under the new names.
 
 ## Upgrade without losing data
 
-Each Worker records the Domain version it was deployed with. When a later Alchemy release lays models out differently, the next deploy moves the deployed data to the new layout: it renames classes in place, so every aggregate, view row and running saga carries over.
+Models deployed before Domain version 0 named classes after the definition alone, like `AccountAggregate`. The next deploy renames each to the model's class with the Durable Object's [`renamedFrom`](/providers/cloudflare/workers/durableobject), so every aggregate, view row and running saga carries over.
 
-Models deployed before versions existed named classes after the definition alone, like `AccountAggregate`. If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails until you choose:
+If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails with `DurableObjectRenameConflict` until the others set `legacyData: false`:
 
 ```typescript
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Layer from "effect/Layer";
 import { Audit, AuditHandlers } from "./Audit.ts";
 import { Billing, BillingHandlers } from "./Billing.ts";
 
 const Platform = DomainCloudflare.layerDurableObjects();
 // Billing keeps the accounts both models wrote; Audit starts empty.
-export const BillingLive = Billing.layer(BillingHandlers, { legacyData: true }).pipe(
+export const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
+export const AuditLive = Audit.layer(AuditHandlers, { legacyData: false }).pipe(
   Layer.provide(Platform),
 );
-export const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
 ```
 
 ## Count on these guarantees

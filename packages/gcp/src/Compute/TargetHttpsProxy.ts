@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -129,8 +130,26 @@ export type TargetHttpsProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetHttpsProxyLookup
 >;
+
+/**
+ * Props for {@link TargetHttpsProxy.lookup}: find a target https proxy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetHttpsProxyLookup {
+  /**
+   * TargetHttpsProxy name (RFC1035, 1-63 characters).
+   */
+  targetHttpsProxyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine target HTTPS proxy.
@@ -185,6 +204,19 @@ export type TargetHttpsProxy = Resource<
  *   urlMap: map.urlMapName,
  *   sslCertificates: [nextCert.sslCertificateName],
  *   quicOverride: "ENABLE",
+ * });
+ * ```
+ *
+ * ### Looking up an existing target https proxy
+ * `TargetHttpsProxy.lookup` references a target https proxy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target https proxy.
+ *
+ * **Example:** Reference an existing target https proxy
+ * ```typescript
+ * const targetHttpsProxy = GCP.Compute.TargetHttpsProxy.lookup({
+ *   targetHttpsProxyName: "my-target-https-proxy",
  * });
  * ```
  *
@@ -317,6 +349,13 @@ export const TargetHttpsProxyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ targetHttpsProxyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, targetHttpsProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

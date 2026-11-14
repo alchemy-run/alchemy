@@ -3,37 +3,37 @@ title: What is Cloudflare?
 description: The concepts behind Cloudflare — accounts, zones, the global network, Workers, bindings, Durable Objects, storage, queues, workflows, containers and API tokens — and how @alchemy.run/cloudflare models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Cloudflare runs one network in more than 340 cities, and it runs your code on every machine in it. A request reaches the nearest city, and your **Worker** answers it there. Around Workers sit storage, databases, queues and stateful objects, which a Worker reaches through **bindings**.
 
 Take one small app: a Worker that stores uploads in R2, counts visits in a Durable Object, and queues jobs for a consumer. Everything lives in your account. A zone holds your domain, which routes requests to a Worker in every city. The Worker reaches a Bucket, Durable Objects and a Queue through bindings, and each Durable Object lives in one city.
 
-<DAG
+<Tree
   nodes={[
-    { id: "profile", label: "Profile", type: "you or CI", col: 0, row: 1 },
-    { id: "domain", label: "app.example.com", type: "Custom domain", col: 1, row: 0 },
-    { id: "worker", label: "Api", type: "Worker · every city", tone: "accent", col: 1, row: 1 },
-    { id: "r2", label: "Uploads", type: "R2 Bucket", col: 2, row: 1 },
-    { id: "roomA", label: "room-a", type: "Durable Object", col: 2, row: 2 },
-    { id: "roomB", label: "room-b", type: "Durable Object", col: 3, row: 2 },
-    { id: "queue", label: "Jobs", type: "Queue", col: 2, row: 3 },
-    { id: "consumer", label: "Consumer", type: "Worker", col: 3, row: 3 },
+    {
+      id: "account", label: "acme", type: "account", icon: "brand:cloudflare", colGap: 2.75,
+      areas: ["zone api uploads", "zone api rooms", "zone api jobs", "zone api consumer"],
+    },
+    { id: "zone", label: "example.com", type: "zone", parent: "account", dashed: true, icon: "globe" },
+    { id: "domain", label: "app.example.com", type: "custom domain", parent: "zone", icon: "link" },
+    { id: "api", label: "Api", type: "Worker · every city", parent: "account", tone: "accent", icon: "square-function" },
+    { id: "uploads", label: "Uploads", type: "R2 Bucket", parent: "account", icon: "archive" },
+    { id: "rooms", label: "Rooms", type: "Durable Object namespace", parent: "account", dashed: true, icon: "boxes" },
+    { id: "roomA", label: "room-a", type: "one city", parent: "rooms", icon: "box" },
+    { id: "roomB", label: "room-b", type: "one city", parent: "rooms", icon: "box" },
+    { id: "jobs", label: "Jobs", type: "Queue", parent: "account", icon: "inbox" },
+    { id: "consumer", label: "Consumer", type: "Worker", parent: "account", icon: "square-function" },
   ]}
-  groups={[
-    { id: "account", label: "Account", nodes: ["worker", "r2", "queue", "consumer"] },
-    { id: "zone", label: "Zone example.com", parent: "account", nodes: ["domain"], dashed: true },
-    { id: "rooms", label: "Rooms namespace · one city per object", parent: "account", nodes: ["roomA", "roomB"], dashed: true },
+  links={[
+    { from: "domain", to: "api", label: "routes" },
+    { from: "api", to: "uploads", label: "binds" },
+    { from: "api", to: "rooms", label: "binds" },
+    { from: "api", to: "jobs", label: "binds" },
+    { from: "jobs", to: "consumer", label: "delivers", dashed: true },
   ]}
-  edges={[
-    { from: "profile", to: "account", label: "deploy" },
-    { from: "domain", to: "worker", label: "routes to" },
-    { from: "worker", to: "r2", label: "binding" },
-    { from: "worker", to: "rooms", label: "binding" },
-    { from: "worker", to: "queue", label: "binding" },
-    { from: "queue", to: "consumer", dashed: true },
-  ]}
-  caption="There are no regions to pick. Zones hold your domains, and Workers and storage belong to the account and run across the whole network. Each Durable Object lives in one city. Dashed edges are messages delivered later."
+  caption="There are no regions to pick. The zone holds your domains, and Workers and storage belong to the account and run across the whole network. Each Durable Object lives in one city. Api binds the bucket, the namespace and the queue, and the queue delivers to Consumer."
 />
 
 ## Accounts: where everything lives

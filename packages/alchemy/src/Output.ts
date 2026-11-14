@@ -403,7 +403,7 @@ export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
 
 export type All<Outs extends (Output | Expr)[]> = number extends Outs["length"]
   ? [Outs[number]] extends [Output<infer V, infer Req> | Expr<infer V, infer Req>]
-    ? Output<V, Req>
+    ? Output<V[], Req>
     : never
   : Tuple<Outs>;
 

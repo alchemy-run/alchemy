@@ -569,8 +569,9 @@ or roll back together. This works for SQLite and key/value writes on the
 R2 writes, and other objects' storage are outside this transaction.
 
 The existing `storage.transaction((txn) => effect)` overload remains
-supported. Nested transactions on the same fiber join the active
-transaction rather than create a savepoint. Keep transactional operations
+supported. A transaction started inside another one is nested: if it fails
+or rolls back, only its own writes and callbacks are undone, and the outer
+transaction carries on. Keep transactional operations
 on that fiber: sibling-fiber storage access is rejected, as are further
 writes after `txn.rollback()`. Storage rollback does not undo assignments
 to JavaScript variables.
@@ -660,6 +661,29 @@ compatible with old JSON payloads. Unknown callback names remain pending;
 renaming a handler does not migrate those jobs. TypeScript payload types
 do not validate data stored by an earlier deployment, so decode evolving
 payloads explicitly with a schema when needed.
+
+## Rename a class
+
+A Durable Object's class name is where its objects live. Change
+`className` under the same binding and the deploy renames the class,
+keeping every object:
+
+```typescript
+env: { Counter: Cloudflare.DurableObject("Counter", { className: "Meter" }) },
+```
+
+When the class moves to a new binding instead, name the class it was
+called before with `renamedFrom`:
+
+```typescript
+env: { Meter: Cloudflare.DurableObject("Meter", { renamedFrom: "Counter" }) },
+```
+
+The deploy ships a `renamed_classes` migration, so `Meter` takes over
+`Counter`'s namespace and its objects. Once `Counter` is gone it does
+nothing, so it can stay. Only one class can take over a class: two
+classes renamed from the same one fail the deploy with
+`DurableObjectRenameConflict` before anything is uploaded.
 
 ## Adopt a Worker deployed by Wrangler
 

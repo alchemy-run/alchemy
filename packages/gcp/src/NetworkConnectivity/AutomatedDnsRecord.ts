@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -167,8 +168,34 @@ export type AutomatedDnsRecord = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AutomatedDnsRecordLookup
 >;
+
+/**
+ * Props for {@link AutomatedDnsRecord.lookup}: find an automated dns record
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AutomatedDnsRecordLookup {
+  /**
+   * AutomatedDnsRecord id (the `{automated_dns_record}` segment of
+   * `projects
+   * /{project}/locations/{location}/automatedDnsRecords/{automated_dns_recor
+   * d}`).
+   */
+  automatedDnsRecordId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A DNS record managed by Network Connectivity Service Connectivity
@@ -194,6 +221,19 @@ export type AutomatedDnsRecord = Resource<
  *   originalConfig: { ttl: "30s", rrdatas: ["10.0.0.1"] },
  *   consumerNetwork: network.selfLink ?? network.networkName,
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing automated dns record
+ * `AutomatedDnsRecord.lookup` references an automated dns record Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared automated dns record.
+ *
+ * **Example:** Reference an existing automated dns record
+ * ```typescript
+ * const automatedDnsRecord = GCP.NetworkConnectivity.AutomatedDnsRecord.lookup({
+ *   automatedDnsRecordId: "my-automated-dns-record",
  * });
  * ```
  *
@@ -324,6 +364,15 @@ export const AutomatedDnsRecordProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ automatedDnsRecordId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, automatedDnsRecordId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -6,6 +6,7 @@ import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,6 +74,13 @@ test.provider.skipIf(!runLifecycle)(
             dataStorageSizeGb: 20,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.OracleDatabase.AutonomousDatabase.lookup({
+          autonomousDatabaseId: created.autonomousDatabaseId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/autonomousDatabases/");

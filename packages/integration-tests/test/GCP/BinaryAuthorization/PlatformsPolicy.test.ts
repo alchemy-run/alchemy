@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -58,6 +59,13 @@ test.provider(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BinaryAuthorization.PlatformsPolicy.lookup({
+          policyId: created.policyId,
+          platform: created.platform,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/platforms/gke/policies/");

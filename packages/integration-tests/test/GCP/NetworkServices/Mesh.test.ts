@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -59,6 +60,10 @@ test.provider(
             interceptionPort: 15001,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.Mesh.lookup({ meshId: created.meshId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/meshes/");

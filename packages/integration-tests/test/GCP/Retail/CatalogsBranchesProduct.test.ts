@@ -6,6 +6,7 @@ import * as retail from "@distilled.cloud/gcp/retail_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,14 @@ test.provider.skipIf(!runLifecycle)(
             priceInfo: { currencyCode: "USD", price: 20 },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Retail.CatalogsBranchesProduct.lookup({
+          productId: created.productId,
+          catalog: created.catalog,
+          branchId: created.branchId,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/products/");

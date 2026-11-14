@@ -106,8 +106,18 @@ export interface Branch extends Resource<
     updatedAt: string;
   },
   never,
-  Providers
+  Providers,
+  BranchLookup
 > {}
+
+/**
+ * Props for {@link Branch.lookup}: find a branch this stack
+ * doesn't manage by its id.
+ */
+export interface BranchLookup {
+  /** Prisma branch id. */
+  branchId: string;
+}
 
 /**
  * A Prisma project branch for preview-class databases and compute resources.
@@ -139,6 +149,16 @@ export interface Branch extends Resource<
  *
  * release.role;      // still "preview"
  * release.isDefault; // true
+ * ```
+ *
+ * ### Looking up an existing branch
+ * `Branch.lookup` references a branch Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing branch
+ * ```typescript
+ * const preview = Prisma.Branch.lookup({ branchId: "br_cmabc123def456ghi789jkl0" });
  * ```
  *
  * @resource
@@ -285,6 +305,14 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ branchId }) {
+          const branch = yield* getBranch({ branchId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return branch ? attrsFrom(branch) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, output, olds }) {
           const branchId = isPrismaDevId(output?.branchId) ? undefined : output?.branchId;
           const findBranchInProject = Effect.gen(function* () {

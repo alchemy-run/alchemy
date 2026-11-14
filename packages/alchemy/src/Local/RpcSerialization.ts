@@ -9,6 +9,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { stripUnowned, Unowned, Unresolved } from "../AdoptPolicy.ts";
 import * as Output from "../Output.ts";
 import { isRedactedMarker, type RedactedMarker } from "../RuntimeContext.ts";
 import { decodeDuration, DURATION_MARKER, encodeState } from "../State/StateEncoding.ts";
@@ -296,6 +297,18 @@ const unwrapRpcStreamHandler = <Args extends Array<any>, Success, Error>(
   );
 
 const serializeRpcArgs = (value: unknown): unknown => {
+  // `read` and `observe` answers: `Unresolved` is a symbol and `Unowned` a
+  // non-enumerable symbol brand, neither of which survives the wire. Lost,
+  // an engine in the parent took a foreign resource for its own.
+  if (value === Unresolved) {
+    return { _tag: "~alchemy/Rpc/Unresolved" } satisfies UnresolvedMarker;
+  }
+  if (Unowned.is(value)) {
+    return {
+      _tag: "~alchemy/Rpc/Unowned",
+      value: serializeRpcArgs(stripUnowned(value as object)),
+    } satisfies UnownedMarker;
+  }
   if (Redacted.isRedacted(value)) {
     return {
       _tag: "Redacted",
@@ -351,6 +364,21 @@ const serializeRpcArgs = (value: unknown): unknown => {
   return value;
 };
 
+interface UnresolvedMarker {
+  readonly _tag: "~alchemy/Rpc/Unresolved";
+}
+
+interface UnownedMarker {
+  readonly _tag: "~alchemy/Rpc/Unowned";
+  readonly value: unknown;
+}
+
+const isUnresolvedMarker = (value: object): value is UnresolvedMarker =>
+  "_tag" in value && value._tag === "~alchemy/Rpc/Unresolved" && Object.keys(value).length === 1;
+
+const isUnownedMarker = (value: object): value is UnownedMarker =>
+  "_tag" in value && value._tag === "~alchemy/Rpc/Unowned" && "value" in value;
+
 interface EffectMarker {
   readonly _tag: "~alchemy/Rpc/Effect";
   readonly description: string;
@@ -382,7 +410,12 @@ const deserializeRpcArgs = (value: unknown): unknown => {
   } else if (typeof value === "object" && value !== null) {
     // These values are serialized as `{_tag: "Redacted", value: ...}` and `{_tag: "Output", description: ...}`,
     // so we need to detect them manually - Redacted.isRedacted and Output.isOutput do not work.
-    if (isRedactedMarker(value)) {
+    if (isUnresolvedMarker(value)) {
+      return Unresolved;
+    } else if (isUnownedMarker(value)) {
+      const attrs = deserializeRpcArgs(value.value);
+      return typeof attrs === "object" && attrs !== null ? Unowned(attrs) : attrs;
+    } else if (isRedactedMarker(value)) {
       return Redacted.make(value.value);
     } else if (
       "_tag" in value &&

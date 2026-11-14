@@ -1,0 +1,83 @@
+---
+title: Branches and checkpoints
+description: Seed a disk once, checkpoint it at deploy time, and copy a writable branch per session in milliseconds.
+sidebar:
+  order: 3
+---
+
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
+
+A **checkpoint** is a named snapshot of a disk. It takes about 15 ms whatever the disk's size, and never changes once taken. A **branch** is a writable copy of a disk started from a checkpoint, in about 35 ms. Writes on a branch never reach the disk or its other branches, so each agent, session or CI job can get a copy of its own.
+
+## Each branch shares the seed until it writes
+
+<BranchGraph
+  end={10}
+  branches={[
+    { id: "seed", label: "Seed", type: "disk", tone: "accent" },
+    { id: "s42", label: "session-42", type: "branch", from: { branch: "seed", at: 3 }, sharedUntil: 5 },
+    { id: "s43", label: "session-43", type: "branch", from: { branch: "seed", at: 3 }, sharedUntil: 7 },
+  ]}
+  points={[
+    { branch: "seed", at: 1, label: "git clone" },
+    { branch: "seed", at: 3, label: "checkpoint base" },
+    { branch: "s42", at: 5, label: "edit src/" },
+    { branch: "s43", at: 7, label: "npm test" },
+  ]}
+  caption="Both sessions start from the checkpoint base. Each branch shares the seed's data until it writes, and its writes stay on that branch."
+/>
+
+## Seed a disk and checkpoint it
+
+`Archil.Checkpoint` runs commands against the disk at deploy time, then takes the checkpoint in the same microVM, so it holds exactly what they produced:
+
+```typescript title="src/workspace.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
+
+export const Seed = Archil.Disk("Seed", {});
+
+export const Base = Effect.gen(function* () {
+  const seed = yield* Seed;
+  return yield* Archil.Checkpoint("Base", {
+    disk: seed.diskId,
+    name: "base",
+    run: ["git clone --depth 1 https://github.com/acme/app repo"],
+  });
+});
+```
+
+## Branch a disk per session
+
+`Archil.BranchDisk` gives a Worker or Lambda a client that creates branches while the app runs:
+
+```typescript
+const seeds = yield* Archil.BranchDisk(Seed);
+const branch = yield* seeds.branch({ name: "session-42", fromCheckpoint: "base" });
+```
+
+Mount it on your own host with `MountDisk` and `branch: "session-42"`. Branches share the disk's credentials, so a disk user that mounts the disk can mount any of its branches. A sandbox can't mount a branch yet.
+
+## Declare a long-lived branch
+
+A branch that lives as long as the Stack, like a staging copy, is a resource:
+
+```typescript title="src/workspace.ts"
+export const Staging = Effect.gen(function* () {
+  const seed = yield* Seed;
+  const base = yield* Base;
+  return yield* Archil.Branch("Staging", { disk: seed.diskId, fromCheckpoint: base.name });
+});
+```
+
+## Fork a sandbox in milliseconds
+
+A sandbox's root filesystem is a disk too, so `fork` uses the same checkpoint and branch to copy a sandbox in milliseconds. A sandbox with mounted disks has to be stopped first.
+
+```typescript
+const copy = yield* sandbox.fork({ name: "task-1-retry" });
+```
+
+## Branches go when the disk does
+
+Archil can't delete checkpoints or branches yet. Destroying an `Archil.Checkpoint` or `Archil.Branch` removes it from Alchemy's state only, and deleting the disk deletes them with it.

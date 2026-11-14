@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -115,8 +116,37 @@ export type FolderSavedQuery = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderSavedQueryLookup
 >;
+
+/**
+ * Props for {@link FolderSavedQuery.lookup}: find a folder saved query this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FolderSavedQueryLookup {
+  /**
+   * Saved query id (the `{query}` segment of
+   * `{parent}/locations/{location}/savedQueries/{query}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  savedQueryId: string;
+  /**
+   * Folder id (`folders/{folder}` or the numeric id).
+   */
+  folderId?: string;
+  /**
+   * Location of the saved query.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging saved query owned by a folder (or the stack project).
@@ -145,6 +175,19 @@ export type FolderSavedQuery = Resource<
  *   visibility: "SHARED",
  *   loggingQuery: { filter: "severity>=WARNING" },
  *   description: "warning and error log entries",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder saved query
+ * `FolderSavedQuery.lookup` references a folder saved query Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * folder saved query.
+ *
+ * **Example:** Reference an existing folder saved query
+ * ```typescript
+ * const folderSavedQuery = GCP.Logging.FolderSavedQuery.lookup({
+ *   savedQueryId: "my-saved-query",
  * });
  * ```
  *
@@ -225,6 +268,16 @@ export const FolderSavedQueryProvider = () =>
       if (!idChanged && !locationChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ savedQueryId, folderId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = scopeParent(env.project, folderId);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(parent, location, savedQueryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, parent, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

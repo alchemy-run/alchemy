@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { CERT_A_PEM, CERT_B_PEM, KEY_A_PEM, KEY_B_PEM } from "./fixtures/https-proxy-cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -67,6 +68,20 @@ test.provider(
           });
           return { map, cert, proxy };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionTargetHttpsProxy.lookup({
+          targetHttpsProxyName: created.proxy.targetHttpsProxyName,
+          region: created.proxy.region,
+        }),
+        created.proxy,
+      );
+      yield* expectFound(
+        GCP.Compute.RegionUrlMap.lookup({
+          urlMapName: created.map.urlMapName,
+          region: created.map.region,
+        }),
+        created.map,
       );
 
       expect(created.proxy.targetHttpsProxyName).toEqual(expect.any(String));

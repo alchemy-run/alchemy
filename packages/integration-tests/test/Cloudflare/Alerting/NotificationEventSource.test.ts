@@ -103,7 +103,10 @@ test.provider(
       expect(issues.length).toBeGreaterThan(0);
       // Titled with the summary line, with Cloudflare's report as the body.
       expect(issues[0]!.title).toMatch(/^Real-Time Issue '.*' detected in /);
-      expect(issues[0]!.body).toContain(`/workers/services/view/${workerName}/production/issues/`);
+      // Cloudflare's report wording changes (it dropped the dashboard link in
+      // Nov 2026); assert only what identifies the issue.
+      expect(issues[0]!.body).toContain(workerName);
+      expect(issues[0]!.body).toMatch(/Issue ID: [0-9a-f-]{36}/);
 
       // The fixture repository is retained across runs: close this run's issues.
       yield* Effect.forEach(

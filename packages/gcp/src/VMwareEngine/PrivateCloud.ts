@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -181,8 +182,32 @@ export type PrivateCloud = Resource<
     expireTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateCloudLookup
 >;
+
+/**
+ * Props for {@link PrivateCloud.lookup}: find a private cloud this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PrivateCloudLookup {
+  /**
+   * Private cloud id (the `{privateCloud}` segment of
+   * `projects/{project}/locations/{location}/privateClouds/{privateCloud}`).
+   */
+  privateCloudId: string;
+  /**
+   * Location. `STANDARD` and `TIME_LIMITED` clouds are zonal
+   * (`us-central1-a`); `STRETCHED` clouds are regional.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud VMware Engine private cloud. `STANDARD` and
@@ -213,6 +238,19 @@ export type PrivateCloud = Resource<
  *     },
  *   },
  *   description: "app sddc",
+ * });
+ * ```
+ *
+ * ### Looking up an existing private cloud
+ * `PrivateCloud.lookup` references a private cloud Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * private cloud.
+ *
+ * **Example:** Reference an existing private cloud
+ * ```typescript
+ * const privateCloud = GCP.VMwareEngine.PrivateCloud.lookup({
+ *   privateCloudId: "my-private-cloud",
  * });
  * ```
  *
@@ -384,6 +422,15 @@ export const PrivateCloudProvider = () =>
           !sameJson(news.encryptionConfig, olds?.encryptionConfig ?? output?.encryptionConfig),
       });
     }),
+
+    lookup: Effect.fn(function* ({ privateCloudId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, privateCloudId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
