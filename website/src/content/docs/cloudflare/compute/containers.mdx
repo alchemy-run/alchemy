@@ -219,6 +219,12 @@ export class Echo extends Cloudflare.Container<Echo>()("Echo", {
 }) {}
 ```
 
+`context` builds `<context>/Dockerfile` unless you set `dockerfile`. Like
+`context`, a relative `dockerfile` path is resolved against the working
+directory of the process that runs the stack (the CLI or your test
+runner), not against `context`. Build both paths from
+`import.meta.dirname` so they don't depend on where that process starts.
+
 Arbitrary images expose no RPC methods — the DO talks to them purely
 over their TCP port via `getTcpPort`. To build, tag, and push that
 image as part of the same Stack, see

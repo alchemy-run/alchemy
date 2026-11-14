@@ -374,8 +374,12 @@ export interface ExternalContainerProps
    */
   context?: string;
   /**
-   * The Dockerfile to build. A string is a **path** resolved relative to
-   * {@link context} (default `<context>/Dockerfile`); an
+   * The Dockerfile to build. A string is a **path** (default
+   * `<context>/Dockerfile`). Like {@link context}, a relative path is
+   * resolved against the working directory of the process that runs the
+   * stack, not against {@link context}. Use an absolute path, e.g.
+   * `${import.meta.dirname}/Dockerfile`, so the result doesn't depend on
+   * where you run `alchemy`. An
    * {@link InlineDockerfile} (typically `Dockerfile.inline`) is the whole
    * Dockerfile's content, built in an empty generated context (exclusive
    * with {@link context}).
@@ -588,13 +592,14 @@ export type ContainerShape = Main<ContainerServices>;
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   context: `${import.meta.dirname}/context`,
- *   dockerfile: "Dockerfile",
+ *   dockerfile: `${import.meta.dirname}/context/Dockerfile.web`,
  * }) {}
  * ```
  *
  * Alchemy builds `dockerfile` against the `context` directory with no `main`
- * bundling. `dockerfile` is resolved relative to `context` and defaults to
- * `<context>/Dockerfile`.
+ * bundling. `dockerfile` defaults to `<context>/Dockerfile`. A relative
+ * `dockerfile` path is resolved against the process working directory, not
+ * against `context`, so prefer absolute paths as above.
  *
  * **Example:** Remote image (`image`)
  * ```typescript
