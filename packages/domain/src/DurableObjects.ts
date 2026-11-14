@@ -18,6 +18,7 @@ import {
  */
 import type { HttpEffect } from "alchemy/Http";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { retryInTransit } from "alchemy/Workers/Transit";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -232,28 +233,17 @@ const reportDefects = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   );
 
 /**
- * How long to keep retrying a call that failed in transit: an instance being
- * reset reports an opaque error, and for a while after a deploy some instances
- * still run the previous code (whose classes don't implement our methods).
- * Backs off from 100ms to 2s, about a minute in total, so a call survives a
- * deploy's rollout.
- */
-export const TRANSIT_RETRY = {
-  // Whichever delay is shorter: exponential at first, then every 2 seconds.
-  schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
-  times: 35,
-} as const;
-
-/**
- * Call an object. A call that fails in transit is retried: every Domain
- * object method is idempotent (sends dedupe by command id, deliveries by
- * checkpoint, schedules replace, reads are reads). A defect the object
+ * Call an object. A call that fails in transit is retried for about a
+ * minute, so it survives an instance resetting or a deploy's rollout: every
+ * Domain object method is idempotent (sends dedupe by command id, deliveries
+ * by checkpoint, schedules replace, reads are reads). A call the host refused
+ * as overloaded fails at once (see `retryInTransit`). A defect the object
  * reported, or a call that keeps failing, is a defect for the caller.
  */
 export const unwrapDefects = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
   call.pipe(
     Effect.catchDefect((defect) => Effect.fail(defect)),
-    Effect.retry(TRANSIT_RETRY),
+    retryInTransit,
     Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
