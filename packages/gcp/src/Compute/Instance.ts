@@ -674,11 +674,8 @@ export const InstanceProvider = () =>
       if (previousName !== undefined && nextName !== undefined && previousName !== nextName) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousType = lastSegment(olds?.machineType ?? DEFAULT_MACHINE_TYPE);
-      const nextType = lastSegment(news.machineType ?? DEFAULT_MACHINE_TYPE);
-      if (olds !== undefined && previousType !== nextType) {
-        return { action: "replace" as const, deleteFirst: true };
-      }
+      // A machine type change is applied in place by reconcile (stop, set the
+      // type, start), so a deletion-protected VM and its attached disks survive.
       // setServiceAccount and updateShieldedInstanceConfig are only permitted
       // on a TERMINATED VM, and we never stop a user's VM, so these replace.
       // When the previous props never declared them, diff against the
@@ -802,6 +799,34 @@ export const InstanceProvider = () =>
 
       if (current === undefined) {
         return yield* new InstanceNotResolved({ instanceName, zone });
+      }
+
+      const desiredType = lastSegment(news.machineType ?? DEFAULT_MACHINE_TYPE);
+      if (lastSegment(current.machineType ?? DEFAULT_MACHINE_TYPE) !== desiredType) {
+        const running = current.status === "RUNNING";
+        if (running)
+          yield* applyZoneOp(
+            env.project,
+            zone,
+            compute.stopInstances({ project: env.project, zone, instance: instanceName }),
+          );
+        yield* applyZoneOp(
+          env.project,
+          zone,
+          compute.setMachineTypeInstances({
+            project: env.project,
+            zone,
+            instance: instanceName,
+            body: { machineType: machineTypeUrl(zone, desiredType) },
+          }),
+        );
+        if (running)
+          yield* applyZoneOp(
+            env.project,
+            zone,
+            compute.startInstances({ project: env.project, zone, instance: instanceName }),
+          );
+        current = yield* waitUntilSettled(env.project, zone, instanceName);
       }
 
       const observedLabels = tagRecord(current.labels);
