@@ -5,6 +5,7 @@ import {
   closeLoopbackUnixSockets,
   CONTAINER_LOOPBACK_ALIAS,
   CONTAINER_LOOPBACK_MOUNT,
+  containerIdFromPath,
   ensureLoopbackUnixSockets,
   loopbackPortsFromEnv,
   loopbackPortsFromEnvValue,
@@ -12,6 +13,7 @@ import {
   mergeSidecarLoopbackHostConfig,
   sidecarLoopbackBinds,
   sidecarLoopbackExtraHost,
+  sidecarNameFromCreatePath,
   usesUnixSocketLoopback,
 } from "../DockerLoopback.ts";
 
@@ -75,6 +77,14 @@ describe("DockerLoopback", () => {
     expect(once.ExtraHosts).toContain("host.docker.internal:host-gateway");
     const twice = mergeSidecarLoopbackHostConfig(once, [5432]);
     expect(twice.ExtraHosts.filter((h) => h === extra)).toHaveLength(1);
+  });
+
+  it("names the sidecar of a user container create request as its start path does", () => {
+    const name = "workerd-app-Jobs-0123abcd";
+    const sidecar = sidecarNameFromCreatePath(`/containers/create?name=${name}`);
+    expect(sidecar).toBe(containerIdFromPath(`/containers/${name}-proxy/start`));
+    expect(sidecarNameFromCreatePath(`/containers/create?name=${name}-proxy`)).toBeUndefined();
+    expect(sidecarNameFromCreatePath("/containers/create")).toBeUndefined();
   });
 
   it.skipIf(!usesUnixSocketLoopback())(
