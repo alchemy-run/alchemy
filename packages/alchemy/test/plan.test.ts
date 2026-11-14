@@ -18,7 +18,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import { UnsatisfiedResourceCycle } from "@/Plan";
+import { type RefCycleError, UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
@@ -1527,6 +1527,47 @@ describe("construct namespaces", { tags: ["unit", "local"] }, () => {
       expect(plan.resources["MarketingSite/A"]?.downstream).toEqual([]);
       expect(plan.resources["MarketingSite/B"]?.downstream).toEqual([]);
       expect(plan.deletions).toEqual({});
+    }),
+  );
+
+  test.provider("binding edges between separate cycles order deletes", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", {});
+          const B = yield* BindingTarget("B", {});
+          const C = yield* BindingTarget("C", {});
+          const D = yield* BindingTarget("D", {});
+          yield* A.bind("FromB", { env: { PEER: B.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+          yield* C.bind("FromD", { env: { PEER: D.string } });
+          yield* D.bind("FromC", { env: { PEER: C.string } });
+          yield* A.bind("FromC", { env: { PEER: C.string } });
+
+          const E = yield* BindingTarget("E", {});
+          const F = yield* BindingTarget("F", {});
+          yield* E.bind("FromE", { env: { SELF: E.string } });
+          yield* F.bind("FromF", { env: { SELF: F.string } });
+          yield* E.bind("FromF", { env: { PEER: F.string } });
+        }),
+      );
+
+      const live = new Set(["A", "B", "C", "D", "E", "F"]);
+      const boundBy: Record<string, string> = { C: "A", F: "E" };
+      yield* stack.destroy().pipe(
+        Effect.provideService(TestResourceHooks, {
+          delete: (id) =>
+            Effect.gen(function* () {
+              if (id === "A" || id === "E") yield* Effect.sleep("30 millis");
+              if (live.has(boundBy[id])) {
+                return yield* Effect.fail(new Error(`${id} is still bound by ${boundBy[id]}`));
+              }
+              live.delete(id);
+            }),
+        }),
+      );
+
+      expect([...live]).toEqual([]);
     }),
   );
 });
@@ -4174,6 +4215,76 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
       expect(plan.resources.Shared!.downstream).toContain("Compute");
     }),
   );
+
+  // #3112: two resources that reference each other, one through a ref,
+  // deadlocked the plan.
+  describe("a ref that closes a cycle (#3112)", () => {
+    const refCycle = Effect.gen(function* () {
+      const api = yield* TestResource.ref("Api");
+      const auth = yield* TestResource("Auth", { string: "auth", stringArray: [api.string] });
+      yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+    });
+
+    for (const [name, seeded] of [
+      ["neither exists", {}],
+      [
+        "both exist",
+        {
+          Api: row("Api", { string: "api", stringArray: ["auth"] }),
+          Auth: row("Auth", { string: "auth", stringArray: ["api"] }),
+        },
+      ],
+    ] as const) {
+      test(
+        `props cycle fails the plan with RefCycleError when ${name}`,
+        Effect.gen(function* () {
+          yield* seed(seeded);
+          const exit = yield* refCycle.pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause) as RefCycleError;
+            expect(error._tag).toBe("RefCycleError");
+            expect(error.owner).toBe("Auth");
+            expect(error.target).toBe("Api");
+            expect(error.message).toContain("Auth -> Api -> Auth");
+          }
+        }),
+      );
+    }
+
+    test(
+      "binding cycle: plan finishes and plans noops",
+      Effect.gen(function* () {
+        const host = (fqn: string, sid: string, env: Record<string, string>) =>
+          ({
+            instanceId,
+            providerVersion: 0,
+            logicalId: fqn,
+            fqn,
+            namespace: undefined,
+            resourceType: "Test.BindingTarget",
+            status: "created",
+            props: { name: fqn },
+            attr: { name: fqn, string: "", env, replaceString: undefined },
+            bindings: [{ sid, data: { env } }],
+            downstream: [],
+          }) as ResourceState;
+        yield* seed({
+          Api: host("Api", "Auth", { AUTH: "Auth" }),
+          Auth: host("Auth", "Api", { API: "Api" }),
+        });
+        const plan = yield* Effect.gen(function* () {
+          const apiRef = yield* BindingTarget.ref("Api");
+          const auth = yield* BindingTarget("Auth", { name: "Auth" });
+          yield* auth.bind("Api", { env: { API: apiRef.name } });
+          const api = yield* BindingTarget("Api", { name: "Api" });
+          yield* api.bind("Auth", { env: { AUTH: auth.name } });
+        }).pipe(makePlan, Effect.timeout("5 seconds"));
+        expect(plan.resources.Api!.action).toBe("noop");
+        expect(plan.resources.Auth!.action).toBe("noop");
+      }),
+    );
+  });
 });
 
 describe("StackRefExpr resolution", { tags: ["unit", "local"] }, () => {
@@ -6258,6 +6369,83 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
       });
       const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
       expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+});
+
+// A pool collects env from what it hosts and hands it to its host as a prop,
+// and what it hosts binds the host's address: the members form a cycle, and a
+// change to bound data alone has to reach every member that reads it.
+describe("binding changes across a cycle", { tags: ["unit", "local"] }, () => {
+  const hosted = (generation: string, replaceString?: string) =>
+    Effect.gen(function* () {
+      const pool = yield* BindingTarget("Pool", { name: "pool", replaceString });
+      const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+      yield* pool.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+    });
+
+  test.provider("an unchanged cycle plans nothing", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(hosted("1"));
+      const plan = yield* stack.plan(hosted("1"));
+      expect(plan.resources.Pool.action).toBe("noop");
+      expect(plan.resources.Host.action).toBe("noop");
+    }),
+  );
+
+  test.provider("a binding-only change updates the members that read it", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(hosted("1"));
+      const plan = yield* stack.plan(hosted("2"));
+      expect(plan.resources.Pool.action).toBe("update");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+
+  test.provider("a member planned for replacement stays replaced", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(hosted("1", "a"));
+      const plan = yield* stack.plan(hosted("2", "b"));
+      expect(plan.resources.Pool.action).toBe("replace");
+      expect(plan.resources.Host.action).not.toBe("noop");
+    }),
+  );
+
+  test.provider("a changed member updates the consumers of the member it is bound to", (stack) =>
+    Effect.gen(function* () {
+      const program = (generation: string) =>
+        Effect.gen(function* () {
+          const pool = yield* BindingTarget("Pool", { name: "pool" });
+          const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+          const entity = yield* Function("Entity", {
+            name: "entity",
+            env: { GEN: generation, HOST: host.functionArn },
+          });
+          yield* pool.bind("Entity", { env: { GEN: entity.env.GEN } });
+        });
+      yield* stack.deploy(program("1"));
+      const plan = yield* stack.plan(program("2"));
+      expect(plan.resources.Entity.action).toBe("update");
+      expect(plan.resources.Pool.action).toBe("update");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+
+  test.provider("a binding-only change crosses every binding of the cycle", (stack) =>
+    Effect.gen(function* () {
+      const program = (generation: string) =>
+        Effect.gen(function* () {
+          const outer = yield* BindingTarget("Outer", { name: "outer" });
+          const inner = yield* BindingTarget("Inner", { name: "inner" });
+          const host = yield* Function("Host", { name: "host", env: { GEN: outer.env.GEN } });
+          yield* inner.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+          yield* outer.bind("Relay", { env: { GEN: inner.env.GEN } });
+        });
+      yield* stack.deploy(program("1"));
+      const plan = yield* stack.plan(program("2"));
+      expect(plan.resources.Inner.action).toBe("update");
+      expect(plan.resources.Outer.action).toBe("update");
+      expect(plan.resources.Host.action).toBe("update");
     }),
   );
 });

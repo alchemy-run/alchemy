@@ -1,0 +1,136 @@
+---
+title: Sandboxes
+description: How a Daytona sandbox moves between started, stopped, archived and deleted, and how to create sandboxes per request or per user from a Worker, or declare a long-lived dev box in your Stack.
+---
+
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
+
+A **sandbox** is an isolated Linux machine: its own filesystem, processes and network, booted from a snapshot. Its disk survives a stop, so Daytona stops a sandbox nobody is using, and starts it again later where it left off. You pay for CPU and memory only while it runs.
+
+## A sandbox stops when idle and starts where it left off
+
+<StateMachine
+  states={[
+    { id: "started", label: "started", type: "billed while it runs", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "stopped", label: "stopped", type: "disk kept", col: 1, row: 0 },
+    { id: "archived", label: "archived", type: "slower to start", col: 2, row: 0 },
+    { id: "deleted", label: "deleted", col: 2, row: 1, end: true, tone: "danger" },
+  ]}
+  transitions={[
+    { from: "started", to: "stopped", label: "autoStopInterval" },
+    { from: "stopped", to: "started", label: "start", bend: -0.6 },
+    { from: "stopped", to: "archived", label: "autoArchiveInterval" },
+    { from: "archived", to: "started", label: "start", bend: 0.3 },
+    { from: "stopped", to: "deleted", label: "autoDeleteInterval" },
+  ]}
+  caption="autoStopInterval (15 minutes by default) stops an idle sandbox, autoArchiveInterval (7 days) archives a stopped one, and autoDeleteInterval, when you set it, deletes a stopped one. Starting a stopped or archived sandbox brings its files back."
+/>
+
+Set `autoStopInterval: 0` to keep a sandbox running, and `ttl` to delete it a fixed time after it was created, whatever its state. VM sandboxes (`linux-vm`, `windows`) can also pause, keeping their memory, with `autoPauseInterval`.
+
+## Create sandboxes at runtime
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Base } from "./Images.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* Daytona.CreateSandbox(Base);
+    return {
+      fetch: Effect.gen(function* () {
+        const sandbox = yield* sandboxes.create({ labels: { task: "lint" }, autoStopInterval: 10 });
+        const lint = yield* sandbox.exec("npx eslint --version");
+        yield* sandboxes.delete(sandbox.sandboxId);
+        return yield* HttpServerResponse.json(lint);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Daytona.CreateSandboxHttp)),
+) {}
+```
+
+The Worker's key can create and delete sandboxes, nothing else. `create` takes Daytona's own create request and waits until the sandbox has started.
+
+## Pick the snapshot per call
+
+```typescript
+const sandboxes = yield* Daytona.CreateSandbox();
+const python = yield* sandboxes.create({ snapshot: "daytonaio/sandbox:0.11.0" });
+```
+
+Without a base, `create` uses the `snapshot` you pass, or Daytona's default.
+
+## Find a sandbox by name or label
+
+```typescript
+const mine = yield* sandboxes.get(`dev-${user}`);
+const lints = yield* sandboxes.list({ labels: { task: "lint" } });
+```
+
+`get` returns `undefined` when there is no such sandbox. With a base, `list` only returns sandboxes created from it.
+
+## Find what a Worker created
+
+Objects created at run time are tagged with the stack, stage and binding, and are not deleted when the stack is destroyed. On a sandbox the tags are Daytona labels, `alchemy.stack`, `alchemy.stage` and `alchemy.id` (Daytona doesn't allow `::` in a label key), next to your own labels. List them by those labels to clean them up:
+
+```typescript
+const leftover = yield* sandboxes.list({ labels: { "alchemy.stage": "pr-42" } });
+yield* Effect.forEach(leftover, (s) => sandboxes.delete(s.id));
+```
+
+`daytona sandbox list` in the CLI shows the same labels.
+
+## Declare a dev box
+
+```typescript
+// src/DevBox.ts
+import * as Daytona from "@alchemy.run/daytona";
+import { Base } from "./Images.ts";
+
+export const DevBox = Daytona.Sandbox("DevBox", {
+  snapshot: Base,
+  autoStopInterval: "30 minutes",
+  autoArchiveInterval: "7 days",
+});
+```
+
+Deploy starts it again if Daytona stopped or archived it. Set `state: "stopped"` or `"archived"` to keep it asleep.
+
+## Drive the dev box from a Worker
+
+```typescript
+const devBox = yield* Daytona.ConnectSandbox(DevBox);
+yield* devBox.startSandbox();
+const test = yield* devBox.exec("git pull && pnpm test", { cwd: "/home/daytona/repo" });
+```
+
+`ConnectSandbox` returns the same handle as `CreateSandbox`, for the sandbox you declared.
+
+## A sandbox's size comes from its snapshot
+
+A sandbox gets its CPU, memory, disk and GPUs from its snapshot. Declare a second snapshot for a bigger sandbox:
+
+```typescript title="src/Images.ts"
+export const Big = Daytona.Snapshot("Big", { image: "node:22-bookworm-slim", cpu: 4, memory: 8, disk: 10 });
+```
+
+## Most settings change in place
+
+Labels, network rules, previews, secrets, the TTL and the auto-stop, auto-pause, auto-archive and auto-delete intervals change in place. A new snapshot, user, environment, mount list, linked sandbox or region replaces the sandbox.
+
+To run a program you write in a declared sandbox, see [Programs in a sandbox](/daytona/sandboxes/programs).
+
+## Fork a sandbox
+
+```typescript
+const fork = yield* devBox.forkSandbox({ name: `pr-${number}` });
+const forks = yield* devBox.getSandboxForks();
+```
+
+A fork copies the sandbox's disk into a new sandbox.

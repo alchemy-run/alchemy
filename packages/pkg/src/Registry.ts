@@ -39,6 +39,13 @@ export interface RegistryOptions {
     readonly repos: ReadonlyArray<string>;
     /** @default Duration.weeks(1) */
     readonly ttl?: Duration.Duration;
+    /**
+     * Branches whose latest push publication never expires, such as
+     * `["main"]`. A newer push from the branch hands the previous
+     * publication back to the TTL, counted from that newer push.
+     * @default []
+     */
+    readonly keepLatest?: ReadonlyArray<string>;
     /** Upper bound on a single tarball. Absent means unlimited. */
     readonly maxPackageSize?: ByteSize.ByteSize;
   };
@@ -168,6 +175,9 @@ export const PkgRegistry = <const Id extends string>(id: Id, options: RegistryOp
             policy: {
               repos: options.policy.repos,
               ttl: options.policy.ttl ?? DEFAULT_TTL,
+              ...(options.policy.keepLatest !== undefined
+                ? { keepLatest: options.policy.keepLatest }
+                : {}),
               ...(options.policy.maxPackageSize !== undefined
                 ? { maxPackageSize: options.policy.maxPackageSize }
                 : {}),

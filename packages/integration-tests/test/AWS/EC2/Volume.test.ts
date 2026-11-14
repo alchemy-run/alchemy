@@ -5,6 +5,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as kms from "@distilled.cloud/aws/kms";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State/State";
@@ -18,7 +19,10 @@ const { test } = Test.make({ providers: AWS.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The testing account is in us-west-2.
-const AZ = "us-west-2a";
+// The first zone of the Region the stack deploys to.
+const AZ = Effect.gen(function* () {
+  return `${yield* yield* Region}a`;
+});
 
 test.provider(
   "create, verify, and delete a gp3 volume",
@@ -29,7 +33,7 @@ test.provider(
       const volume = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Volume("TestGp3Volume", {
-            availabilityZone: AZ,
+            availabilityZone: yield* AZ,
             size: 1,
             volumeType: "gp3",
           });
@@ -37,7 +41,7 @@ test.provider(
       );
 
       expect(volume.volumeId).toMatch(/^vol-/);
-      expect(volume.availabilityZone).toBe(AZ);
+      expect(volume.availabilityZone).toBe(yield* AZ);
       expect(volume.volumeType).toBe("gp3");
       expect(volume.size).toBe(1);
 
@@ -48,7 +52,7 @@ test.provider(
       const v = observed.Volumes?.[0];
       expect(v?.VolumeType).toBe("gp3");
       expect(v?.Size).toBe(1);
-      expect(v?.AvailabilityZone).toBe(AZ);
+      expect(v?.AvailabilityZone).toBe(yield* AZ);
       expect(v?.State === "available" || v?.State === "creating").toBe(true);
       expect(v?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBeTruthy();
 
@@ -159,7 +163,7 @@ test.provider(
             targetKeyId: key.keyId,
           });
           const volume = yield* Volume("TestEncryptedVolume", {
-            availabilityZone: AZ,
+            availabilityZone: yield* AZ,
             size: 1,
             volumeType: "gp3",
             encrypted: true,
@@ -218,7 +222,7 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             return yield* Volume("ClientTokenVolume", {
-              availabilityZone: AZ,
+              availabilityZone: yield* AZ,
               size: 1,
               volumeType: "gp3",
               tags,
@@ -316,7 +320,7 @@ test.provider(
 
       const program = Effect.gen(function* () {
         return yield* Volume("DriftVolume", {
-          availabilityZone: AZ,
+          availabilityZone: yield* AZ,
           size: 1,
           volumeType: "gp3",
         });

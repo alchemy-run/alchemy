@@ -1,0 +1,132 @@
+---
+title: Effect Cluster
+description: Host a domain model on Effect Cluster entities, with its state in Postgres and its runners on any cloud.
+---
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Host your model on [Effect Cluster](/cluster), and every aggregate instance, view key and policy is an entity id of one entity. Its state lives in the cluster's Postgres, its sagas run on Effect Cluster's workflow engine, and its runners run in the pool you give it.
+
+## Host the model
+
+Provide `DomainCluster.layerEntities` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the entity that holds the model, point `main` at the file whose default export the runners load, and give it a pool.
+
+```typescript
+// packages/server/src/BankLive.ts
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import * as Layer from "effect/Layer";
+import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+
+export const Database = ClusterDocker.Database("Cluster");
+const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Database));
+
+export default Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      DomainCluster.layerEntities({
+        name: "Bank",
+        main: import.meta.url,
+        pool: Default,
+      }),
+      SiftFraudCheck,
+    ),
+  ),
+);
+```
+
+The pool decides where the runners run, and the database is where the cluster keeps its state. Swap `ClusterDocker.SwarmPool` for `ClusterAWS.EcsPool`, `ClusterFly.MachinePool` or another pool to run them elsewhere. See [Pools](/cluster/pools) and [Databases](/cluster/databases).
+
+## Serve the Api from anywhere
+
+Provide `BankLive` wherever you serve the Api: a container, a Lambda, a Cloudflare Worker.
+
+```typescript
+// packages/server/src/BankApi.ts
+import * as Docker from "@alchemy.run/docker";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as Effect from "effect/Effect";
+import BankLive, { Database } from "./BankLive.ts";
+
+export default class BankApi extends Docker.Service<BankApi>()(
+  "BankApi",
+  Effect.gen(function* () {
+    const database = yield* Cluster.Database.Database;
+    return {
+      main: import.meta.url,
+      port: 3000,
+      networks: database.network?.kind === "docker" ? [{ name: database.network.name }] : [],
+    };
+  }).pipe(Effect.provide(Database)),
+  Effect.gen(function* () {
+    const api = yield* CustomerApi;
+    return { fetch: api.fetch };
+  }).pipe(Effect.provide(BankLive)),
+) {}
+```
+
+In the container, the Layer reaches the entity through the pool's gateway, so the container needs no database access. On the runners, the same Layer runs the model: its policies and sagas run there.
+
+## Deploy it
+
+The container provides `BankLive`, so deploying it deploys the model's entity, its pool and its database:
+
+```typescript
+// alchemy.run.ts
+import * as Docker from "@alchemy.run/docker";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import BankApi from "@bank/server/BankApi";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "ClusterDomainExample",
+  {
+    providers: Layer.mergeAll(Docker.providers(), Cluster.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* BankApi;
+    return { api: api.name };
+  }),
+);
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Know what runs where
+
+Every object of the model is an entity id of the `Bank` entity, named after what it holds:
+
+| Your model | On Effect Cluster |
+| --- | --- |
+| An aggregate instance, like account `a-1` | The entity id `Bank.AccountAggregate/a-1` |
+| A view key, like the summary of `a-1` | The entity id `Bank.AccountSummaryView/a-1` |
+| A policy | One entity id per policy and key |
+| A projection key | One entity id per projection and key, with the key's input log |
+| A stream key | One entity id per stream and key |
+| A saga run, like transfer `t-1` | A run of Effect Cluster's workflow engine |
+
+Each entity id keeps its state in one table of the cluster's database, `alchemy_domain_objects`, and moves between runners with its shard.
+
+## Count on these guarantees
+
+Commands to one aggregate instance run one at a time. Its events, new state and reply commit together in one Postgres transaction, or not at all.
+
+Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a runner restarts in between. Scheduled commands are persisted messages, delivered when they're due on whichever runner then owns the instance.
+
+## Watch without polling
+
+Give the client `Domain.protocolWebSocket` (see [Api](/domain/api#choose-a-protocol)). The runtime that serves the Api holds each live read's WebSocket, and the entity that owns the key pushes every commit to it over a streamed call through the pool's gateway.
+
+A dropped socket, or an entity that moves to another runner, reconnects and resumes from the last value it delivered. Over `Domain.protocolHttp`, live reads are streamed responses that poll the entity instead.
+
+## Add consumers to a running Domain
+
+A deploy that adds a view or a projection, or bumps a version, doesn't wait for its history. The first call after the deploy starts the backfill, and the new consumer fills from its sources' events. See [History at scale](/domain/backfill).
+
+:::note
+The same model runs [in memory](/domain/in-memory) for tests, and on [Cloudflare](/domain/cloudflare) or [Rivet](/domain/rivet) with no change to its definitions.
+:::

@@ -375,6 +375,92 @@ describe("Action output convergence", { tags: ["unit", "local"] }, () => {
       }),
   );
 
+  // A pool collects env from what it hosts and hands it to its host as a
+  // prop, and what it hosts binds the host's address: Pool and Host are in a
+  // cycle, and a change to the bound env alone has to reach the Host.
+  test.provider(
+    "a binding-only change to a cycle member reaches the consumers of its attributes",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const pool = yield* BindingTarget("Pool", { name: "pool" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+            yield* pool.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        expect(actionOfPlan(yield* stack.plan(program("1")), "Host")).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Pool.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Pool.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
+  test.provider(
+    "a changed cycle member reaches the consumers of the member it is bound to",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const pool = yield* BindingTarget("Pool", { name: "pool" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+            const entity = yield* Function("Entity", {
+              name: "entity",
+              env: { GEN: generation, HOST: host.functionArn },
+            });
+            yield* pool.bind("Entity", { env: { GEN: entity.env.GEN } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        const unchanged = yield* stack.plan(program("1"));
+        expect(unchanged.resources.Pool.action).toBe("noop");
+        expect(unchanged.resources.Host.action).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Entity.action).toBe("update");
+        expect(changed.resources.Pool.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Pool.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
+  test.provider(
+    "a binding-only change crosses every binding of a cycle before the next deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const outer = yield* BindingTarget("Outer", { name: "outer" });
+            const inner = yield* BindingTarget("Inner", { name: "inner" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: outer.env.GEN } });
+            yield* inner.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+            yield* outer.bind("Relay", { env: { GEN: inner.env.GEN } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        const unchanged = yield* stack.plan(program("1"));
+        expect(unchanged.resources.Inner.action).toBe("noop");
+        expect(unchanged.resources.Outer.action).toBe("noop");
+        expect(unchanged.resources.Host.action).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Inner.action).toBe("update");
+        expect(changed.resources.Outer.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Inner.action).toBe("noop");
+        expect(settled.resources.Outer.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
   test.provider(
     "an Action planned to run skips its body when upstream resolves to the same input",
     (stack) =>
@@ -1299,6 +1385,42 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
     }),
   );
 
+  // #3112: Auth reads Api through a ref, Api reads Auth directly. The ref
+  // closes a cycle through props, which deadlocked the plan once both
+  // existed. The deploy that closes it fails before touching either.
+  test.provider("a deploy whose ref closes a props cycle fails before any change", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("Api", { string: "api" });
+        }),
+      );
+
+      const { events, record } = recorder();
+      const exit = yield* Effect.gen(function* () {
+        const apiRef = yield* TestResource.ref("Api");
+        const auth = yield* TestResource("Auth", {
+          string: "auth",
+          stringArray: [apiRef.string],
+        });
+        yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+      }).pipe(
+        stack.deploy,
+        hook({ create: record("create"), update: record("update") }),
+        Effect.timeout("10 seconds"),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(Cause.pretty(exit.cause)).toContain("RefCycleError");
+      }
+      expect(events).toEqual([]);
+      expect((yield* getState("Api"))?.props).toEqual({ string: "api" });
+      expect(yield* getState("Auth")).toBeUndefined();
+    }),
+  );
+
   test.provider(
     "a resource's ref to itself reads its persisted state without waiting on itself",
     (stack) =>
@@ -1746,6 +1868,51 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
 
         expect(yield* getState("A")).toBeUndefined();
         expectNotStarted(yield* getState("B"));
+      }),
+    );
+
+    // #3103: A binds B only by B's `name`, which the update keeps, so
+    // planning resolves that reference to its value and it orders nothing.
+    // B still references A's changing `string`. That is not a cycle: B must
+    // wait for A's update instead of starting against A's previous output.
+    test.provider("an update orders peers linked back only by a stable attribute", (stack) =>
+      Effect.gen(function* () {
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* BindingTarget("A", { name: "a", string: `a-${version}` });
+            const B = yield* BindingTarget("B", { name: "b", string: `b-${version}` });
+            yield* A.bind("FromB", { env: { PEER: B.name } });
+            yield* B.bind("FromA", { env: { PEER: A.string } });
+            return { A, B };
+          });
+
+        yield* stack.deploy(program("v1"));
+
+        const plan = yield* stack.plan(program("v2"));
+        expect([...plan.cycleMembers]).toEqual([]);
+
+        let aUpdated = false;
+        const bSawAUpdated: boolean[] = [];
+        const output = yield* program("v2").pipe(
+          stack.deploy,
+          hook({
+            update: (id) =>
+              id === "A"
+                ? // Give B every chance to run first if nothing orders it.
+                  Effect.sleep("50 millis").pipe(
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        aUpdated = true;
+                      }),
+                    ),
+                  )
+                : Effect.sync(() => void bSawAUpdated.push(aUpdated)),
+          }),
+        );
+
+        expect(bSawAUpdated).toEqual([true]);
+        expect(output.A.env).toEqual({ PEER: "b" });
+        expect(output.B.env).toEqual({ PEER: "a-v2" });
       }),
     );
 

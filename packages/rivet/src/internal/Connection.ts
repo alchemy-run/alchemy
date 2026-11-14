@@ -1,0 +1,85 @@
+/**
+ * How a Rivet resource reaches its control plane: the API endpoint and the
+ * admin token, carried on the resource's props so every resource talks to
+ * the control plane it was declared against.
+ *
+ * @internal not exported from the Rivet barrel.
+ */
+import * as Rivet from "@distilled.cloud/rivet";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpClientError from "effect/http/HttpClientError";
+import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+
+export interface ConnectionProps {
+  /** The control plane's API URL, e.g. `https://rivet.example.com`. */
+  endpoint: string;
+  /** The control plane's admin token. */
+  token: Redacted.Redacted<string>;
+}
+
+/**
+ * Provide the Rivet SDK credentials for one control plane, and wait out a
+ * control plane that is still starting: it refuses connections for a few
+ * seconds, then reports healthy about a minute before its storage accepts
+ * commands (`StorageOverloaded`), and times storage commands out while its
+ * engines find each other (`CommandDeadlineElapsed`) or its storage host is
+ * short of capacity (`StorageCommandCapacity`). Behind a load balancer the same window
+ * shows up as 502/503/504 until its instances boot and pass health checks,
+ * which takes several minutes on fresh instances (a three-engine cluster forms
+ * after its engines boot). A resource reconciled
+ * right after its control plane starts would otherwise fail.
+ */
+export const withConnection =
+  (
+    connection: ConnectionProps,
+    options: {
+      /**
+       * How long to wait out a control plane that answers but is still
+       * forming (`StorageOverloaded`, `CommandDeadlineElapsed`,
+       * `StorageCommandCapacity`, 429).
+       * @default "10 minutes"
+       */
+      readonly wait?: Duration.Input;
+      /**
+       * How long to wait for a control plane that doesn't answer at all
+       * (timeouts, refused connections, 502/503/504 from its load balancer).
+       * Each attempt is bounded at 20 seconds, 5 seconds apart.
+       * @default the same as {@link wait}
+       */
+      readonly unreachableWait?: Duration.Input;
+    } = {},
+  ) =>
+  <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      // An address that drops packets (a load balancer with no healthy
+      // backend) never refuses the connection: bound each attempt.
+      Effect.timeout("20 seconds"),
+      Effect.retry({
+        while: (error) =>
+          error._tag === "BadGateway" ||
+          error._tag === "ServiceUnavailable" ||
+          error._tag === "GatewayTimeout" ||
+          error._tag === "TimeoutError" ||
+          (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
+        schedule: Schedule.spaced("5 seconds").pipe(
+          Schedule.upTo({ duration: options.unreachableWait ?? options.wait ?? "10 minutes" }),
+        ),
+      }),
+      // Answering but still forming: always worth the whole wait.
+      Effect.retry({
+        while: (error) =>
+          error._tag === "StorageOverloaded" ||
+          error._tag === "CommandDeadlineElapsed" ||
+          error._tag === "StorageCommandCapacity" ||
+          error._tag === "TooManyRequests",
+        schedule: Schedule.spaced("5 seconds").pipe(
+          Schedule.upTo({ duration: options.wait ?? "10 minutes" }),
+        ),
+      }),
+      // This retry owns the whole wait: the SDK's own retry of the same
+      // errors would multiply it.
+      Rivet.Retry.none,
+      Effect.provide(Rivet.credentials({ token: connection.token, endpoint: connection.endpoint })),
+    );

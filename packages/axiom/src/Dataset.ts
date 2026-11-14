@@ -88,8 +88,18 @@ export type Dataset = Resource<
     otelHeaders: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatasetLookup
 >;
+
+/**
+ * Props for {@link Dataset.lookup}: find a dataset this stack
+ * doesn't manage by its name.
+ */
+export interface DatasetLookup {
+  /** Dataset name. */
+  name: string;
+}
 
 /**
  * An Axiom dataset — the top-level container that stores events, logs,
@@ -136,6 +146,16 @@ export type Dataset = Resource<
  *       `Authorization=Bearer ${env.AXIOM_TOKEN},X-Axiom-Dataset=${traces.name}`,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Ingest into an existing dataset
+ * ```typescript
+ * const logs = Axiom.Dataset.lookup({ name: "logs" });
  * ```
  *
  * @resource
@@ -310,6 +330,13 @@ export const DatasetProvider = () =>
             Effect.catchTag("NotFound", () => Effect.void),
           );
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const existing = yield* get({ dataset_id: name }).pipe(
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return existing === undefined ? undefined : yield* toAttrs(existing);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const stack = yield* Stack;
           const stage = yield* Stage;

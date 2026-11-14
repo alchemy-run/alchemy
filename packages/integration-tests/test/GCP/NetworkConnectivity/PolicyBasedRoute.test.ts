@@ -5,6 +5,7 @@ import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -45,6 +46,12 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { route };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.PolicyBasedRoute.lookup({
+          policyBasedRouteId: created.route.policyBasedRouteId,
+        }),
+        created.route,
       );
 
       expect(created.route.name).toContain("/policyBasedRoutes/");

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -96,8 +97,39 @@ export type ClustersAcl = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClustersAclLookup
 >;
+
+/**
+ * Props for {@link ClustersAcl.lookup}: find a clusters acl this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ClustersAclLookup {
+  /**
+   * ACL id. Defines the Resource Pattern: `cluster`, `topic/{name}`,
+   * `consumerGroup/{name}`, `transactionalId/{name}`,
+   * `topicPrefixed/{name}`, `allTopics`, `allConsumerGroups`,
+   * `allTransactionalIds`.
+   */
+  aclId: string;
+  /**
+   * Region used when `cluster` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent cluster. Full name
+   * `projects/{project}/locations/{location}/clusters/{cluster}` or the
+   * cluster id (combined with `location`).
+   */
+  cluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An ACL for a Kafka resource pattern on a Managed Kafka cluster.
@@ -135,6 +167,20 @@ export type ClustersAcl = Resource<
  *       host: "*",
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing clusters acl
+ * `ClustersAcl.lookup` references a clusters acl Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * clusters acl.
+ *
+ * **Example:** Reference an existing clusters acl
+ * ```typescript
+ * const clustersAcl = GCP.ManagedKafka.ClustersAcl.lookup({
+ *   aclId: "my-acl",
+ *   cluster: "my-cluster",
  * });
  * ```
  *
@@ -221,6 +267,17 @@ export const ClustersAclProvider = () =>
         nextParent: clusterOf(news.cluster, env.project, location),
       });
     }),
+
+    lookup: Effect.fn(function* ({ aclId, location: lookupLocation, cluster: lookupCluster }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const cluster =
+        lookupCluster !== undefined ? clusterOf(lookupCluster, env.project, location) : "";
+      const name = cluster.length > 0 ? resourceName(cluster, aclId) : "";
+      const existing = yield* getAcl(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

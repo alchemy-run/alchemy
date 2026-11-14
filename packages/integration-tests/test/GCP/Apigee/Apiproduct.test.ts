@@ -6,6 +6,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,6 +65,13 @@ test.provider.skipIf(!runLifecycle)(
             approvalType: "auto",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.Apiproduct.lookup({
+          apiproductId: created.apiproductId,
+          organizationId: created.organizationId,
+        }),
+        created,
       );
 
       expect(created.apiproductId).toEqual(expect.any(String));

@@ -19,13 +19,14 @@ through either Worker are visible from the other.
 
 <Tree
   nodes={[
-    { id: "acct", label: "my-company", type: "account" },
+    { id: "acct", label: "my-company", type: "account", areas: ["b a"], colGap: 3 },
+    { id: "b", label: "WorkerB", type: "Worker", parent: "acct", specs: [["scriptName", "WorkerA"]] },
     { id: "a", label: "WorkerA", type: "Worker · hosts Counter", parent: "acct" },
     { id: "ns", label: "Counter", type: "Durable Object namespace", parent: "a", dashed: true },
     { id: "alice", label: '"alice"', type: "object · count 3", parent: "ns", tone: "accent" },
     { id: "bob", label: '"bob"', type: "object · count 1", parent: "ns", tone: "accent" },
-    { id: "b", label: "WorkerB", type: "Worker", parent: "acct", side: true, specs: [["binds", "Counter"], ["scriptName", "WorkerA"]] },
   ]}
+  links={[{ from: "b", to: "ns", label: "binds" }]}
   caption="The objects live in WorkerA's namespace. WorkerB holds only a binding to it, so getByName('alice') from either Worker reaches the same object and the same count."
 />
 

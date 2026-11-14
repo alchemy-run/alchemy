@@ -2,6 +2,7 @@ import { expect } from "bun:test";
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Domain from "@alchemy.run/domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import * as Test from "@alchemy.run/test/Bun";
 // Runs under `bun test`: deploying a Worker from Vitest does not yet produce a
@@ -25,7 +26,12 @@ import { sessionClient } from "../packages/domain/src/Session.middleware.ts";
 import { mfa, register, transfer } from "../packages/server/test/flows.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
+  providers: Layer.mergeAll(
+    Cloudflare.providers(),
+    DomainCloudflare.providers(),
+    Stripe.providers(),
+    Axiom.providers(),
+  ),
   state: Alchemy.localState(),
 });
 

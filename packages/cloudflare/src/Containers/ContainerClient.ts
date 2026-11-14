@@ -532,9 +532,9 @@ export const fromContainer = (
  * container's RPC shape are sent to its port-3000 server; the handle's own
  * methods take precedence.
  */
-export const makeContainerHandle = Effect.fnUntraced(function* (
+export const makeContainerHandle = Effect.fnUntraced(function* <R>(
   id: string,
-  binding: Effect.Effect<unknown, never, any>,
+  binding: Effect.Effect<unknown, never, R>,
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
@@ -543,12 +543,14 @@ export const makeContainerHandle = Effect.fnUntraced(function* (
   return makeFetchRpcStub<ContainerClient>({
     // RPC methods only run inside the Durable Object, where RuntimeContext is
     // always present; the stub's fetch type cannot carry it.
-    fetch: (request) =>
+    fetch: (request) => {
+      const response = rpcPort.pipe(Effect.flatMap((port) => port.fetch(request)));
       // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext; RPC calls only run at runtime
-      rpcPort.pipe(Effect.flatMap((port) => port.fetch(request))) as Effect.Effect<
+      return response as Effect.Effect<
         HttpClientResponse.HttpClientResponse,
-        unknown
-      >,
+        Effect.Error<typeof response>
+      >;
+    },
     baseUrl: "http://container",
     base: { ...client, "~alchemy/Id": id },
   });

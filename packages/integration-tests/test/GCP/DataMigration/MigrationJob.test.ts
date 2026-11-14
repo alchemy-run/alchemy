@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -74,6 +75,13 @@ test.provider.skipIf(!runSlowLifecycle)(
           });
           return { source, dest, job };
         }),
+      );
+      yield* expectFound(
+        GCP.DataMigration.MigrationJob.lookup({
+          migrationJobId: created.job.migrationJobId,
+          location: created.job.location,
+        }),
+        created.job,
       );
 
       expect(created.job.migrationJobId).toEqual(expect.any(String));

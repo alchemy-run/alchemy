@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -89,8 +90,32 @@ export type ReasoningEnginesSession = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReasoningEnginesSessionLookup
 >;
+
+/**
+ * Props for {@link ReasoningEnginesSession.lookup}: find a reasoning
+ * engines session this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ReasoningEnginesSessionLookup {
+  /**
+   * Session id (the `{session}` segment).
+   */
+  sessionId: string;
+  /**
+   * Parent ReasoningEngine resource name
+   * (`projects/{project}/locations/{loc
+   * ation}/reasoningEngines/{reasoning_engine}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Reasoning Engine session between a user and an agent.
@@ -105,6 +130,20 @@ export type ReasoningEnginesSession = Resource<
  *   parent: engine.name,
  *   userId: "user-123",
  *   displayName: "support-chat",
+ * });
+ * ```
+ *
+ * ### Looking up an existing reasoning engines session
+ * `ReasoningEnginesSession.lookup` references a reasoning engines session
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared reasoning engines session.
+ *
+ * **Example:** Reference an existing reasoning engines session
+ * ```typescript
+ * const reasoningEnginesSession = GCP.AIPlatform.ReasoningEnginesSession.lookup({
+ *   sessionId: "my-session",
+ *   parent: "my-parent",
  * });
  * ```
  *
@@ -217,6 +256,14 @@ export const ReasoningEnginesSessionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sessionId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, sessionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

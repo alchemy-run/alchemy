@@ -1,0 +1,170 @@
+---
+title: Network
+sidebar:
+  order: 2
+description: Control what a sandbox can reach, and add credentials to its requests on the way out.
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+Every sandbox has an outbound policy. Archil enforces it outside the microVM, so code inside can't change it, and it can add headers to requests as they leave, so a key the sandbox uses never sits inside it.
+
+## The policy is enforced outside the microVM
+
+<Boundaries
+  nodes={[
+    { id: "agent", label: "agent", type: "your code", col: 0, row: 0, tone: "accent" },
+    { id: "github", label: "api.github.com", type: "allowed · + Authorization", col: 0, row: 1 },
+    { id: "other", label: "example.com", type: "not listed", col: 2, row: 1 },
+  ]}
+  zones={[
+    { id: "sandbox", label: "sandbox", type: "egress: deny", nodes: ["agent"] },
+    { id: "rest", label: "everything else", nodes: ["other"], tone: "warn", labelAt: "right" },
+  ]}
+  links={[
+    { from: "agent", to: "github", label: "GET /user" },
+    { from: "agent", to: "rest", kind: "blocked" },
+  ]}
+  caption="With default: deny, a sandbox reaches only the hosts it allows. The policy adds the Authorization header to requests for api.github.com, so the token never enters the sandbox."
+/>
+
+## Deny everything but a list of hosts
+
+```typescript title="src/agent.ts"
+export const MySandbox = Archil.Sandbox("MySandbox", {
+  network: {
+    egress: { default: "deny", allow: ["registry.npmjs.org", "*.github.com"] },
+  },
+});
+```
+
+Deny entries win over allow entries. A wildcard matches subdomains, not the apex domain.
+
+## Add a credential on the way out
+
+An allow entry can set headers on matching HTTPS requests. The sandbox never sees the value:
+
+```typescript title="src/agent.ts"
+export const MySandbox = Archil.Sandbox("MySandbox", {
+  network: {
+    egress: {
+      default: "deny",
+      allow: [
+        { target: "api.github.com", headers: { Authorization: Config.Redacted("GITHUB_AUTH") } },
+      ],
+    },
+  },
+});
+```
+
+Archil has no secret store, so the value lives in the sandbox's policy.
+
+## Send requests through your own gateway
+
+An allow entry can also forward matching requests to a URL of yours. Archil decrypts the request, applies the entry's headers, and sends it to `forwardUrl` with the original path and query. It names the original destination and the calling sandbox in `archil-forwarded-host`, `archil-forwarded-scheme`, `archil-forwarded-port`, `archil-forwarded-path` and `archil-sandbox-id` headers.
+
+<Boundaries
+  nodes={[
+    { id: "agent", label: "agent", type: "your code", col: 0, row: 0, tone: "accent" },
+    { id: "gateway", label: "MyGateway", type: "Worker · + x-api-key", col: 1, row: 0 },
+    { id: "api", label: "api.example.com", type: "receives the key", col: 2, row: 0 },
+  ]}
+  zones={[{ id: "sandbox", label: "sandbox", type: "egress: deny", nodes: ["agent"] }]}
+  links={[
+    { from: "agent", to: "gateway", label: "forwarded · + token" },
+    { from: "gateway", to: "api", label: "calls" },
+  ]}
+  caption="The agent calls api.example.com as usual. Archil forwards the request to the gateway and adds the token that proves it came from this policy. The gateway adds the API key and calls the real host. Neither secret enters the sandbox."
+/>
+
+### Forward the API's requests to the gateway
+
+```typescript title="alchemy.run.ts"
+const gateway = yield* MyGateway;
+const sandbox = yield* Archil.Sandbox("MySandbox", {
+  network: {
+    egress: {
+      default: "deny",
+      allow: [
+        {
+          target: "api.example.com",
+          headers: { "X-Gateway-Token": Config.Redacted("GATEWAY_TOKEN") },
+          forwardUrl: gateway.url.as<string>(),
+        },
+      ],
+    },
+  },
+});
+```
+
+Requests for `api.example.com` now go to the gateway. Archil adds the gateway token on the way, so the gateway can tell they came through this policy.
+
+### Give the gateway its secrets
+
+```typescript title="src/Gateway.ts"
+export default class MyGateway extends Cloudflare.Worker<MyGateway>()(
+  "MyGateway",
+  {
+    main: import.meta.url,
+    env: {
+      GATEWAY_TOKEN: Config.Redacted("GATEWAY_TOKEN"),
+      API_KEY: Config.Redacted("API_KEY"),
+    },
+  },
+  Effect.succeed({ fetch: forward }),
+) {}
+```
+
+A Cloudflare Worker makes a small gateway. It holds the token it expects and the API key it adds. `forward` is the handler the next steps build.
+
+### Refuse requests without the token
+
+```typescript title="src/Gateway.ts"
+const request = yield* HttpServerRequest;
+const env = yield* Cloudflare.Workers.WorkerEnvironment;
+if (request.headers["x-gateway-token"] !== env.GATEWAY_TOKEN) {
+  return HttpServerResponse.text("forbidden", { status: 403 });
+}
+```
+
+The gateway's URL is public, so anyone can call it. Only Archil adds the token.
+
+### Send on only to hosts you list
+
+```typescript title="src/Gateway.ts"
+const host = request.headers["archil-forwarded-host"];
+if (host === undefined || !["api.example.com"].includes(host)) {
+  return HttpServerResponse.text("host not allowed", { status: 403 });
+}
+```
+
+Without the list, the gateway would add your key to requests for any host.
+
+### Add the key and call the real host
+
+```typescript title="src/Gateway.ts"
+const { pathname, search } = new URL(request.originalUrl);
+const client = yield* HttpClient.HttpClient;
+const upstream = yield* client.execute(
+  HttpClientRequest.get(`https://${host}${pathname}${search}`).pipe(
+    HttpClientRequest.setHeader("x-api-key", env.API_KEY),
+  ),
+);
+return HttpServerResponse.text(yield* upstream.text, { status: upstream.status });
+```
+
+Archil appends the original path and query to `forwardUrl`, so the gateway rebuilds the URL from them. For other methods, bodies and headers, copy them from `request`, leaving out the `archil-` headers and the token.
+
+The gateway holds the API key, so rotating it changes only the Worker. `archil-sandbox-id` tells it which sandbox called, which it can use to log, rate-limit or pick a key per sandbox. `forwardUrl` must be a public HTTPS URL on a domain name, so a `workers.dev` URL or a custom domain works, and an IP address doesn't.
+
+## Change the policy while it runs
+
+```typescript
+yield* sandbox.setEgress({ default: "deny", allow: ["api.openai.com"] });
+```
+
+The new policy applies at once. On a declared `Archil.Sandbox`, changing `network` updates it in place.
+
+## Your plan sets the default
+
+On Archil's Free plan, sandboxes reach only a managed allowlist of package registries, Git hosts and model APIs, and adding headers needs the Developer plan or above. A sandbox created on a paid plan with no policy reaches anything.

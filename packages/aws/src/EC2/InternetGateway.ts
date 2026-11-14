@@ -193,14 +193,33 @@ export const InternetGatewayProvider = () =>
   Provider.effect(
     InternetGateway,
     Effect.gen(function* () {
-      const findInternetGatewayByTags = Effect.fn(function* (id: string) {
+      const findInternetGatewayByTags = Effect.fn(function* (
+        id: string,
+        instanceId: string,
+        vpcId: string | undefined,
+      ) {
         const filters = yield* createAlchemyTagFilters(id);
         const pages = yield* ec2.describeInternetGateways
           .pages({ Filters: filters })
           .pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.InternetGateways ?? [])
-          .find((candidate) => candidate.InternetGatewayId !== undefined);
+          .find(
+            (candidate) =>
+              candidate.InternetGatewayId !== undefined &&
+              // A gateway another instance created (another namespace's
+              // resource with the same logical id, possibly mid-create and not
+              // attached yet) is not ours. Gateways from before the instance
+              // tag carry none.
+              (candidate.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value ??
+                instanceId) === instanceId &&
+              // An interrupted create left its gateway unattached or on this
+              // VPC. One live on another VPC belongs to another resource with
+              // the same logical id (e.g. in another namespace): never take it.
+              !candidate.Attachments?.some(
+                (a) => (a.State === "available" || a.State === "attaching") && a.VpcId !== vpcId,
+              ),
+          );
       });
 
       /**
@@ -258,7 +277,7 @@ export const InternetGatewayProvider = () =>
           if (!match?.InternetGatewayId) return undefined;
           return toAttributes(match, region, accountId);
         }),
-        read: Effect.fn(function* ({ id, output }) {
+        read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const igw = output?.internetGatewayId
             ? (yield* ec2
@@ -268,7 +287,11 @@ export const InternetGatewayProvider = () =>
                     Effect.succeed({ InternetGateways: [] }),
                   ),
                 )).InternetGateways?.[0]
-            : yield* findInternetGatewayByTags(id);
+            : yield* findInternetGatewayByTags(
+                id,
+                instanceId,
+                typeof olds?.vpcId === "string" ? olds.vpcId : undefined,
+              );
           if (!igw?.InternetGatewayId) return undefined;
           const attrs = toAttributes(igw, region, accountId);
           return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
@@ -348,7 +371,7 @@ export const InternetGatewayProvider = () =>
             // state persistence by stable stack/stage/logical-id ownership.
             // Older interrupted creates predate the instance tag, so requiring
             // it here would strand exactly the resources recovery must adopt.
-            igw = yield* findInternetGatewayByTags(id);
+            igw = yield* findInternetGatewayByTags(id, instanceId, news.vpcId);
           }
 
           // Ensure — create the IGW if missing.

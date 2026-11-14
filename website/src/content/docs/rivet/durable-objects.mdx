@@ -1,0 +1,219 @@
+---
+title: Durable Object
+description: What a Rivet Durable Object is — a class with one instance per name, each with its own state — and how one is written, from its two phases and methods to fetch, alarm, and keeping its code out of its callers.
+---
+
+A Durable Object is a way to build a stateful service out of many small, named pieces. Instead of one server that holds every chat room in memory, or a database every request goes through, each room is its own small program with its own data. You call a room by its name, and Rivet makes sure there's exactly one of it.
+
+## A class and its instances
+
+A Durable Object starts as a class. `Room` says what a room can do, like let someone join:
+
+```typescript title="src/room.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        join: () =>
+          state.storage.transaction(
+            Effect.gen(function* () {
+              const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+              yield* state.storage.put("visitors", visitors);
+              return visitors;
+            }),
+          ),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`"Room"` is the class's name. The control plane files every room under it, so renaming the class starts every room afresh.
+
+`main` is the file that exports the class. The pool's nodes load it to run the class, so it's almost always `import.meta.url`.
+
+An **instance** is one room. The lobby is an instance, and so is the kitchen. Every instance runs the same code, and each one has its own state:
+
+```typescript title="src/api.ts"
+const rooms = yield* Room;
+const lobby = rooms.getByName("lobby");
+const kitchen = rooms.getByName("kitchen");
+```
+
+You never create an instance. Every name exists from the start, and the first call to a name brings its instance to life.
+
+## One instance per name
+
+However many callers ask for the lobby, from however many servers, they all reach the same instance. There's never a second lobby with a different idea of who's in it.
+
+That's what makes a Durable Object useful. The lobby can count its visitors, or keep its messages in order, without coordinating with anything else, because it's the only thing that knows about the lobby. The [control plane](/rivet/control-planes) keeps track of where each instance runs, and starts it on a node in its [pool](/rivet/pools) when it's called.
+
+## State that lives with the instance
+
+Each instance has its own storage: keys and values, a SQL database, and an alarm that calls it back later. The lobby's messages live in the lobby's database, and nobody else's.
+
+Because the data sits with the instance, a room doesn't fetch its state from somewhere else on every call. It reads its own. When an instance goes quiet, Rivet puts it to sleep; the next call wakes it, and its data is still there. See [Storage](/rivet/storage).
+
+## Write it in two phases
+
+The implementation is an Effect that returns another Effect, and each runs at a different moment.
+
+```typescript title="src/room.ts"
+Effect.gen(function* () {
+  // once per node
+  return Effect.gen(function* () {
+    // once per room
+    return {};
+  });
+}).pipe(Effect.provide(Default)),
+```
+
+The outer Effect is the **Construction phase**. It runs once on each node, before any room exists. This is where you resolve what the class needs from elsewhere, like another Durable Object it calls:
+
+```typescript title="src/room.ts"
+Effect.gen(function* () {
+  const notifications = yield* Notifications;
+  return Effect.gen(function* () {
+    // ...
+  });
+});
+```
+
+The inner Effect runs once per room, on the first call after the room starts or wakes from sleep. It reads the room's state and returns what the room can do:
+
+```typescript title="src/room.ts"
+return Effect.gen(function* () {
+  const state = yield* Rivet.DurableObjectState;
+  return {
+    name: () => Effect.succeed(state.id.name),
+  };
+});
+```
+
+`state.id.name` is the name the caller used, `"lobby"` for the lobby. So setting something up per room, like creating its tables, belongs in the inner Effect; resolving what every room shares belongs in the outer one.
+
+## Choose where it runs
+
+`Effect.provide(Default)` puts the class on a pool. The pool decides which machines run it, and the pool's control plane decides which of them runs each room. The class itself never names a cloud, which is why it moves between clouds unchanged. See [Pool](/rivet/pools).
+
+## Give it methods
+
+Every function the inner Effect returns, apart from `fetch`, `alarm` and the `webSocket*` handlers, is a method callers can run:
+
+```typescript title="src/room.ts"
+return {
+  join: () =>
+    state.storage.transaction(
+      Effect.gen(function* () {
+        const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+        yield* state.storage.put("visitors", visitors);
+        return visitors;
+      }),
+    ),
+  post: (author: string, text: string) => insertMessage(author, text),
+};
+```
+
+A method takes arguments and returns an Effect. Arguments and results travel between machines as JSON, so they're strings, numbers, booleans, arrays and plain objects. A method can also return a `Stream`, or fail with a tagged error the caller catches by name. See [Calling a Durable Object](/rivet/calling).
+
+Methods share the room's state, and a room runs its calls in parallel, so their reads and writes can interleave. A method that reads a value and writes it back runs as a transaction. See [Concurrency](/rivet/concurrency).
+
+## Handle HTTP with fetch
+
+A room can answer HTTP requests as well as method calls. Return a `fetch` handler:
+
+```typescript title="src/room.ts"
+return {
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    return HttpServerResponse.text(`you reached ${state.id.name}`);
+  }),
+};
+```
+
+Callers forward a request to it with `room.fetch(request)`.
+
+## Hold WebSockets
+
+`fetch` can accept a WebSocket instead of answering. `Rivet.upgrade()` accepts it and returns the `101` response to hand back:
+
+```typescript title="src/room.ts"
+return {
+  fetch: Effect.gen(function* () {
+    const [response, socket] = yield* Rivet.upgrade({ tags: ["chat"] });
+    yield* socket.send(`welcome to ${state.id.name}`);
+    return response;
+  }),
+  webSocketMessage: (socket: Rivet.WebSocket, message: string | Uint8Array) =>
+    Effect.gen(function* () {
+      for (const peer of yield* state.getWebSockets("chat")) yield* peer.send(message);
+    }),
+};
+```
+
+A caller passes the upgrade request along with `room.fetch(request)`, and Rivet's gateway carries the socket to the instance that owns the name. The room receives its messages in `webSocketMessage`, and `webSocketClose` and `webSocketError` when it ends. `state.getWebSockets(tag)` finds every open socket with a tag, and the room stays awake while it holds any.
+
+:::caution
+Rivet 3 doesn't hibernate WebSockets yet, so a room holding open sockets stays awake. Hibernatable WebSockets are coming soon.
+:::
+
+## Wake it with alarm
+
+Return an `alarm` handler, and Rivet calls it when the room's alarm comes due:
+
+```typescript title="src/room.ts"
+return {
+  alarm: () =>
+    Effect.gen(function* () {
+      yield* (yield* state.storage.sql.exec("DELETE FROM messages")).toArray();
+    }),
+};
+```
+
+`alarm` isn't a method; callers can't run it. The room sets the alarm itself with `state.storage.setAlarm`. See [Storage](/rivet/storage#set-an-alarm).
+
+## Keep its code out of its callers
+
+A caller imports the class to call it, and the class carries its implementation with it. When the implementation is large, or imports things a caller shouldn't bundle, declare the class on its own with the shape of its methods:
+
+```typescript title="src/room.ts"
+export interface RoomShape {
+  join: () => Effect.Effect<number, never, RuntimeContext>;
+}
+
+export class Room extends Rivet.DurableObject<Room, RoomShape>()("Room") {}
+```
+
+Then implement it in another file with `make`, which returns a Layer:
+
+```typescript title="src/room-live.ts"
+export const RoomLive = Room.make(
+  { main: import.meta.url, handler: "RoomLive" },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        join: () =>
+          state.storage.transaction(
+            Effect.gen(function* () {
+              const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+              yield* state.storage.put("visitors", visitors);
+              return visitors;
+            }),
+          ),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+`handler` names the export the pool loads. Callers import `src/room.ts` and get only the declaration; provide `RoomLive` once, where the Stack deploys.
+
+Next, [Storage](/rivet/storage): what each room keeps, and how.

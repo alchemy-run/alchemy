@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   domainIdOf,
@@ -59,8 +60,27 @@ export type Domain = Resource<
     lastVerifyTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DomainLookup
 >;
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DomainLookup {
+  /**
+   * Fully qualified domain name registered with Postmaster Tools
+   * (`mail.example.com`).
+   */
+  domainId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Gmail Postmaster Tools domain.
@@ -90,6 +110,16 @@ export type Domain = Resource<
  *   domainId: "mail.example.com",
  *   verificationMethod: "TXT",
  * });
+ * ```
+ *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared domain.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const domain = GCP.GmailPostmasterTools.Domain.lookup({ domainId: "example.com" });
  * ```
  *
  * @resource
@@ -132,6 +162,15 @@ export const DomainProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ domainId: lookupDomainId }) {
+      const env = yield* GcpEnvironment.current;
+      const domainId = lookupDomainId ?? "";
+      const name = toDomainName(domainId);
+      const existing = yield* getDomain(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, domainId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

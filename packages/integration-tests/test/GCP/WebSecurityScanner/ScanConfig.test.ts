@@ -6,6 +6,7 @@ import * as websecurityscanner from "@distilled.cloud/gcp/websecurityscanner_v1"
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -95,6 +96,10 @@ test.provider(
             region: "us-central1",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.Address.lookup({ addressName: reserved.addressName, region: reserved.region }),
+        reserved,
       );
       expect(reserved.address).toEqual(expect.any(String));
       const startingUrl = `http://${reserved.address}`;

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -127,8 +128,31 @@ export type Realm = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RealmLookup
 >;
+
+/**
+ * Props for {@link Realm.lookup}: find a realm this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface RealmLookup {
+  /**
+   * Realm id (the `{realm}` segment of
+   * `projects/{project}/locations/{location}/realms/{realm}`).
+   */
+  realmId: string;
+  /**
+   * Location of the realm. Cloud Number Registry is global — `global` is
+   * the only supported value.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Number Registry realm — a routing domain of IP ranges that
@@ -158,6 +182,16 @@ export type Realm = Resource<
  *   registryBook: book.name,
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing realm
+ * `Realm.lookup` references a realm Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared realm.
+ *
+ * **Example:** Reference an existing realm
+ * ```typescript
+ * const realm = GCP.CloudNumberRegistry.Realm.lookup({ realmId: "my-realm" });
  * ```
  *
  * @resource
@@ -266,6 +300,15 @@ export const RealmProvider = () =>
             previousVersion !== nextVersion),
       });
     }),
+
+    lookup: Effect.fn(function* ({ realmId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, realmId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

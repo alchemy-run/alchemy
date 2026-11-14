@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingPortalConfigurations,
   GetBillingPortalConfiguration,
@@ -343,8 +342,18 @@ export type BillingPortalConfiguration = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  BillingPortalConfigurationLookup
 >;
+
+/**
+ * Props for {@link BillingPortalConfiguration.lookup}: find a billing portal configuration this stack
+ * doesn't manage by its id.
+ */
+export interface BillingPortalConfigurationLookup {
+  /** Stripe billing portal configuration id, e.g. `"bpc_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Customer Portal configuration — the features, branding, and
@@ -404,6 +413,16 @@ export type BillingPortalConfiguration = Resource<
  * const portal = yield* Stripe.BillingPortalConfiguration("customer-portal", {
  *   features: { invoiceHistory: { enabled: true } },
  * });
+ * ```
+ *
+ * ### Looking up an existing billing portal configuration
+ * `BillingPortalConfiguration.lookup` references a billing portal configuration Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing billing portal configuration
+ * ```typescript
+ * const ref = Stripe.BillingPortalConfiguration.lookup({ id: "bpc_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -753,6 +772,11 @@ export const BillingPortalConfigurationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -802,11 +826,8 @@ export const BillingPortalConfigurationProvider = () =>
           ...(news.loginPage !== undefined
             ? { login_page: { enabled: news.loginPage.enabled } }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-billing-portal-configuration-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-billing-portal-configuration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

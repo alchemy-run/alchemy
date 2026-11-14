@@ -91,7 +91,7 @@ const cards = bank.AccountCard.watch(accountId);
 
 ### Queries
 
-A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
+A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). A paged query's method also streams it: `entries` yields every entry and `pages` every page, following the cursors for you. Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
 
 ```typescript title="packages/server/test/CustomerApi.test.ts"
 const first = yield* sam.AccountLedger({ account: accountId }, { atLeast: receipt, take: 1 });

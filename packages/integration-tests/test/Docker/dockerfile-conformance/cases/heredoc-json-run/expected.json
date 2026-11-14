@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "cat",
+              "\u003c\u003cEOF"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -19,8 +19,18 @@ export type View = Resource<
     id: string;
   },
   never,
-  Providers
+  Providers,
+  ViewLookup
 >;
+
+/**
+ * Props for {@link View.lookup}: find a view this stack
+ * doesn't manage by its id.
+ */
+export interface ViewLookup {
+  /** Axiom view id. */
+  id: string;
+}
 
 /**
  * An Axiom saved view — a named, shareable APL query. Useful for building
@@ -58,6 +68,16 @@ export type View = Resource<
  *     | join kind=leftouter (['my-app-logs']) on trace_id
  *   `,
  * });
+ * ```
+ *
+ * ### Looking up an existing view
+ * `View.lookup` references a view Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing view
+ * ```typescript
+ * const ref = Axiom.View.lookup({ id: "v_abc123" });
  * ```
  *
  * @resource
@@ -118,6 +138,13 @@ export const ViewProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
+        lookup: Effect.fn(function* ({ id }) {
+          return yield* get({ id }).pipe(
+            Effect.map((current) => ({ ...current, id })),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(

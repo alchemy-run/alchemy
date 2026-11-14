@@ -6,6 +6,7 @@ import * as apphub from "@distilled.cloud/gcp/apphub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -89,6 +90,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { app, workload };
         }),
+      );
+      yield* expectFound(
+        GCP.AppHub.ApplicationsWorkload.lookup({
+          workloadId: created.workload.workloadId,
+          location: created.workload.location,
+          application: created.workload.application,
+        }),
+        created.workload,
       );
 
       expect(created.workload.name).toContain("/workloads/");

@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPromotionCodes,
   GetPromotionCode,
@@ -135,8 +134,18 @@ export interface PromotionCode extends Resource<
     restrictions: PromotionCodeRestrictions;
   },
   never,
-  Providers
+  Providers,
+  PromotionCodeLookup
 > {}
+
+/**
+ * Props for {@link PromotionCode.lookup}: find a promotion code this stack
+ * doesn't manage by its id.
+ */
+export interface PromotionCodeLookup {
+  /** Stripe promotion code id, e.g. `"promo_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Promotion Code — a customer-redeemable code for an underlying
@@ -187,6 +196,16 @@ export interface PromotionCode extends Resource<
  *   coupon: "25OFF",
  *   code: "WELCOME25",
  * });
+ * ```
+ *
+ * ### Looking up an existing promotion code
+ * `PromotionCode.lookup` references a promotion code Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing promotion code
+ * ```typescript
+ * const ref = Stripe.PromotionCode.lookup({ id: "promo_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -451,6 +470,11 @@ export const PromotionCodeProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const code = yield* toCode(id, olds?.code, output?.code);
       const existing = yield* observe({ id: output?.id, code });
@@ -488,10 +512,8 @@ export const PromotionCodeProvider = () =>
           ...(news.maxRedemptions !== undefined ? { max_redemptions: news.maxRedemptions } : {}),
           metadata,
           ...(createRestrictions !== undefined ? { restrictions: createRestrictions } : {}),
+          idempotencyKey: `alchemy-promotion-code-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-promotion-code-${instanceId}`,
-          }),
           Effect.catchTag("InvalidRequestError", (error) =>
             observe({ id: output?.id, code }).pipe(
               Effect.flatMap((found) =>

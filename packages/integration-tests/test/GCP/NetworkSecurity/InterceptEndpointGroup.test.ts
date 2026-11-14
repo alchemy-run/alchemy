@@ -6,6 +6,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -68,6 +69,13 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { vpc, collectors, group };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.InterceptEndpointGroup.lookup({
+          interceptEndpointGroupId: created.group.interceptEndpointGroupId,
+          location: created.group.location,
+        }),
+        created.group,
       );
 
       expect(created.group.name).toContain("/interceptEndpointGroups/");

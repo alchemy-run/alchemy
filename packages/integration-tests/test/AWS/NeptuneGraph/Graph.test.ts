@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 import NeptuneGraphTestFunctionLive, { FixtureGraph, NeptuneGraphTestFunction } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -81,7 +82,7 @@ const assertGraphGone = (graphId: string) =>
 // Lambda running openCypher through the ExecuteQuery binding — is skipped
 // under `--fast` and always destroys what it created.
 test.provider.skipIf(!!process.env.FAST)(
-  "create graph, query it from Lambda via ExecuteQuery, destroy",
+  "create graph, query it from Lambda via ExecuteQuery, destroy through an interruption",
   (stack) =>
     Effect.gen(function* () {
       // Clean slate in case a previous run died mid-flight.
@@ -177,8 +178,16 @@ test.provider.skipIf(!!process.env.FAST)(
       const snapshots = (yield* getJson("/snapshots")) as { graphSnapshots: unknown[] };
       expect(Array.isArray(snapshots.graphSnapshots)).toBe(true);
 
-      // Destroy immediately — the graph bills while it exists — and verify
-      // it is fully gone out-of-band.
+      // Destroy immediately — the graph bills while it exists. The destroy is
+      // interrupted once the graph is DELETING, so the next one has to finish
+      // a delete already under way. Then verify the graph is gone out-of-band.
+      yield* interruptDestroy(stack, {
+        status: neptunegraph
+          .getGraph({ graphIdentifier: graph.graphId })
+          .pipe(Effect.map((observed) => observed.status)),
+        deleting: "DELETING",
+        times: 90,
+      });
       yield* stack.destroy();
       yield* assertGraphGone(graph.graphId);
     }),

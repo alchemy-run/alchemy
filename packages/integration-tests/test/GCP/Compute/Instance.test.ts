@@ -7,6 +7,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -140,6 +141,10 @@ test.provider.skipIf(!!process.env.FAST)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.Instance.lookup({ instanceName: created.instanceName, zone: created.zone }),
+        created,
       );
 
       expect(created.instanceName).toEqual(expect.any(String));

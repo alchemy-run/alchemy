@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -181,8 +182,31 @@ export type RegionNetworkEndpointGroup = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionNetworkEndpointGroupLookup
 >;
+
+/**
+ * Props for {@link RegionNetworkEndpointGroup.lookup}: find a region
+ * network endpoint group this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface RegionNetworkEndpointGroupLookup {
+  /**
+   * NEG name.
+   */
+  networkEndpointGroupName: string;
+  /**
+   * Region the NEG lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine network endpoint group.
@@ -230,6 +254,19 @@ export type RegionNetworkEndpointGroup = Resource<
  *   pscTargetService: "us-central1-cloudkms.googleapis.com",
  *   subnetwork:
  *     "projects/{project}/regions/us-central1/subnetworks/default",
+ * });
+ * ```
+ *
+ * ### Looking up an existing region network endpoint group
+ * `RegionNetworkEndpointGroup.lookup` references a region network endpoint
+ * group Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared region network endpoint group.
+ *
+ * **Example:** Reference an existing region network endpoint group
+ * ```typescript
+ * const regionNetworkEndpointGroup = GCP.Compute.RegionNetworkEndpointGroup.lookup({
+ *   networkEndpointGroupName: "my-network-endpoint-group",
  * });
  * ```
  *
@@ -647,6 +684,14 @@ export const RegionNetworkEndpointGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ networkEndpointGroupName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, networkEndpointGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

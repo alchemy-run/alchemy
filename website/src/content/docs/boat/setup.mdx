@@ -1,0 +1,56 @@
+---
+title: Setup
+description: Install @alchemy.run/boat, sign in to Boat with a profile, and deploy from CI.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+You need:
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- A Boat account, from [boat.dev](https://boat.dev)
+
+## Add the provider
+
+Install `@alchemy.run/boat`:
+
+<PackageManagers add="@alchemy.run/boat" />
+
+Then add `Boat.providers()` next to your cloud's providers:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+## Sign in
+
+<PackageManagers run="alchemy profile edit --add Boat" />
+
+Pick **Browser sign-in** and enter your Boat account's email. Alchemy opens a Boat page: sign in there the way you signed up (GitHub, Google or an email code), and type the code your terminal shows. Alchemy stores the API key Boat issues, which lasts a year and renews itself before it expires.
+
+To paste a key from the dashboard's **API Keys** tab instead, pick **API key**. Give it the `admin` preset: deploying creates keys for your Workers and Functions.
+
+## Deploy from CI
+
+Set `BOAT_API_KEY`, and Alchemy uses it instead of your profile:
+
+<PackageManagers script={`BOAT_API_KEY=boat_... {run} alchemy deploy`} />
+
+See [Account & API keys](/boat/account-and-keys#deploy-from-ci-with-a-key).
+
+Next, build the [tutorial](/boat/tutorial/part-1).

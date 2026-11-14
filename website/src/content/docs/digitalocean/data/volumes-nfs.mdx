@@ -1,0 +1,78 @@
+---
+title: Volumes and NFS
+description: Give Droplets disks that outlive them with Block Storage Volumes, share files between Droplets and Kubernetes nodes with managed NFS, and snapshot Volumes.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+DigitalOcean has two kinds of network storage for machines. A **Volume** is a block device: a disk that attaches to one Droplet at a time and keeps its data when that Droplet is replaced. A **Network File Storage** share (NFS) is a file system that many Droplets and Kubernetes nodes in the same VPC mount at once.
+
+<Tree
+  nodes={[
+    {
+      id: "vpc", label: "app-vpc", type: "VPC · nyc3", icon: "network", dashed: true,
+      areas: ["data a", "shared shared", ". b"],
+      phoneAreas: ["a data", "shared shared", "b ."],
+      colGap: 9,
+    },
+    { id: "a", label: "Web1", type: "Droplet", parent: "vpc", tone: "accent", icon: "server" },
+    { id: "b", label: "Web2", type: "Droplet", parent: "vpc", tone: "accent", icon: "server" },
+    { id: "data", label: "Data", type: "Volume · 10 GiB", parent: "vpc", icon: "hard-drive" },
+    { id: "shared", label: "Shared", type: "NFS share · 50 GiB", parent: "vpc", icon: "folder" },
+  ]}
+  links={[
+    { from: "data", to: "a", label: "disk" },
+    { from: "shared", to: "a", label: "mounted" },
+    { from: "shared", to: "b", label: "mounted" },
+  ]}
+  caption="A Volume attaches to one Droplet. An NFS share is mounted by every Droplet in its VPC that needs it."
+/>
+
+## Create a Volume
+
+```typescript
+const data = yield* DigitalOcean.Volume("Data", {
+  region: "nyc3",
+  sizeGigabytes: 10,
+  filesystemType: "ext4",
+});
+```
+
+Give it to a Droplet in the same region with `volumes: [data.volumeId]` on the Droplet, or attach it to one that already exists:
+
+```typescript
+yield* DigitalOcean.VolumeAttachment("DataOnHost", {
+  volumeId: data.volumeId,
+  dropletId: host.dropletId,
+});
+```
+
+Growing `sizeGigabytes` resizes the Volume in place; grow the file system on the Droplet afterwards.
+
+## Snapshot a Volume
+
+```typescript
+const snap = yield* DigitalOcean.VolumeSnapshot("Nightly", { volumeId: data.volumeId });
+```
+
+Pass `snapshotId` to a new Volume to start it from the snapshot.
+
+## Share files with NFS
+
+```typescript
+const vpc = yield* DigitalOcean.Vpc("AppVpc", { region: "nyc3" });
+const shared = yield* DigitalOcean.Nfs("Shared", {
+  region: "nyc3",
+  sizeGib: 50,
+  vpcIds: [vpc.vpcId],
+});
+```
+
+Droplets and Kubernetes nodes in the VPC mount it at `shared.host`:`shared.mountPath`. `performanceTier: "high"` gives it more throughput.
+
+## Limits
+
+- A Volume and its Droplet must be in the same region, and a Volume attaches to one Droplet at a time.
+- NFS is reachable only from inside its VPCs, and only in the regions that offer it.
+
+See [Droplets](/digitalocean/compute/droplets) for disks a Droplet keeps on its own.

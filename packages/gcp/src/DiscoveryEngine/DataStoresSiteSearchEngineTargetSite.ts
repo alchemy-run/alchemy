@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { expandDataStore, matchesUriPattern, parseResourceName } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
@@ -68,8 +69,32 @@ export type DataStoresSiteSearchEngineTargetSite = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataStoresSiteSearchEngineTargetSiteLookup
 >;
+
+/**
+ * Props for {@link DataStoresSiteSearchEngineTargetSite.lookup}: find a
+ * data stores site search engine target site this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface DataStoresSiteSearchEngineTargetSiteLookup {
+  /**
+   * Identifies the target site within the data store.
+   */
+  providedUriPattern: string;
+  /**
+   * Parent Data Store resource name
+   * `projects/{project}/locations/{location}/dataStores/{dataStore}`. The
+   * data store must use `PUBLIC_WEBSITE` content.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Search TargetSite under a Data Store site search engine.
@@ -103,6 +128,21 @@ export type DataStoresSiteSearchEngineTargetSite = Resource<
  *     type: "EXCLUDE",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing data stores site search engine target site
+ * `DataStoresSiteSearchEngineTargetSite.lookup` references a data stores
+ * site search engine target site Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared data stores site
+ * search engine target site.
+ *
+ * **Example:** Reference an existing data stores site search engine target site
+ * ```typescript
+ * const dataStoresSiteSearchEngineTargetSite = GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSite.lookup({
+ *   providedUriPattern: "my-provided-uri-pattern",
+ *   dataStore: "my-data-store",
+ * });
  * ```
  *
  * @resource
@@ -209,6 +249,21 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ providedUriPattern, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = dataStore ? expandDataStore(dataStore, env.project, "global") : undefined;
+      const existing =
+        providedUriPattern === undefined
+          ? undefined
+          : yield* findByPattern(
+              providedUriPattern,
+              parent ? siteSearchEngine(parent) : undefined,
+              undefined,
+            );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, providedUriPattern);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

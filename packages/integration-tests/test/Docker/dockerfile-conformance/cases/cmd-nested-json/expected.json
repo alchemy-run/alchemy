@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "when using JSON array syntax, arrays must be comprised of strings only"
+}

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({
   providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
@@ -65,6 +66,13 @@ test.provider(
             sourceContents: SOURCE_V1,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Workflows.Workflow.lookup({
+          workflowId: created.workflowId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.workflowId).toEqual(expect.any(String));

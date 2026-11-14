@@ -1,0 +1,168 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "ubuntu:12.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "EXPOSE",
+          "line": 3,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 4,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 5,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 6,
+          "flags": []
+        },
+        {
+          "tag": "RUN",
+          "line": 8,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \u0026\u0026 apt-get install libc6-dev-i386 curl unzip -y"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 9,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "mkdir -p /steam"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 10,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "curl http://media.steampowered.com/client/steamcmd_linux.tar.gz | tar vxz -C /steam"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 11,
+          "flags": [],
+          "sources": [
+            "./script"
+          ],
+          "destination": "/steam/script"
+        },
+        {
+          "tag": "RUN",
+          "line": 12,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "/steam/steamcmd.sh +runscript /steam/script"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 13,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "curl http://mirror.pointysoftware.net/alliedmodders/mmsource-1.10.0-linux.tar.gz | tar vxz -C /steam/tf2/tf"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 14,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "curl http://mirror.pointysoftware.net/alliedmodders/sourcemod-1.5.3-linux.tar.gz | tar vxz -C /steam/tf2/tf"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 15,
+          "flags": [],
+          "sources": [
+            "./server.cfg"
+          ],
+          "destination": "/steam/tf2/tf/cfg/server.cfg"
+        },
+        {
+          "tag": "ADD",
+          "line": 16,
+          "flags": [],
+          "sources": [
+            "./ctf_2fort.cfg"
+          ],
+          "destination": "/steam/tf2/tf/cfg/ctf_2fort.cfg"
+        },
+        {
+          "tag": "ADD",
+          "line": 17,
+          "flags": [],
+          "sources": [
+            "./sourcemod.cfg"
+          ],
+          "destination": "/steam/tf2/tf/cfg/sourcemod/sourcemod.cfg"
+        },
+        {
+          "tag": "RUN",
+          "line": 18,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "rm -r /steam/tf2/tf/addons/sourcemod/configs"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 19,
+          "flags": [],
+          "sources": [
+            "./configs"
+          ],
+          "destination": "/steam/tf2/tf/addons/sourcemod/configs"
+        },
+        {
+          "tag": "RUN",
+          "line": 20,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "mkdir -p /steam/tf2/tf/addons/sourcemod/translations/en"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 21,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cp /steam/tf2/tf/addons/sourcemod/translations/*.txt /steam/tf2/tf/addons/sourcemod/translations/en"
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 23,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /steam/tf2 \u0026\u0026 ./srcds_run -port 27015 +ip 0.0.0.0 +map ctf_2fort -autoupdate -steam_dir /steam -steamcmd_script /steam/script +tf_bot_quota 12 +tf_bot_quota_mode fill"
+          }
+        }
+      ]
+    }
+  ]
+}

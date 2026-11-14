@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -102,8 +103,33 @@ export type CustomConstraint = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CustomConstraintLookup
 >;
+
+/**
+ * Props for {@link CustomConstraint.lookup}: find a custom constraint this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CustomConstraintLookup {
+  /**
+   * Constraint id (the `{customConstraint}` segment of
+   * `organizations/{organization}/customConstraints/{customConstraint}`).
+   * Must start with `custom.` and contain only letters, digits, and
+   * periods.
+   */
+  constraintId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Organization Policy custom constraint.
@@ -156,6 +182,19 @@ export type CustomConstraint = Resource<
  *   condition: "resource.name.startsWith('tmp-')",
  *   actionType: "DENY",
  *   displayName: "Deny tmp VMs",
+ * });
+ * ```
+ *
+ * ### Looking up an existing custom constraint
+ * `CustomConstraint.lookup` references a custom constraint Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * custom constraint.
+ *
+ * **Example:** Reference an existing custom constraint
+ * ```typescript
+ * const customConstraint = GCP.OrgPolicy.CustomConstraint.lookup({
+ *   constraintId: "my-constraint",
  * });
  * ```
  *
@@ -399,6 +438,15 @@ export const CustomConstraintProvider = () =>
         deleteFirst: !idChanged && !orgChanged,
       };
     }),
+
+    lookup: Effect.fn(function* ({ constraintId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* tryResolveOrganization(lookupOrganization);
+      const name = organization !== undefined ? resourceName(organization, constraintId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

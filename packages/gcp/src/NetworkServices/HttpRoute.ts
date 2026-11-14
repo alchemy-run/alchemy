@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type {
@@ -292,8 +293,33 @@ export type HttpRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  HttpRouteLookup
 >;
+
+/**
+ * Props for {@link HttpRoute.lookup}: find a http route this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface HttpRouteLookup {
+  /**
+   * HttpRoute id (the `{httpRoute}` segment of
+   * `projects/{project}/locations/{location}/httpRoutes/{httpRoute}`). Must
+   * be 1-63 characters and not start with a number.
+   */
+  httpRouteId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Services HttpRoute — how a Mesh or Gateway routes HTTP
@@ -331,6 +357,19 @@ export type HttpRoute = Resource<
  *       action: { directResponse: { status: 200, stringBody: "ok" } },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing http route
+ * `HttpRoute.lookup` references a http route Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * http route.
+ *
+ * **Example:** Reference an existing http route
+ * ```typescript
+ * const httpRoute = GCP.NetworkServices.HttpRoute.lookup({
+ *   httpRouteId: "my-http-route",
  * });
  * ```
  *
@@ -570,6 +609,15 @@ export const HttpRouteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ httpRouteId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, httpRouteId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

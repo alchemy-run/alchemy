@@ -1,0 +1,168 @@
+---
+title: "Part 2: Signed-In Members"
+description: Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the pool.
+sidebar:
+  order: 2
+---
+
+Anyone can join a room under any name. In this part, a room takes the member's name from a token instead, checked by RPC middleware before the handler runs.
+
+## Declare the middleware
+
+```diff lang="typescript"
++// src/Auth.ts
++import * as Context from "effect/Context";
++import { RpcMiddleware } from "effect/rpc";
++import * as Schema from "effect/Schema";
++
++export class CurrentUser extends Context.Service<CurrentUser, { readonly name: string }>()(
++  "CurrentUser",
++) {}
++
++export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
++
++export class Auth extends RpcMiddleware.Service<Auth, { provides: CurrentUser }>()("Auth", {
++  error: Unauthorized,
++  requiredForClient: true,
++}) {}
+```
+
+`Auth` is Effect's RPC middleware. It provides `CurrentUser` to the handler, fails with `Unauthorized` when it can't, and needs the caller to do its part.
+
+## Check the token on the runner
+
+```diff lang="typescript"
+// src/Auth.ts
+import * as Context from "effect/Context";
++import * as Effect from "effect/Effect";
++import * as Headers from "effect/http/Headers";
++import * as Layer from "effect/Layer";
+import { RpcMiddleware } from "effect/rpc";
+import * as Schema from "effect/Schema";
+export class Auth extends RpcMiddleware.Service<Auth, { provides: CurrentUser }>()("Auth", {
+  error: Unauthorized,
+  requiredForClient: true,
+}) {}
++
++export const AuthLive = Layer.succeed(Auth, (effect, { headers }) => {
++  const token = headers["x-member"];
++  return token
++    ? Effect.provideService(effect, CurrentUser, { name: token })
++    : Effect.fail(new Unauthorized());
++});
+```
+
+`AuthLive` runs on the runner before every handler that uses `Auth`. Here a token is just the member's name; a real one would verify a signature.
+
+## Send the token from the caller
+
+```diff lang="typescript"
+// src/Auth.ts
+export const AuthLive = Layer.succeed(Auth, (effect, { headers }) => {
+  const token = headers["x-member"];
+  return token
+    ? Effect.provideService(effect, CurrentUser, { name: token })
+    : Effect.fail(new Unauthorized());
+});
++
++export class MemberToken extends Context.Service<MemberToken, string>()("MemberToken") {}
++
++export const AuthClient = RpcMiddleware.layerClient(Auth, ({ request, next }) =>
++  Effect.gen(function* () {
++    // Read per call: the API provides it for each request.
++    const token = yield* Effect.serviceOption(MemberToken);
++    return yield* next(
++      token._tag === "Some"
++        ? { ...request, headers: Headers.set(request.headers, "x-member", token.value) }
++        : request,
++    );
++  }),
++);
+```
+
+`AuthClient` runs in the caller and puts the token on each request.
+
+## Require it on Join
+
+```diff lang="typescript"
+// src/Room.ts
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
++import { Auth } from "./Auth.ts";
+
+export class Room extends Cluster.Entity<Room>()("Room", [
+-  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
++  Rpc.make("Join", { success: Schema.Int }).middleware(Auth),
+]) {}
+```
+
+`Join` no longer takes a name: the middleware supplies it.
+
+## Read the member in the handler
+
+```diff lang="typescript"
+// src/RoomLive.ts
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
++import { AuthLive, CurrentUser } from "./Auth.ts";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+      return Room.of({
+-        Join: ({ payload }) =>
+-          Ref.modify(members, (all) => {
+-            const next = new Set(all).add(payload.name);
+-            return [next.size, next];
+-          }),
++        Join: () =>
++          Effect.gen(function* () {
++            const user = yield* CurrentUser;
++            return yield* Ref.modify(members, (all) => {
++              const next = new Set(all).add(user.name);
++              return [next.size, next];
++            });
++          }),
+      });
+    });
+-  }).pipe(Effect.provide(Default)),
++  }).pipe(Effect.provide(Default.pipe(Layer.provide(AuthLive)))),
+);
+```
+
+`AuthLive` is provided with the pool, which carries it to the room on every runner. Leave it out and the deploy fails, naming the RPC that needs it.
+
+## Pass the token from the API
+
+```diff lang="typescript"
+// src/Api.ts
++import { AuthClient, MemberToken } from "./Auth.ts";
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
+-        const [, room = "lobby", name = "guest"] = url.pathname.split("/");
++        const [, room = "lobby"] = url.pathname.split("/");
+        const target = yield* rooms.getByName(room);
+-        return yield* HttpServerResponse.json({ members: yield* target.Join({ name }) });
+-      }).pipe(Effect.orDie),
++        return yield* target.Join().pipe(
++          Effect.provideService(MemberToken, request.headers["x-member"] ?? ""),
++          Effect.flatMap((members) => HttpServerResponse.json({ members })),
++          Effect.catchTag("Unauthorized", () =>
++            HttpServerResponse.json({ error: "sign in" }, { status: 401 }),
++          ),
++        );
++      }).pipe(Effect.provide(AuthClient), Effect.orDie),
+```
+
+The API forwards the caller's token. `Unauthorized` comes back with its tag, so the API turns it into a 401.
+
+```sh
+alchemy deploy
+curl localhost:8080/lobby
+# {"error":"sign in"}
+curl -H "x-member: sam" localhost:8080/lobby
+# {"members":1}
+```
+
+Next, invite people to a room and wait for their answer, in [Part 3](/cluster/tutorial/part-3).

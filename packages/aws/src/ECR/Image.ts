@@ -1,3 +1,4 @@
+import { type BuildCacheOptions, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -75,6 +76,8 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform?: string;
     /** Docker build arguments. */
     buildArgs?: Record<string, string>;
+    /** BuildKit layer cache; `true` keeps it at `<repositoryUri>:buildcache`. */
+    cache?: BuildCacheOptions["cache"];
     /** Additional arguments appended to `docker image build`. */
     args?: string[];
   },
@@ -87,6 +90,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform: options.platform,
     "build-arg": options.buildArgs,
     args: options.args,
+    ...imageBuildCacheOptions(options, options.imageUri, credentials),
   });
   // Pushes are idempotent; transient registry-transport failures (Docker
   // Desktop's embedded proxy timing out under load, ECR 503s, credential
@@ -134,6 +138,17 @@ export interface ImageProps {
    * Docker build arguments (`--build-arg`).
    */
   buildArgs?: Record<string, string>;
+  /**
+   * Keep build layers in a remote cache so a fresh builder (a new CI runner)
+   * skips unchanged steps. `true` keeps every stage's layers at the
+   * repository's `:buildcache` tag; pass BuildKit's `--cache-from` /
+   * `--cache-to` values as `{ from, to }` for another
+   * [backend](https://docs.docker.com/build/cache/backends/). An explicit
+   * ECR registry cache needs `image-manifest=true,oci-mediatypes=true`,
+   * which `true` sets. The cache is not part of the content hash.
+   * @default false
+   */
+  cache?: BuildCacheOptions["cache"];
 }
 
 export interface Image extends Resource<
@@ -235,6 +250,33 @@ export interface ImageLookup {
  *   dockerfile: "Dockerfile.worker",
  *   platform: "linux/arm64",
  *   buildArgs: { NODE_ENV: "production" },
+ * });
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the ECR repository
+ * ```typescript
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   context: "./app",
+ *   cache: true,
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   context: "./app",
+ *   cache: {
+ *     from: ["type=gha,scope=app"],
+ *     to: ["type=gha,scope=app,mode=max"],
+ *   },
  * });
  * ```
  *
@@ -428,6 +470,7 @@ export const ImageProvider = () =>
             dockerfile,
             platform: news.platform ?? "linux/amd64",
             buildArgs: news.buildArgs,
+            cache: news.cache,
             // Engines using the containerd image store attach provenance
             // attestations by default, turning the pushed tag into an OCI
             // image index — which Lambda (a valid consumer of these images)

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,8 +93,37 @@ export type OdbNetworksOdbSubnet = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OdbNetworksOdbSubnetLookup
 >;
+
+/**
+ * Props for {@link OdbNetworksOdbSubnet.lookup}: find an odb networks odb
+ * subnet this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface OdbNetworksOdbSubnetLookup {
+  /**
+   * ODB Subnet id (the `{odb_subnet}` segment of
+   * `.../odbNetworks/{odb_network}/odbSubnets/{odb_subnet}`).
+   */
+  odbSubnetId: string;
+  /**
+   * Region used when `odbNetwork` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent ODB Network. Full name
+   * `projects/{project}/locations/{location}/odbNetworks/{odb_network}` or
+   * the network id (combined with `location`).
+   */
+  odbNetwork: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Database@Google Cloud ODB Subnet inside an ODB Network.
@@ -120,6 +150,20 @@ export type OdbNetworksOdbSubnet = Resource<
  *   cidrRange: "10.250.0.32/27",
  *   purpose: "BACKUP_SUBNET",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing odb networks odb subnet
+ * `OdbNetworksOdbSubnet.lookup` references an odb networks odb subnet
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared odb networks odb subnet.
+ *
+ * **Example:** Reference an existing odb networks odb subnet
+ * ```typescript
+ * const odbNetworksOdbSubnet = GCP.OracleDatabase.OdbNetworksOdbSubnet.lookup({
+ *   odbSubnetId: "my-odb-subnet",
+ *   odbNetwork: "my-odb-network",
  * });
  * ```
  *
@@ -225,6 +269,20 @@ export const OdbNetworksOdbSubnetProvider = () =>
         extra: previousPurpose !== nextPurpose || previousCidr !== nextCidr,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      odbSubnetId,
+      location: lookupLocation,
+      odbNetwork: lookupOdbNetwork,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const odbNetwork = networkOf(lookupOdbNetwork ?? "", env.project, location);
+      const name = resourceName(odbNetwork, odbSubnetId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

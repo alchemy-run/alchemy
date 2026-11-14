@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -131,8 +132,33 @@ export type CaPool = Resource<
     encryptionSpec: EncryptionSpec | undefined;
   },
   never,
-  Providers
+  Providers,
+  CaPoolLookup
 >;
+
+/**
+ * Props for {@link CaPool.lookup}: find a ca pool this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface CaPoolLookup {
+  /**
+   * CaPool id (the `{caPool}` segment of
+   * `projects/{project}/locations/{location}/caPools/{caPool}`). Must match
+   * `[a-zA-Z0-9_-]{1,63}`.
+   */
+  caPoolId: string;
+  /**
+   * Certificate Authority Service location (`us-central1`, `us-east1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Authority Service CaPool — a group of Certificate
@@ -179,6 +205,16 @@ export type CaPool = Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing ca pool
+ * `CaPool.lookup` references a ca pool Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared ca pool.
+ *
+ * **Example:** Reference an existing ca pool
+ * ```typescript
+ * const caPool = GCP.PrivateCA.CaPool.lookup({ caPoolId: "my-ca-pool" });
  * ```
  *
  * @resource
@@ -450,6 +486,15 @@ export const CaPoolProvider = () =>
           !idChanged && !locationChanged && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ caPoolId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, caPoolId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -313,15 +313,17 @@ export interface ReadUploadArtifactInput {
   output?: "bytes" | "file";
 }
 
+type ReadUploadArtifactError = Effect.Error<ReturnType<typeof readUploadArtifactInternal>>;
+
 export function readUploadArtifact(
   input: ReadUploadArtifactInput & { readonly output: "file" },
-): Effect.Effect<ArtifactFile | undefined, Error, Path.Path>;
+): Effect.Effect<ArtifactFile | undefined, ReadUploadArtifactError, Path.Path>;
 export function readUploadArtifact(
   input: ReadUploadArtifactInput & { readonly output?: "bytes" },
-): Effect.Effect<Uint8Array | undefined, Error, Path.Path>;
+): Effect.Effect<Uint8Array | undefined, ReadUploadArtifactError, Path.Path>;
 export function readUploadArtifact(
   input: ReadUploadArtifactInput,
-): Effect.Effect<Uint8Array | ArtifactFile | undefined, Error, Path.Path>;
+): Effect.Effect<Uint8Array | ArtifactFile | undefined, ReadUploadArtifactError, Path.Path>;
 export function readUploadArtifact(input: ReadUploadArtifactInput) {
   return readUploadArtifactInternal(input);
 }
@@ -638,7 +640,7 @@ const ProviderLive = () =>
             }
           }
           let createdDeploymentId: string | undefined;
-          const cleanupCreatedDeploymentOnFailure = (failedDeploymentId: string, error: unknown) =>
+          const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
             createdDeploymentId === failedDeploymentId
               ? destroyDeployment(failedDeploymentId).pipe(
                   Effect.mapError((cleanupError) =>
@@ -669,7 +671,9 @@ const ProviderLive = () =>
             if (artifact !== undefined && !created.uploadUrl) {
               return yield* cleanupCreatedDeploymentOnFailure(
                 created.id,
-                new Error("Prisma deployment creation did not return an upload URL."),
+                new DeploymentOperationFailed({
+                  message: "Prisma deployment creation did not return an upload URL.",
+                }),
               );
             }
             if (created.uploadUrl && artifact !== undefined) {

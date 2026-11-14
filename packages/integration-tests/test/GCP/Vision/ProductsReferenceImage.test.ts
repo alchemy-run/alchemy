@@ -8,6 +8,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -111,6 +112,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { product, image };
         }),
+      );
+      yield* expectFound(
+        GCP.Vision.ProductsReferenceImage.lookup({
+          location: created.image.location,
+          parent: created.image.parent,
+          referenceImageId: created.image.referenceImageId,
+        }),
+        created.image,
       );
 
       expect(created.image.name).toContain("/referenceImages/");

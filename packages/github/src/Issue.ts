@@ -104,8 +104,27 @@ export interface Issue extends Resource<
     updatedAt: string;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  IssueLookup
 > {}
+
+/**
+ * Props for {@link Issue.lookup}: find an issue this stack
+ * doesn't manage by its repository and number.
+ */
+export interface IssueLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Issue number. */
+  number: number;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub repository issue.
@@ -189,6 +208,17 @@ export interface Issue extends Resource<
  * })
  * ```
  *
+ * ### Looking up an existing issue
+ * `Issue.lookup` references an issue Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ * A pull request's number finds nothing: use `PullRequest.lookup`.
+ *
+ * **Example:** Comment on an existing issue
+ * ```typescript
+ * const issue = GitHub.Issue.lookup({ owner: "alchemy-run", repository: "alchemy", number: 42 });
+ * ```
+ *
  * @resource
  * @product Issue
  */
@@ -215,6 +245,24 @@ export const IssueProvider = () =>
         return { action: "replace" };
       }
     }),
+
+    lookup: Effect.fn(
+      function* ({ owner, repository, number }) {
+        const issue = yield* Issues.get({ owner, repo: repository, issue_number: number }).pipe(
+          Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined),
+        );
+        if (issue === undefined || issue.pull_request) return undefined;
+        return {
+          issueNumber: issue.number,
+          nodeId: issue.node_id,
+          htmlUrl: issue.html_url,
+          state: issue.state as "open" | "closed",
+          createdAt: issue.created_at,
+          updatedAt: issue.updated_at,
+        };
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
 
     reconcile: Effect.fn(
       function* ({ news, output }) {

@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -154,8 +155,32 @@ export type Repository = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 >;
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RepositoryLookup {
+  /**
+   * Repository id (the `{repository}` segment of
+   * `projects/{project}/locations/{location}/repositories/{repository}`).
+   */
+  repositoryId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataform Git repository — the container for workspaces, release
@@ -180,6 +205,19 @@ export type Repository = Resource<
  *   repositoryId: "analytics",
  *   location: "us-central1",
  *   displayName: "analytics",
+ * });
+ * ```
+ *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * repository.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const repository = GCP.Dataform.Repository.lookup({
+ *   repositoryId: "my-repository",
  * });
  * ```
  *
@@ -259,6 +297,15 @@ export const RepositoryProvider = () =>
           news.kmsKeyName !== previousKey,
       });
     }),
+
+    lookup: Effect.fn(function* ({ repositoryId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, repositoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

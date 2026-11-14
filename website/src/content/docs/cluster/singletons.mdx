@@ -1,0 +1,127 @@
+---
+title: Singletons
+description: Run one fiber across the whole cluster with an Effect Cluster singleton — on exactly one runner, moved when that runner stops.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A singleton is one fiber that runs on exactly one runner. When that runner stops, another runner starts it. Use it for work that must not run twice at once: a poller, a leader's loop, a queue consumer.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "r1", label: "Runner 1" },
+    { id: "r2", label: "Runner 2" },
+  ]}
+  bars={[
+    { lane: "r1", start: 0, end: 5, label: "Sweeper", tone: "accent" },
+    { lane: "r1", start: 5, end: 7, label: "stopped", tone: "warn" },
+    { lane: "r2", start: 6.5, end: 10, label: "Sweeper", tone: "accent" },
+  ]}
+  marks={[{ at: 5, label: "Runner 1 stops" }]}
+  caption="The Sweeper runs on Runner 1 until it stops. Once its shard lock lapses, Runner 2 takes the shard and starts the fiber. It never runs on both."
+/>
+
+## Declare and implement it
+
+A singleton is declared by name, with an Effect that resolves bindings once per runner and returns the fiber:
+
+```typescript title="src/Sweeper.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { Default } from "./Cluster.ts";
+import Room from "./Room.ts";
+
+export default class Sweeper extends Cluster.Singleton<Sweeper>()(
+  "Sweeper",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.gen(function* () {
+      const lobby = yield* rooms.getByName("lobby");
+      const members = yield* lobby.Members();
+      yield* Effect.logInfo(`lobby has ${members.length} members`);
+    }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.orDie);
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+Every runner builds the outer Effect. Only the runner that owns the singleton runs the fiber it returns.
+
+## Deploy it
+
+Nothing calls a singleton, so nothing else yields it. `yield*` it in the Stack:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import Sweeper from "./src/Sweeper.ts";
+
+export default Alchemy.Stack(
+  "Rooms",
+  { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) },
+  Effect.gen(function* () {
+    yield* Sweeper;
+    const api = yield* Api;
+    return { api: api.name };
+  }),
+);
+```
+
+Runners hand a singleton over through their shard locks, so while shards settle, after a deploy or when a runner starts, it can move once or twice. It never runs on two runners at once.
+
+## Declare it on its own
+
+A singleton can also be declared by name alone and implemented with `.make`, which returns a Layer, as an [entity](/cluster/entities#keep-its-code-out-of-its-callers) split from its callers is. Nothing calls a singleton, so there is no caller to keep its code from; split it when you keep every implementation as a Layer:
+
+```typescript title="src/Sweeper.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+
+export class Sweeper extends Cluster.Singleton<Sweeper>()("Sweeper") {}
+```
+
+```typescript title="src/SweeperLive.ts"
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { Default } from "./Cluster.ts";
+import Room from "./Room.ts";
+import { Sweeper } from "./Sweeper.ts";
+
+export default Sweeper.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.gen(function* () {
+      const lobby = yield* rooms.getByName("lobby");
+      const members = yield* lobby.Members();
+      yield* Effect.logInfo(`lobby has ${members.length} members`);
+    }).pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.orDie);
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+Provide the Layer to the Stack, next to the rest of your implementations:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import SweeperLive from "./src/SweeperLive.ts";
+
+export default Alchemy.Stack(
+  "Rooms",
+  { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { api: api.name };
+  }).pipe(Effect.provide(SweeperLive)),
+);
+```

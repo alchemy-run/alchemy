@@ -6,6 +6,7 @@ import * as vmwareengine from "@distilled.cloud/gcp/vmwareengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -80,6 +81,21 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { ven, policy, rule };
         }),
+      );
+      yield* expectFound(
+        GCP.VMwareEngine.NetworkPoliciesExternalAccessRule.lookup({
+          externalAccessRuleId: created.rule.externalAccessRuleId,
+          location: created.rule.location,
+          networkPolicy: created.rule.networkPolicy,
+        }),
+        created.rule,
+      );
+      yield* expectFound(
+        GCP.VMwareEngine.NetworkPolicy.lookup({
+          networkPolicyId: created.policy.networkPolicyId,
+          location: created.policy.location,
+        }),
+        created.policy,
       );
 
       expect(created.rule.name).toContain("/externalAccessRules/");

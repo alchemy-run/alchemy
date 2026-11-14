@@ -1,9 +1,10 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
 /** @effect-diagnostics layerMergeAllWithDependencies:off */
-import { isRetryable, isThrottlingError, isTransientError } from "@distilled.cloud/aws/Category";
+import { isRetryable, isThrottlingError } from "@distilled.cloud/aws/Category";
 import { capped, jittered, Retry, type Factory as RetryFactory } from "@distilled.cloud/aws/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import * as Command from "alchemy/Command";
+import { isTransient } from "alchemy/DeployRetry";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
@@ -1411,11 +1412,11 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
-          // Live-only: floci does not emulate Web Functions, so `alchemy dev`
-          // deploys them to AWS like any mode-agnostic provider.
-          Lambda.WebFunctionProvider(),
-          Lambda.WebFunctionEndpointProvider(),
-          Lambda.WebFunctionPermissionProvider(),
+          // Requires the alchemy floci fork ≥ 2.4.0-alchemy.1, which serves
+          // the Web Function API (web functions, revisions, endpoints).
+          flociDual(Lambda.WebFunction, () => Lambda.WebFunctionProvider()),
+          flociDual(Lambda.WebFunctionEndpoint, () => Lambda.WebFunctionEndpointProvider()),
+          flociDual(Lambda.WebFunctionPermission, () => Lambda.WebFunctionPermissionProvider()),
           flociDual(Logs.Destination, () => Logs.DestinationProvider()),
           flociDual(Logs.LogGroup, () => Logs.LogGroupProvider()),
           flociDual(Logs.LogStream, () => Logs.LogStreamProvider()),
@@ -1903,6 +1904,7 @@ export const providers = () =>
     // at the stack level lets `Capability.execute(...)` Outputs (e.g.
     // `AWS.EC2.getAmi`) resolve during plan.
     Layer.provideMerge(EC2.GetAmiHttp),
+    Layer.provideMerge(EC2.GetManagedPrefixListHttp),
     // Fresh per call: these derive from the environment below, and shared
     // (memoized) instances built for another environment in the same run
     // would shadow an `AWSEnvironment` provided to this layer.
@@ -2041,7 +2043,7 @@ const awsRetryFactory: RetryFactory = (lastError) => {
     while: (error) => {
       if (isConnectFailure(error)) return ++connectFailures <= 3;
       return (
-        isTransientError(error) ||
+        isTransient(error) ||
         isThrottlingError(error) ||
         isRetryable(error) ||
         isHttpTransportError(error)

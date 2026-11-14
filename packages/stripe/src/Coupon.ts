@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteCoupon,
   GetCoupons,
@@ -146,8 +145,18 @@ export type Coupon = Resource<
     metadata: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CouponLookup
 >;
+
+/**
+ * Props for {@link Coupon.lookup}: find a coupon this stack
+ * doesn't manage by its id.
+ */
+export interface CouponLookup {
+  /** Stripe coupon id, e.g. `"SUMMER25"`. */
+  id: string;
+}
 
 /**
  * A Stripe Coupon — a percent-off or amount-off discount applied to
@@ -201,6 +210,16 @@ export type Coupon = Resource<
  *   name: "Welcome 20% (updated)",
  *   metadata: { campaign: "spring" },
  * });
+ * ```
+ *
+ * ### Looking up an existing coupon
+ * `Coupon.lookup` references a coupon Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing coupon
+ * ```typescript
+ * const ref = Stripe.Coupon.lookup({ id: "SUMMER25" });
  * ```
  *
  * @resource
@@ -405,6 +424,11 @@ export const CouponProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -452,11 +476,8 @@ export const CouponProvider = () =>
             ? { applies_to: { products: news.appliesTo.products } }
             : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-coupon-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-coupon-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

@@ -3,29 +3,24 @@ title: What is Turso?
 description: The concepts behind Turso — organizations, groups, locations, SQLite databases, tokens, connections, migrations, copies and a database per tenant — and how @alchemy.run/turso models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Turso hosts SQLite databases for you. Each database is a whole SQLite file, run by Turso and reached over the network, and making one is so cheap that you can have thousands: one per customer, one per pull request, one per user.
 
 Take one small app: a Worker with a database of its own, plus a database per customer. An organization holds a group in one location. The group holds the app's database and one database per tenant, and Workers reach them with tokens.
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Worker", type: "group token", col: 0, row: 0 },
-    { id: "app", label: "app", type: "database", tone: "accent", col: 1, row: 0 },
-    { id: "a", label: "tenant-a", type: "database", col: 2, row: 0 },
-    { id: "b", label: "tenant-b", type: "database", col: 3, row: 0 },
-    { id: "c", label: "tenant-c", type: "database", col: 1, row: 1 },
+    { id: "org", label: "acme", type: "organization", icon: "brand:turso" },
+    { id: "us", label: "default", type: "group · aws-us-east-1", parent: "org", dashed: true, icon: "map-pin" },
+    { id: "app", label: "app", type: "database", parent: "us", tone: "accent", icon: "database" },
+    { id: "a", label: "tenant-a", type: "database", parent: "us", icon: "database" },
+    { id: "b", label: "tenant-b", type: "database", parent: "us", icon: "database" },
+    { id: "eu", label: "eu", type: "group · aws-eu-west-1", parent: "org", dashed: true, icon: "map-pin" },
+    { id: "c", label: "tenant-c", type: "database", parent: "eu", icon: "database" },
   ]}
-  groups={[
-    { id: "org", label: "Organization acme", nodes: [] },
-    { id: "us", label: "Group default · aws-us-east-1", parent: "org", nodes: ["app", "a", "b"], dashed: true },
-    { id: "eu", label: "Group eu · aws-eu-west-1", parent: "org", nodes: ["c"], dashed: true },
-  ]}
-  edges={[
-    { from: "worker", to: "us" },
-  ]}
-  caption="An organization holds groups, and a group decides where its databases run. Every database in a group shares its location, so a tenant that must stay in Europe gets a database in a European group. A group token reaches every database in its group."
+  caption="An organization holds groups, and a group decides where its databases run. Every database in a group shares its location, so a tenant that must stay in Europe gets a database in a European group. A Worker holding the default group's token reaches every database in it."
 />
 
 ## Organizations

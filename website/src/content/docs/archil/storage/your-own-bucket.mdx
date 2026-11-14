@@ -1,0 +1,74 @@
+---
+title: Your own bucket
+description: Keep a disk's files as ordinary objects in your own S3, R2, GCS or Azure bucket, with no keys for S3.
+sidebar:
+  order: 4
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+A disk can keep its files in a bucket you own instead of Archil's. Archil still keeps the data in use in its storage layer, and copies writes to your bucket in the background, where they're ordinary objects any S3 tool can read without Archil. Destroying the disk leaves them there. Archil offers it on its paid plans.
+
+## Your bucket trusts Archil, no key needed
+
+On S3, the bucket's policy trusts Archil's IAM role for your region, only on behalf of disks in your organization, so no access key exists anywhere.
+
+<Boundaries
+  nodes={[
+    { id: "dataset", label: "Dataset", type: "disk · org acme", col: 1, row: 0, tone: "accent" },
+    { id: "store", label: "Store", type: "S3 Bucket · datasets/", col: 1, row: 1 },
+    { id: "theirs", label: "notes", type: "disk · another org", col: 0, row: 1 },
+  ]}
+  zones={[{ id: "aws", label: "AWS account", nodes: ["store"], labelAt: "right" }]}
+  links={[
+    { from: "dataset", to: "store", label: "Archil's role" },
+    { from: "theirs", to: "aws", kind: "blocked" },
+  ]}
+  caption="The bucket policy lets Archil's role in only for disks in your organization. A disk in another organization, using the same role, is refused."
+/>
+
+## A disk on an S3 bucket
+
+`ArchilAWS.S3Disk` declares the bucket policy and the disk together:
+
+```typescript title="src/storage.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as ArchilAWS from "@alchemy.run/archil/AWS";
+
+export const Store = AWS.S3.Bucket("Store", {});
+export const Dataset = ArchilAWS.S3Disk("Dataset", { bucket: Store, prefix: "datasets/" });
+```
+
+The disk's files land under `datasets/` in `Store`. Your Stack needs `AWS.providers()` next to `Archil.providers()`.
+
+## Set your organization id in the profile
+
+The policy is scoped to your Archil organization, so Alchemy needs its id. Enter it in your profile:
+
+```sh
+alchemy profile edit --add Archil
+```
+
+Or set `ARCHIL_ORGANIZATION` in CI. Find the id in the [console](https://console.archil.com).
+
+## Use another object store
+
+R2, Google Cloud Storage, Azure Blob and other S3-compatible stores take keys. Give them in `storage` on `Archil.Disk`:
+
+```typescript title="src/storage.ts"
+export const Dataset = Archil.Disk("Dataset", {
+  storage: {
+    type: "r2",
+    bucketName: "datasets",
+    bucketEndpoint: "https://<account>.r2.cloudflarestorage.com",
+    accessKeyId: Config.Redacted("R2_ACCESS_KEY_ID"),
+    secretAccessKey: Config.Redacted("R2_SECRET_ACCESS_KEY"),
+  },
+});
+```
+
+Changing `storage` replaces the disk.
+
+## The bucket sees writes a little later
+
+Archil writes to the bucket after the write is durable in its own storage, so a tool reading the bucket directly sees a new file a little later than a client of the disk does. Read through the disk when you need the latest write.

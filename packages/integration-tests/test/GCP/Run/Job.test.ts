@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import MarkerJob, { MARKER_OBJECT } from "./fixtures/job.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -44,6 +45,10 @@ test.provider(
             containers: [{ image: IMAGE }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Run.Job.lookup({ jobId: created.jobId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/jobs/");

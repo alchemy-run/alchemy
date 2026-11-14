@@ -1,0 +1,122 @@
+---
+title: Network and previews
+description: What a Daytona sandbox can reach — your organization's tier, domain and CIDR allowlists, no network at all — and how preview URLs let the outside reach a port inside it.
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+Daytona controls a sandbox's network from outside the sandbox, so nothing running inside it can turn the limits off. Two layers decide what goes out. Your organization's **tier** sets the floor: below Tier 3, sandboxes reach only an allowlist of essential services, such as package registries, GitHub, AI APIs and Daytona's own API, and from Tier 3 they reach the whole internet. On top of that, each sandbox can narrow it further.
+
+## Your tier sets the floor, each sandbox narrows it
+
+<Boundaries
+  nodes={[
+    { id: "box", label: "DevBox", type: "domainAllowList", col: 0, row: 0, tone: "accent" },
+    { id: "github", label: "github.com", type: "allowed", col: 1, row: 0 },
+    { id: "other", label: "example.com", type: "not on the list", col: 0, row: 1 },
+  ]}
+  zones={[
+    { id: "sandbox", label: "sandbox", type: "limits enforced outside", nodes: ["box"], tone: "warn", labelAt: "right" },
+    { id: "away", label: "elsewhere", nodes: ["other"], labelAt: "right" },
+  ]}
+  links={[
+    { from: "box", to: "github", label: "git clone" },
+    { from: "box", to: "away", kind: "blocked", label: "refused" },
+  ]}
+  caption="DevBox allows github.com and registry.npmjs.org. A clone from GitHub goes through; a connection to any host not on the list is refused before it leaves Daytona."
+/>
+
+## Allow only some domains
+
+```typescript title="src/DevBox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import { Base } from "./Images.ts";
+
+export const DevBox = Daytona.Sandbox("DevBox", {
+  snapshot: Base,
+  domainAllowList: ["github.com", "registry.npmjs.org"],
+});
+```
+
+Use `networkAllowList` for CIDR ranges, and `networkBlockAll: true` to cut the network entirely. All three change in place.
+
+## Route traffic through your own proxy
+
+```typescript title="src/DevBox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import { Base } from "./Images.ts";
+
+export const DevBox = Daytona.Sandbox("DevBox", {
+  snapshot: Base,
+  domainAllowList: ["github.com", "registry.npmjs.org"],
+  outboundProxyUrl: "http://proxy.example.com:3128",
+});
+```
+
+Daytona sets `HTTP_PROXY` and `HTTPS_PROXY` in the sandbox to this URL, and enforces it at the network only when the sandbox also has a `domainAllowList`. It's a forward proxy: HTTPS requests reach it as `CONNECT` tunnels, so it runs on a host that accepts them, such as a Fly Machine. A Cloudflare Worker can't serve `CONNECT`, so it can't be one. The URL is in the sandbox's environment, so the sandbox can read any password in it. To add a credential the sandbox never sees, use a [Secret](/daytona/security/secrets#declare-a-secret-for-some-hosts). Changing the URL replaces the sandbox.
+
+## Limit sandboxes you create
+
+```typescript
+const sandbox = yield* sandboxes.create({
+  domainAllowList: "api.openai.com,github.com",
+  networkBlockAll: false,
+});
+yield* sandbox.updateNetworkSettings({ domainAllowList: "github.com" });
+```
+
+`create` takes Daytona's own request, so the lists are comma-separated strings here.
+
+## Reach a port from outside
+
+A **preview URL** reaches a port inside a sandbox through Daytona's proxy. A private sandbox's previews need its preview token in the `X-Daytona-Preview-Token` header; a `public` sandbox's previews are open to anyone.
+
+<Boundaries
+  nodes={[
+    { id: "you", label: "your Worker", type: "sends the token", col: 0, row: 0 },
+    { id: "proxy", label: "preview URL", type: "Daytona proxy", col: 0, row: 1 },
+    { id: "app", label: "port 3000", type: "pnpm dev", col: 0, row: 2, tone: "accent" },
+  ]}
+  zones={[
+    { id: "daytona", label: "Daytona", nodes: ["proxy"], labelAt: "right" },
+    { id: "sandbox", label: "sandbox", type: "private", nodes: ["app"], tone: "warn", labelAt: "right" },
+  ]}
+  links={[
+    { from: "you", to: "proxy", label: "GET /" },
+    { from: "proxy", to: "app" },
+  ]}
+  caption="A request reaches port 3000 only through the preview URL, and Daytona's proxy lets it through only with the sandbox's preview token. A public sandbox skips the check."
+/>
+
+```typescript
+const preview = yield* sandbox.getPortPreviewUrl({ port: 3000 });
+const signed = yield* sandbox.getSignedPortPreviewUrl({ port: 3000, expiresInSeconds: 3600 });
+const port = yield* sandbox.getTcpPort(3000);
+const res = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+A signed URL works without the token until it expires, so you can hand it to a browser. `getTcpPort` returns the port's preview `url` and `token`, and its `fetch` sends a request there with the token for you.
+
+## Put a Worker in front of a port
+
+`fetch` also takes the request your Worker received, and returns a response the Worker can send straight back:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+return yield* port.fetch(yield* HttpServerRequest);
+```
+
+The method, path, query, headers and body go to the sandbox's server, and its status, headers and body come back. Bodies stream both ways.
+
+## Open previews to anyone
+
+```typescript title="src/DevBox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import { Base } from "./Images.ts";
+
+export const DevBox = Daytona.Sandbox("DevBox", { snapshot: Base, public: true });
+```
+
+`public` changes in place.
+
+Credentials a sandbox can use but not read are in [Secrets](/daytona/security/secrets).

@@ -17,6 +17,8 @@ export * from "./EIP.ts";
 export * from "./FlowLog.ts";
 export * from "./GetAmi.ts";
 export * from "./GetAmiHttp.ts";
+export * from "./GetManagedPrefixList.ts";
+export * from "./GetManagedPrefixListHttp.ts";
 export * from "./GetConsoleOutput.ts";
 export * from "./GetConsoleOutputHttp.ts";
 export * from "./GetPasswordData.ts";

@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteCustomerTaxIds,
   GetCustomers,
@@ -294,10 +293,8 @@ export const CustomerTaxIdProvider = () =>
           customer: news.customer,
           type: news.type,
           value: news.value,
+          idempotencyKey: `alchemy-customer-tax-id-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-customer-tax-id-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

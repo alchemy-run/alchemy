@@ -155,6 +155,54 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
     expect(second).toBe(first);
   });
 
+  test("reports why a stack entrypoint failed to load", async () => {
+    const failures = await TestCore.run(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const throwing = path.join(dir, "throwing.run.ts");
+        yield* fs.writeFileString(
+          throwing,
+          'throw new Error("stack failed", { cause: Object.assign(new Error("disk full"), { code: "ENOSPC" }) });\n',
+        );
+        const aggregate = path.join(dir, "aggregate.run.ts");
+        yield* fs.writeFileString(
+          aggregate,
+          'throw new TypeError("fetch failed", { cause: new AggregateError([Object.assign(new Error("connect ECONNREFUSED ::1:5432"), { code: "ECONNREFUSED" }), new Error("connect ECONNREFUSED 127.0.0.1:5432")]) });\n',
+        );
+        const missing = path.join(dir, "missing.run.ts");
+        yield* fs.writeFileString(missing, 'import "alchemy-test-missing-package";\n');
+        const syntax = path.join(dir, "syntax.run.ts");
+        yield* fs.writeFileString(syntax, "export default {\n");
+        const thrownString = path.join(dir, "string.run.ts");
+        yield* fs.writeFileString(thrownString, 'throw "boom";\n');
+        return yield* Effect.forEach([throwing, aggregate, missing, syntax, thrownString], (main) =>
+          collectAuthProviders({ main, envFile: Option.none<string>(), profile: "default" }).pipe(
+            Effect.flip,
+            Effect.map((error) => `${error._tag}: ${error.message}`),
+          ),
+        );
+      }).pipe(Effect.scoped, Effect.provide(Interaction.layerNonInteractive())),
+      { providers: TestLayers() },
+    );
+
+    expect(failures[0]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+throwing\.run\.ts': Error: stack failed; caused by Error \[ENOSPC\]: disk full$/,
+    );
+    expect(failures[1]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+aggregate\.run\.ts': TypeError: fetch failed; caused by AggregateError \(Error \[ECONNREFUSED\]: connect ECONNREFUSED ::1:5432, Error: connect ECONNREFUSED 127\.0\.0\.1:5432\)$/,
+    );
+    expect(failures[2]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+missing\.run\.ts': ResolveMessage \[ERR_MODULE_NOT_FOUND\]: Cannot find package 'alchemy-test-missing-package'/,
+    );
+    expect(failures[3]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+syntax\.run\.ts': BuildMessage: /,
+    );
+    expect(failures[4]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+string\.run\.ts': boom$/,
+    );
+  });
+
   test("reports a missing stack entrypoint as a user-facing error", async () => {
     const result = await TestCore.run(
       importStack(path.join(import.meta.dirname, "missing-alchemy.run.ts")).pipe(Effect.result),

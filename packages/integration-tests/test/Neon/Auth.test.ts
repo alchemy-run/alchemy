@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schema from "effect/Schema";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -39,6 +40,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const first = yield* stack.deploy(application(false, "https://auth.example.com"));
+      yield* expectFound(
+        Auth.lookup({ projectId: first.auth.projectId, branchId: first.auth.branchId }),
+        first.auth,
+      );
       const request = {
         project_id: first.auth.projectId,
         branch_id: first.auth.branchId,
