@@ -181,6 +181,23 @@ class Later extends Domain.Aggregate("Later", {
 
 class Strays extends Domain.Model("Strays", { aggregates: [Later] }) {}
 
+// A decide that builds its event and its rejection with `make` rather than `new`.
+class Shut extends Domain.Event("Shut") {}
+class AlreadyShut extends Domain.Rejection("AlreadyShut") {}
+class Close extends Domain.Command("Close", {
+  target: Schema.String,
+  events: [Shut],
+  rejects: [AlreadyShut],
+}) {}
+class Door extends Domain.Aggregate("Door", {
+  id: Schema.String,
+  state: Schema.Struct({ shut: Schema.Boolean }),
+  initial: { shut: false },
+  commands: [Close],
+  decide: { Close: (door) => (door.shut ? AlreadyShut.make({}) : [Shut.make({})]) },
+  evolve: { Shut: () => ({ shut: true }) },
+}) {}
+
 const NOW = 1_800_000_000_000;
 const Hosted = Bank.layer(Layer.empty).pipe(
   Layer.provide(Layer.suspend(() => InMemory.make({ now: () => NOW }).layer)),
@@ -233,6 +250,24 @@ describe("Domain Aggregate.predict", { tags: ["unit", "local"] }, () => {
       const typed: InsufficientFunds = local.rejection;
       expect(typed.requested).toBe(5);
     }).pipe(Effect.provide(Hosted)),
+  );
+
+  it.effect("a rejection built with make, as one built with new", () =>
+    Effect.gen(function* () {
+      const local = Door.predict({ shut: true }, new Close(), { id: "d-1", now });
+
+      expect(local._tag).toBe("Rejected");
+      if (local._tag !== "Rejected") return;
+      expect(local.rejection).toBeInstanceOf(AlreadyShut);
+      // `make` is typed as the rejection class, which is yieldable.
+      const made: AlreadyShut = AlreadyShut.make({});
+      const failure = yield* Effect.flip(
+        Effect.gen(function* () {
+          return yield* made;
+        }),
+      );
+      expect(failure).toEqual(local.rejection);
+    }),
   );
 
   it.effect("decide sees the id and time the caller gives", () =>

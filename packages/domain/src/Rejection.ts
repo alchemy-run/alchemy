@@ -84,7 +84,7 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
  * The class type returned by {@link make}.
  */
 export interface RejectionClass<Tag extends string, F extends Fields> extends Schema.Class<
-  Instance<Tag, F>,
+  Instance<Tag, F> & Cause.YieldableError,
   Schema.TaggedStruct<Tag, F>,
   Cause.YieldableError
 > {
