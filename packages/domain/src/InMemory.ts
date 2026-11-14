@@ -386,9 +386,7 @@ export const make = (
     enqueue: (run, key) =>
       enqueueWork([
         {
-          run: Effect.suspend(() => {
-            return Effect.forkDetach(tracked(run.pipe(pollsWait))).pipe(Effect.asVoid);
-          }),
+          run: Effect.suspend(() => run.pipe(pollsWait, tracked, Effect.forkDetach, Effect.asVoid)),
           label: `saga ${key}`,
           lane: `saga:${key}`,
         },
@@ -1137,17 +1135,15 @@ export const make = (
                     ) {
                       if (!p.timer) {
                         p.timer = true;
-                        yield* Effect.forkDetach(
-                          tracked(
-                            Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
-                              Effect.andThen(
-                                Effect.sync(() => {
-                                  p.timer = false;
-                                }),
-                              ),
-                              Effect.andThen(process(key, true)),
-                            ),
+                        yield* Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
+                          Effect.andThen(
+                            Effect.sync(() => {
+                              p.timer = false;
+                            }),
                           ),
+                          Effect.andThen(process(key, true)),
+                          tracked,
+                          Effect.forkDetach,
                         );
                       }
                       return;
@@ -1174,17 +1170,16 @@ export const make = (
               if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
               p.intake[delivery.source] = delivery.seq;
               p.log.push({ position: p.log.length + 1, delivery, at: now() });
-              return Effect.forkDetach(
-                tracked(
-                  process(delivery.key, false).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
-                      ),
-                    ),
+              return process(delivery.key, false).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.sync(() => failures.push(cause)).pipe(
+                    Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
                   ),
                 ),
-              ).pipe(Effect.asVoid);
+                tracked,
+                Effect.forkDetach,
+                Effect.asVoid,
+              );
             });
           const target = targetId({
             kind: "projection",
@@ -1351,15 +1346,16 @@ export const make = (
           return {
             receive: (delivery) =>
               Effect.suspend(() =>
-                tracked(
-                  exclusively(lockFor(delivery.key))(kit.run(delivery).pipe(pollsWait)).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                      ),
+                exclusively(lockFor(delivery.key))(kit.run(delivery).pipe(pollsWait)).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
                   ),
-                ).pipe(Effect.forkDetach, Effect.asVoid),
+                  tracked,
+                  Effect.forkDetach,
+                  Effect.asVoid,
+                ),
               ),
           };
         }),
