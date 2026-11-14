@@ -1,0 +1,161 @@
+---
+title: What is DigitalOcean?
+description: The concepts behind DigitalOcean — teams, tokens, projects, regions, App Platform, Functions, Droplets, Kubernetes, Sandboxes, Spaces, Managed Databases, AI agents, networking and monitoring — and how @alchemy.run/digitalocean models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+DigitalOcean is a cloud platform where everything you create belongs to a **team**. One API, signed with one team token, creates every kind of resource: an App, a Droplet, a database cluster, a bucket. Each of those runs in a **region** you choose, and **projects** group them inside the team for organizing.
+
+Take one small app: an API on App Platform that stores files in a Spaces bucket and keeps its data in Postgres. Your token reaches the team. The team's Container Registry holds the API's image. The Shop project groups the three for the control panel. In `nyc3` the API runs, the bucket holds the files, and the database cluster holds the data, and the API reaches each through a binding.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 3,
+      areas: ["registry project"],
+      phoneAreas: ["registry", "project"],
+    },
+    { id: "registry", label: "acme", type: "Container Registry", parent: "team", icon: "package" },
+    {
+      id: "project", label: "Shop", type: "project", parent: "team", dashed: true, icon: "folder",
+      areas: ["region"],
+    },
+    {
+      id: "region", label: "nyc3", type: "region · New York", parent: "project", dashed: true, icon: "map-pin", colGap: 5,
+      areas: ["api uploads", "api db"],
+    },
+    { id: "api", label: "Api", type: "App · service", parent: "region", tone: "accent", icon: "server" },
+    { id: "uploads", label: "Uploads", type: "Spaces bucket", parent: "region", icon: "archive" },
+    { id: "db", label: "Db", type: "Postgres cluster", parent: "region", icon: "brand:postgresql" },
+  ]}
+  links={[
+    { from: "registry", to: "api", label: "image" },
+    { from: "api", to: "uploads", label: "writes" },
+    { from: "api", to: "db", label: "queries" },
+  ]}
+  scopes={[{ on: "team", label: "token: acme" }]}
+  caption="A token reaches the whole team. A team has one Container Registry, shared by every region. Apps, buckets and clusters each run in one region. The Shop project groups them for the control panel; a project can hold resources from any region, and doesn't change where anything runs or who can reach it."
+/>
+
+## Teams and tokens
+
+A **team** holds your resources and your bill, and its members share access to it. A **personal access token** is created for one team and reaches everything in it, so the token decides where Alchemy deploys. Give production its own team and its own token.
+
+See [Teams, projects and tokens](/digitalocean/teams-projects-and-tokens).
+
+## Projects
+
+A **project** groups resources inside a team, the way the control panel shows them. Every new resource lands in the team's default project unless you move it. Projects don't isolate anything: access and billing stay at the team.
+
+```typescript title="src/project.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Shop = DigitalOcean.Project("Shop", { description: "The shop's resources" });
+```
+
+## Regions
+
+A **region** is one DigitalOcean data center, named by a slug: `nyc3` New York, `sfo3` San Francisco, `ams3` Amsterdam, `fra1` Frankfurt, `sgp1` Singapore. Droplets, volumes, buckets and database clusters each live in one. App Platform names its regions by city alone (`nyc`, `ams`), and runs the App's instances in one of them.
+
+## App Platform
+
+**App Platform** builds and runs your containers: you give it an image and it runs it as a **service** behind HTTPS on a `*.ondigitalocean.app` address, with more instances when you ask for them. Scheduled **jobs** run the same image on a cron schedule. App Platform pulls images from your team's **Container Registry**, and a team has exactly one.
+
+In Alchemy, an App is your program and its configuration in one file:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc" },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from App Platform")),
+    };
+  }),
+) {}
+```
+
+Deploy bundles the file into an image, pushes it to the registry, and waits until App Platform serves it.
+
+See [App Platform](/digitalocean/compute/app-platform).
+
+## Functions
+
+**Functions** are serverless functions grouped in a **namespace**. Each namespace has its own API address, and a function runs only when it's called, or on a schedule with a **trigger**. A function can also answer HTTP directly as a web function.
+
+See [Functions](/digitalocean/compute/functions).
+
+## Droplets
+
+A **Droplet** is a virtual machine. You pick its **size**, which sets its CPUs and memory, like `s-1vcpu-1gb`, an **image**, like `ubuntu-24-04-x64`, and a region.
+
+```typescript title="src/host.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Host = DigitalOcean.Droplet("Host", {
+  region: "nyc3",
+  size: "s-1vcpu-1gb",
+  image: "ubuntu-24-04-x64",
+});
+```
+
+A **Volume** is a network disk attached to one Droplet at a time in the same region, and a **snapshot** saves a Droplet's disk as an image to start others from. An **autoscale pool** keeps a group of identical Droplets sized to their load.
+
+See [Droplets](/digitalocean/compute/droplets).
+
+## Kubernetes
+
+**DigitalOcean Kubernetes** runs the Kubernetes control plane for you. Your workloads run on **node pools**, groups of Droplets of one size, that it can scale with demand.
+
+See [Kubernetes](/digitalocean/compute/kubernetes).
+
+## Sandboxes
+
+A **sandbox** is a MicroVM your program creates while it runs, to execute code it doesn't trust, and deletes when done. A **template** is an image prepared ahead of time, so each sandbox boots from it in seconds.
+
+See [Sandboxes](/digitalocean/compute/sandboxes).
+
+## Spaces
+
+**Spaces** is object storage that speaks the S3 API. A **bucket** holds objects in one region, and a **CDN endpoint** serves them from DigitalOcean's edge. Spaces signs requests with its own **access keys**, separate from your team token, and a key can be limited to one bucket.
+
+See [Spaces](/digitalocean/data/spaces).
+
+## Managed Databases
+
+A **database cluster** is a managed PostgreSQL, MySQL, Valkey, MongoDB, Kafka or OpenSearch server, with backups and failover handled for you. A cluster holds **databases** and **users**, can have read-only **replicas** in other regions, and accepts connections only from the **trusted sources** you list.
+
+See [Managed Databases](/digitalocean/data/managed-databases).
+
+## AI: agents and inference
+
+The **GenAI Platform** hosts **agents**: a model with your instructions, answering on a private endpoint. An agent retrieves from **knowledge bases** built from your buckets or websites, calls your Functions, and hands conversations to other agents. **Serverless Inference** calls models by name, billed per token, and **Dedicated Inference** serves an open-weight model on GPUs reserved for you.
+
+See [GenAI agents](/digitalocean/ai/genai-agents).
+
+## Networking
+
+A **VPC** is a private network in one region: Droplets, clusters and databases in it reach each other on private addresses. A **firewall** decides what traffic reaches the Droplets it's applied to. A **load balancer** spreads traffic across Droplets, and **reserved IPs** are addresses that stay the same when the Droplet behind them is replaced. DigitalOcean also hosts DNS **domains** and their records.
+
+See [VPCs and NAT](/digitalocean/networking/vpcs).
+
+## Monitoring
+
+**Monitoring** collects metrics from Droplets, runs **uptime checks** against your URLs, and sends alerts by email or Slack. **Insights** adds alert rules over any resource's metrics, and **log sinks** forward a Kubernetes cluster's logs to OpenSearch.
+
+See [Monitoring and Insights](/digitalocean/observability/monitoring).
+
+## State: where Alchemy keeps its record
+
+DigitalOcean has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`. See [State Store](/state-store).
+
+## How @alchemy.run/digitalocean models these concepts
+
+Your token picks the team, and `DigitalOcean.providers()` deploys into it. An App is your program, deployed as an image to App Platform. Droplets, clusters, buckets, databases, agents and networks are declarations next to the code that uses them. A binding, like `DigitalOcean.Spaces.PutObject(Uploads)`, gives a running program what it needs to reach one resource and nothing else.
+
+Next, build one: the [tutorial](/digitalocean/tutorial/part-1) puts these ideas to work, one step at a time.
