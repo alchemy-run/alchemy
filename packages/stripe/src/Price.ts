@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPrices,
   GetPrice,
@@ -571,11 +570,8 @@ export const PriceProvider = () =>
           ...(desiredLookupKey.length > 0
             ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-price-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-price-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

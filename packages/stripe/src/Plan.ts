@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeletePlan,
   GetPlans,
@@ -428,11 +427,8 @@ export const PlanProvider = () =>
           ...(desiredTrialPeriodDays !== undefined
             ? { trial_period_days: desiredTrialPeriodDays }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-plan-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-plan-${instanceId}`,
+        });
       }
 
       if (current === undefined) {
