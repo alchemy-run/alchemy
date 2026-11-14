@@ -1,5 +1,9 @@
 import type { TokensCreateRequestPoliciesItemPermissionGroupsItemMeta } from "@distilled.cloud/cloudflare/accounts";
-import { PERMISSION_GROUPS_BY_NAME, type PermissionGroupName } from "./PermissionGroups.ts";
+import {
+  PERMISSION_GROUPS,
+  type PermissionGroup,
+  type PermissionGroupName,
+} from "./PermissionGroups.ts";
 
 /**
  * Resource keys recognized by Cloudflare API token policies.
@@ -25,7 +29,11 @@ export type ResourceKey =
 /**
  * A permission group reference: either a typed Cloudflare permission-group
  * name (resolved against the static catalog) or an explicit `{ id }` for
- * names that aren't in the catalog or have multiple scopes.
+ * names that aren't in the catalog. A name that Cloudflare gives to groups in
+ * more than one scope (e.g. an account-scoped and a zone-scoped
+ * `"Access: Apps and Policies Write"`) is resolved against the resource keys
+ * of the policy it appears in; if those keys don't single out one group, pass
+ * the group's `{ id }`.
  */
 export type PermissionGroupRef = PermissionGroupName | { id: string; meta?: PermissionGroupMeta };
 
@@ -112,16 +120,57 @@ export type ResolvedPolicy = {
   resources: Record<string, ResourceScope>;
 };
 
-export const resolvePermissionGroup = (ref: PermissionGroupRef) => {
+const keyMatchesScope = (key: string, scope: string) =>
+  key === scope || key.startsWith(`${scope}.`);
+
+/**
+ * Pick the one group named `name` whose scope covers the policy's resources.
+ * A nested resource (a zone key under an account key) is the target of the
+ * policy, so it is matched instead of the key that holds it.
+ */
+const resolveSharedName = (
+  name: string,
+  candidates: PermissionGroup[],
+  resources: Record<string, ResourceScope>,
+): PermissionGroup => {
+  const scopes = candidates.flatMap((group) => group.scopes);
+  const targets = Object.entries(resources).flatMap(([key, value]) =>
+    typeof value === "string" ? [key] : Object.keys(value),
+  );
+  // `com.cloudflare.api.account.zone.*` also starts with the account scope, so
+  // each key counts for its longest matching scope only.
+  const matched = new Set(
+    targets.flatMap((key) => {
+      const scope = scopes
+        .filter((candidate) => keyMatchesScope(key, candidate))
+        .sort((a, b) => b.length - a.length)[0];
+      return scope === undefined ? [] : [scope];
+    }),
+  );
+  const hits = candidates.filter((group) => group.scopes.some((scope) => matched.has(scope)));
+  if (hits.length === 1) return hits[0]!;
+  throw new Error(
+    `Cloudflare permission group "${name}" exists in more than one scope ` +
+      `(${candidates.map((group) => `${group.scopes.join(" + ")}: ${group.id}`).join("; ")}) ` +
+      "and this policy's resources don't single out one. Pass an explicit { id } instead.",
+  );
+};
+
+export const resolvePermissionGroup = (
+  ref: PermissionGroupRef,
+  resources: Record<string, ResourceScope> = {},
+) => {
   if (typeof ref === "string") {
-    const group = PERMISSION_GROUPS_BY_NAME[ref];
-    if (!group) {
+    const candidates = PERMISSION_GROUPS.filter((group) => group.name === ref);
+    if (candidates.length === 0) {
       // Should be unreachable due to the typed union, but guard anyway in
       // case Cloudflare retires a name we still have in the catalog.
       throw new Error(
         `Unknown Cloudflare permission group: "${ref}". Pass an explicit { id } instead.`,
       );
     }
+    const group =
+      candidates.length === 1 ? candidates[0]! : resolveSharedName(ref, candidates, resources);
     return { id: group.id };
   }
   return ref.meta ? { id: ref.id, meta: ref.meta } : { id: ref.id };
@@ -137,11 +186,16 @@ const resolveResources = (resources: Policy["resources"]): Record<string, Resour
 };
 
 export const resolvePolicies = (policies: Policy[]): ResolvedPolicy[] =>
-  policies.map((policy) => ({
-    effect: policy.effect,
-    permissionGroups: policy.permissionGroups.map(resolvePermissionGroup),
-    resources: resolveResources(policy.resources),
-  }));
+  policies.map((policy) => {
+    const resources = resolveResources(policy.resources);
+    return {
+      effect: policy.effect,
+      permissionGroups: policy.permissionGroups.map((ref) =>
+        resolvePermissionGroup(ref, resources),
+      ),
+      resources,
+    };
+  });
 
 /**
  * Find a `com.cloudflare.edge.worker.script.*` key placed at the top level of
