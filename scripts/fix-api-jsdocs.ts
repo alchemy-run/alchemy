@@ -33,6 +33,7 @@ const packages = [
   "neon",
   "prisma",
   "hetzner",
+  "digitalocean",
   "railway",
   "fly",
   "github",
