@@ -1,0 +1,83 @@
+---
+title: Hetzner
+description: Run an Effect Cluster's database and runners on Hetzner Cloud Servers, on a private Network, behind a Load Balancer.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Host your cluster on Hetzner Cloud: Postgres runs on a Server with a Volume, and each runner runs on a Server of its own, all on a private Network. A Load Balancer serves the pool's gateway, so a Hetzner Service or anything else calls the rooms by id.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterHetzner from "@alchemy.run/effect-cluster/Hetzner";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterHetzner.Database("Cluster");
+
+export const Default = ClusterHetzner.ServerPool("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
+
+<Tree
+  nodes={[
+    { id: "project", label: "Hetzner project", type: "your profile's project" },
+    { id: "net", label: "Network", type: "private", parent: "project", dashed: true },
+    { id: "db", label: "Database", type: "Server · Postgres", parent: "net", specs: [["data", "Volume"]] },
+    { id: "pool", label: "Default", type: "ServerPool", parent: "net" },
+    { id: "s1", label: "Server", type: "runner", parent: "pool" },
+    { id: "s2", label: "Server", type: "runner", parent: "pool" },
+    { id: "lb", label: "Load Balancer", type: "checks /health", parent: "project", side: true },
+  ]}
+  caption="Runners reach Postgres and each other over the Network, and their firewalls let only SSH in from outside. The Load Balancer finds the Servers by label."
+/>
+
+## The database
+
+`ClusterHetzner.Database` creates a private Network and runs Postgres in Docker on a Server with a Volume. Its firewall drops every connection to its public address; runners reach it over the Network.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterHetzner from "@alchemy.run/effect-cluster/Hetzner";
+
+export const Database = ClusterHetzner.Database("Cluster", {
+  location: "fsn1",
+  serverType: "cx33",
+  diskSize: 50,
+});
+```
+
+## The pool
+
+`ClusterHetzner.ServerPool` creates one Server per runner on the Network, and runs the pool's program on each as a `Hetzner.Service`. Runners reach each other over the Network; their firewall only lets SSH in, which deploys them. The Load Balancer finds the Servers by label and checks each at `/health`.
+
+## Call it from a Hetzner Service
+
+```typescript title="src/Api.ts"
+import * as Hetzner from "@alchemy.run/hetzner";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export const ApiServer = Hetzner.Server("ApiServer", {
+  serverType: "cx23",
+  image: "ubuntu-24.04",
+  location: "nbg1",
+});
+
+export default class Api extends Hetzner.Service<Api>()(
+  "Api",
+  { server: ApiServer, main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        return yield* HttpServerResponse.json({ members: yield* lobby.Join({ name: "sam" }) });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Every option, with its default, is in the reference: [Database](/providers/cluster/hetzner#database) and [ServerPool](/providers/cluster/hetzner#serverpool).

@@ -5,6 +5,7 @@ import * as placementGroups from "@distilled.cloud/hetzner/placement_groups";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
@@ -26,6 +27,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Hetzner.PlacementGroup.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));

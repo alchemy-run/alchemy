@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteTerminalConfiguration,
   GetTerminalConfigurations,
@@ -373,8 +372,18 @@ export type TerminalConfiguration = Resource<
     livemode: boolean;
   } & DeviceAttributes,
   never,
-  Providers
+  Providers,
+  TerminalConfigurationLookup
 >;
+
+/**
+ * Props for {@link TerminalConfiguration.lookup}: find a Terminal configuration this stack
+ * doesn't manage by its id.
+ */
+export interface TerminalConfigurationLookup {
+  /** Stripe Terminal configuration id, e.g. `"tmc_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Terminal Configuration — splash screens, tipping, offline
@@ -436,6 +445,16 @@ export type TerminalConfiguration = Resource<
  * const config = yield* Stripe.TerminalConfiguration("storefront", {
  *   name: "Storefront",
  * });
+ * ```
+ *
+ * ### Looking up an existing Terminal configuration
+ * `TerminalConfiguration.lookup` references a Terminal configuration Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Terminal configuration
+ * ```typescript
+ * const ref = Stripe.TerminalConfiguration.lookup({ id: "tmc_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -799,6 +818,11 @@ export const TerminalConfigurationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -830,11 +854,10 @@ export const TerminalConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* CreateTerminalConfiguration(toCreatePayload(name, news)).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-terminal-configuration-${instanceId}`,
-          }),
-        );
+        current = yield* CreateTerminalConfiguration({
+          ...toCreatePayload(name, news),
+          idempotencyKey: `alchemy-terminal-configuration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

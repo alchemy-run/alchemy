@@ -6,6 +6,7 @@ import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -72,6 +73,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { store, engine, control };
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.CollectionsEnginesControl.lookup({
+          controlId: created.control.controlId,
+          engine: created.control.engine,
+        }),
+        created.control,
       );
 
       expect(created.control.name).toContain("/controls/");

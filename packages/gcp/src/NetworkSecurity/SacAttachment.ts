@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -86,8 +87,33 @@ export type SacAttachment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SacAttachmentLookup
 >;
+
+/**
+ * Props for {@link SacAttachment.lookup}: find a sac attachment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SacAttachmentLookup {
+  /**
+   * Attachment id (the `{sacAttachment}` segment of
+   * `projects/{project}/loca
+   * tions/{location}/sacAttachments/{sacAttachment}`).
+   */
+  sacAttachmentId: string;
+  /**
+   * Region of the attachment (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Secure Access Connect (SAC) attachment — binds an NCC Gateway to a
@@ -117,6 +143,19 @@ export type SacAttachment = Resource<
  *   sacRealm: realm.name,
  *   nccGateway: gateway.name,
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing sac attachment
+ * `SacAttachment.lookup` references a sac attachment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * sac attachment.
+ *
+ * **Example:** Reference an existing sac attachment
+ * ```typescript
+ * const sacAttachment = GCP.NetworkSecurity.SacAttachment.lookup({
+ *   sacAttachmentId: "my-sac-attachment",
  * });
  * ```
  *
@@ -242,6 +281,15 @@ export const SacAttachmentProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ sacAttachmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, sacAttachmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

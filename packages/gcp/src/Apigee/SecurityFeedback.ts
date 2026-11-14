@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
@@ -95,8 +96,31 @@ export type SecurityFeedback = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityFeedbackLookup
 >;
+
+/**
+ * Props for {@link SecurityFeedback.lookup}: find a security feedback this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityFeedbackLookup {
+  /**
+   * Feedback id (the `{feedback}` segment of
+   * `organizations/{org}/securityFeedback/{feedback}`).
+   */
+  securityFeedbackId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Advanced API Security customer feedback report.
@@ -115,6 +139,19 @@ export type SecurityFeedback = Resource<
  *     attribute: "ATTRIBUTE_ENVIRONMENTS",
  *     values: ["eval"],
  *   }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing security feedback
+ * `SecurityFeedback.lookup` references a security feedback Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security feedback.
+ *
+ * **Example:** Reference an existing security feedback
+ * ```typescript
+ * const securityFeedback = GCP.Apigee.SecurityFeedback.lookup({
+ *   securityFeedbackId: "my-security-feedback",
  * });
  * ```
  *
@@ -213,6 +250,16 @@ export const SecurityFeedbackProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityFeedbackId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, securityFeedbackId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,8 +114,30 @@ export type DataProduct = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataProductLookup
 >;
+
+/**
+ * Props for {@link DataProduct.lookup}: find a data product this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DataProductLookup {
+  /**
+   * Data product id. Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  dataProductId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex Data Product — a curated collection of data assets packaged
@@ -131,6 +154,19 @@ export type DataProduct = Resource<
  *   displayName: "Sales mart",
  *   ownerEmails: ["owner@example.com"],
  *   labels: { env: "test" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing data product
+ * `DataProduct.lookup` references a data product Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * data product.
+ *
+ * **Example:** Reference an existing data product
+ * ```typescript
+ * const dataProduct = GCP.Dataplex.DataProduct.lookup({
+ *   dataProductId: "my-data-product",
  * });
  * ```
  *
@@ -205,6 +241,15 @@ export const DataProductProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ dataProductId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, dataProductId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

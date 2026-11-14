@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as analyticshub from "@distilled.cloud/gcp/analyticshub_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { hubLocation, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -72,6 +73,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { dataset, exchange, listing };
         }),
+      );
+      yield* expectFound(
+        GCP.AnalyticsHub.DataExchangesListing.lookup({
+          listingId: created.listing.listingId,
+          location: created.listing.location,
+          dataExchange: created.listing.dataExchange,
+        }),
+        created.listing,
       );
 
       expect(created.listing.name).toContain("/listings/");

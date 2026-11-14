@@ -1,0 +1,148 @@
+---
+title: Cloudflare
+description: Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no servers to manage.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+Host your cluster on Cloudflare: one Worker runs every class you give it, on Durable Objects. There is no database and nothing to scale. Callers reach it through the Worker's gateway.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterCloudflare from "@alchemy.run/effect-cluster/Cloudflare";
+
+export const Default = ClusterCloudflare.DurableObjectPool("Default");
+```
+
+Install `@alchemy.run/cloudflare` and finish [Cloudflare setup](/cloudflare/setup). Add its providers next to the cluster's:
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import RoomLive from "./src/RoomLive.ts";
+
+export default Alchemy.Stack(
+  "Rooms",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Cluster.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }).pipe(Effect.provide(RoomLive)),
+);
+```
+
+Your entities, workflows, singletons and crons don't change. Their implementations take `Default` like they take any pool.
+
+## Each instance is a Durable Object
+
+A Durable Object is already one instance per name, in one place, handling one event at a time. That's what Effect Cluster's shards and runners exist to give you, so on Cloudflare there are none. Every entity type shares one Durable Object class, and each instance is the object named by its type and id. This is the design of Effect's own Durable Object support.
+
+<DAG
+  nodes={[
+    { id: "caller", label: "Callers", type: "Worker, Lambda, container", layer: 0 },
+    { id: "worker", label: "Pool Worker", type: "the gateway", tone: "accent", layer: 1 },
+    { id: "lobby", label: "Room lobby", type: "Durable Object", layer: 2 },
+    { id: "kitchen", label: "Room kitchen", type: "Durable Object", layer: 2 },
+  ]}
+  edges={[
+    { from: "caller", to: "worker", label: "lobby.Join()" },
+    { from: "worker", to: "lobby" },
+    { from: "worker", to: "kitchen" },
+  ]}
+  caption="The Worker routes each call to the object named by the entity's type and id."
+/>
+
+One entity calling another goes straight from object to object, without the gateway.
+
+## State lasts until the instance is idle
+
+An instance keeps its state in memory, as on runners, until it has been idle for its [`maxIdleTime`](/cluster/entities#how-long-an-instance-lives). Cloudflare puts an object to sleep after about ten seconds without events, so until then the object's alarm wakes it every few seconds. A short `maxIdleTime` costs fewer alarms:
+
+```typescript title="src/RoomLive.ts"
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url, maxIdleTime: "15 seconds" },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+        Join: ({ payload }) =>
+          Ref.modify(members, (all) => {
+            const next = new Set(all).add(payload.name);
+            return [next.size, next];
+          }),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+An instance held with `Entity.keepAlive(true)` doesn't stop when idle. If its object restarts, the alarm starts the instance again.
+
+## A deploy reaches an instance when its object restarts
+
+A deploy gives the pool's Worker a new version. An object that is asleep starts on the new version at its next call. An object that is awake keeps its instance, its in-memory state and the version it started on until Cloudflare restarts it, which can take several minutes.
+
+So after a deploy, an instance you hold with `Entity.keepAlive(true)` may answer with the old code for a while. Persisted messages, delayed messages and cron times are in the object's SQLite, so they are delivered whichever version the object is on.
+
+## Handlers run as on runners
+
+Each instance runs its handlers behind Effect's own RPC server, the way Effect Cluster's runners do. RPC middleware, `concurrency`, `Rpc.fork` and `Rpc.uninterruptible` all work as they do on runners. When a caller is interrupted, its handler is interrupted too.
+
+A defect restarts the instance and runs its messages again, with a growing pause between restarts. To send the defect to the caller instead, set `disableFatalDefects: true`.
+
+## Persisted messages live in the object
+
+A persisted message is written to the object's own SQLite before it runs, and its reply after. A message with a primary key runs once. A duplicate that arrives while the first is running waits for its reply. A message cut short by a restart runs again when the object's alarm fires. A message with `DeliverAt` waits in SQLite until its time, and the alarm wakes the object to run it.
+
+A call the object never answers fails with `PersistenceError`. A persisted call is first sent again to a fresh stub, since the object stores it under the same id and runs it once.
+
+## Workflows, singletons and crons
+
+Each workflow execution is a Durable Object of its own, running Alchemy's Durable Object [workflow engine](/cloudflare/compute/effect-workflows): activities, durable sleeps and signals are kept in its SQLite.
+
+A singleton runs in an object that its alarm checks on every few seconds, restarting the fiber if the object restarted. A cron runs in an object that its alarm wakes at each scheduled time, down to the second.
+
+## Call it from a Worker
+
+A Worker can't fetch another Worker's `workers.dev` address in the same account, so a Worker that yields one of your classes gets a service binding to the pool's Worker, and its calls go through that:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        return yield* HttpServerResponse.json({ members: yield* lobby.Join({ name: "sam" }) });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Callers on any other runtime, like a Lambda function or a container, use the Worker's `workers.dev` address, with the token Alchemy binds into them.
+
+## What doesn't run on Cloudflare
+
+An [existing Effect Cluster program](/cluster/existing-programs) needs Node: give it a pool on another host. Shard groups don't apply, because there are no shards.
+
+Every option, with its default, is in the reference: [DurableObjectPool](/providers/cluster/cloudflare#durableobjectpool).

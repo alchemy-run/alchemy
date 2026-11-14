@@ -148,8 +148,13 @@ const stackProgram = (framework: string, alchemyImport: string, awsImport: strin
     "",
   ].join("\n");
 
+// Skipped under the floci runner: the published CLI predates the emulator
+// support and deploys to real AWS, and in dev the current version runs the
+// framework's dev server instead of a Web Function.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
 for (const upgrade of cases) {
-  test.provider.skipIf(!!process.env.FAST)(
+  test.provider.skipIf(!!process.env.FAST || runEmulated)(
     `a ${upgrade.framework} site deployed by ${PUBLISHED} moves onto Web Functions and keeps its distribution`,
     () =>
       Effect.gen(function* () {

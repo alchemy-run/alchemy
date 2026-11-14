@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
@@ -100,6 +101,7 @@ describe(
         const docker = yield* Docker.Docker;
         yield* stack.destroy();
         const first = yield* stack.deploy(Docker.Context("bare-context"));
+        yield* expectFound(Docker.Context.lookup({ name: first.name }), first);
         const second = yield* stack.deploy(Docker.Context("bare-context"));
         expect(second.id).toBe(first.id);
         yield* stack.destroy();

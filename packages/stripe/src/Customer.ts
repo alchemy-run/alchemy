@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteCustomer,
   GetCustomers,
@@ -77,8 +76,18 @@ export type Customer = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  CustomerLookup
 >;
+
+/**
+ * Props for {@link Customer.lookup}: find a customer this stack
+ * doesn't manage by its id.
+ */
+export interface CustomerLookup {
+  /** Stripe customer id, e.g. `"cus_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Customer — the billing identity invoices, subscriptions, and
@@ -116,6 +125,16 @@ export type Customer = Resource<
  *   name: "Alice Example",
  *   metadata: { plan: "enterprise" },
  * });
+ * ```
+ *
+ * ### Looking up an existing customer
+ * `Customer.lookup` references a customer Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing customer
+ * ```typescript
+ * const ref = Stripe.Customer.lookup({ id: "cus_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -215,6 +234,11 @@ export const CustomerProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -254,11 +278,8 @@ export const CustomerProvider = () =>
           ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
           ...(desiredPhone.length > 0 ? { phone: desiredPhone } : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-customer-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-customer-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

@@ -1,0 +1,85 @@
+---
+title: Disks
+description: Create disks per user at run time, share a few at deploy time, run commands against them, and read their files by key.
+sidebar:
+  order: 1
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+
+A disk is a POSIX filesystem stored in object storage. The data clients are using sits in Archil's storage layer, in front of the bucket, so reads and writes run at disk speed while the bucket holds everything. A write is durable once `fsync` returns. The bucket is Archil's, or [your own](/archil/storage/your-own-bucket).
+
+## One disk, three ways in
+
+One disk is reachable three ways at once: mounted as a filesystem, through serverless exec, and as an S3-style bucket of objects.
+
+<Tree
+  nodes={[
+    { id: "api", label: "Api", type: "sandbox", icon: "box" },
+    { id: "exec", label: "exec", type: "a microVM per call", icon: "terminal" },
+    { id: "worker", label: "Worker", type: "ReadDisk binding", icon: "square-function" },
+    { id: "disk", label: "Dataset", type: "disk", icon: "brand:archil", areas: ["cache", "bucket"] },
+    { id: "cache", label: "storage layer", type: "data in use", parent: "disk", tone: "accent", icon: "zap" },
+    { id: "bucket", label: "bucket", type: "every file", parent: "disk", icon: "archive" },
+  ]}
+  areas={["api disk", "exec disk", "worker disk"]}
+  colGap={3}
+  links={[
+    { from: "api", to: "disk", label: "mounts" },
+    { from: "exec", to: "disk", label: "mounts" },
+    { from: "worker", to: "disk", label: "S3 API" },
+    { from: "cache", to: "bucket", label: "copies writes", dashed: true },
+  ]}
+  caption="Mounts, exec calls and S3 requests all reach the same disk and see each other's writes. Archil keeps the data in use in front of the bucket and copies writes to the bucket in the background."
+/>
+
+Create a disk for each user or session at run time, and declare the few shared ones in your Stack.
+
+## Create disks at run time
+
+`Archil.CreateDisk` gives a Worker or Lambda a client that creates disks by name:
+
+```typescript
+const disks = yield* Archil.CreateDisk();
+const home = yield* disks.create(`user-${user}`);
+```
+
+Calling `create` again with the same name returns the same disk. `get`, `list`, and `delete` work on the disks this client created.
+
+## Declare a shared disk
+
+A dataset every user reads is a resource:
+
+```typescript
+// src/Storage.ts
+export const Dataset = Archil.Disk("Dataset", {});
+```
+
+Restrict where it can be mounted from with `allowedIps`, and stop sandboxes and exec from mounting it with `allowSandboxMount: false`.
+
+## Run commands against a disk
+
+```typescript
+const dataset = yield* Archil.ExecDisk(Dataset);
+const result = yield* dataset.exec("wc -l /mnt/archil/*.csv");
+const hits = yield* dataset.grep({ pattern: "TODO", directory: "src", recursive: true });
+```
+
+`ExecDisks` mounts several disks in one call, at paths under `/mnt/archil`.
+
+## Read and write files without a machine
+
+Every disk is also an S3-style bucket. `ReadDisk`, `WriteDisk`, and `ReadWriteDisk` use it:
+
+```typescript
+const files = yield* Archil.ReadWriteDisk(Dataset);
+yield* files.put("notes/today.md", "# Today");
+const url = yield* files.share("notes/today.md", 3600);
+```
+
+A write that conflicts with a mounted client's lock fails with `ObjectConflict`.
+
+## Branch it, or keep it in your bucket
+
+Copy a disk per session from a checkpoint with [Branches and checkpoints](/archil/storage/branches). Keep a disk's files as ordinary objects in your S3 bucket with [Your own bucket](/archil/storage/your-own-bucket).

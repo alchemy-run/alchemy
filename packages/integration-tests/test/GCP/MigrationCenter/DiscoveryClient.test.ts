@@ -6,6 +6,7 @@ import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,20 @@ test.provider(
           });
           return { source, client };
         }),
+      );
+      yield* expectFound(
+        GCP.MigrationCenter.DiscoveryClient.lookup({
+          discoveryClientId: created.client.discoveryClientId,
+          location: created.client.location,
+        }),
+        created.client,
+      );
+      yield* expectFound(
+        GCP.MigrationCenter.Source.lookup({
+          sourceId: created.source.sourceId,
+          location: created.source.location,
+        }),
+        created.source,
       );
 
       expect(created.client.discoveryClientId).toEqual(expect.any(String));

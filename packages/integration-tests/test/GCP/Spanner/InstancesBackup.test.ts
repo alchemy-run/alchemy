@@ -6,6 +6,7 @@ import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,6 +74,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { instance, database, backup };
         }),
+      );
+      yield* expectFound(
+        GCP.Spanner.InstancesBackup.lookup({
+          backupId: created.backup.backupId,
+          instance: created.backup.instanceId,
+        }),
+        created.backup,
       );
 
       expect(created.backup.name).toContain("/backups/");

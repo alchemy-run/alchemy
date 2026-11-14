@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "mount",
+              "value": "type=cache,target=/root/.cache"
+            },
+            {
+              "name": "mount",
+              "value": "type=secret,id=npmrc,target=/root/.npmrc"
+            },
+            {
+              "name": "network",
+              "value": "none"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "npm ci"
+          }
+        }
+      ]
+    }
+  ]
+}

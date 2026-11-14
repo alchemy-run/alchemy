@@ -7,6 +7,7 @@ import { Action } from "alchemy/Action";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -85,6 +86,23 @@ test.provider.skipIf(!runLifecycle)(
           );
           return { cluster, instance, user, probe: yield* Probe({}) };
         }),
+      );
+      // AlloyDB omits a cluster's displayName from reads.
+      yield* expectFound(
+        GCP.AlloyDB.Cluster.lookup({
+          clusterId: created.cluster.clusterId,
+          location: created.cluster.location,
+        }),
+        created.cluster,
+        { ignore: ["displayName"] },
+      );
+      yield* expectFound(
+        GCP.AlloyDB.Instance.lookup({
+          instanceId: created.instance.instanceId,
+          cluster: created.instance.clusterId,
+          location: created.instance.location,
+        }),
+        created.instance,
       );
 
       expect(created.user.name).toContain("/users/");

@@ -1,9 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type { HttpServerError } from "effect/http/HttpServerError";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import { type Filter, matches } from "./Filter.ts";
 import type { Kernel } from "./Kernel.ts";
 import * as Key from "./Key.ts";
@@ -239,3 +244,58 @@ export const streamPush =
         cursor,
       );
     });
+
+/**
+ * Serve a live read's WebSocket (the current request) in this process: send
+ * what it starts with, then push on every change to the key, until the read
+ * ends or the client goes. For platforms whose keys live in the process that
+ * serves the Api, so no object holds the socket.
+ */
+export const serveSocket = (
+  subscription: Subscription,
+  push: (subscription: Subscription) => Effect.Effect<Push>,
+  changes: Stream.Stream<unknown>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError, HttpServerRequest> =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const socket = yield* request.upgrade;
+    const writer = yield* socket.writer;
+    let current = subscription;
+    const send = (message: Json) =>
+      writer.write(JSON.stringify({ ...(message as object), cursor: current.cursor }));
+    if (subscription.refused !== undefined) {
+      yield* send({
+        _tag: "Exit",
+        requestId: subscription.requestId,
+        exit: subscription.refused,
+      }).pipe(Effect.andThen(writer.write(new Socket.CloseEvent(1000, ""))), Effect.ignore);
+      return HttpServerResponse.empty({ status: 101 });
+    }
+    // Deliver one push; whether the read ended.
+    const deliver = Effect.gen(function* () {
+      const pushed = yield* push(current);
+      current = pushed.subscription;
+      for (const message of pushed.messages) yield* send(message);
+      return pushed.done;
+    });
+    const pushes = Effect.gen(function* () {
+      if (yield* deliver) return;
+      yield* changes.pipe(
+        Stream.mapEffect(() => deliver),
+        Stream.takeUntil((done) => done),
+        Stream.runDrain,
+      );
+    }).pipe(
+      Effect.andThen(writer.write(new Socket.CloseEvent(1000, ""))),
+      Effect.catchCause(() =>
+        writer.write(new Socket.CloseEvent(1011, "Domain could not push to this read")),
+      ),
+      Effect.ignore,
+    );
+    // The client closed: stop pushing.
+    const closed = Effect.scoped(
+      Effect.flatMap(socket.reader, ({ pull }) => Effect.forever(pull)),
+    ).pipe(Effect.ignore);
+    yield* Effect.raceFirst(pushes, closed);
+    return HttpServerResponse.empty({ status: 101 });
+  }).pipe(Effect.scoped);

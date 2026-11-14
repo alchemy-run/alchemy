@@ -1,0 +1,149 @@
+---
+title: What is Archil?
+description: The concepts behind Archil — organizations and API keys, regions, disks, serverless exec, sandboxes, images, mounts, disk users, branches and egress policy — and how @alchemy.run/archil models each of them.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Archil runs code against your data. Your files live on **disks**, POSIX filesystems backed by object storage. Archil runs code against a disk in a Firecracker microVM, either one call at a time (serverless exec) or in a sandbox that stays around. Any other Linux machine can mount the disk too. Every disk, sandbox and image belongs to an organization and lives in one region.
+
+Take one small app: a `Dataset` disk of CSV files. A Cloudflare Worker counts their rows with a serverless call. An `Api` sandbox serves them at a public URL. A Container you run elsewhere mounts the disk to index it. The disk keeps recent data on Archil's fast storage and the rest in its bucket.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization", icon: "brand:archil" },
+    { id: "region", label: "aws-us-east-1", type: "region", parent: "org", dashed: true, icon: "map-pin", areas: ["api dataset", "exec dataset"], phoneAreas: ["api exec", "dataset dataset"], colGap: 3 },
+    { id: "api", label: "Api", type: "sandbox", parent: "region", icon: "box" },
+    { id: "exec", label: "exec", type: "microVM per call", parent: "region", icon: "terminal" },
+    { id: "dataset", label: "Dataset", type: "disk", parent: "region", tone: "accent", icon: "hard-drive" },
+    { id: "bucket", label: "your bucket", type: "S3", icon: "archive" },
+  ]}
+  areas={["org bucket"]}
+  colGap={3}
+  links={[
+    { from: "api", to: "dataset", label: "mounts" },
+    { from: "exec", to: "dataset", label: "mounts" },
+    { from: "dataset", to: "bucket", label: "syncs", dashed: true },
+  ]}
+  caption="The disk, the sandbox and each exec call live in one region of the organization, and both mount the disk, whose files sync to your own bucket. Outside Archil, a Worker starts exec calls through Archil's API, and your Indexer Container mounts the disk over the network."
+/>
+
+## Organizations: who owns the disks
+
+A personal account or an **organization** owns your disks, sandboxes and images, and the bill for them. An organization lets a team share disks: its members can manage them, and its administrators manage the members.
+
+Archil's control plane takes an **API key**, created in the console. A key works for one account or organization in one region, and can call every operation there. Archil can't create narrower keys, so Alchemy deploys with yours.
+
+<PackageManagers run="alchemy profile edit --add Archil" />
+
+See [Organization and keys](/archil/organization-and-keys).
+
+## Regions: where data and code run together
+
+A **region** is where a disk's data and the microVMs that use it run: `aws-us-east-1`, `aws-us-west-2`, `aws-eu-west-1` or `gcp-us-central1`. Serverless exec and sandboxes run only in the AWS regions, so keep a disk you run code against in one of them.
+
+Your profile sets the region for everything the Stack deploys, and asks for it when you add Archil.
+
+## Disks: a local filesystem in object storage
+
+A **disk** is a filesystem that behaves like a local one (POSIX, git, SQLite), stored in object storage. The data a client is using sits in Archil's storage layer in front of the bucket, so reads and writes are fast, and the bucket holds everything. The bucket is Archil's unless you bring your own.
+
+```typescript title="src/storage.ts"
+export const Dataset = Archil.Disk("Dataset", {});
+```
+
+The same disk is also an S3-style bucket, so a host can read and write its files by key without mounting it.
+
+See [Disks](/archil/storage/disks).
+
+## Serverless exec: one command, one microVM
+
+**Serverless exec** runs one command against a disk: Archil boots a microVM with the disk at `/mnt/archil`, runs the command to completion (up to five minutes), and shuts it down. Each call is one charge, and a disk takes many calls at once. Files the command writes stay on the disk.
+
+```typescript
+const dataset = yield* Archil.ExecDisk(Dataset);
+const result = yield* dataset.exec("wc -l /mnt/archil/*.csv");
+```
+
+That makes it the natural place for an agent's shell tool, or a search across a large dataset.
+
+See [Choosing a runtime](/archil/compute/choosing-a-runtime).
+
+## Sandboxes: microVMs that pause and resume
+
+A **sandbox** is a microVM that stays around between calls. Its root filesystem is a disk of its own, it can mount other disks, and its ports can be public. It pauses when idle, keeping its memory and processes, and resumes on the next connection. A fork copies it, memory and all.
+
+```typescript title="src/devbox.ts"
+export const DevBox = Archil.Sandbox("DevBox", {
+  mounts: [{ disk: Workspace, path: "/workspace" }],
+  ports: [3000],
+});
+```
+
+Give a sandbox a `main`, and it runs your program at a public `https://` URL.
+
+See [Sandboxes](/archil/compute/sandboxes) and [Programs](/archil/compute/programs).
+
+## Images: what a sandbox boots
+
+A sandbox boots an **image**: any public OCI image, or one Archil pulls from your private registry. Archil doesn't build images, so a Dockerfile is built on your machine and pushed to a registry first. `Archil.Image` pins one by digest:
+
+```typescript
+export const Base = Archil.Image("Base", { image: "node:24-bookworm" });
+```
+
+See [Images](/archil/compute/images).
+
+## Mounts: a disk at a path, on any machine
+
+A **mount** puts a disk at a path, in a sandbox or on any Linux machine running Archil's FUSE client. Its **mode** decides who can write: `exclusive` (the default) gives one client the whole disk, `conditional` lets many write anywhere, `shared` lets many write the paths they check out, and `read-only` never writes.
+
+```typescript
+const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+```
+
+See [Mounting](/archil/storage/mounting).
+
+## Disk users: access to one disk
+
+A **disk user** is access to one disk: a mount token, an S3 key pair, or an AWS role that mounts with its own identity. Archil checks it itself, so a host holding one can't reach any other disk. Alchemy creates one per host for the bindings that need them:
+
+```typescript
+const dataset = yield* Archil.ReadDisk(Dataset);
+```
+
+See [Credentials and bindings](/archil/security/credentials).
+
+## Branches: a writable copy in milliseconds
+
+A **checkpoint** is a named snapshot of a disk, and a **branch** is a writable copy started from one. Both take tens of milliseconds whatever the disk's size, and writes on a branch never reach its source.
+
+```typescript
+const seeds = yield* Archil.BranchDisk(Seed);
+const branch = yield* seeds.branch({ name: "session-42", fromCheckpoint: "base" });
+```
+
+See [Branches and checkpoints](/archil/storage/branches).
+
+## Egress policy: what a sandbox can reach
+
+Every sandbox has an **egress policy** that Archil enforces outside the microVM. It can deny everything but a list of hosts, and add headers, like an API key, to requests on their way out, so code inside never sees the value.
+
+```typescript
+export const MySandbox = Archil.Sandbox("MySandbox", {
+  network: { egress: { default: "deny", allow: ["registry.npmjs.org", "*.github.com"] } },
+});
+```
+
+See [Network](/archil/security/network).
+
+## State: where Alchemy keeps its record
+
+Archil has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`.
+
+## How @alchemy.run/archil models these concepts
+
+Your profile picks the API key and the region, and `Archil.providers()` deploys into them. The few long-lived things an app shares (a dataset disk, a seeded checkpoint, an image, a dev box, a program) are resources in the Stack. Disks, sandboxes, branches and images made per user or task come from run-time bindings (`CreateDisk`, `CreateSandbox`, `BranchDisk`, `CreateImage`). Archil has no tags, so the disks and sandboxes they create carry their stack, stage and binding in a name prefix, and stay when the Stack is destroyed. Bindings that touch one disk give their host its own disk user, never your key.
+
+Next, build one: the [tutorial](/archil/tutorial/part-1) puts these ideas to work, one step at a time.

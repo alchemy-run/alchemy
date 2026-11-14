@@ -140,7 +140,8 @@ export const LoopbackServerLive = Layer.effect(
       secret,
       route: (name, handler) =>
         Effect.isEffect(handler)
-          ? makeHandler(handler, { scope }).pipe(
+          ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- loopback routes accept any handler Effect from workerd globals
+            makeHandler(handler, { scope }).pipe(
               Effect.map((handler) => {
                 MutableHashMap.set(routes, name, handler);
               }),

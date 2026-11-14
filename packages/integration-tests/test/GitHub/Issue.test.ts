@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { repoOf, expectFound } from "./lookup.ts";
 import { gh, scopedToOwner } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
@@ -62,6 +63,10 @@ test.provider(
         labels: ["bug"],
         state: "closed",
       });
+      yield* expectFound(
+        GitHub.Issue.lookup({ ...repoOf(created.htmlUrl), number: created.issueNumber }),
+        created,
+      );
       expect(created.issueNumber).toBeGreaterThan(0);
       expect(created.nodeId).toBeTruthy();
       expect(created.htmlUrl).toBe(

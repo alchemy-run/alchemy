@@ -191,9 +191,12 @@ export const AccountProvider = () =>
           }
         }),
         lookup: Effect.fn(function* (props) {
-          return "accountId" in props
-            ? yield* readAccountById(props.accountId)
-            : yield* readAccountByNameOrEmail({ name: "", email: props.email });
+          // An account outside any organization has no member accounts to find.
+          return yield* (
+            "accountId" in props
+              ? readAccountById(props.accountId)
+              : readAccountByNameOrEmail({ name: "", email: props.email })
+          ).pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.accountId
@@ -370,12 +373,10 @@ const readAccountById = Effect.fn(function* (accountId: string) {
     return undefined;
   }
 
-  const [parentId, tags] = yield* Effect.all([
-    readParentId(described.Id),
-    readResourceTags(described.Id).pipe(
-      Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
-    ),
-  ]);
+  const readTags = readResourceTags(described.Id).pipe(
+    Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+  );
+  const [parentId, tags] = yield* Effect.all([readParentId(described.Id), readTags]);
 
   return {
     accountId: described.Id,

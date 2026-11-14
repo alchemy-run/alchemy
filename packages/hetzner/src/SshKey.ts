@@ -56,8 +56,18 @@ export type SshKey = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  SshKeyLookup
 >;
+
+/**
+ * Props for {@link SshKey.lookup}: find a SSH key this stack
+ * doesn't manage by its name.
+ */
+export interface SshKeyLookup {
+  /** SSH key name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud SSH key. Public keys are injected into Servers at create
@@ -80,6 +90,16 @@ export type SshKey = Resource<
  *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
  *   labels: { role: "deploy" },
  * });
+ * ```
+ *
+ * ### Looking up an existing SSH key
+ * `SshKey.lookup` references a SSH key Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing key
+ * ```typescript
+ * const key = Hetzner.SshKey.lookup({ name: "laptop" });
  * ```
  *
  * @resource
@@ -161,6 +181,11 @@ export const SshKeyProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
     }),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {

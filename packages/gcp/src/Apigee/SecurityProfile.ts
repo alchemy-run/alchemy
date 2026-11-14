@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
@@ -118,8 +119,31 @@ export type SecurityProfile = Resource<
     revisionUpdateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityProfileLookup
 >;
+
+/**
+ * Props for {@link SecurityProfile.lookup}: find a security profile this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityProfileLookup {
+  /**
+   * Profile id (the `{profile}` segment of
+   * `organizations/{org}/securityProfiles/{profile}`).
+   */
+  securityProfileId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Advanced API Security profile (v1).
@@ -147,6 +171,19 @@ export type SecurityProfile = Resource<
  *   profileConfig: {
  *     categories: [{ authorization: true, cors: true, threat: true }],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing security profile
+ * `SecurityProfile.lookup` references a security profile Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security profile.
+ *
+ * **Example:** Reference an existing security profile
+ * ```typescript
+ * const securityProfile = GCP.Apigee.SecurityProfile.lookup({
+ *   securityProfileId: "my-security-profile",
  * });
  * ```
  *
@@ -271,6 +308,16 @@ export const SecurityProfileProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityProfileId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, securityProfileId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -39,6 +40,7 @@ describe.concurrent("App", () => {
             });
           }),
         );
+        yield* expectFound(Fly.App.lookup({ name: created.appName }), created);
 
         expect(created.appId).toEqual(expect.any(String));
         expect(created.appName).toEqual(expect.any(String));

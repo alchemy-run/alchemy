@@ -37,6 +37,12 @@ export class PrismaDeploymentFailed extends Data.TaggedError("PrismaDeploymentFa
   message: string;
 }> {}
 
+/** Deleting a deployment failed; the message names the manual cleanup routes. */
+export class PrismaDeploymentDeleteFailed extends Data.TaggedError("PrismaDeploymentDeleteFailed")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 export interface WaitForDeploymentStatusOptions {
   /**
    * Maximum time to wait for a deployment to reach the requested status.
@@ -102,13 +108,6 @@ const DELETE_CONFLICT_RETRY_ATTEMPTS = 5;
 
 const deleteRetryDelay = (attempt: number) => Effect.sleep(Duration.millis(250 * 2 ** attempt));
 
-const ensureError = (error: unknown): Error =>
-  error instanceof Error
-    ? error
-    : new Error("Prisma deployment lifecycle operation failed.", {
-        cause: error,
-      });
-
 const deploymentDeleteFailed = (
   deploymentId: string,
   statusAtDelete: string | undefined,
@@ -118,8 +117,8 @@ const deploymentDeleteFailed = (
   const detail = format(error);
   const isKnownStoppedDeleteFailure =
     statusAtDelete === "stopped" && Category.hasCategory(error, "ServerError");
-  return new Error(
-    [
+  return new PrismaDeploymentDeleteFailed({
+    message: [
       `Failed to delete Prisma deployment '${deploymentId}' while it was in status '${statusAtDelete ?? "unknown"}'.`,
       detail,
       isKnownStoppedDeleteFailure
@@ -130,8 +129,8 @@ const deploymentDeleteFailed = (
     ]
       .filter((line): line is string => line !== undefined)
       .join(" "),
-    { cause: error },
-  );
+    cause: error,
+  });
 };
 
 const deploymentWaitTimedOut = (
@@ -231,7 +230,6 @@ export const destroyDeployment = Effect.fn(function* (
     if (deployment.status !== "stopping") {
       yield* stopDeploymentIdempotent(deploymentId).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
-        Effect.mapError(ensureError),
       );
       stopped = true;
     }

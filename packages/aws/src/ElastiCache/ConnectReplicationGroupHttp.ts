@@ -24,10 +24,10 @@ export const ConnectReplicationGroupHttp = Layer.effect(
       const configurationPort = group.configurationEndpointPort;
       const primaryPort = group.primaryEndpointPort;
       const endpointHost = Output.flatMap(configurationHost, (host) =>
-        host === undefined ? primaryHost : Output.asOutput(host),
+        host === undefined ? primaryHost : Output.literal(host),
       );
       const endpointPort = Output.flatMap(configurationPort, (port) =>
-        port === undefined ? primaryPort : Output.asOutput(port),
+        port === undefined ? primaryPort : Output.literal(port),
       );
       const readerHost = Output.map(group.readerEndpointAddress, (host) => host ?? "");
       const readerPort = Output.map(group.readerEndpointPort, (port) =>

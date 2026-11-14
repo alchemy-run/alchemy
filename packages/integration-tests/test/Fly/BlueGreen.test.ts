@@ -6613,7 +6613,13 @@ describe.concurrent("BlueGreen", () => {
               const outcomes: string[] = [];
               for (const lease_nonce of [undefined, differentNonce(nonce)]) {
                 const request = { ...target, lease_nonce };
-                const attempts = [
+                // The attempts succeed with different types; only the outcome matters.
+                const attempts: ReadonlyArray<
+                  readonly [
+                    string,
+                    Effect.Effect<unknown, { readonly _tag: string }, machines.FlyIoOpContext>,
+                  ]
+                > = [
                   ["update", machines.updateMachine({ ...request, config: initial.config })],
                   ["start", machines.startMachine(request)],
                   ["cordon", machines.cordonMachine(request)],
@@ -6625,7 +6631,7 @@ describe.concurrent("BlueGreen", () => {
                     machines.restartMachine({ ...request, signal: "SIGTERM", timeout: "5s" }),
                   ],
                   ["delete", machines.deleteMachine({ ...request, force: true })],
-                ] as const;
+                ];
                 for (const [operation, attempt] of attempts) {
                   yield* refreshAuthority;
                   const result = yield* attempt.pipe(Effect.timeout("60 seconds"), Effect.result);

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   AnalyticshubNotResolved,
@@ -197,8 +198,38 @@ export type DataExchangesListing = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataExchangesListingLookup
 >;
+
+/**
+ * Props for {@link DataExchangesListing.lookup}: find a data exchanges
+ * listing this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface DataExchangesListingLookup {
+  /**
+   * Listing id (the `{listing}` segment of
+   * `.../dataExchanges/{dataExchange}/listings/{listing}`). Letters,
+   * numbers, and underscores; max 100 bytes.
+   */
+  listingId: string;
+  /**
+   * Location used when `dataExchange` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent data exchange. Full name
+   * `projects/{project}/locations/{location}/dataExchanges/{dataExchange}`
+   * or the exchange id (combined with `location`).
+   */
+  dataExchange: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Analytics Hub listing published into a data exchange. Subscribers
@@ -235,6 +266,20 @@ export type DataExchangesListing = Resource<
  *   dataExchange: exchange.name,
  *   displayName: "Events",
  *   pubsubTopic: { topic: topic.name },
+ * });
+ * ```
+ *
+ * ### Looking up an existing data exchanges listing
+ * `DataExchangesListing.lookup` references a data exchanges listing Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared data exchanges listing.
+ *
+ * **Example:** Reference an existing data exchanges listing
+ * ```typescript
+ * const dataExchangesListing = GCP.AnalyticsHub.DataExchangesListing.lookup({
+ *   listingId: "my-listing",
+ *   dataExchange: "my-data-exchange",
  * });
  * ```
  *
@@ -361,6 +406,23 @@ export const DataExchangesListingProvider = () =>
         extra: previousSource.length > 1 && nextSource.length > 1 && previousSource !== nextSource,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      listingId,
+      location: lookupLocation,
+      dataExchange: lookupDataExchange,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataExchange =
+        lookupDataExchange !== undefined
+          ? parentExchange(lookupDataExchange, env.project, location)
+          : "";
+      const name = dataExchange ? resourceName(dataExchange, listingId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -216,6 +216,8 @@ export type Server = Resource<
     volumeIds: number[];
     /** Attached private Network IDs. */
     networkIds: number[];
+    /** The Server's address on each attached private Network, in {@link networkIds} order. */
+    privateIps: string[];
     /** Firewall IDs applied to the public NIC. */
     firewallIds: number[];
     /** Placement Group ID, or `undefined` if unassigned. */
@@ -245,8 +247,18 @@ export type Server = Resource<
      */
     volumes?: Array<{ volumeId: number; path: string }>;
   },
-  Providers
+  Providers,
+  ServerLookup
 >;
+
+/**
+ * Props for {@link Server.lookup}: find a server this stack
+ * doesn't manage by its name.
+ */
+export interface ServerLookup {
+  /** Server name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Server — a virtual machine in a Location, created from
@@ -323,6 +335,19 @@ export type Server = Resource<
  * multipart cloud-init document, so both run. It is applied on first boot
  * only — changing it replaces the Server.
  *
+ * ### Looking up an existing server
+ * `Server.lookup` references a server Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Alchemy holds a server's SSH key only for servers it created, so a
+ * looked-up server has no `privateKey`.
+ *
+ * **Example:** Reference an existing server
+ * ```typescript
+ * const server = Hetzner.Server.lookup({ name: "web-1" });
+ * const address = server.ipv4;
+ * ```
+ *
  * @resource
  * @product Server
  */
@@ -392,6 +417,10 @@ const toAttrs = (server: CloudServer): Server["Attributes"] => ({
   networkIds: server.private_net
     .map((item) => item.network)
     .filter((id): id is number => typeof id === "number"),
+  privateIps: server.private_net
+    .filter((item) => typeof item.network === "number")
+    .map((item) => item.ip)
+    .filter((ip): ip is string => typeof ip === "string"),
   firewallIds: (server.public_net.firewalls ?? [])
     .map((item) => item.id)
     .filter((id): id is number => typeof id === "number"),
@@ -790,7 +819,7 @@ const syncVolumes = Effect.fn(function* (input: {
     if (observed.has(volumeId)) continue;
     const { action } = yield* Hetzner.volumeActions.attachVolume({
       id: volumeId,
-      server: input.serverId,
+      assignee: { id: input.serverId, type: "server" },
     });
     yield* waitForAction(action);
   }
@@ -894,6 +923,11 @@ export const ServerProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });

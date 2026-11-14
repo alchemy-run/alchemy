@@ -5,6 +5,7 @@ import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -35,6 +36,13 @@ test.provider(
             githubConfig: {},
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudBuild.Connection.lookup({
+          connectionId: created.connectionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.connectionId).toEqual(expect.any(String));

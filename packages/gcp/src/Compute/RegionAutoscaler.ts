@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -133,8 +134,31 @@ export type RegionAutoscaler = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionAutoscalerLookup
 >;
+
+/**
+ * Props for {@link RegionAutoscaler.lookup}: find a region autoscaler this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionAutoscalerLookup {
+  /**
+   * Autoscaler name (RFC1035, 1-63 characters).
+   */
+  autoscalerName: string;
+  /**
+   * Region of the managed instance group (e.g. `us-central1`).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine autoscaler for a managed instance group.
@@ -189,6 +213,19 @@ export type RegionAutoscaler = Resource<
  *     maxNumReplicas: 10,
  *     cpuUtilization: { utilizationTarget: 0.5 },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing region autoscaler
+ * `RegionAutoscaler.lookup` references a region autoscaler Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * region autoscaler.
+ *
+ * **Example:** Reference an existing region autoscaler
+ * ```typescript
+ * const regionAutoscaler = GCP.Compute.RegionAutoscaler.lookup({
+ *   autoscalerName: "my-autoscaler",
  * });
  * ```
  *
@@ -460,6 +497,14 @@ export const RegionAutoscalerProvider = () =>
         deleteFirst: true,
       };
     }),
+
+    lookup: Effect.fn(function* ({ autoscalerName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, autoscalerName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

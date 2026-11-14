@@ -67,8 +67,26 @@ export type LocationsBucketsView = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsBucketsViewLookup
 >;
+
+/**
+ * Props for {@link LocationsBucketsView.lookup}: find a locations buckets
+ * view this stack doesn't manage by its identifiers.
+ */
+export interface LocationsBucketsViewLookup {
+  /**
+   * View id (the `{view}` segment of `{bucket}/views/{view}`). Limited to
+   * 100 characters: letters, digits, underscores, hyphens.
+   */
+  viewId: string;
+  /**
+   * Full resource name of the parent log bucket
+   * (`{parent}/locations/{location}/buckets/{bucket}`).
+   */
+  bucketName: string;
+}
 
 /**
  * A Cloud Logging view over log entries in a log bucket, managed through
@@ -108,6 +126,20 @@ export type LocationsBucketsView = Resource<
  *   bucketName: bucket.name,
  *   filter: 'LOG_ID("stderr")',
  *   description: "stderr only",
+ * });
+ * ```
+ *
+ * ### Looking up an existing locations buckets view
+ * `LocationsBucketsView.lookup` references a locations buckets view Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared locations buckets view.
+ *
+ * **Example:** Reference an existing locations buckets view
+ * ```typescript
+ * const locationsBucketsView = GCP.Logging.LocationsBucketsView.lookup({
+ *   viewId: "my-view",
+ *   bucketName: "my-bucket",
  * });
  * ```
  *
@@ -159,6 +191,14 @@ export const LocationsBucketsViewProvider = () =>
       const bucketChanged = previousBucket !== undefined && news.bucketName !== previousBucket;
       if (!idChanged && !bucketChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({ viewId, bucketName }) {
+      if (bucketName === undefined) return undefined;
+      const name = resourceName(bucketName, viewId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, bucketName);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

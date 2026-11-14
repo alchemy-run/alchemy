@@ -3,32 +3,29 @@ title: What is Railway?
 description: The concepts behind Railway — workspaces, projects, environments, services, deployments, databases, volumes, variables, private networking and domains — and how @alchemy.run/railway models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Railway runs containers for you. You put **services** in a **project**: your API, a worker, a Postgres database, a Redis cache. Railway builds each one, runs it, gives it a URL, and connects the services in a project over a private network. You pay for the CPU and memory they actually use.
 
 Take one small app: an API service with a Postgres database and a Volume, in one project. A workspace holds the project. The project runs a full copy of its services in each environment, and services in one environment reach each other over its private network.
 
-<DAG
+<Tree
   nodes={[
-    { id: "token", label: "API token", type: "one workspace", col: 0, row: 0 },
-    { id: "api", label: "Api", type: "Service · public URL", tone: "accent", col: 1, row: 0 },
-    { id: "pg", label: "Postgres", type: "Service · Volume", col: 2, row: 0 },
-    { id: "api2", label: "Api", type: "Service", col: 1, row: 1 },
-    { id: "pg2", label: "Postgres", type: "Service · Volume", col: 2, row: 1 },
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:railway" },
+    { id: "project", label: "Site", type: "project", parent: "ws", dashed: true, icon: "folder" },
+    { id: "prod", label: "production", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api pg"], colGap: 4 },
+    { id: "api", label: "Api", type: "service · public URL", parent: "prod", tone: "accent", icon: "server" },
+    { id: "pg", label: "Postgres", type: "service · volume", parent: "prod", icon: "brand:postgresql" },
+    { id: "staging", label: "staging", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api2 pg2"], colGap: 4 },
+    { id: "api2", label: "Api", type: "service", parent: "staging", icon: "server" },
+    { id: "pg2", label: "Postgres", type: "service · volume", parent: "staging", icon: "brand:postgresql" },
   ]}
-  groups={[
-    { id: "ws", label: "Workspace acme", nodes: [] },
-    { id: "project", label: "Project Site", parent: "ws", nodes: [], dashed: true },
-    { id: "prod", label: "production", parent: "project", nodes: ["api", "pg"], dashed: true },
-    { id: "staging", label: "staging", parent: "project", nodes: ["api2", "pg2"], dashed: true },
+  links={[
+    { from: "api", to: "pg", label: "privately" },
+    { from: "api2", to: "pg2", label: "privately" },
   ]}
-  edges={[
-    { from: "token", to: "ws", label: "deploy" },
-    { from: "api", to: "pg", label: "private network" },
-    { from: "api2", to: "pg2", label: "private network" },
-  ]}
-  caption="A workspace holds projects. Each environment is a full copy of the project's services, with its own variables, data and private network."
+  caption="A workspace holds projects, and an API token deploys into one workspace. Each environment is a full copy of the project's services, with its own variables, data and private network."
 />
 
 ## Workspaces and tokens

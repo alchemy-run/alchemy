@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ADD",
+          "line": 2,
+          "flags": [
+            {
+              "name": "unpack",
+              "value": "false"
+            },
+            {
+              "name": "keep-git-dir",
+              "value": "false"
+            },
+            {
+              "name": "link",
+              "value": null
+            },
+            {
+              "name": "exclude",
+              "value": "*.tmp"
+            }
+          ],
+          "sources": [
+            "https://example.com/a.tar"
+          ],
+          "destination": "/x/"
+        }
+      ]
+    }
+  ]
+}

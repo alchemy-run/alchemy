@@ -1,0 +1,131 @@
+---
+title: Pools
+description: How a pool of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across pools.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A **pool** is a group of **runners**, the processes that run your code. A pool is a Layer: provide it to an implementation, and that implementation runs on every runner in the pool. Each host names its pool after what it runs on, like `ClusterDocker.SwarmPool` or `ClusterAWS.EcsPool`.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+## One pool, one program
+
+Every class provided the same pool is bundled into one Node program, built into one image, and run on every runner in the pool. A change to any of them builds a new image, and the host replaces the runners, a few at a time.
+
+<DAG
+  nodes={[
+    { id: "room", label: "Room", type: "entity", layer: 0 },
+    { id: "invite", label: "Invite", type: "workflow", layer: 0 },
+    { id: "cleanup", label: "Cleanup", type: "cron", layer: 0 },
+    { id: "default", label: "Default", type: "one image", tone: "accent", layer: 1 },
+    { id: "r1", label: "Runner 1", layer: 2 },
+    { id: "r2", label: "Runner 2", layer: 2 },
+  ]}
+  edges={[
+    { from: "room", to: "default" },
+    { from: "invite", to: "default" },
+    { from: "cleanup", to: "default" },
+    { from: "default", to: "r1" },
+    { from: "default", to: "r2" },
+  ]}
+  caption="Every runner in a pool runs the same classes."
+/>
+
+Effect Cluster needs this: it gives each shard to any runner in a group, whatever classes the runner has, so every runner must have them all.
+
+A class's `main` is how the pool finds it. The pool's program imports the default export of each class's `main`: the class itself when it's declared with its implementation, or the Layer `.make` returned when it's [declared on its own](/cluster/entities#keep-its-code-out-of-its-callers). So `main` is almost always `import.meta.url`, in a file whose default export is the class or the Layer.
+
+Because the pool bundles every class it hosts, a class calling another on the same pool adds nothing to it. Only callers outside the pool, or on another pool, bundle code they never run.
+
+## Split work across pools
+
+A second pool is its own program, image and service, scaled and deployed on its own:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+
+export const Billing = ClusterDocker.SwarmPool("Billing", { replicas: 4 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+Each pool is its own **shard group**, so its classes' instances only run on its runners. Pools on the same database are one cluster: an entity on `Default` calls one on `Billing` directly.
+
+## Deploying with Layers
+
+Provide a pool to an implementation's Effect, whether the class is declared with its implementation or on its own, with whatever its handlers need from them, like RPC middleware:
+
+```typescript title="src/RoomLive.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import { AuthLive } from "./Auth.ts";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+        Join: () => Effect.map(Ref.get(members), (all) => all.size),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default.pipe(Layer.provide(AuthLive)))),
+);
+```
+
+Or provide it to the Layer `.make` returns, as Effect does with `toLayer`:
+
+```typescript title="src/SweeperLive.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Default } from "./Cluster.ts";
+import { Sweeper } from "./Sweeper.ts";
+
+export default Sweeper.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.logInfo("sweeping");
+  }),
+).pipe(Layer.provide(Default));
+```
+
+## The gateway
+
+Every pool serves its classes over HTTP to callers outside the cluster, behind a token. Where the gateway is reachable depends on the cloud:
+
+| Cloud | Gateway |
+|---|---|
+| Docker | the service's name, on the swarm's network |
+| AWS | an internet-facing Application Load Balancer |
+| GCP | a regional load balancer on a static address |
+| Kubernetes | a Service, in the cluster (or a load balancer, with `serviceType`) |
+| Fly | `https://{name}.fly.dev` |
+| Hetzner | a Load Balancer |
+| Cloudflare | the pool's Worker, through a service binding from other Workers |
+
+Load balancers check the gateway at `/health`, which needs no token.
+
+## What happens on a deploy
+
+When the host replaces runners, each new runner registers and takes shards as the old ones release them. Instances on a moving shard stop and start again on their new runner, with fresh state. Persisted messages and workflows continue; a call in flight to a moving instance can fail with `EntityNotAssignedToRunner` and is safe to retry.

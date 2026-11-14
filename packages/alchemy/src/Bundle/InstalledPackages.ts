@@ -3,6 +3,7 @@ import { builtinModules } from "node:module";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
@@ -25,7 +26,7 @@ export type PackageInstall = ReadonlyArray<string> | Readonly<Record<string, str
 export type NpmInstallRunner = (
   directory: string,
   args: ReadonlyArray<string>,
-) => Effect.Effect<void, unknown>;
+) => Effect.Effect<void, BundleError | PlatformError>;
 
 export interface ResolveInstallTargetsOptions {
   readonly cwd: string;

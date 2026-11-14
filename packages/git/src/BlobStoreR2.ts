@@ -123,6 +123,7 @@ export const BlobStoreR2 = (
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- `bucket` may be a declaration Effect whose requirement is resolved at stack eval; the Layer type below drops it on purpose
       const client = yield* Cloudflare.R2.ReadWriteBucket(bucket);
       return makeBlobStoreR2(client);
     }),

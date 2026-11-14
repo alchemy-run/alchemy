@@ -487,6 +487,20 @@ layer(services, { excludeTestServices: true })((it) => {
     }),
   );
 
+  // A supervisor restarting a stage in the same process (#3188).
+  it.effect("serves on the same strict port again right after the previous proxy closes", () =>
+    Effect.gen(function* () {
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const port = yield* PortHelpers.find(0);
+      const serveOnce = Effect.scoped(
+        proxy.serve({ port, strictPort: true }).pipe(Effect.map((instance) => instance.url.port)),
+      );
+
+      expect(yield* serveOnce).toBe(String(port));
+      expect(yield* serveOnce).toBe(String(port));
+    }),
+  );
+
   it.effect("owns its port on the IPv6 loopback so localhost cannot be shadowed", () =>
     Effect.gen(function* () {
       const proxy = yield* WorkerProxy.WorkerProxy;

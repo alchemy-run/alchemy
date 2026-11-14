@@ -110,6 +110,8 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             return yield* HttpServerResponse.json(yield* object.transactionalRegistration());
           case "sibling-transaction":
             return yield* HttpServerResponse.json(yield* object.siblingTransaction());
+          case "nested-transactions":
+            return yield* HttpServerResponse.json(yield* object.nestedTransactions());
           case "rollback-explicit":
             return yield* HttpServerResponse.json(yield* object.rollbackExplicit());
           case "rollback-typed":

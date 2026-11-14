@@ -6,6 +6,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -69,6 +70,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { group, app };
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.AppgroupsApp.lookup({
+          appId: created.app.appId,
+          organizationId: created.app.organizationId,
+          appgroup: created.app.appgroupId,
+        }),
+        created.app,
       );
 
       expect(created.app.appId).toEqual(expect.any(String));

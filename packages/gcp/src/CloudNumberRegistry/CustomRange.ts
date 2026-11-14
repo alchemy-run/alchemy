@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -122,8 +123,32 @@ export type CustomRange = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CustomRangeLookup
 >;
+
+/**
+ * Props for {@link CustomRange.lookup}: find a custom range this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CustomRangeLookup {
+  /**
+   * Custom range id (the `{customRange}` segment of
+   * `projects/{project}/locations/{location}/customRanges/{customRange}`).
+   */
+  customRangeId: string;
+  /**
+   * Location of the range. Cloud Number Registry is global — `global` is
+   * the only supported value.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A user-defined Cloud Number Registry IP range. Custom ranges track
@@ -164,6 +189,19 @@ export type CustomRange = Resource<
  *   ipv4CidrRange: "10.0.0.0/22",
  *   description: "on-prem campus v2",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing custom range
+ * `CustomRange.lookup` references a custom range Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * custom range.
+ *
+ * **Example:** Reference an existing custom range
+ * ```typescript
+ * const customRange = GCP.CloudNumberRegistry.CustomRange.lookup({
+ *   customRangeId: "my-custom-range",
  * });
  * ```
  *
@@ -256,6 +294,15 @@ export const CustomRangeProvider = () =>
           (previousV6 !== undefined && nextV6 !== undefined && previousV6 !== nextV6),
       });
     }),
+
+    lookup: Effect.fn(function* ({ customRangeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, customRangeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

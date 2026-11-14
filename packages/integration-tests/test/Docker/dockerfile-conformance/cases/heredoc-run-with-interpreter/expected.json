@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "\u003c\u003cCOMPLEX python3"
+          },
+          "heredocs": [
+            {
+              "name": "COMPLEX",
+              "content": "print('hello world')\n",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

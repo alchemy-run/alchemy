@@ -102,8 +102,25 @@ export type AccessPoliciesServicePerimeter = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AccessPoliciesServicePerimeterLookup
 >;
+
+/**
+ * Props for {@link AccessPoliciesServicePerimeter.lookup}: find an access
+ * policies service perimeter this stack doesn't manage by its identifiers.
+ */
+export interface AccessPoliciesServicePerimeterLookup {
+  /**
+   * Service perimeter id (the `{service_perimeter}` segment). Must begin
+   * with a letter, then alphanumeric or `_`.
+   */
+  servicePerimeterId: string;
+  /**
+   * Parent access policy (`accessPolicies/{policy}` or the policy id).
+   */
+  policy: string;
+}
 
 /**
  * An Access Context Manager service perimeter.
@@ -152,6 +169,20 @@ export type AccessPoliciesServicePerimeter = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing access policies service perimeter
+ * `AccessPoliciesServicePerimeter.lookup` references an access policies
+ * service perimeter Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared access policies service perimeter.
+ *
+ * **Example:** Reference an existing access policies service perimeter
+ * ```typescript
+ * const accessPoliciesServicePerimeter = GCP.AccessContextManager.AccessPoliciesServicePerimeter.lookup({
+ *   servicePerimeterId: "my-service-perimeter",
+ *   policy: "my-policy",
+ * });
  * ```
  *
  * @resource
@@ -222,6 +253,14 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       const nextType = typeOf(news.perimeterType ?? olds?.perimeterType ?? output?.perimeterType);
       const typeChanged = previousType !== nextType;
       return replaceOnIdentity(idChanged || policyChanged || typeChanged);
+    }),
+
+    lookup: Effect.fn(function* ({ servicePerimeterId, policy }) {
+      if (policy === undefined) return undefined;
+      const name = resourceNameOf(policy, "servicePerimeters", servicePerimeterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -128,8 +129,33 @@ export type SavedQuery = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SavedQueryLookup
 >;
+
+/**
+ * Props for {@link SavedQuery.lookup}: find a saved query this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SavedQueryLookup {
+  /**
+   * Saved query id (the `{query}` segment of
+   * `projects/{project}/locations/{location}/savedQueries/{query}`).
+   * Limited to 100 characters: letters, digits, underscores, hyphens,
+   * periods; first character must be alphanumeric.
+   */
+  savedQueryId: string;
+  /**
+   * Location that stores the saved query.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging saved query for Logs Explorer or Log Analytics.
@@ -164,6 +190,19 @@ export type SavedQuery = Resource<
  * const query = yield* GCP.Logging.SavedQuery("Errors", {
  *   displayName: "warnings and errors",
  *   loggingQuery: { filter: "severity>=WARNING" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing saved query
+ * `SavedQuery.lookup` references a saved query Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * saved query.
+ *
+ * **Example:** Reference an existing saved query
+ * ```typescript
+ * const savedQuery = GCP.Logging.SavedQuery.lookup({
+ *   savedQueryId: "my-saved-query",
  * });
  * ```
  *
@@ -297,6 +336,15 @@ export const SavedQueryProvider = () =>
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ savedQueryId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(env.project, location, savedQueryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

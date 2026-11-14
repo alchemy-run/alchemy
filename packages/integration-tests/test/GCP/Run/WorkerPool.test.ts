@@ -5,6 +5,7 @@ import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,6 +42,13 @@ test.provider(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Run.WorkerPool.lookup({
+          workerPoolId: created.workerPoolId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/workerPools/");

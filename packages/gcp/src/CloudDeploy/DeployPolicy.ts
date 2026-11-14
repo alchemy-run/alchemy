@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -206,8 +207,33 @@ export type DeployPolicy = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeployPolicyLookup
 >;
+
+/**
+ * Props for {@link DeployPolicy.lookup}: find a deploy policy this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DeployPolicyLookup {
+  /**
+   * Deploy policy id (the `{deployPolicy}` segment of
+   * `projects/{project}/lo
+   * cations/{location}/deployPolicies/{deployPolicy}`).
+   */
+  deployPolicyId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Deploy policy that restricts rollout actions on selected
@@ -275,6 +301,19 @@ export type DeployPolicy = Resource<
  *   }],
  *   description: "weekend freeze v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing deploy policy
+ * `DeployPolicy.lookup` references a deploy policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * deploy policy.
+ *
+ * **Example:** Reference an existing deploy policy
+ * ```typescript
+ * const deployPolicy = GCP.CloudDeploy.DeployPolicy.lookup({
+ *   deployPolicyId: "my-deploy-policy",
  * });
  * ```
  *
@@ -373,6 +412,15 @@ export const DeployPolicyProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ deployPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, deployPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

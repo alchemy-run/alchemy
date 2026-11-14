@@ -5,6 +5,7 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,6 +42,10 @@ test.provider(
             query: { query: "SELECT 1 AS n", useLegacySql: false },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BigQuery.Job.lookup({ jobId: created.jobId, location: created.location }),
+        created,
       );
 
       expect(created.jobId).toEqual(expect.any(String));

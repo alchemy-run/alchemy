@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgName, sameJson, waitForOperation } from "./operations.ts";
@@ -160,8 +161,26 @@ export type Organization = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationLookup
 >;
+
+/**
+ * Props for {@link Organization.lookup}: find an organization this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface OrganizationLookup {
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee X organization, 1:1 with a Google Cloud project.
@@ -191,6 +210,17 @@ export type Organization = Resource<
  *   description: "api platform",
  *   addonsConfig: { monetizationConfig: { enabled: true } },
  * });
+ * ```
+ *
+ * ### Looking up an existing organization
+ * `Organization.lookup` references an organization Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * organization.
+ *
+ * **Example:** Reference an existing organization
+ * ```typescript
+ * const organization = GCP.Apigee.Organization.lookup({});
  * ```
  *
  * @resource
@@ -291,6 +321,16 @@ export const OrganizationProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ organizationId: lookupOrganizationId }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = toOrgId(env.project, lookupOrganizationId, undefined);
+      const name = orgName(organizationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

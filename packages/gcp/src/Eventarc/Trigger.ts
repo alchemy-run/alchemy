@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -257,8 +258,33 @@ export type Trigger = Resource<
     conditions: eventarc.StateConditionMap | undefined;
   },
   never,
-  Providers
+  Providers,
+  TriggerLookup
 >;
+
+/**
+ * Props for {@link Trigger.lookup}: find a trigger this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TriggerLookup {
+  /**
+   * Trigger id (the `{trigger}` segment of
+   * `projects/{project}/locations/{location}/triggers/{trigger}`). Must
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  triggerId: string;
+  /**
+   * Eventarc location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc trigger that routes events matching a set of CloudEvents
@@ -329,6 +355,16 @@ export type Trigger = Resource<
  *   eventDataContentType: "application/json",
  *   labels: { env: "prod", role: "events" },
  * });
+ * ```
+ *
+ * ### Looking up an existing trigger
+ * `Trigger.lookup` references a trigger Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared trigger.
+ *
+ * **Example:** Reference an existing trigger
+ * ```typescript
+ * const trigger = GCP.Eventarc.Trigger.lookup({ triggerId: "my-trigger" });
  * ```
  *
  * @resource
@@ -702,6 +738,15 @@ export const TriggerProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ triggerId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, triggerId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

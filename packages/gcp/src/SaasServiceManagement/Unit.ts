@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -145,8 +146,6 @@ export type Unit = Resource<
     ongoingOperations: ReadonlyArray<string>;
     /** Pending unit operations. */
     pendingOperations: ReadonlyArray<string>;
-    /** Flag revisions in use. */
-    flagRevisions: ReadonlyArray<string>;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
     /** User annotations. */
@@ -161,8 +160,31 @@ export type Unit = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  UnitLookup
 >;
+
+/**
+ * Props for {@link Unit.lookup}: find an unit this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface UnitLookup {
+  /**
+   * Unit id (the `{unit}` segment of
+   * `projects/{project}/locations/{location}/units/{unit}`).
+   */
+  unitId: string;
+  /**
+   * Region of the unit (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Lifecycle Manager unit — one deployable instance of a UnitKind.
@@ -191,6 +213,16 @@ export type Unit = Resource<
  *   unitKind: kind.name,
  *   maintenance: { pinnedUntilTime: "2030-01-01T00:00:00Z" },
  * });
+ * ```
+ *
+ * ### Looking up an existing unit
+ * `Unit.lookup` references an unit Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared unit.
+ *
+ * **Example:** Reference an existing unit
+ * ```typescript
+ * const unit = GCP.SaasServiceManagement.Unit.lookup({ unitId: "my-unit" });
  * ```
  *
  * @resource
@@ -230,7 +262,6 @@ const toAttrs = (item: saasservicemgmt.Unit, project: string) => {
     })),
     ongoingOperations: item.ongoingOperations ?? [],
     pendingOperations: item.pendingOperations ?? [],
-    flagRevisions: item.flagRevisions ?? [],
     labels: userLabels(item.labels),
     annotations: userAnnotations(item.annotations),
     uid: item.uid,
@@ -303,6 +334,15 @@ export const UnitProvider = () =>
           (previousMode !== undefined && nextMode !== undefined && previousMode !== nextMode),
       });
     }),
+
+    lookup: Effect.fn(function* ({ unitId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, unitId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

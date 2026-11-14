@@ -127,8 +127,18 @@ export interface App extends Resource<
     logicalId: string | null;
   },
   never,
-  Providers
+  Providers,
+  AppLookup
 > {}
+
+/**
+ * Props for {@link App.lookup}: find an App this stack
+ * doesn't manage by its id.
+ */
+export interface AppLookup {
+  /** Prisma App (Compute service) id, `cps_…`. */
+  appId: string;
+}
 
 /**
  * A Prisma App, the long-lived application configuration that owns deployments.
@@ -153,6 +163,16 @@ export interface App extends Resource<
  *   project,
  *   branchId: preview.branchId,
  * });
+ * ```
+ *
+ * ### Looking up an existing App
+ * `App.lookup` references a App Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing App
+ * ```typescript
+ * const api = Prisma.App.lookup({ appId: "cps_cmabc123def456ghi789jkl0" });
  * ```
  *
  * @resource
@@ -218,11 +238,16 @@ const findAppByLogicalId = Effect.fn(function* (
   return apps.find((app) => app.logicalId === logicalId && app.branchId === branch.id);
 });
 
+export class PrismaAppLogicalIdTaken extends Data.TaggedError("PrismaAppLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (logicalId: string, branchId: string, projectId: string, cause: unknown) =>
-  new Error(
-    `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
-    { cause },
-  );
+  new PrismaAppLogicalIdTaken({
+    message: `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
+    cause,
+  });
 
 const attrsFrom = (app: ObservedApp): App["Attributes"] => ({
   appId: app.id,
@@ -329,6 +354,14 @@ const ProviderLive = () =>
             ? ({ action: "update" } as const)
             : undefined;
         }),
+        lookup: Effect.fn(function* ({ appId }) {
+          const app = yield* getService({ serviceId: appId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return app ? attrsFrom(app) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, fqn, output, olds }) {
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let provenOwned = false;
@@ -401,9 +434,7 @@ const ProviderLive = () =>
               Effect.catchTag("Conflict", (conflict) =>
                 Effect.gen(function* () {
                   if ((yield* findAppByLogicalId(projectId, logicalId, news)) !== undefined) {
-                    return yield* Effect.fail(
-                      logicalIdTaken(logicalId, branch.id, projectId, conflict),
-                    );
+                    return yield* logicalIdTaken(logicalId, branch.id, projectId, conflict);
                   }
                   const app = yield* findApp(projectId, displayName, news);
                   if (app && output?.appId !== undefined && app.id === output.appId) {

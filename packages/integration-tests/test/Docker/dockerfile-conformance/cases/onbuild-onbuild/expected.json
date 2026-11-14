@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: Chaining ONBUILD via `ONBUILD ONBUILD` isn't allowed"
+}

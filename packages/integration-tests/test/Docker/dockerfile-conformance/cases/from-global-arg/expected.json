@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "globalArgs": [
+    {
+      "tag": "ARG",
+      "line": 1,
+      "flags": [],
+      "vars": [
+        [
+          "BASE",
+          "alpine:3.20"
+        ]
+      ]
+    },
+    {
+      "tag": "ARG",
+      "line": 2,
+      "flags": [],
+      "vars": [
+        [
+          "VERSION",
+          null
+        ]
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "line": 3,
+      "image": "${BASE}",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ARG",
+          "line": 4,
+          "flags": [],
+          "vars": [
+            [
+              "VERSION",
+              null
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

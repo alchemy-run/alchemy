@@ -14,6 +14,7 @@ import * as Ref from "effect/Ref";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 
 // ---------------------------------------------------------------- a wallet domain
@@ -420,6 +421,32 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
         { ...asSam, after: page.cursor!, take: 3 },
       );
       expect(next.entries.map((row) => row.amount)).toEqual([4, 5, 6]);
+
+      // `pages` follows each cursor to the last page (take is clamped to 3); `entries` flattens them.
+      const pages = yield* api.WalletMovements.pages(
+        { wallet: "sam-1" },
+        { ...asSam, take: 4 },
+      ).pipe(Stream.runCollect);
+      expect(pages.map((p) => p.entries.length)).toEqual([3, 3, 3, 3, 3, 3, 2]);
+      expect(pages.at(-1)!.cursor).toBeNull();
+      const all = yield* api.WalletMovements.entries(
+        { wallet: "sam-1" },
+        { ...asSam, take: 7 },
+      ).pipe(Stream.runCollect);
+      expect(all.map((row) => row.amount)).toEqual(amounts);
+      // From a cursor, and stopped early with `Stream.take`.
+      const rest = yield* api.WalletMovements.entries(
+        { wallet: "sam-1" },
+        { ...asSam, after: next.cursor!, take: 3 },
+      ).pipe(Stream.runCollect);
+      expect(rest.map((row) => row.amount)).toEqual(amounts.slice(6));
+      const first = yield* api.WalletMovements.entries({ wallet: "sam-1" }, asSam).pipe(
+        Stream.take(1),
+        Stream.runCollect,
+      );
+      expect(first.map((row) => row.amount)).toEqual([1]);
+      // A query that isn't paged has no streams.
+      expect("pages" in api.Total).toBe(false);
 
       const refused = yield* api
         .WalletMovements({ wallet: "sam-1" }, { headers: { "x-viewer": "kim" } })

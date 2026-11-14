@@ -5,6 +5,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -39,6 +40,13 @@ test.provider(
           });
           return { bucket, view };
         }),
+      );
+      yield* expectFound(
+        GCP.Logging.FolderBucketsView.lookup({
+          viewId: created.view.viewId,
+          bucketName: created.view.bucketName,
+        }),
+        created.view,
       );
 
       expect(created.view.viewId).toEqual(expect.any(String));

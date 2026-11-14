@@ -6,6 +6,7 @@ import * as appengine from "@distilled.cloud/gcp/appengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -114,6 +115,14 @@ test.provider.skipIf(!runLifecycle)(
             sslSettings: { sslManagementType: "AUTOMATIC" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AppEngine.ApplicationsDomainMapping.lookup({
+          domain: created.domain,
+          applicationsId: created.applicationsId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.domain).toEqual(domain);

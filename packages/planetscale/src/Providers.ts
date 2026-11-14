@@ -1,5 +1,7 @@
+import { Retry as PlanetscaleRetry } from "@distilled.cloud/planetscale/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -15,6 +17,7 @@ import {
   PostgresDefaultRoleProvider,
 } from "./Postgres/PostgresDefaultRole.ts";
 import { PostgresRole, PostgresRoleProvider } from "./Postgres/PostgresRole.ts";
+import { ServiceToken, ServiceTokenProvider } from "./ServiceToken.ts";
 
 /**
  * Service tag bundling all PlanetScale providers + auth + credentials. Use
@@ -45,6 +48,7 @@ export const providers = () =>
       MySQLPassword,
       PostgresRole,
       PostgresDefaultRole,
+      ServiceToken,
     ]),
   ).pipe(
     Layer.provide(
@@ -56,8 +60,10 @@ export const providers = () =>
         MySQLPasswordProvider(),
         PostgresRoleProvider(),
         PostgresDefaultRoleProvider(),
+        ServiceTokenProvider(),
       ),
     ),
+    Layer.provideMerge(Layer.succeed(PlanetscaleRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(PlanetscaleAuth),

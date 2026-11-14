@@ -101,6 +101,26 @@ export default EventBridgeTestFunction.make(
         ),
     );
 
+    // Consume loop whose pattern matches a field that holds an array in the
+    // event: EventBridge delivers when any array value matches, and the
+    // runtime dispatch must agree or the event is dropped (#3297).
+    yield* AWS.EventBridge.consumeBusEvents(
+      bus,
+      { source: ["alchemy.test.tagged"], detail: { tags: ["blue"] } },
+      (events: Stream.Stream<AWS.EventBridge.EventRecord>) =>
+        events.pipe(
+          Stream.map((event) => ({
+            MessageBody: JSON.stringify({
+              source: event.source,
+              detailType: event["detail-type"],
+              detail: event.detail,
+            }),
+          })),
+          Stream.run(customSink),
+          Effect.orDie,
+        ),
+    );
+
     // Consume loop on the DEFAULT bus (no bus argument).
     yield* AWS.EventBridge.consumeBusEvents(
       { source: ["alchemy.test.default"] },
@@ -136,6 +156,23 @@ export default EventBridgeTestFunction.make(
                 Source: "alchemy.test.custom",
                 DetailType: "TestEvent",
                 Detail: JSON.stringify({ marker: body.marker }),
+              },
+            ],
+          });
+          return yield* HttpServerResponse.json({
+            failedEntryCount: result.FailedEntryCount ?? 0,
+            entries: result.Entries ?? [],
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/publish-tagged") {
+          const body = (yield* request.json) as unknown as { marker: string };
+          const result = yield* putEventsCustom({
+            Entries: [
+              {
+                Source: "alchemy.test.tagged",
+                DetailType: "TestEvent",
+                Detail: JSON.stringify({ marker: body.marker, tags: ["red", "blue"] }),
               },
             ],
           });

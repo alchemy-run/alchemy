@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -104,8 +105,29 @@ export type InstanceConfig = Resource<
     storageLimitPerProcessingUnit: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceConfigLookup
 >;
+
+/**
+ * Props for {@link InstanceConfig.lookup}: find an instance config this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InstanceConfigLookup {
+  /**
+   * Instance config id (the `{config}` segment of
+   * `projects/{project}/instanceConfigs/{config}`). User-managed ids must
+   * start with `custom-` and match `custom-[-a-z0-9]*[a-z0-9]` (2–64
+   * characters).
+   */
+  instanceConfigId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A user-managed Cloud Spanner instance configuration.
@@ -137,6 +159,19 @@ export type InstanceConfig = Resource<
  *     { location: "us-central1", type: "READ_WRITE" },
  *     { location: "us-east1", type: "READ_ONLY" },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing instance config
+ * `InstanceConfig.lookup` references an instance config Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * instance config.
+ *
+ * **Example:** Reference an existing instance config
+ * ```typescript
+ * const instanceConfig = GCP.Spanner.InstanceConfig.lookup({
+ *   instanceConfigId: "my-instance-config",
  * });
  * ```
  *
@@ -328,6 +363,14 @@ export const InstanceConfigProvider = () =>
           (previousId !== undefined && nextId === previousId),
       };
     }),
+
+    lookup: Effect.fn(function* ({ instanceConfigId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instanceConfigName(env.project, instanceConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

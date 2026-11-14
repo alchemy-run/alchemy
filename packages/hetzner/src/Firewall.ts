@@ -132,8 +132,18 @@ export interface Firewall extends Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FirewallLookup
 > {}
+
+/**
+ * Props for {@link Firewall.lookup}: find a firewall this stack
+ * doesn't manage by its name.
+ */
+export interface FirewallLookup {
+  /** Firewall name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud firewall — a named set of inbound/outbound rules that
@@ -197,6 +207,16 @@ export interface Firewall extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing firewall
+ * `Firewall.lookup` references a firewall Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing firewall
+ * ```typescript
+ * const firewall = Hetzner.Firewall.lookup({ name: "web" });
  * ```
  *
  * @resource
@@ -537,6 +557,11 @@ export const FirewallProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name =
         output?.name ??
