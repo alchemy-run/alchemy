@@ -13,6 +13,7 @@ import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createAlchemyTagFilters, createInternalTags, diffTags } from "alchemy/Tags";
+import { withWebhookHost, type WebhookHost } from "alchemy/WebhookHost";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -332,7 +333,7 @@ export type InstanceLookup =
       name: string;
     };
 
-export type InstanceServices = ServerHost | Credentials | Region | AWSEnvironment;
+export type InstanceServices = ServerHost | WebhookHost | Credentials | Region | AWSEnvironment;
 
 export type InstanceShape = Main<InstanceServices>;
 
@@ -450,7 +451,9 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  */
 export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> &
   LookupMethod<Instance> = Platform("AWS.EC2.Instance", {
-  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
+  // A public instance can receive webhooks (`Stripe.ConsumeEventsLive`, ...).
+  createRuntimeContext: (id: string) =>
+    withWebhookHost(createEc2HostRuntimeContext("AWS.EC2.Instance")(id)),
 });
 
 export const InstanceProvider = () =>
