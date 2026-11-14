@@ -8,7 +8,7 @@ Host your model on [Rivet](/rivet), and every aggregate instance, view key and p
 
 ## Host the model
 
-Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` and `handler` at the export the nodes load, and give it a pool.
+Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` at the file whose default export the nodes load, and give it a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -21,13 +21,12 @@ import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
-export const BankLive = Bank.layer(BankHandlers).pipe(
+export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
       DomainRivet.layerDurableObjects({
         name: "Bank",
         main: import.meta.url,
-        handler: "BankLive",
         pool: Default,
       }),
       SiftFraudCheck,
@@ -47,7 +46,7 @@ Provide `BankLive` wherever you serve the Api: a Cloudflare Worker, a Lambda, a 
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
-import { BankLive } from "./BankLive.ts";
+import BankLive from "./BankLive.ts";
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
@@ -111,9 +110,11 @@ Commands to one aggregate instance run one at a time. Its events, new state and 
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a node restarts in between. Scheduled commands fire on the actor's alarm when they're due.
 
-## Read live over HTTP
+## Watch without polling
 
-Rivet holds no WebSockets for actors, so serve the Api with `Domain.protocolHttp`. A `watch` or `events` read is a streamed response, fed by polling the actor that owns the key. `Domain.protocolWebSocket` answers `501` here.
+Give the client `Domain.protocolWebSocket` (see [Api](/domain/api#choose-a-protocol)). Each `watch` or `events` read opens a WebSocket, which the Api carries through the control plane's gateway to the actor that owns the key. The actor pushes every commit down it as it happens.
+
+The runtime that serves the Api holds the caller's side of the socket: a Worker hands it straight through, and a container (Bun or Node) copies frames between the two. A dropped socket reconnects and resumes from the last value it delivered. Over `Domain.protocolHttp`, live reads are streamed responses that poll the actor instead.
 
 ## Add consumers to a running Domain
 

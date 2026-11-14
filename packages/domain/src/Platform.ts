@@ -402,6 +402,32 @@ export interface ViewKit {
 }
 
 /**
+ * Which entries of a key a `list` reads, by `seq`. Without a range, every
+ * entry, oldest first.
+ */
+export interface ListRange {
+  /** Oldest first (`"asc"`, the default) or newest first. */
+  readonly order?: "asc" | "desc";
+  /** Only entries after this `seq` in `order`: greater for `"asc"`, smaller for `"desc"`. */
+  readonly after?: number;
+  /** At most this many entries. */
+  readonly limit?: number;
+}
+
+/** The entries of `entries` (sorted by `seq`) in `range`, for platforms that hold them in memory. */
+export const inRange = <A extends { readonly seq: number }>(
+  entries: ReadonlyArray<A>,
+  range: ListRange | undefined,
+): ReadonlyArray<A> => {
+  const desc = range?.order === "desc";
+  const after = range?.after;
+  const ordered = (desc ? [...entries].reverse() : entries).filter(
+    (entry) => after === undefined || (desc ? entry.seq < after : entry.seq > after),
+  );
+  return range?.limit === undefined ? ordered : ordered.slice(0, Math.max(0, range.limit));
+};
+
+/**
  * What a platform provides for a view.
  */
 export interface ViewStore {
@@ -410,8 +436,8 @@ export interface ViewStore {
   readonly read: (key: string) => Effect.Effect<ViewSnapshot>;
   /** The current snapshot, then every new one. */
   readonly changes: (key: string) => Stream.Stream<ViewSnapshot>;
-  /** Every entry of a key. */
-  readonly list: (key: string) => Effect.Effect<ReadonlyArray<ViewEntry>>;
+  /** A key's entries in `range`: only these are read from storage. */
+  readonly list: (key: string, range?: ListRange) => Effect.Effect<ReadonlyArray<ViewEntry>>;
   /** Entries with `seq > after`, then live entries. */
   readonly tail: (key: string, after: number) => Stream.Stream<ViewEntry>;
   /**
@@ -578,8 +604,8 @@ export interface StreamStore {
   readonly read: (key: string) => Effect.Effect<StreamMeta>;
   /** The current meta, then every new one. */
   readonly changes: (key: string) => Stream.Stream<StreamMeta>;
-  /** Every entry of a key. */
-  readonly list: (key: string) => Effect.Effect<ReadonlyArray<StreamEntry>>;
+  /** A key's entries in `range`: only these are read from storage. */
+  readonly list: (key: string, range?: ListRange) => Effect.Effect<ReadonlyArray<StreamEntry>>;
   /** Entries with `seq > after`, then live entries. */
   readonly tail: (key: string, after: number) => Stream.Stream<StreamEntry>;
   /** Accept a WebSocket upgrade for a live read of `key` (optional, like views). */

@@ -293,6 +293,9 @@
       "path": "./examples/aws-ecs/tsconfig.json"
     },
     {
+      "path": "./examples/aws-ecs-sandboxes/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-eks/tsconfig.json"
     },
     {

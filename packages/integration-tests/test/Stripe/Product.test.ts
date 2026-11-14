@@ -36,6 +36,7 @@ test.provider(
             name: "Alchemy Catalog Product",
             description: "Initial description",
             images: ["https://example.com/product.png"],
+            taxCode: "txcd_10103001",
             metadata: { tier: "pro" },
           });
         }),
@@ -47,6 +48,7 @@ test.provider(
       expect(created.description).toEqual("Initial description");
       expect(created.active).toEqual(true);
       expect(created.images).toEqual(["https://example.com/product.png"]);
+      expect(created.taxCode).toEqual("txcd_10103001");
       expect(created.metadata).toMatchObject({ tier: "pro" });
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
@@ -57,6 +59,7 @@ test.provider(
       expect(fetched.description).toEqual("Initial description");
       expect(fetched.active).toEqual(true);
       expect(fetched.images).toEqual(["https://example.com/product.png"]);
+      expect(fetched.tax_code).toEqual("txcd_10103001");
       expect(fetched.metadata?.tier).toEqual("pro");
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
@@ -69,6 +72,7 @@ test.provider(
             description: "Updated description",
             active: false,
             images: ["https://example.com/product-updated.png"],
+            taxCode: "txcd_10000000",
             metadata: { tier: "enterprise", sku: "ent-1" },
           });
         }),
@@ -79,6 +83,7 @@ test.provider(
       expect(updated.description).toEqual("Updated description");
       expect(updated.active).toEqual(false);
       expect(updated.images).toEqual(["https://example.com/product-updated.png"]);
+      expect(updated.taxCode).toEqual("txcd_10000000");
       expect(updated.metadata).toEqual({ tier: "enterprise", sku: "ent-1" });
 
       const refetched = yield* GetProduct({ id: updated.id });
@@ -86,6 +91,7 @@ test.provider(
       expect(refetched.description).toEqual("Updated description");
       expect(refetched.active).toEqual(false);
       expect(refetched.images).toEqual(updated.images);
+      expect(refetched.tax_code).toEqual("txcd_10000000");
       expect(refetched.metadata?.tier).toEqual("enterprise");
       expect(refetched.metadata?.sku).toEqual("ent-1");
       expect(refetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();

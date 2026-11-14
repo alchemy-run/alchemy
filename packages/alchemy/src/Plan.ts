@@ -82,7 +82,7 @@ import {
   type UpdatingReourceState,
 } from "./State/index.ts";
 import { isPlainData, mapPlainData } from "./Util/data.ts";
-import { findCycleMembers } from "./Util/scc.ts";
+import { findCycleMembers, findCycles } from "./Util/scc.ts";
 import { hashInput } from "./Util/sha256.ts";
 
 export type PlanError = never;
@@ -831,135 +831,296 @@ const makePlan = <A>(
     // `cachedInScope`): a diff that fails or is cancelled must not take the
     // resolution every other diff is waiting on down with it.
     const memoScope = yield* Effect.scope;
-    const resolvedResources: Record<string, Effect.Effect<any>> = {};
+
+    /**
+     * How the members of a cycle resolve while one of them is resolved: to
+     * `exposures` once those are known, and until then to their first pass,
+     * which leaves the data bound to them out. A member cannot wait on what
+     * the rest of the plan sees of its peers, since that waits on the member.
+     */
+    interface Peers {
+      readonly members: ReadonlySet<string>;
+      readonly exposures?: ReadonlyMap<string, unknown>;
+    }
+
+    /** What a node's outputs resolve to for the nodes that read them. */
+    interface Exposure {
+      readonly value: unknown;
+      /**
+       * How much of what the node last settled on `value` holds: all of it
+       * (`settled`), the attributes that survive its update, or `nothing`.
+       */
+      readonly extent: string;
+      /**
+       * The persisted bindings of a settled resource, for comparing them once
+       * the peers of its cycle are known.
+       */
+      readonly oldBindings?: ResourceBinding[];
+      /** The replacement its provider asked for. */
+      readonly replace?: ReplaceDiff;
+    }
+
+    const haveBindingsChanged = (olds: ResourceBinding[], news: ResourceBinding[]) =>
+      diffBindings(olds, news).some((binding) => binding.action !== "noop");
+
+    const exposeResource = (
+      resourceExpr: Output.ResourceExpr<any, any>,
+      peers: Peers | undefined,
+    ): Effect.Effect<Exposure, Config.ConfigError | StateStoreError> =>
+      // @ts-expect-error
+      Effect.gen(function* () {
+        const resource = resourceExpr.src;
+        const nothing: Exposure = { value: resourceExpr, extent: "nothing" };
+
+        const { provider, mode } = yield* resolveProviderAndMode(resource);
+        const props = materializeStableRefs(yield* resolveInput(resource.Props, undefined, peers));
+        // Falls back to the row at a former FQN (`renamedFrom`) so a
+        // renamed resource's stable attributes keep flowing to
+        // downstream diffs across the migration.
+        const { row: oldState } = yield* getPersistedRow(resource);
+
+        if (!oldState || oldState.status === "creating") {
+          return nothing;
+        }
+
+        // The resource is switching provider modes (local ⇄ live):
+        // it will be replaced, so nothing about the persisted attrs
+        // is stable for downstream consumers.
+        if (hasModeSwitched(mode, oldState)) {
+          return nothing;
+        }
+
+        const oldProps = oldState.status === "updating" ? oldState.old.props : oldState.props;
+
+        // Normalize both sides through `dedupeBindings` so the binding
+        // sets handed to `diff` are deduped AND sid-sorted — provider
+        // diffs that hash/compare the arrays never churn on
+        // registration-order flips (or on legacy unsorted state).
+        const oldBindings = dedupeBindings(oldState.bindings ?? []);
+        const bindings = stack.bindings[resource.FQN] ?? [];
+        // A cycle member's bindings hold its peers' outputs: they stay
+        // unresolved, and are left out of the comparison, until those are known.
+        const blind = peers !== undefined && peers.exposures === undefined;
+        const newBindings = dedupeBindings(
+          blind ? bindings : yield* resolveInput(bindings, undefined, peers),
+        );
+
+        const diff = yield* provider.diff
+          ? provider
+              .diff({
+                id: resource.LogicalId,
+                fqn: resource.FQN,
+                olds: oldProps,
+                instanceId: oldState.instanceId,
+                news: props,
+                output: oldState.attr,
+                oldBindings,
+                newBindings,
+              })
+              .pipe(providePlanScope(resource, oldState.instanceId))
+          : Effect.undefined;
+
+        // A present `diff.stables` is authoritative for this update and
+        // overrides `provider.stables`. We only fall back to the
+        // provider-level "always stable" list when the diff does not
+        // return one (e.g. no diff fn, or a diff that omits `stables`).
+        const stables: string[] = diff?.stables ?? provider.stables ?? [];
+
+        const surviving: Exposure =
+          stables.length > 0
+            ? {
+                value: new Output.ResourceExpr(
+                  resourceExpr.src,
+                  Object.fromEntries(stables.map((stable) => [stable, oldState.attr?.[stable]])),
+                ),
+                extent: `stables:${[...stables].sort().join(",")}`,
+              }
+            : // if there are no stable properties, treat every property as changed
+              nothing;
+
+        if (diff == null) {
+          if (
+            havePropsChanged(oldProps, props) ||
+            (!blind && haveBindingsChanged(oldBindings, newBindings))
+          ) {
+            // the props have changed but the provider did not provide any hints as to what is stable
+            // so we must assume everything has changed
+            return surviving;
+          }
+        } else if (diff.action === "update") {
+          return surviving;
+        } else if (diff.action === "replace") {
+          return { ...nothing, replace: diff };
+        }
+        // `--force` upgrades this resource's noop to an update (see the
+        // diff mapping in the resource-graph pass below), so its
+        // `reconcile` WILL re-run and may produce fresh attributes —
+        // that is the point of --force. Returning the persisted attr
+        // snapshot here would bake potentially-stale values into every
+        // consumer's plan props and binding data, so consumers would
+        // keep the stale attrs even though the upstream just
+        // re-reconciled. Expose only the stable attributes and let
+        // apply re-evaluate the rest against the forced reconcile's
+        // fresh output. A noop diff may carry `stables` for exactly this
+        // case (conditional stables such as a rename-mutable `name`);
+        // without them the forced upstream would only expose
+        // `provider.stables` and identity-sensitive consumers would
+        // falsely plan a replacement (#1832).
+        if (options.force) {
+          return surviving;
+        }
+        if (
+          oldState.status === "created" ||
+          oldState.status === "updated" ||
+          oldState.status === "replaced"
+        ) {
+          // we can safely return the attributes if we know they have stabilized
+          return { value: oldState.attr, extent: "settled", oldBindings };
+        } else {
+          // we must assume the resource doesn't exist if it hasn't stabilized
+          return nothing;
+        }
+      });
+
+    const exposeAction = (
+      resourceExpr: Output.ResourceExpr<any, any>,
+      node: ActionRun | ActionNoop,
+    ): Exposure =>
+      node.action === "noop"
+        ? { value: node.state.output, extent: "settled" }
+        : { value: resourceExpr, extent: "nothing" };
+
+    // A node's exposure with the peers of its cycle, if it has one, at their
+    // own first pass.
+    const firstPasses: Record<
+      string,
+      Effect.Effect<Exposure, Config.ConfigError | StateStoreError>
+    > = {};
+    const firstPass = (
+      resourceExpr: Output.ResourceExpr<any, any>,
+    ): Effect.Effect<Exposure, Config.ConfigError | StateStoreError> =>
+      Effect.gen(function* () {
+        const node = resourceExpr.src;
+        return yield* (firstPasses[node.FQN] ??= yield* cachedInScope(memoScope)(
+          isAction(node)
+            ? Effect.map(firstActionPlan(node), (plan) => exposeAction(resourceExpr, plan))
+            : exposeResource(resourceExpr, peersOf(node.FQN)),
+        ));
+      });
+
+    /**
+     * The exposure of every member of a cycle.
+     *
+     * A member's first pass cannot see the data bound to it, since that holds
+     * its peers' outputs. So a member that settled is compared again with its
+     * peers known, and the ones that turn out to have changed stop exposing
+     * what they persisted, which may in turn change the members that read
+     * them, until nothing more does. Without this a pool whose bound env
+     * changed keeps handing the env it persisted to the host that runs it.
+     */
+    interface Settled {
+      readonly exposures: ReadonlyMap<string, unknown>;
+      /** Actions whose first pass reused an output an input of which changed. */
+      readonly reruns: ReadonlySet<string>;
+    }
+    const settledCycles = new Map<
+      ReadonlySet<string>,
+      Effect.Effect<Settled, Config.ConfigError | StateStoreError>
+    >();
+    const settle = (
+      members: ReadonlySet<string>,
+    ): Effect.Effect<Settled, Config.ConfigError | StateStoreError> =>
+      Effect.gen(function* () {
+        const cached = settledCycles.get(members);
+        if (cached) return yield* cached;
+        const settling = yield* cachedInScope(memoScope)(
+          Effect.gen(function* () {
+            const nodes = [...members].map(
+              (fqn) => Output.of(nodesByFqn.get(fqn) as any) as Output.ResourceExpr<any, any>,
+            );
+            const first = yield* Effect.forEach(nodes, firstPass, { concurrency: "unbounded" });
+            const exposures = new Map<string, unknown>(
+              nodes.map((node, i) => [node.src.FQN, first[i].value]),
+            );
+            const peers: Peers = { members, exposures };
+            const extents = new Map<string, string>(
+              nodes.map((node, i) => [node.src.FQN, first[i].extent]),
+            );
+            const reruns = new Set<string>();
+            const expose = (node: Output.ResourceExpr<any, any>) =>
+              isAction(node.src)
+                ? Effect.map(planAction(node.src, peers), (plan) => exposeAction(node, plan))
+                : exposeResource(node, peers);
+            // The members to look at again: first the ones whose bound data
+            // differs from what they persisted, then the ones that read a
+            // member that changed.
+            let suspects = (yield* Effect.forEach(
+              nodes,
+              (node, i) => {
+                const { oldBindings } = first[i];
+                return oldBindings === undefined
+                  ? Effect.succeed([])
+                  : resolveInput(stack.bindings[node.src.FQN] ?? [], undefined, peers).pipe(
+                      Effect.map((bindings) =>
+                        haveBindingsChanged(oldBindings, dedupeBindings(bindings)) ? [node] : [],
+                      ),
+                    );
+              },
+              { concurrency: "unbounded" },
+            )).flat();
+            // A member only ever exposes less, so this ends; the bound guards
+            // a provider whose stable attributes come and go.
+            for (let round = 0; suspects.length > 0 && round <= 2 * nodes.length; round++) {
+              const exposed = yield* Effect.forEach(suspects, expose, {
+                concurrency: "unbounded",
+              });
+              const changing = new Set<string>();
+              suspects.forEach((node, i) => {
+                const fqn: string = node.src.FQN;
+                const { extent } = exposed[i];
+                if (extent === extents.get(fqn)) return;
+                extents.set(fqn, extent);
+                exposures.set(fqn, exposed[i].value);
+                changing.add(fqn);
+                if (isAction(node.src)) reruns.add(fqn);
+              });
+              suspects = nodes.filter(
+                (node) =>
+                  extents.get(node.src.FQN) !== "nothing" &&
+                  (allUpstreamDependencies[node.src.FQN] ?? []).some((upstream) =>
+                    changing.has(upstream),
+                  ),
+              );
+            }
+            return { exposures, reruns } satisfies Settled;
+          }),
+        );
+        settledCycles.set(members, settling);
+        return yield* settling;
+      });
 
     const resolveResource = (
       resourceExpr: Output.ResourceExpr<any, any>,
+      peers?: Peers,
     ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
-        if (selected && !selected.has(resourceExpr.src.FQN)) {
+        const fqn: string = resourceExpr.src.FQN;
+        if (selected && !selected.has(fqn)) {
           return yield* Effect.die(
             new UnsafeSelectionBoundary({
-              message: `Output evaluation discovered unselected dependency '${resourceExpr.src.FQN}'. Declare the dependency explicitly or run a full deployment.`,
+              message: `Output evaluation discovered unselected dependency '${fqn}'. Declare the dependency explicitly or run a full deployment.`,
             }),
           );
         }
-        if (isAction(resourceExpr.src)) {
-          const node = yield* diffAction(resourceExpr.src);
-          return node.action === "noop" ? node.state.output : resourceExpr;
+        if (peers?.members.has(fqn)) {
+          return peers.exposures
+            ? peers.exposures.get(fqn)
+            : (yield* firstPass(resourceExpr)).value;
         }
-        // @ts-expect-error
-        return yield* (resolvedResources[resourceExpr.src.FQN] ??= yield* cachedInScope(memoScope)(
-          Effect.gen(function* () {
-            const resource = resourceExpr.src;
-
-            const { provider, mode } = yield* resolveProviderAndMode(resource);
-            const props = materializeStableRefs(yield* resolveInput(resource.Props));
-            // Falls back to the row at a former FQN (`renamedFrom`) so a
-            // renamed resource's stable attributes keep flowing to
-            // downstream diffs across the migration.
-            const { row: oldState } = yield* getPersistedRow(resource);
-
-            if (!oldState || oldState.status === "creating") {
-              return resourceExpr;
-            }
-
-            // The resource is switching provider modes (local ⇄ live):
-            // it will be replaced, so nothing about the persisted attrs
-            // is stable for downstream consumers.
-            if (hasModeSwitched(mode, oldState)) {
-              return resourceExpr;
-            }
-
-            const oldProps = oldState.status === "updating" ? oldState.old.props : oldState.props;
-
-            // Normalize both sides through `dedupeBindings` so the binding
-            // sets handed to `diff` are deduped AND sid-sorted — provider
-            // diffs that hash/compare the arrays never churn on
-            // registration-order flips (or on legacy unsorted state).
-            const oldBindings = dedupeBindings(oldState.bindings ?? []);
-            const bindings = stack.bindings[resource.FQN] ?? [];
-            const newBindings = dedupeBindings(
-              combinedCycleMembers.has(resource.FQN) ? bindings : yield* resolveInput(bindings),
-            );
-
-            const diff = yield* provider.diff
-              ? provider
-                  .diff({
-                    id: resource.LogicalId,
-                    fqn: resource.FQN,
-                    olds: oldProps,
-                    instanceId: oldState.instanceId,
-                    news: props,
-                    output: oldState.attr,
-                    oldBindings,
-                    newBindings,
-                  })
-                  .pipe(providePlanScope(resource, oldState.instanceId))
-              : Effect.undefined;
-
-            // A present `diff.stables` is authoritative for this update and
-            // overrides `provider.stables`. We only fall back to the
-            // provider-level "always stable" list when the diff does not
-            // return one (e.g. no diff fn, or a diff that omits `stables`).
-            const stables: string[] = diff?.stables ?? provider.stables ?? [];
-
-            const withStables = (output: any) =>
-              stables.length > 0
-                ? new Output.ResourceExpr(
-                    resourceExpr.src,
-                    Object.fromEntries(stables.map((stable) => [stable, output?.[stable]])),
-                  )
-                : // if there are no stable properties, treat every property as changed
-                  resourceExpr;
-
-            if (diff == null) {
-              if (
-                havePropsChanged(oldProps, props) ||
-                (!combinedCycleMembers.has(resource.FQN) &&
-                  diffBindings(oldBindings, newBindings).some(
-                    (binding) => binding.action !== "noop",
-                  ))
-              ) {
-                // the props have changed but the provider did not provide any hints as to what is stable
-                // so we must assume everything has changed
-                return withStables(oldState?.attr);
-              }
-            } else if (diff.action === "update") {
-              return withStables(oldState?.attr);
-            } else if (diff.action === "replace") {
-              return resourceExpr;
-            }
-            // `--force` upgrades this resource's noop to an update (see the
-            // diff mapping in the resource-graph pass below), so its
-            // `reconcile` WILL re-run and may produce fresh attributes —
-            // that is the point of --force. Returning the persisted attr
-            // snapshot here would bake potentially-stale values into every
-            // consumer's plan props and binding data, so consumers would
-            // keep the stale attrs even though the upstream just
-            // re-reconciled. Expose only the stable attributes and let
-            // apply re-evaluate the rest against the forced reconcile's
-            // fresh output. A noop diff may carry `stables` for exactly this
-            // case (conditional stables such as a rename-mutable `name`);
-            // without them the forced upstream would only expose
-            // `provider.stables` and identity-sensitive consumers would
-            // falsely plan a replacement (#1832).
-            if (options.force) {
-              return withStables(oldState?.attr);
-            }
-            if (
-              oldState.status === "created" ||
-              oldState.status === "updated" ||
-              oldState.status === "replaced"
-            ) {
-              // we can safely return the attributes if we know they have stabilized
-              return oldState?.attr;
-            } else {
-              // we must assume the resource doesn't exist if it hasn't stabilized
-              return resourceExpr;
-            }
-          }),
-        ));
+        const cycle = combinedCycles.get(fqn);
+        return cycle
+          ? (yield* settle(cycle)).exposures.get(fqn)
+          : (yield* firstPass(resourceExpr)).value;
       });
 
     /**
@@ -980,12 +1141,14 @@ const makePlan = <A>(
       // a shared visited-set) keeps legitimately-shared diamond references
       // intact and is race-free under `concurrency: "unbounded"` (#1082).
       ancestors: ReadonlySet<object> = new Set(),
+      // The cycle being resolved, if any.
+      peers?: Peers,
     ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
         } else if (Output.isExpr(input)) {
-          return yield* resolveOutput(input);
+          return yield* resolveOutput(input, peers);
         } else if (Config.isConfig(input)) {
           // Config is a lazy reference to the deploy environment. Resolve it
           // here so the concrete value flows into diffing/hashing (an opaque
@@ -993,27 +1156,27 @@ const makePlan = <A>(
           // providers receive a resolved value instead of a Config object.
           // `Config.Redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
-          return yield* resolveInput(yield* input, ancestors);
+          return yield* resolveInput(yield* input, ancestors, peers);
         } else if (isResource(input)) {
           // Resource objects have dynamic properties (path, hash, etc.) that are
           // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
           // Resolve the ResourceExpr to get the actual resource output, then continue
           // resolving any nested outputs in the result.
           const resourceExpr = Output.of(input);
-          const resolved = yield* resolveOutput(resourceExpr);
+          const resolved = yield* resolveOutput(resourceExpr, peers);
           if (Output.isResourceExpr(resolved)) {
             // Still-unresolved reference (creating, replacing, or updating
             // upstream) — keep it evaluable for Apply.
             return resolved;
           }
-          return yield* resolveInput(resolved, ancestors);
+          return yield* resolveInput(resolved, ancestors, peers);
         } else if (isPlainData(input)) {
           if (ancestors.has(input)) {
             return undefined;
           }
           const nested = new Set(ancestors).add(input);
           if (Array.isArray(input)) {
-            return yield* Effect.forEach(input, (item) => resolveInput(item, nested), {
+            return yield* Effect.forEach(input, (item) => resolveInput(item, nested, peers), {
               concurrency: "unbounded",
             });
           }
@@ -1021,7 +1184,7 @@ const makePlan = <A>(
             yield* Effect.forEach(
               Object.entries(input),
               ([key, value]) =>
-                resolveInput(value, nested).pipe(Effect.map((value) => [key, value])),
+                resolveInput(value, nested, peers).pipe(Effect.map((value) => [key, value])),
               { concurrency: "unbounded" },
             ),
           );
@@ -1111,36 +1274,38 @@ const makePlan = <A>(
 
     const resolveOutput = (
       expr: Output.Expr<any>,
+      // The cycle being resolved, if any.
+      peers?: Peers,
     ): Effect.Effect<any, Config.ConfigError | StateStoreError> =>
       Effect.gen(function* () {
         if (Output.isResourceExpr(expr)) {
-          return yield* resolveResource(expr);
+          return yield* resolveResource(expr, peers);
         } else if (Output.isPropExpr(expr)) {
-          const upstream = yield* resolveOutput(expr.expr);
+          const upstream = yield* resolveOutput(expr.expr, peers);
           return upstream?.[expr.identifier];
         } else if (Output.isApplyExpr(expr)) {
-          const upstream = yield* resolveOutput(expr.expr);
+          const upstream = yield* resolveOutput(expr.expr, peers);
           return Output.hasOutputs(upstream) ? expr : expr.f(upstream);
         } else if (Output.isLookupExpr(expr)) {
           // Props that depend on a resource still being created resolve at
           // apply, like any other Output.
-          const props = yield* resolveInput(expr.expr);
+          const props = yield* resolveInput(expr.expr, undefined, peers);
           if (Output.hasOutputs(props)) return expr;
           const attrs = yield* expr.f(props);
           yield* rejectManagedLookup(expr, props, attrs);
           return attrs;
         } else if (Output.isEffectExpr(expr)) {
-          const upstream = yield* resolveOutput(expr.expr);
+          const upstream = yield* resolveOutput(expr.expr, peers);
           return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
         } else if (Output.isFlatMapExpr(expr)) {
-          const upstream = yield* resolveOutput(expr.expr);
+          const upstream = yield* resolveOutput(expr.expr, peers);
           // Source still unresolved -> keep the flatMap intact for a later pass.
           // Otherwise run `f` to produce the next Output and resolve into it.
           return Output.hasOutputs(upstream)
             ? expr
-            : yield* resolveOutput(Output.asOutput(expr.f(upstream)) as Output.Expr<any>);
+            : yield* resolveOutput(Output.asOutput(expr.f(upstream)) as Output.Expr<any>, peers);
         } else if (Output.isAllExpr(expr)) {
-          return yield* Effect.forEach(expr.outs, resolveOutput, {
+          return yield* Effect.forEach(expr.outs, (out) => resolveOutput(out, peers), {
             concurrency: "unbounded",
           });
         } else if (Output.isLiteralExpr(expr)) {
@@ -1152,6 +1317,7 @@ const makePlan = <A>(
           if (target !== undefined) {
             return yield* resolveResource(
               Output.of(target as any) as Output.ResourceExpr<any, any>,
+              peers,
             );
           }
           const refStack = expr.stack ?? stackName;
@@ -1195,7 +1361,7 @@ const makePlan = <A>(
           }
           return output;
         } else if (Output.isNamedExpr(expr)) {
-          return yield* resolveOutput(expr.expr);
+          return yield* resolveOutput(expr.expr, peers);
         }
         return yield* Effect.die(new Error("Not implemented yet" + (expr as any).kind));
       });
@@ -1304,9 +1470,17 @@ const makePlan = <A>(
     ]);
 
     // Resources that participate in a cycle when both prop and binding
-    // edges are considered. Used below to decide whether an acyclic
-    // binding edge should also become a downstream edge.
-    const combinedCycleMembers = findCycleMembers(allUpstreamDependencies);
+    // edges are considered, each mapped to the members of its own cycle.
+    // Used below to decide whether a binding edge stays inside one cycle
+    // or should also become a downstream edge.
+    const combinedCycles = findCycles(allUpstreamDependencies);
+    const peersOf = (fqn: string): Peers | undefined => {
+      const members = combinedCycles.get(fqn);
+      return members && { members };
+    };
+    const nodesByFqn = new Map<string, ResourceLike | ActionLike>(
+      [...resources, ...actions].map((node) => [node.FQN, node]),
+    );
     const inputCycleMembers = findCycleMembers({
       ...newUpstreamDependencies,
       ...Object.fromEntries(
@@ -1350,11 +1524,7 @@ const makePlan = <A>(
         if (downFqn === upFqn) continue;
         // Binding-only edge — exclude when both endpoints sit inside
         // the same SCC of the combined graph.
-        if (
-          !propDeps.has(upFqn) &&
-          combinedCycleMembers.has(upFqn) &&
-          combinedCycleMembers.has(downFqn)
-        ) {
+        if (!propDeps.has(upFqn) && combinedCycles.get(downFqn)?.has(upFqn)) {
           continue;
         }
         let downstream = directDownstream.get(upFqn);
@@ -1382,48 +1552,67 @@ const makePlan = <A>(
       ...actions.map((action) => [action.FQN, computeDownstream(action.FQN)] as const),
     ]);
 
+    const planAction = Effect.fn(function* (action: ActionLike, peers: Peers | undefined) {
+      const fqn = action.FQN;
+      const downstream = newDownstreamDependencies[fqn] ?? [];
+      const oldState = yield* state.get({ stack: stackName, stage, fqn });
+      const prior = isActionState(oldState) ? oldState : undefined;
+      const resolvedInput = inputCycleMembers.has(fqn)
+        ? action.Input
+        : yield* resolveInput(action.Input, undefined, peers);
+      // Actions are pure in their inputs. Only a completed, unforced run
+      // with fully known, identical inputs has a reusable output.
+      if (
+        prior?.status === "ran" &&
+        !options.force &&
+        !inputCycleMembers.has(fqn) &&
+        isResolved(resolvedInput) &&
+        prior.inputHash === (yield* hashInput(resolvedInput))
+      ) {
+        return {
+          kind: "action",
+          action: "noop",
+          def: action,
+          state: prior,
+          downstream,
+        } satisfies ActionNoop;
+      }
+      return {
+        kind: "action",
+        action: "run",
+        def: action,
+        input: action.Input,
+        state: prior,
+        downstream,
+        forced: !!options.force,
+      } satisfies ActionRun;
+    });
     const actionPlans: Record<
       string,
       Effect.Effect<ActionRun | ActionNoop, Config.ConfigError | StateStoreError>
     > = {};
-    const diffAction = Effect.fn("plan.diff.action")(function* (action: ActionLike) {
+    // An Action's plan with the peers of its cycle, if it has one, at their
+    // first pass.
+    const firstActionPlan = Effect.fn(function* (action: ActionLike) {
       return yield* (actionPlans[action.FQN] ??= yield* cachedInScope(memoScope)(
-        Effect.gen(function* () {
-          const fqn = action.FQN;
-          const downstream = newDownstreamDependencies[fqn] ?? [];
-          const oldState = yield* state.get({ stack: stackName, stage, fqn });
-          const prior = isActionState(oldState) ? oldState : undefined;
-          const resolvedInput = inputCycleMembers.has(fqn)
-            ? action.Input
-            : yield* resolveInput(action.Input);
-          // Actions are pure in their inputs. Only a completed, unforced run
-          // with fully known, identical inputs has a reusable output.
-          if (
-            prior?.status === "ran" &&
-            !options.force &&
-            !inputCycleMembers.has(fqn) &&
-            isResolved(resolvedInput) &&
-            prior.inputHash === (yield* hashInput(resolvedInput))
-          ) {
-            return {
-              kind: "action",
-              action: "noop",
-              def: action,
-              state: prior,
-              downstream,
-            } satisfies ActionNoop;
-          }
-          return {
+        planAction(action, peersOf(action.FQN)),
+      ));
+    });
+    const diffAction = Effect.fn("plan.diff.action")(function* (action: ActionLike) {
+      const plan = yield* firstActionPlan(action);
+      const cycle = combinedCycles.get(action.FQN);
+      // An input of a cycle member can change with what is bound to a peer.
+      return plan.action === "noop" && cycle && (yield* settle(cycle)).reruns.has(action.FQN)
+        ? ({
             kind: "action",
             action: "run",
             def: action,
             input: action.Input,
-            state: prior,
-            downstream,
-            forced: !!options.force,
-          } satisfies ActionRun;
-        }),
-      ));
+            state: plan.state,
+            downstream: plan.downstream,
+            forced: false,
+          } satisfies ActionRun)
+        : plan;
     });
 
     const plannedCount = yield* Ref.make(0);
@@ -1765,6 +1954,14 @@ const makePlan = <A>(
       // comparing props across runtimes is meaningless (and the new
       // mode's provider has never seen the old mode's state). The
       // action is a replacement by definition.
+      // The props above hold what a cycle's members settle on, which a
+      // member's own replacement can leave unresolved: the peers it reads
+      // change because it does. A provider can't compare unresolved props, so
+      // the replacement it asked for over its peers' first pass stands.
+      const replace = combinedCycles.has(fqn)
+        ? (yield* firstPass(Output.of(resource) as Output.ResourceExpr<any, any>)).replace
+        : undefined;
+
       const diff = modeSwitched
         ? ({
             action: "replace",
@@ -1829,6 +2026,7 @@ const makePlan = <A>(
                 ? ({ action: "update" } satisfies UpdateDiff)
                 : diff,
             ),
+            Effect.map((diff) => (replace && diff.action !== "replace" ? replace : diff)),
           );
 
       if (oldState.status === "creating") {

@@ -204,10 +204,11 @@ const clientHeaders = (
  */
 export const makeNamespace = (entity: AnyEntity, target: GatewayTarget) => {
   const group = groupOf(entity);
+  // NDJSON frames each message, so a streamed RPC delivers as it goes.
   const protocol = RpcClient.layerProtocolHttp({
     url: `${target.url.replace(/\/+$/, "")}${GATEWAY_PATH}`,
     transformClient: HttpClient.mapRequest(HttpClientRequest.bearerToken(target.token)),
-  }).pipe(Layer.provide([FetchHttpClient.layer, RpcSerialization.layerJson]));
+  }).pipe(Layer.provide([FetchHttpClient.layer, RpcSerialization.layerNdjson]));
 
   const getByName = (entityId: string) =>
     Effect.gen(function* () {
@@ -359,7 +360,7 @@ export function gatewayLayer(
   return HttpRouter.serve(
     RpcServer.layerHttp({ group, path: GATEWAY_PATH, protocol: "http" }).pipe(
       Layer.provide(handlers),
-      Layer.provide(RpcSerialization.layerJson),
+      Layer.provide(RpcSerialization.layerNdjson),
     ),
     { disableListenLog: true, middleware: authorized(token) },
   );

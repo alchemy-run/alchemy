@@ -10,6 +10,7 @@ import {
   merchantReviewDataSource,
   probeAccount,
   probeDataSource,
+  reviewsV1betaRetired,
   runMerchantReviewLifecycle,
 } from "./common.ts";
 
@@ -47,7 +48,7 @@ test.provider.skipIf(!runMerchantReviewLifecycle)(
   },
 );
 
-test.provider.skipIf(runMerchantReviewLifecycle)(
+test.provider.skipIf(runMerchantReviewLifecycle || reviewsV1betaRetired)(
   "insertAccountsMerchantReviews without Merchant Reviews access fails with InsufficientScopes",
   (stack) =>
     Effect.gen(function* () {

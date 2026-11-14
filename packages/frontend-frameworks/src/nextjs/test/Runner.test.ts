@@ -71,10 +71,7 @@ describe("optional OpenNext configuration", () => {
     run(
       Effect.gen(function* () {
         const { fs, path, root } = yield* fixture;
-        const provider = yield* source.make({
-          root,
-          memo: { include: ["app/**"] },
-        });
+        const provider = yield* source.make({ memo: { include: ["app/**"] } }, { rootDir: root });
         const context = {
           id: "Site",
           workerName: "site",
@@ -92,10 +89,10 @@ describe("optional OpenNext configuration", () => {
           relocated.path.join(relocated.root, "open-next.config.ts"),
           "export default { default: {} };\n",
         );
-        const relocatedProvider = yield* source.make({
-          root: relocated.root,
-          memo: { include: ["app/**"] },
-        });
+        const relocatedProvider = yield* source.make(
+          { memo: { include: ["app/**"] } },
+          { rootDir: relocated.root },
+        );
         expect((yield* relocatedProvider.hash(context, undefined)).input).toBe(created.input);
         yield* fs.writeFileString(configPath, "export default { default: { minify: true } };\n");
         expect((yield* hash()).input).not.toBe(created.input);

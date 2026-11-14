@@ -48,7 +48,9 @@ import {
   emptyStreamMeta,
   type HostedModel,
   hostedModels,
+  inRange,
   type Json,
+  type ListRange,
   type ModelHost,
   Platform,
   type PolicyKit,
@@ -80,6 +82,8 @@ export interface ListOptions {
   readonly end?: string;
   /** At most this many entries. */
   readonly limit?: number;
+  /** Keys in descending order: `limit` counts from the end. */
+  readonly reverse?: boolean;
 }
 
 /**
@@ -199,6 +203,19 @@ export interface Host<R = never> {
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
+
+/** The storage list that reads exactly the `entry:` rows in `range`. */
+const entryRange = (range: ListRange | undefined): ListOptions => {
+  const limit = range?.limit === undefined ? {} : { limit: Math.max(0, range.limit) };
+  return range?.order === "desc"
+    ? {
+        prefix: "entry:",
+        ...(range.after === undefined ? {} : { end: `entry:${pad(range.after)}` }),
+        reverse: true,
+        ...limit,
+      }
+    : { prefix: "entry:", start: `entry:${pad((range?.after ?? 0) + 1)}`, ...limit };
+};
 
 const DefectTag = "alchemy/Domain/Defect";
 
@@ -963,6 +980,16 @@ const viewObject = (
                 .pipe(Effect.map((rows) => [...rows.values()])),
         ),
       );
+    const entriesIn = (range: ListRange | undefined) =>
+      stored.pipe(
+        Effect.flatMap((snapshot) =>
+          stale(snapshot)
+            ? Effect.succeed([])
+            : state.storage
+                .list<ViewEntry>(entryRange(range))
+                .pipe(Effect.map((rows) => [...rows.values()])),
+        ),
+      );
     const target = kit.target;
     // Pushes and sends an apply leaves for after its transaction commits.
     let after: Array<Effect.Effect<void, never, ObjectState | RuntimeContext>> = [];
@@ -1121,6 +1148,7 @@ const viewObject = (
         ),
       read: () => reportDefects(read),
       after: (after: number) => reportDefects(entriesAfter(after)),
+      page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
       // The backfill protocol, as a source, a consumer and a scanner.
       ...scannerRpc(() => scannerFor()),
       ...runRpc(relay, runFor),
@@ -1439,6 +1467,10 @@ const streamObject = (kit: StreamKit) =>
       state.storage
         .list<StreamEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
         .pipe(Effect.map((rows) => [...rows.values()]));
+    const entriesIn = (range: ListRange | undefined) =>
+      state.storage
+        .list<StreamEntry>(entryRange(range))
+        .pipe(Effect.map((rows) => [...rows.values()]));
     const latest = (meta: StreamMeta) =>
       meta.seq === 0 ? Effect.undefined : state.storage.get<StreamEntry>(`entry:${pad(meta.seq)}`);
     return {
@@ -1497,6 +1529,7 @@ const streamObject = (kit: StreamKit) =>
         }).pipe(exclusively, reportDefects),
       read: () => reportDefects(readMeta),
       after: (after: number) => reportDefects(entriesAfter(after)),
+      page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
       // A live read of this key: accept its WebSocket, then push on every append.
       fetch: accept((key, subscription) =>
         Effect.gen(function* () {
@@ -1956,7 +1989,14 @@ export const makePlatform = <R>(
                       Stream.fromEffectSchedule(read(key), POLL).pipe(
                         Stream.changesWith((a, b) => a.version === b.version),
                       ),
-                    list: (key) => after(key, 0),
+                    list: (key, range) =>
+                      orComputed(
+                        unwrapDefects<ReadonlyArray<ViewEntry>>(
+                          namespace.getByName(key).page(range),
+                        ),
+                        (result) => inRange(result.entries, range),
+                        key,
+                      ),
                     ...(connect === undefined
                       ? {}
                       : {
@@ -2023,7 +2063,10 @@ export const makePlatform = <R>(
                       Stream.fromEffectSchedule(read(key), POLL).pipe(
                         Stream.changesWith((a, b) => a.seq === b.seq),
                       ),
-                    list: (key) => after(key, 0),
+                    list: (key, range) =>
+                      unwrapDefects<ReadonlyArray<StreamEntry>>(
+                        namespace.getByName(key).page(range),
+                      ),
                     tail: (key, from) =>
                       pollAfter(
                         from,

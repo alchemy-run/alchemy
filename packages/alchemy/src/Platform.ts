@@ -153,6 +153,28 @@ export interface Platform<
   Provider: Provider<Resource>;
 
   <Self, Shape, Deps = never>(): {
+    <
+      const Id extends string,
+      PropsReq = never,
+      InitReq extends Services | PlatformServices | Resource = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<InlineProps>
+        | Effect.Effect<InputProps<InlineProps>, ConfigError.ConfigError, PropsReq>,
+      impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+    ): Effect.Effect<
+      Resource & Rpc<Self>,
+      never,
+      | Resource["Providers"]
+      | Exclude<PropsReq, Services | PlatformServices | Resource>
+      | Exclude<InitReq, Services | PlatformServices | Resource>
+    > &
+      Named<Id> &
+      PlatformIdentity<Id> & {
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+      };
+
     <const Id extends string>(
       id: Id,
     ): Effect.Effect<Resource & Rpc<Self> & Dependencies<Deps>, never, Resource["Providers"]> &
@@ -258,6 +280,13 @@ export const Platform = <
       }
     | undefined
   >,
+  // Requirements and errors of the hooks below. They run in the
+  // resource-construction context, which carries the Stack's providers,
+  // so whatever they need is discharged there.
+  OnCreateE = never,
+  OnCreateR = never,
+  TransformE = never,
+  TransformR = never,
 >(
   type: R["Type"],
   hooks: {
@@ -272,9 +301,9 @@ export const Platform = <
     // `onCreate` runs inside the resource-construction context, which already
     // carries the Stack's providers — so the hook may yield child resources
     // (e.g. an async Worker registering a `WorkflowResource` for a bound
-    // Workflow). Allow an ambient requirement (`any`) rather than forcing
-    // `never`; it is discharged by the surrounding provider context.
-    onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    // Workflow). Its requirements are discharged by the surrounding
+    // provider context.
+    onCreate?: (resource: R, props: any) => Effect.Effect<void, OnCreateE, OnCreateR>;
     /**
      * Transform the user-supplied props before the underlying resource is
      * declared. Runs in the resource-construction context (Stack, Namespace,
@@ -284,7 +313,7 @@ export const Platform = <
      * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
      * wherever the props effect is, including inside deployed bundles.
      */
-    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    transformProps?: (id: string, props: any) => Effect.Effect<any, TransformE, TransformR>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -502,8 +531,10 @@ export const Platform = <
 
               yield* impl.pipe(
                 Effect.flatMap((impl) => {
-                  if (!impl) return Effect.void;
-                  const shape = impl as Record<string, unknown>;
+                  // An `alwaysServe` runtime serves routes of its own, so it
+                  // boots even when the program returns nothing.
+                  if (!impl && runtimeContext.alwaysServe !== true) return Effect.void;
+                  const shape = (impl ?? {}) as Record<string, unknown>;
                   // Serve when there's a `fetch` handler OR any RPC shape
                   // methods. A pure-RPC impl (methods, no `fetch`) still needs
                   // the server to boot — hand `serveRpc` a default 404 fallback

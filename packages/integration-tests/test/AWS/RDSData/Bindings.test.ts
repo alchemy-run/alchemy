@@ -12,7 +12,6 @@ import * as Schedule from "effect/Schedule";
 import RDSDrizzleIamFunctionLive, { RDSDrizzleIamFunction } from "./drizzle-iam-handler";
 import RDSDataTestFunctionLive, { RDSDataTestFunction } from "./handler";
 import { RDSDataInfra } from "./infra";
-import { reapRDSDataOrphans } from "./reap";
 
 // Aurora Serverless v2 cluster + writer-instance provisioning takes 5-15
 // minutes — far beyond the speed doctrine's budget — so the ENTIRE live suite
@@ -65,15 +64,6 @@ const postJson = (url: string, body: unknown) =>
     Effect.flatMap((r) => r.json),
   );
 
-// The scratch stack's state store is IN MEMORY, so `sharedStack.destroy()`
-// can only see resources deployed by THIS process. A previous run killed
-// mid-deploy/mid-destroy (Aurora provisioning + teardown run 10+ minutes)
-// leaves the whole VPC/RDS fixture orphaned with no state to destroy from.
-// The reaper deletes fixture leftovers out-of-band by deterministic
-// name-prefix / ownership tag; it runs as a pre-clean before deploy and as
-// an `ensuring` finalizer after destroy.
-const reapOrphans = Core.withProviders(reapRDSDataOrphans, testOptions, sharedStack.name);
-
 describe(
   "RDSData Bindings",
   {
@@ -95,11 +85,6 @@ describe(
         ? Effect.gen(function* () {
             yield* Effect.logInfo("RDSData test setup: destroying previous resources");
             yield* sharedStack.destroy();
-
-            yield* Effect.logInfo(
-              "RDSData test setup: reaping orphans from prior interrupted runs",
-            );
-            yield* reapOrphans;
 
             yield* Effect.logInfo(
               "RDSData test setup: deploying Aurora SV2 + Lambda fixture (5-15 min)",
@@ -194,13 +179,7 @@ describe(
                 sharedStack.name,
               );
             }
-          }).pipe(
-            // Always sweep out-of-band leftovers — even when destroy itself
-            // fails partway (e.g. a lingering Lambda ENI blocking SG deletion).
-            // Once this process exits, the in-memory state is gone and nothing
-            // else can ever find these resources again.
-            Effect.ensuring(reapOrphans.pipe(Effect.orDie)),
-          )
+          })
         : Effect.void,
       { timeout: 1_500_000 },
     );

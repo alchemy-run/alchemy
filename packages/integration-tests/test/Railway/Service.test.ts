@@ -15,9 +15,11 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import TracedApi from "./fixtures/traced-api.ts";
+import { railwayApi } from "./limit.ts";
 import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({
+  limit: railwayApi,
   providers: Layer.mergeAll(Railway.providers(), Cloudflare.providers()),
 });
 

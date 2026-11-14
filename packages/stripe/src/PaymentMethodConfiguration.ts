@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentMethodConfigurations,
   GetPaymentMethodConfiguration,
@@ -591,11 +590,8 @@ export const PaymentMethodConfigurationProvider = () =>
           name,
           ...(news.parent !== undefined ? { parent: news.parent } : {}),
           ...wireMethods,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-payment-method-configuration-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-payment-method-configuration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {
