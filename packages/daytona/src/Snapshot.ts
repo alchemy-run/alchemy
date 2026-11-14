@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { uploadBuildContext } from "./internal/BuildContext.ts";
+import { declarable } from "./internal/Declared.ts";
 import { createInternalLabels } from "./internal/Labels.ts";
 import { isOwnedName, resolveName } from "./internal/Names.ts";
 import { runCommand } from "./internal/Process.ts";
@@ -242,7 +243,7 @@ export interface SnapshotLookup {
  * @resource
  * @product Snapshot
  */
-export const Snapshot = Resource<Snapshot>("Daytona.Snapshot");
+export const Snapshot = declarable<Snapshot>()(Resource<Snapshot>("Daytona.Snapshot"));
 
 /**
  * What Daytona's builders can build: any Dockerfile, for amd64. Daytona's

@@ -64,13 +64,17 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 type Scratch = Parameters<Parameters<typeof test.provider>[1]>[0];
 
+/** A standalone container application from a remote `image`. */
+const imageProgram = (image: string) =>
+  Effect.gen(function* () {
+    return { app: yield* Cloudflare.Container("DigestReuse", { image }).Application };
+  });
+
 /** Deploy a standalone container application from a remote `image`. */
-const deployImage = (scratch: Scratch, image: string) =>
-  scratch.deploy(
-    Effect.gen(function* () {
-      return { app: yield* Cloudflare.Container("DigestReuse", { image }).Application };
-    }),
-  );
+const deployImage = (scratch: Scratch, image: string) => scratch.deploy(imageProgram(image));
+
+/** Plan a standalone container application from a remote `image`. */
+const planImage = (scratch: Scratch, image: string) => scratch.plan(imageProgram(image));
 
 /** The live (active) image reference + version of an application. */
 const live = (accountId: string, applicationId: string) =>
@@ -721,11 +725,11 @@ describe.concurrent(
 
           const credentials = yield* Containers.createContainerRegistryCredentials({
             accountId: first.app.accountId,
-            registryId: "registry.cloudflare.com",
+            domain: "registry.cloudflare.com",
             permissions: ["pull"],
             expirationMinutes: 15,
           });
-          const username = credentials.username ?? credentials.user;
+          const username = credentials.username;
           assert(username);
           const client = yield* HttpClient.HttpClient;
           // A layer cache is opt-in (`build.cache`): nothing but the image is pushed.
@@ -846,11 +850,11 @@ describe.concurrent(
 
           const credentials = yield* Containers.createContainerRegistryCredentials({
             accountId: first.app.accountId,
-            registryId: "registry.cloudflare.com",
+            domain: "registry.cloudflare.com",
             permissions: ["pull"],
             expirationMinutes: 15,
           });
-          const username = credentials.username ?? credentials.user;
+          const username = credentials.username;
           assert(username);
           const client = yield* HttpClient.HttpClient;
           const registryGet = (pathname: string, accept = "*/*") =>
@@ -1205,11 +1209,11 @@ describe.concurrent(
             const { accountId, applicationId } = deployed.app;
             const credentials = yield* Containers.createContainerRegistryCredentials({
               accountId,
-              registryId: "registry.cloudflare.com",
+              domain: "registry.cloudflare.com",
               permissions: ["pull"],
               expirationMinutes: 15,
             });
-            const username = credentials.username ?? credentials.user;
+            const username = credentials.username;
             assert(username);
             const client = yield* HttpClient.HttpClient;
             const repository = tag.slice("registry.cloudflare.com/".length, tag.lastIndexOf(":"));
@@ -1715,6 +1719,47 @@ describe.concurrent(
           expect(third.app.version).toBe(rolledOut.version);
           const afterRollout = yield* Drift.detect(scratch);
           expect(afterRollout.resources.DigestReuse?.action).toBe("unchanged");
+
+          // An out-of-band image update leaves the saved input and
+          // configuration hashes current. Neither may hide the live drift.
+          const driftedConfiguration = {
+            ...third.app.configuration,
+            image: first.app.configuration.image!,
+          };
+          yield* Containers.updateContainerApplication({
+            accountId,
+            applicationId: third.app.applicationId,
+            configuration: driftedConfiguration,
+          });
+          yield* Containers.createContainerApplicationRollout({
+            accountId,
+            applicationId: third.app.applicationId,
+            description: "out-of-band image drift",
+            strategy: "rolling",
+            kind: "full_auto",
+            stepPercentage: 100,
+            targetConfiguration: driftedConfiguration,
+          });
+          yield* waitForImage(accountId, third.app.applicationId, driftedConfiguration.image);
+          const drift = yield* Drift.detect(scratch);
+          expect(drift.resources.DigestReuse?.action).toBe("drifted");
+          // Unchanged inputs still plan the repair.
+          const repair = yield* planImage(scratch, "mendhak/http-https-echo:40");
+          expect(repair.resources.DigestReuse?.action).toBe("update");
+
+          const repaired = yield* deployImage(scratch, "mendhak/http-https-echo:40");
+          expect(repaired.app.hash?.image).toBe(third.app.hash?.image);
+          expect(repaired.app.hash?.digest).toBe(third.app.hash?.digest);
+          expect(repaired.app.configuration.image).toBe(third.app.configuration.image);
+          expect((yield* live(accountId, repaired.app.applicationId)).image).toBe(
+            third.app.configuration.image,
+          );
+          const settled = yield* deployImage(scratch, "mendhak/http-https-echo:40");
+          expect(settled.app.version).toBe(repaired.app.version);
+          // The live digest check does not plan an update once repaired.
+          const unchanged = yield* planImage(scratch, "mendhak/http-https-echo:40");
+          expect(unchanged.resources.DigestReuse?.action).toBe("noop");
+          expect((yield* Drift.detect(scratch)).resources.DigestReuse?.action).toBe("unchanged");
 
           yield* scratch.destroy();
         }).pipe(logLevel),

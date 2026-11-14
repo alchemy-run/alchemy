@@ -1,6 +1,8 @@
 import * as Daytona from "@alchemy.run/daytona";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Credentials } from "@distilled.cloud/daytona/Credentials";
+import * as toolboxProcess from "@distilled.cloud/daytona/process";
 import * as sandboxes from "@distilled.cloud/daytona/sandbox";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -14,6 +16,18 @@ const observe = (id: string) =>
     Effect.map((s) => (s.state === "destroyed" || s.state === "destroying" ? undefined : s)),
     Effect.catchTag("SandboxNotFound", () => Effect.undefined),
   );
+
+/** Run a command in a sandbox with the deployer's credentials. */
+const execIn = (sandboxId: string, command: string) =>
+  Effect.gen(function* () {
+    const base = yield* Credentials;
+    return yield* toolboxProcess.executeCommand({ command }).pipe(
+      Effect.provideService(
+        Credentials,
+        Effect.map(base, (c) => ({ ...c, sandboxId })),
+      ),
+    );
+  });
 
 // Orgs below Daytona's Tier 3 can't set sandbox network rules; set
 // DAYTONA_TEST_NETWORK=1 on an account that can.
@@ -303,6 +317,41 @@ test.provider(
       expect(yield* observe(first.box.sandboxId)).toBeUndefined();
     }),
   { tags: ["provider:daytona", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "a secret reaches its host as the real value, and the sandbox holds only a placeholder",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Not a real key. OpenAI's rejection quotes the end of the key it
+      // was sent, which shows what left the sandbox.
+      const value = "sk-alchemy-not-a-real-key-0000000000000000-zq7w";
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const token = yield* Daytona.Secret("Token", { value, hosts: ["api.openai.com"] });
+          const box = yield* Daytona.Sandbox("Proxied", { secrets: { API_TOKEN: token } });
+          return { token, box };
+        }),
+      );
+
+      // Inside the sandbox the variable is the placeholder, never the value.
+      const env = yield* execIn(out.box.sandboxId, "sh -c 'printenv API_TOKEN; env'");
+      expect(env.result).toContain(out.token.placeholder);
+      expect(env.result).not.toContain(value);
+
+      // On the way to the secret's host, Daytona swaps the value in.
+      const sent = yield* execIn(
+        out.box.sandboxId,
+        `sh -c 'curl -sS -m 20 https://api.openai.com/v1/models -H "Authorization: Bearer $API_TOKEN"'`,
+      );
+      expect(sent.result).toContain("zq7w");
+      expect(sent.result).not.toContain(out.token.placeholder.slice(-4));
+
+      yield* stack.destroy();
+      expect(yield* observe(out.box.sandboxId)).toBeUndefined();
+    }),
+  { tags: ["provider:daytona", "provider:daytona:secret", "live"], timeout: 300_000 },
 );
 
 // Per-sandbox queue timeouts need the organization feature; set

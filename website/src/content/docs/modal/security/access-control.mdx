@@ -3,7 +3,23 @@ title: Access control
 description: Separate workloads with environments, member roles and scoped tokens.
 ---
 
+import Tree from "../../../../components/diagrams/Tree.astro";
+
 A Modal Function or Server calls Modal as its own container, over the API socket Modal gives every container. No token is stored in it. Every other host (a Worker, a Lambda, a Sandbox) gets its own scoped service user, and a binding grants it `viewer` or `contributor` on the bound resource's environment. Keep workloads apart with environments.
+
+## A binding reaches only its environment
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
+    { id: "prod", label: "Production", type: "environment", parent: "ws", icon: "folder" },
+    { id: "coder", label: "Coder", type: "app", parent: "prod", icon: "app-window" },
+    { id: "weights", label: "Weights", type: "Volume", parent: "prod", icon: "hard-drive" },
+    { id: "dev", label: "Dev", type: "environment", parent: "ws", side: true, tone: "muted", icon: "folder" },
+  ]}
+  scopes={[{ on: "prod", label: "Api's service user · contributor" }]}
+  caption="The Worker Api binds a Sandbox in Coder, so its service user is a contributor in Production and nothing else. It can't touch Dev."
+/>
 
 ## Restrict an environment
 
@@ -79,7 +95,7 @@ The key applies inside Modal too. A Function calling another Function logs in to
 
 A program with `restrictModalAccess` can't call Modal as its container. Its bindings get a scoped service user instead, so it can reach only what it binds.
 
-## Share one port
+## Share one port with a token
 
 ```typescript
 const { url, token } = yield* sandbox.connectToken({ port: 8080, userMetadata: user });
@@ -87,7 +103,7 @@ const { url, token } = yield* sandbox.connectToken({ port: 8080, userMetadata: u
 
 The token opens that port only.
 
-## Tokens for protected endpoints
+## Issue tokens for protected endpoints
 
 ```typescript
 // src/Tokens.ts
@@ -99,7 +115,7 @@ export const Caller = Modal.WebhookToken("Caller", { scoped: true, environments:
 
 Send `tokenId` as `Modal-Key` and `tokenSecret` as `Modal-Secret`.
 
-## Workspace defaults
+## Set workspace defaults
 
 ```typescript
 // src/Settings.ts

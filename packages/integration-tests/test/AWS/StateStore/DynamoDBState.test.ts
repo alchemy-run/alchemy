@@ -9,6 +9,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
+import { TelemetryDebug } from "@distilled.cloud/core/telemetry-debug";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
@@ -16,6 +17,7 @@ import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
@@ -440,7 +442,8 @@ test.provider(
       });
       const atDebug = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
-          Effect.provide(Logger.layer([logger])),
+          // SDKs write their Debug lines only with TelemetryDebug provided.
+          Effect.provide(Layer.mergeAll(Logger.layer([logger]), TelemetryDebug.layer)),
           Effect.provideService(References.MinimumLogLevel, "Debug"),
         );
 

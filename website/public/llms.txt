@@ -314,8 +314,10 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 ## AWS — Compute
 
 - [Lambda MicroVMs](https://alchemy.run/aws/compute/microvms) — Build a Firecracker MicroVM image from TypeScript or a Dockerfile, then launch and drive isolated stateful instances from a Lambda Function with typed lifecycle bindings and RPC.
+- [Nitro Sandboxes](https://alchemy.run/aws/compute/nitro-sandboxes) — How Nitro Sandboxes run each ECS task, EKS pod or self-managed workload in its own lightweight VM on your EC2 instances, the difference between isolated and confidential modes, and how to turn them on for ECS, EKS and EC2.
 - [EC2](https://alchemy.run/aws/compute/ec2) — How EC2 instances give you a whole virtual machine, how to launch one from an image into a subnet, how to run your Effect program on it as a service, and how to reach it.
 - [ECS](https://alchemy.run/aws/compute/ecs) — How ECS runs containers on Fargate through clusters, task definitions, tasks and services, and how to run a server, a one-off job or a scheduled job from an image, a Dockerfile or an Effect program.
+- [ECS Sandboxes](https://alchemy.run/aws/compute/ecs-sandboxes) — Create a Nitro Sandbox per user or session on ECS from a Lambda Function, then run commands, use files, open terminals and call ports in it through a typed handle.
 - [Effect workflows](https://alchemy.run/aws/compute/effect-workflows) — Run Effect workflows on AWS Lambda durable functions. Host them in an AWS.Lambda.WorkflowFunction, start runs from other functions with AWS.Lambda.DurableFunctionEngine, and let them sleep and wait durably.
 - [EKS](https://alchemy.run/aws/compute/eks) — Stand up an EKS Auto Mode cluster on a Network and run containers on it — Deployments for servers, Jobs for run-to-completion work, Manifests for everything else. No YAML, no kubectl.
 - [HyperPod](https://alchemy.run/aws/compute/hyperpod) — Provision SageMaker HyperPod clusters — Slurm or EKS orchestrated — and run ML workloads on them with sbatch, raw manifests, or effectful Jobs with task governance.
@@ -720,11 +722,12 @@ E2B sandboxes for agents: what E2B is, team and API keys, network rules and egre
 - [E2B](https://alchemy.run/e2b) — Run sandboxes for agents on E2B with Alchemy. Declare templates, warm snapshots, volumes and secrets in TypeScript, and create sandboxes from any Worker or Function.
 - [What is E2B?](https://alchemy.run/e2b/what-is-e2b) — The concepts behind E2B — teams and API keys, templates, sandboxes, snapshots and forks, volumes, network rules and secrets, and lifecycle events — and how @alchemy.run/e2b models each of them.
 - [Setup](https://alchemy.run/e2b/setup) — Install @alchemy.run/e2b, sign in to E2B with a profile, and deploy from CI.
-- [Part 1: Your First Template](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and deploy it.
-- [Part 2: Add a Worker](https://alchemy.run/e2b/tutorial/part-2) — Create sandboxes from a Worker, run code in them, and keep a sandbox per user.
-- [Part 3: Testing](https://alchemy.run/e2b/tutorial/part-3) — Deploy the Stack in a test, call the API, and check the result.
-- [Part 4: Stages](https://alchemy.run/e2b/tutorial/part-4) — Deploy separate copies of the Stack, each with its own templates and Worker.
-- [Part 5: CI/CD](https://alchemy.run/e2b/tutorial/part-5) — Deploy a stage per pull request from GitHub Actions.
+- [Part 1: Build a Template and a Snapshot](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and a snapshot of it with a repository cloned, both built at deploy time, so every sandbox starts ready.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/e2b/tutorial/part-2) — A Cloudflare Worker that starts a fresh E2B sandbox from the Warm snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/e2b/tutorial/part-3) — Give each user an E2B sandbox started from the Warm snapshot, which pauses with their changes and resumes when they come back.
+- [Part 4: Update the Template](https://alchemy.run/e2b/tutorial/part-4) — Change the E2B template, redeploy, and see the snapshot rebuilt on it, while existing sandboxes keep what they started with.
+- [Part 5: Testing](https://alchemy.run/e2b/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the Warm snapshot, and check what they contain.
+- [Part 6: Stages and CI](https://alchemy.run/e2b/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own E2B template, snapshot and Worker.
 - [Team & API keys](https://alchemy.run/e2b/api-keys) — How an E2B team holds your templates and sandboxes, how your profile picks the team Alchemy deploys to, and what key each host gets instead of yours.
 - [Network & secrets](https://alchemy.run/e2b/network-and-secrets) — Limit where a sandbox can connect, and add credentials to its requests without the sandbox seeing them.
 - [Templates](https://alchemy.run/e2b/templates) — Build the images your sandboxes boot from, from a registry image, a Dockerfile, or another template.
@@ -744,11 +747,12 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 
 ## Archil — Tutorial
 
-- [Part 1: Your First Stack](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, create a Stack with an Archil disk, and deploy it.
-- [Part 2: Run a Program](https://alchemy.run/archil/tutorial/part-2) — Run an Effect HTTP program in its own Archil sandbox that stores files on the disk.
-- [Part 3: Testing](https://alchemy.run/archil/tutorial/part-3) — Deploy the stack in a test, call the program over HTTP, and check the file landed on the disk.
-- [Part 4: Stages](https://alchemy.run/archil/tutorial/part-4) — Deploy isolated copies of the stack with --stage, each with its own disk, sandbox and URL.
-- [Part 5: CI/CD](https://alchemy.run/archil/tutorial/part-5) — Deploy from GitHub Actions with a remote state store, a stage per pull request, and your Archil key as a repository secret.
+- [Part 1: Set Up a Sandbox](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, and declare an Archil sandbox that clones a repository onto its disk at deploy time.
+- [Part 2: Fork It for Each Request](https://alchemy.run/archil/tutorial/part-2) — A program in its own Archil sandbox that forks the set-up sandbox for each request, runs a command, and deletes the fork.
+- [Part 3: A Fork per User](https://alchemy.run/archil/tutorial/part-3) — Give each user an Archil fork of the set-up sandbox, found again by name, which keeps their changes.
+- [Part 4: Update the Sandbox](https://alchemy.run/archil/tutorial/part-4) — Change the commands that set up the Archil sandbox, redeploy, and see new forks start from the new one while existing forks keep theirs.
+- [Part 5: Testing](https://alchemy.run/archil/tutorial/part-5) — Deploy the Stack in a test, fork the set-up sandbox, and check what the fork contains.
+- [Part 6: Stages and CI](https://alchemy.run/archil/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own set-up Archil sandbox and program, from GitHub Actions.
 
 ## Archil — Accounts & access
 
@@ -763,24 +767,6 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 - [Sandboxes](https://alchemy.run/archil/compute/sandboxes) — Firecracker microVMs with disks mounted, declared as a dev box or created per task.
 - [Images](https://alchemy.run/archil/compute/images) — Boot sandboxes from public images, private registries, or a Dockerfile built on your machine and pushed for Archil to pull.
 
-## Archil — Frontend
-
-- [Websites](https://alchemy.run/archil/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to an Archil sandbox.
-- [Vite](https://alchemy.run/archil/frontend/vite) — Deploy a Vite SPA to Archil with Archil.Website.Vite: static assets served from its own Archil sandbox at a public https URL, and Vite's own dev server under alchemy dev.
-- [Static sites](https://alchemy.run/archil/frontend/static-site) — Deploy a static site to Archil with Archil.Website.StaticSite: run your build command and serve its output from its own Archil sandbox at a public https URL.
-- [React Router](https://alchemy.run/archil/frontend/react-router) — Deploy a React Router app to Archil with Archil.Website.ReactRouter: a program in its own Archil sandbox at a public https URL, and React Router's own dev server under alchemy dev.
-- [Foldkit](https://alchemy.run/archil/frontend/foldkit) — Deploy a Foldkit app to Archil with Archil.Website.Foldkit: a program in its own Archil sandbox at a public https URL, and Foldkit's own dev server under alchemy dev.
-- [TanStack Start](https://alchemy.run/archil/frontend/tanstack-start) — Deploy a TanStack Start app to Archil with Archil.Website.TanStackStart: a program in its own Archil sandbox at a public https URL, and TanStack Start's own dev server under alchemy dev.
-- [Next.js](https://alchemy.run/archil/frontend/nextjs) — Deploy a Next.js app to Archil with Archil.Website.Nextjs: a program in its own Archil sandbox at a public https URL, and Next.js's own dev server under alchemy dev.
-- [Vinext](https://alchemy.run/archil/frontend/vinext) — Deploy a vinext app to Archil with Archil.Website.Vinext: a program in its own Archil sandbox at a public https URL, and vinext's own dev server under alchemy dev.
-- [Nuxt](https://alchemy.run/archil/frontend/nuxt) — Deploy a Nuxt app to Archil with Archil.Website.Nuxt: a program in its own Archil sandbox at a public https URL, and Nuxt's own dev server under alchemy dev.
-- [Vocs](https://alchemy.run/archil/frontend/vocs) — Deploy a Vocs app to Archil with Archil.Website.Vocs: a program in its own Archil sandbox at a public https URL, and Vocs's own dev server under alchemy dev.
-- [SolidStart](https://alchemy.run/archil/frontend/solidstart) — Deploy a SolidStart app to Archil with Archil.Website.SolidStart: a program in its own Archil sandbox at a public https URL, and SolidStart's own dev server under alchemy dev.
-- [Astro](https://alchemy.run/archil/frontend/astro) — Deploy an Astro app to Archil with Archil.Website.Astro: a program in its own Archil sandbox at a public https URL, and Astro's own dev server under alchemy dev.
-- [SvelteKit](https://alchemy.run/archil/frontend/sveltekit) — Deploy a SvelteKit app to Archil with Archil.Website.SvelteKit: a program in its own Archil sandbox at a public https URL, and SvelteKit's own dev server under alchemy dev.
-- [Waku](https://alchemy.run/archil/frontend/waku) — Deploy a Waku app to Archil with Archil.Website.Waku: a program in its own Archil sandbox at a public https URL, and Waku's own dev server under alchemy dev.
-- [Octane](https://alchemy.run/archil/frontend/octane) — Deploy an Octane app to Archil with Archil.Website.Octane: a program in its own Archil sandbox at a public https URL, and Octane's own dev server under alchemy dev.
-
 ## Archil — Storage
 
 - [Disks](https://alchemy.run/archil/storage/disks) — Create disks per user at run time, share a few at deploy time, run commands against them, and read their files by key.
@@ -793,21 +779,24 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.
 
 - [Boat](https://alchemy.run/boat) — Run sandboxes on Boat with Alchemy. Declare sandboxes, snapshots, environments and webhooks in TypeScript, and create sandboxes from any Worker or Function.
-- [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, ports and webhooks — and how @alchemy.run/boat models each of them.
+- [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, credential profiles and the AI credentials proxy, ports and webhooks — and how @alchemy.run/boat models each of them.
 - [Setup](https://alchemy.run/boat/setup) — Install @alchemy.run/boat, sign in to Boat with a profile, and deploy from CI.
-- [Part 1: Your First Sandbox](https://alchemy.run/boat/tutorial/part-1) — Add the Boat provider to a Stack and deploy a sandbox.
-- [Part 2: Sandboxes from a Worker](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that runs code in a fresh Boat sandbox per request, and keeps one sandbox per user.
-- [Part 3: Testing](https://alchemy.run/boat/tutorial/part-3) — Deploy the Stack in a test, call the API, and check the result.
-- [Part 4: Stages](https://alchemy.run/boat/tutorial/part-4) — Deploy separate copies of the Stack, each with its own Worker and key.
-- [Part 5: CI/CD](https://alchemy.run/boat/tutorial/part-5) — Deploy a stage per pull request from GitHub Actions.
+- [Part 1: Build a Snapshot](https://alchemy.run/boat/tutorial/part-1) — Declare a Boat snapshot that clones a repository and installs tools at deploy time, so every sandbox starts ready.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that starts a fresh Boat sandbox from the Golden snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/boat/tutorial/part-3) — Give each user a Boat sandbox started from the Golden snapshot, which keeps their changes and resumes when they come back.
+- [Part 4: Update the Snapshot](https://alchemy.run/boat/tutorial/part-4) — Change the Golden snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
+- [Part 5: Testing](https://alchemy.run/boat/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the Golden snapshot, and check what they contain.
+- [Part 6: Stages and CI](https://alchemy.run/boat/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Boat snapshot and Worker.
 - [Account & API keys](https://alchemy.run/boat/account-and-keys) — How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
-- [Choosing a runtime](https://alchemy.run/boat/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
-- [Sandboxes](https://alchemy.run/boat/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
-- [Programs](https://alchemy.run/boat/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
-- [Snapshots & forks](https://alchemy.run/boat/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
-- [Environments](https://alchemy.run/boat/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
-- [Ports](https://alchemy.run/boat/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
-- [Webhooks](https://alchemy.run/boat/webhooks) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
+- [Credentials & bindings](https://alchemy.run/boat/security/credentials) — What each host gets to reach Boat, deploy-time resources vs clients your app runs, and who owns the sandboxes your app creates.
+- [Environments & secrets](https://alchemy.run/boat/security/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
+- [Credential profiles](https://alchemy.run/boat/security/credential-profiles) — Boat credential profiles — the AI keys and API secrets a sandbox gets, and the proxy that keeps the real ones out of it.
+- [Choosing a runtime](https://alchemy.run/boat/sandboxes/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
+- [Sandboxes](https://alchemy.run/boat/sandboxes/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
+- [Programs](https://alchemy.run/boat/sandboxes/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
+- [Snapshots & forks](https://alchemy.run/boat/sandboxes/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
+- [Ports & URLs](https://alchemy.run/boat/sandboxes/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
+- [Lifecycle events](https://alchemy.run/boat/sandboxes/lifecycle-events) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
 
 ## Rivet
 
@@ -881,11 +870,12 @@ Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and sc
 
 ## Daytona — Tutorial
 
-- [Part 1: Your First Snapshot](https://alchemy.run/daytona/tutorial/part-1) — Declare the snapshot your sandboxes boot from and deploy it.
-- [Part 2: Run Code in a Sandbox](https://alchemy.run/daytona/tutorial/part-2) — Add a Worker that creates a sandbox per request, runs a command, and deletes it.
-- [Part 3: A Sandbox per User](https://alchemy.run/daytona/tutorial/part-3) — Give each user a sandbox with their own volume, so their files survive the sandbox.
-- [Part 4: Testing](https://alchemy.run/daytona/tutorial/part-4) — Deploy the Stack in a test, call the Worker, and destroy it.
-- [Part 5: Stages and CI](https://alchemy.run/daytona/tutorial/part-5) — Deploy a copy of the app per stage, and from CI.
+- [Part 1: Build a Warm Snapshot](https://alchemy.run/daytona/tutorial/part-1) — Declare a Daytona snapshot of an image, and a warm snapshot of it with a repository cloned, both built at deploy time.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/daytona/tutorial/part-2) — A Cloudflare Worker that starts a fresh Daytona sandbox from the warm snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/daytona/tutorial/part-3) — Give each user a Daytona sandbox started from the warm snapshot, which stops when idle and starts again with their changes.
+- [Part 4: Update the Snapshot](https://alchemy.run/daytona/tutorial/part-4) — Move the Daytona snapshots to a new Node.js version, redeploy, and see new sandboxes start from it while existing ones keep theirs.
+- [Part 5: Testing](https://alchemy.run/daytona/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the warm snapshot, and check what they contain.
+- [Part 6: Stages and CI](https://alchemy.run/daytona/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Daytona snapshots and Worker.
 
 ## Daytona — Accounts & access
 
@@ -920,11 +910,12 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Tutorial
 
-- [Part 1: Your First Stack](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, app and image.
-- [Part 2: Add a Sandbox](https://alchemy.run/modal/tutorial/part-2) — Create a sandbox from a Worker and give each user a volume.
-- [Part 3: Testing](https://alchemy.run/modal/tutorial/part-3) — Test the deployed API against real Modal sandboxes.
-- [Part 4: Stages](https://alchemy.run/modal/tutorial/part-4) — Deploy separate dev, staging and prod copies, each in its own Modal environment.
-- [Part 5: CI/CD](https://alchemy.run/modal/tutorial/part-5) — Deploy from GitHub Actions with a Modal token in repository secrets.
+- [Part 1: Build a Warm Image](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, an app, and a warm image with a repository cloned, all built at deploy time.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/modal/tutorial/part-2) — A Cloudflare Worker that starts a Modal sandbox from the warm image for each command, and reads back its output.
+- [Part 3: A Copy per User](https://alchemy.run/modal/tutorial/part-3) — Give each user a Modal volume of their own, mounted into every sandbox they start from the warm image.
+- [Part 4: Update the Image](https://alchemy.run/modal/tutorial/part-4) — Change the warm Modal image, redeploy, and see new sandboxes start from the new image while users keep their files.
+- [Part 5: Testing](https://alchemy.run/modal/tutorial/part-5) — Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the warm image and the user's files.
+- [Part 6: Stages and CI](https://alchemy.run/modal/tutorial/part-6) — Deploy a stage per environment and per pull request, each in its own Modal environment with its own images.
 
 ## Modal — Accounts & access
 
@@ -938,7 +929,7 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Services
 
-- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed Modal function.
 - [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
 - [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
 - [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
@@ -947,16 +938,16 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Sandboxes
 
-- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image.
-- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One sandbox whose filesystem outlives its sessions.
+- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image, and start sandboxes with a repository already installed.
+- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One Modal sandbox whose filesystem outlives its sessions, resumed from a Worker.
 - [Programs](https://alchemy.run/modal/sandboxes/programs) — Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
 - [Sandboxes](https://alchemy.run/modal/sandboxes/sandboxes) — Create, find, run commands in, and stop Modal sandboxes from any runtime.
-- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a sandbox's files or memory and start new sandboxes from it.
+- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a Modal sandbox's files, its memory, or one directory, and start new sandboxes from it.
 
 ## Modal — Storage
 
-- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between sandboxes, functions and Workers.
-- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, sandboxes and Python functions.
+- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between Modal sandboxes, functions and Workers.
+- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, Modal sandboxes and Python functions with a Modal Queue.
 - [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
 
 ## Modal — Networking
@@ -1081,12 +1072,23 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 
 Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
 
-- [Docker](https://alchemy.run/docker) — Images, containers, networks, volumes and Swarm services as Stack resources, driven through your active Docker CLI context.
-- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — the engine and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
-- [Setup](https://alchemy.run/docker/setup) — Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
-- [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
-- [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
-- [Docker Swarm](https://alchemy.run/docker/swarm) — Provision a swarm and deploy replicated services to it, from local dev to a remote VPS
+- [Docker](https://alchemy.run/docker) — Docker builds applications into images and runs them as isolated containers on a Docker engine, on your laptop, a CI runner or a server.
+- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — engines and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
+- [Setup](https://alchemy.run/docker/setup) — Install @alchemy.run/docker, register its providers, and point Alchemy at a Docker or Podman engine.
+- [Engines & contexts](https://alchemy.run/docker/engines-and-contexts) — How a Docker context chooses the engine a resource lands on — the CLI's current context, a Docker.Context over SSH or TCP, an existing context by lookup — and who can reach an engine.
+- [Registries & credentials](https://alchemy.run/docker/registries) — Give an image its registry credentials as a Redacted Config value, push without docker login, pull private base images, and read the password from a secrets manager per stage.
+- [Build images](https://alchemy.run/docker/build-images) — Build an image from a Dockerfile with Docker.Image — build args, multi-stage targets, platforms, build secrets — and know when a deploy rebuilds it.
+- [Build caches](https://alchemy.run/docker/build-caches) — Keep an image's build layers in a registry or GitHub Actions cache, so fresh CI runners skip the steps that didn't change.
+- [Pull & mirror images](https://alchemy.run/docker/remote-images) — Pull an existing image with Docker.RemoteImage, pin it so deploys stop re-pulling, and re-tag and push it into your own registry.
+- [Images on cloud runtimes](https://alchemy.run/docker/cloud-runtimes) — Hand a pushed image's reference or digest to ECS, Cloudflare Containers, Cloud Run or Kubernetes, let those runtimes build with your local Docker, and write Dockerfiles inline with Dockerfile.inline.
+- [Containers](https://alchemy.run/docker/containers) — Run an image as a Docker.Container — start it, publish ports, pass secrets through its environment, health-check it, reach the host — and know which changes recreate it.
+- [Networks](https://alchemy.run/docker/networks) — Connect containers on a Docker.Network so they reach each other by name, cut a network off from the internet, pin its subnet, and attach to networks you didn't create.
+- [Volumes](https://alchemy.run/docker/volumes) — Keep a container's data in a Docker.Volume so it survives the container being recreated, mount host directories, and know when a volume and its data are deleted.
+- [Limits & security](https://alchemy.run/docker/limits-and-security) — Cap a container's memory, CPU and processes, run it as an unprivileged user with a read-only filesystem and no capabilities, apply seccomp and AppArmor profiles, and rotate its logs.
+- [Swarms](https://alchemy.run/docker/swarm) — Turn an engine into a swarm with Docker.Swarm, locally or on a server over SSH, use a swarm you didn't create, and grow it to more nodes.
+- [Services](https://alchemy.run/docker/services) — Run replicated containers on a swarm with Docker.Service — publish ports through the routing mesh, roll out new images with automatic rollback, connect services on overlay networks, mount Swarm secrets, and place tasks on nodes.
+- [Effectful services](https://alchemy.run/docker/effectful-services) — Write a Swarm service as an Effect program in your own code — Alchemy bundles it into an image on the swarm's engine, serves its fetch handler, runs its background loops and gives it the Config it reads.
+- [Local Postgres](https://alchemy.run/docker/local-services) — Run Postgres for local development as Stack resources — a pinned image, a network and a volume, a Redacted password, and a health-checked container.
 
 ## Kubernetes
 
@@ -1217,4 +1219,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~256 KB) — only fetch it when you need to locate a specific resource's reference page.

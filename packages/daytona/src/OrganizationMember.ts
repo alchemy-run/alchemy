@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { declarable } from "./internal/Declared.ts";
 import {
   movesOrganization,
   organizationIdFor,
@@ -85,7 +86,9 @@ export class MemberNotInOrganization extends Data.TaggedError("Daytona.MemberNot
  * @resource
  * @product Organization
  */
-export const OrganizationMember = Resource<OrganizationMember>("Daytona.OrganizationMember");
+export const OrganizationMember = declarable<OrganizationMember>()(
+  Resource<OrganizationMember>("Daytona.OrganizationMember"),
+);
 
 const findMember = Effect.fn(function* (organizationId: string, user: string) {
   const members = yield* organizations.listOrganizationMembers({ organizationId });

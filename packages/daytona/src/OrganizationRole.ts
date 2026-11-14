@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Permission } from "./ApiKey.ts";
+import { declarable } from "./internal/Declared.ts";
 import { isOwnedName, resolveName } from "./internal/Names.ts";
 import {
   currentOrganizationId,
@@ -71,7 +72,9 @@ export type OrganizationRole = Resource<
  * @resource
  * @product Organization
  */
-export const OrganizationRole = Resource<OrganizationRole>("Daytona.OrganizationRole");
+export const OrganizationRole = declarable<OrganizationRole>()(
+  Resource<OrganizationRole>("Daytona.OrganizationRole"),
+);
 
 const toAttributes = (
   organizationId: string,

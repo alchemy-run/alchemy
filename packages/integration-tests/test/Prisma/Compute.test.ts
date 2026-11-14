@@ -10,6 +10,8 @@ import {
   ComputeProvider,
   syncComputeEnvironment,
   waitForDeploymentUrl,
+  type ComputeDeploymentRecoveryFailed,
+  type ComputeEnvironmentRollbackFailed,
   type ComputeProps,
 } from "@alchemy.run/prisma/Compute";
 import type { Branch as ApiBranch } from "@alchemy.run/prisma/Types";
@@ -34,6 +36,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { WebSocketServer } from "ws";
+import type { AppPromotionNotConverged } from "../../../prisma/src/internal/AppPromotion.ts";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
 import {
   type Captured,
@@ -2633,9 +2636,11 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(error).toBeInstanceOf(AggregateError);
-          expect((error as AggregateError).message).toContain("promotion returned success");
-          expect((error as AggregateError).message).toContain("did not converge");
+          expect(error).toMatchObject({ _tag: "AppPromotionNotConverged" });
+          expect((error as AppPromotionNotConverged).message).toContain(
+            "promotion returned success",
+          );
+          expect((error as AppPromotionNotConverged).message).toContain("did not converge");
           expect(fixture.latestDeploymentId()).toBe("version-old");
           expect(fixture.hasDeployment("version-new")).toBe(true);
           expect(
@@ -2711,8 +2716,8 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(error).toBeInstanceOf(AggregateError);
-          expect((error as AggregateError).message).toContain(
+          expect(error).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((error as ComputeDeploymentRecoveryFailed).message).toContain(
             "rollback to deployment 'version-old' did not converge",
           );
           expect(fixture.latestDeploymentId()).toBe("version-new");
@@ -2961,8 +2966,8 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(firstError).toBeInstanceOf(AggregateError);
-          expect((firstError as AggregateError).message).toContain(
+          expect(firstError).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((firstError as ComputeDeploymentRecoveryFailed).message).toContain(
             "no safe rollback target exists",
           );
           expect(fixture.calls.filter(([operation]) => operation === "rollbackApp")).toEqual([]);
@@ -2986,8 +2991,8 @@ describe(
             .pipe(Effect.flip);
           const retryCalls = fixture.calls.slice(callsBeforeRetry);
 
-          expect(retryError).toBeInstanceOf(AggregateError);
-          expect((retryError as AggregateError).message).toContain(
+          expect(retryError).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((retryError as ComputeDeploymentRecoveryFailed).message).toContain(
             "cannot prove that the live deployment is the interrupted replacement",
           );
           expect(retryCalls.filter(([operation]) => operation === "createAppDeployment")).toEqual(
@@ -3072,8 +3077,8 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(replacementError).toBeInstanceOf(AggregateError);
-          expect((replacementError as AggregateError).message).toContain(
+          expect(replacementError).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((replacementError as ComputeDeploymentRecoveryFailed).message).toContain(
             "no safe rollback target exists",
           );
           expect(fixture.latestDeploymentId()).toBe("version-new-2");
@@ -3099,8 +3104,8 @@ describe(
             .pipe(Effect.flip);
           const retryCalls = fixture.calls.slice(callsBeforeRetry);
 
-          expect(retryError).toBeInstanceOf(AggregateError);
-          expect((retryError as AggregateError).message).toContain(
+          expect(retryError).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((retryError as ComputeDeploymentRecoveryFailed).message).toContain(
             "cannot prove that the live deployment is the interrupted replacement",
           );
           expect(retryCalls.filter(([operation]) => operation === "createAppDeployment")).toEqual(
@@ -3178,14 +3183,14 @@ describe(
         return Effect.gen(function* () {
           const firstError = yield* reconcile.pipe(Effect.flip);
 
-          expect(firstError).toBeInstanceOf(AggregateError);
-          expect((firstError as AggregateError).message).toContain(
+          expect(firstError).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((firstError as ComputeDeploymentRecoveryFailed).message).toContain(
             "promoted deployment 'version-new'",
           );
-          expect((firstError as AggregateError).message).toContain(
+          expect((firstError as ComputeDeploymentRecoveryFailed).message).toContain(
             "rollback to deployment 'version-old' did not converge",
           );
-          expect((firstError as AggregateError).message).toContain(
+          expect((firstError as ComputeDeploymentRecoveryFailed).message).toContain(
             "next reconcile will retry recovery",
           );
           expect(fixture.latestDeploymentId()).toBe("version-new");
@@ -3200,12 +3205,12 @@ describe(
           const retryError = yield* reconcile.pipe(Effect.flip);
           const blockedRetryCalls = fixture.calls.slice(callsBeforeBlockedRetry);
 
-          expect(retryError).toBeInstanceOf(AggregateError);
-          expect((retryError as AggregateError).message).toContain(
+          expect(retryError).toMatchObject({ _tag: "ComputeDeploymentRecoveryFailed" });
+          expect((retryError as ComputeDeploymentRecoveryFailed).message).toContain(
             "no environment variables or new deployment were changed",
           );
           expect(
-            (retryError as AggregateError).errors.some(
+            (retryError as ComputeDeploymentRecoveryFailed).errors.some(
               (error) => error instanceof Error && error.message === "rollback unavailable",
             ),
           ).toBe(true);
@@ -3892,14 +3897,14 @@ describe(
           B: "two",
         }).pipe(Effect.flip);
 
-        expect(error).toBeInstanceOf(AggregateError);
-        expect(((error as AggregateError).errors[0] as Error).message).toContain(
+        expect(error).toMatchObject({ _tag: "ComputeEnvironmentRollbackFailed" });
+        expect(((error as ComputeEnvironmentRollbackFailed).errors[0] as Error).message).toContain(
           "second create failed",
         );
-        expect(((error as AggregateError).errors[1] as Error).message).toContain(
+        expect(((error as ComputeEnvironmentRollbackFailed).errors[1] as Error).message).toContain(
           "rollback delete failed",
         );
-        expect((error as AggregateError).message).toContain(
+        expect((error as ComputeEnvironmentRollbackFailed).message).toContain(
           "DELETE /v1/environment-variables/env-a",
         );
       }).pipe(Effect.provide(apiRoutedHttp(client)));
@@ -6188,8 +6193,8 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(error).toBeInstanceOf(AggregateError);
-          expect((error as AggregateError).message).toContain("ambiguous");
+          expect(error).toMatchObject({ _tag: "AppPromotionNotConverged" });
+          expect((error as AppPromotionNotConverged).message).toContain("ambiguous");
           expect(versions.has("version-new")).toBe(true);
           expect(calls).toEqual([
             ["getApp", "service-1"],

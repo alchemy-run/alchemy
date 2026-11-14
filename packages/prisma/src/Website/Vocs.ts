@@ -40,6 +40,8 @@ export const Vocs = (id: string, props: VocsProps = {}) =>
   makeFrameworkSite(id, props, {
     framework: "@alchemy.run/frontend-frameworks/vocs/node",
     target: "@alchemy.run/frontend-frameworks/vocs/node",
+    // Vocs's Vite dev server exhausts memory under Bun.
+    runtime: "node",
     options: { outDir: props.outDir },
     htmlHandling: "drop-trailing-slash",
   }).pipe(Namespace.push(id));

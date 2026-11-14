@@ -1,61 +1,68 @@
 ---
-title: "Part 5: CI/CD"
-description: Deploy from GitHub Actions with a Modal token in repository secrets.
+title: "Part 5: Testing"
+description: Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the warm image and the user's files.
 sidebar:
   order: 5
 ---
 
-Modal has no OIDC federation, so CI uses a token. Create one for a workspace you use only for CI.
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Store the token in GitHub
+## Deploy once per test file
 
-Add `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` as repository secrets.
+```typescript title="test/integ.test.ts"
+import { expect } from "bun:test";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import Stack from "../alchemy.run.ts";
 
-## Deploy on push
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers()),
+  state: Alchemy.localState(),
+});
 
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun alchemy deploy --stage ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'prod' }}
-        env:
-          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 ```
 
-Each pull request deploys its own stage, in its own Modal environment.
+The test deploys the Stack to a stage of its own, with its own environment and images, and destroys it afterwards.
 
-## Clean up closed pull requests
+## Check a sandbox sees the warm image and the user's files
 
-```yaml
-# .github/workflows/cleanup.yml
-name: Cleanup
-on:
-  pull_request:
-    types: [closed]
-
-jobs:
-  destroy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun alchemy destroy --stage pr-${{ github.event.number }}
-        env:
-          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```typescript title="test/integ.test.ts"
+test(
+  "starts each sandbox from the Warm image, with the user's files mounted",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    yield* Test.executeWhenReady(
+      HttpClientRequest.put(`${url}/users/ada/files/notes.md`).pipe(HttpClientRequest.bodyText("hello")),
+    );
+    const res = yield* HttpClient.execute(
+      HttpClientRequest.post(`${url}/users/ada/run`).pipe(
+        HttpClientRequest.bodyText("pnpm --version && cat /home/user/notes.md"),
+      ),
+    );
+    const body = (yield* res.json) as { exitCode: number; output: string };
+    expect(body.exitCode).toBe(0);
+    expect(body.output).toContain("hello");
+  }),
+  { timeout: 600_000 },
+);
 ```
+
+`pnpm` is only there if the sandbox booted from `Warm`, and `hello` only if it mounted Ada's volume. Destroying the stage removes its environment, and the volumes in it.
+
+## Run it
+
+<PackageManagers script={`bun test`} />
+
+Set `NO_DESTROY=1` to keep the deployment, and its images, between runs while you iterate.
+
+## Next
+
+[Part 6](/modal/tutorial/part-6) deploys more copies, from CI.

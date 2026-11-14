@@ -89,7 +89,14 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
       // fallback) — the worker handles every request, like in production.
       server.middlewares.use(function distilledCloudflarePreviewMiddleware(req, res) {
         const url = workerRequestUrl(req.url, address);
-        forwardWorkerRequest(req, res, url, handle.proxySharedSecret, server.config.logger);
+        forwardWorkerRequest(
+          req,
+          res,
+          url,
+          handle.socketPath,
+          handle.proxySharedSecret,
+          server.config.logger,
+        );
       });
     },
   };

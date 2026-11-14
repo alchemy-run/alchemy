@@ -3,6 +3,7 @@ import { fromWebToken, type ResolvedCredentials } from "@distilled.cloud/aws/Cre
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import { AlchemyContext } from "alchemy/AlchemyContext";
+import { orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
@@ -513,6 +514,9 @@ const withWebIdentity = Effect.fn(function* <Op>(
       Endpoint.fromEnv(),
       FetchHttpClient.layer,
     ]),
+    // The web-token provider loads on first use and fails with `SdkError`
+    // when its module cannot load.
+    orDieCredentialsUnavailable("AWS"),
   );
 });
 

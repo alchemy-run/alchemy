@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
@@ -14,8 +15,10 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../../Utils/Telemetry.ts";
 import EffectWebFunctionLive, { EffectWebFunction } from "./fixtures/web/effect-web.ts";
 import {
   BackgroundLoopWeb,
@@ -24,11 +27,14 @@ import {
   EventSourceWebLive,
 } from "./fixtures/web/not-http.ts";
 import RdsWebFunctionLive, { RdsWebFunction, RdsWebInfra } from "./fixtures/web/rds-web.ts";
+import TracedWebFunctionLive, { TracedWebFunction } from "./fixtures/web/traced-web.ts";
 
 const asyncServerMain = fileURLToPath(new URL("./fixtures/web/async-server.ts", import.meta.url));
 const prebuiltMain = fileURLToPath(new URL("./fixtures/web/prebuilt/server.mjs", import.meta.url));
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
 
 const tags = ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"];
 
@@ -444,6 +450,10 @@ test.provider(
   { tags, timeout: 60_000 },
 );
 
+// Floci (`ALCHEMY_TEST_DEV=1`) serves the Web Function and connector APIs but
+// has no VPC data plane, so only the live run proves traffic leaves through it.
+const emulator = process.env.ALCHEMY_TEST_DEV === "1";
+
 // Slow: the network connector takes ~3 minutes to become ACTIVE.
 test.provider.skipIf(!!process.env.FAST)(
   "vpc routes outbound traffic through the VPC",
@@ -490,11 +500,13 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const { fn: after, extraUrl } = yield* deploy(true);
       expect(after.revisionId).not.toBe(before.revisionId);
-      const resolved = yield* dns(after.url).pipe(
-        Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until: (r) => r.ok, times: 20 }),
-      );
-      expect(resolved.ok).toBe(true);
-      expect(resolved.addresses?.length).toBeGreaterThan(0);
+      if (!emulator) {
+        const resolved = yield* dns(after.url).pipe(
+          Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until: (r) => r.ok, times: 20 }),
+        );
+        expect(resolved.ok).toBe(true);
+        expect(resolved.addresses?.length).toBeGreaterThan(0);
+      }
 
       // Out-of-band: the revision pins a version of a WebFunction connector.
       const revision = yield* LambdaWeb.getWebFunctionRevision({
@@ -532,7 +544,7 @@ test.provider.skipIf(!!process.env.FAST)(
         Effect.map(() => false),
         Effect.catchTag("NoSuchEntityException", () => Effect.succeed(true)),
       );
-      expect((yield* dns(extraUrl)).ok).toBe(true);
+      if (!emulator) expect((yield* dns(extraUrl)).ok).toBe(true);
 
       // Removing `vpc` releases the connector and its operator role in the
       // same deploy, once no endpoint serves a revision that uses it.
@@ -565,12 +577,16 @@ test.provider.skipIf(!!process.env.FAST)(
           }),
         );
 
-      const global = yield* deploy(["us-east-1"]);
-      expect(global.domainName).toContain(".lambda-web.global.on.aws");
+      // One Region besides the home Region, which the endpoint always includes.
+      const homeRegion = yield* yield* AWS.Region;
+      const other = homeRegion === "us-east-1" ? "us-west-2" : "us-east-1";
+      const global = yield* deploy([other]);
+      // `<id>.lambda-web.global.on.aws` on AWS; Floci keeps the same labels.
+      expect(global.domainName).toContain(".lambda-web.global.");
       expect(global.endpointType).toBe("MultiRegion");
       const endpoint = yield* getEndpoint(global.functionName);
       expect(endpoint.endpointType).toBe("MultiRegion");
-      expect([...endpoint.regions].sort()).toEqual(["us-east-1", "us-west-2"]);
+      expect([...endpoint.regions].sort()).toEqual([homeRegion, other].sort());
       expect(yield* getTextUntil(global.url, (body) => body === "greeting=global")).toBe(
         "greeting=global",
       );
@@ -711,4 +727,31 @@ test.provider(
       expect(ok.resources.Invalid).toMatchObject({ action: "create" });
     }),
   { tags, timeout: 60_000 },
+);
+
+test.provider(
+  "Effect fetch handler exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const fn = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedWebFunction.pipe(Effect.provide(TracedWebFunctionLive));
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(fn.url, "lambdaweb")).toBe("did work lambdaweb");
+      const traces = yield* waitForWorkSpan(collector.url!, "lambdaweb");
+      expect(traces).toContain("work:lambdaweb");
+      expect(traces).toContain("lambda-web-e2e");
+
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:cloudflare", "provider:cloudflare:worker"], timeout: 300_000 },
 );

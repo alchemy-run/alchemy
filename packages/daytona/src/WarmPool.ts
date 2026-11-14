@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { declarable } from "./internal/Declared.ts";
 import { resolved, type Ref } from "./internal/Ref.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -58,7 +59,7 @@ export type WarmPool = Resource<
  * @resource
  * @product Warm Pool
  */
-export const WarmPool = Resource<WarmPool>("Daytona.WarmPool");
+export const WarmPool = declarable<WarmPool>()(Resource<WarmPool>("Daytona.WarmPool"));
 
 const toAttributes = (p: warmPools.WarmPool): WarmPoolAttributes => ({
   warmPoolId: p.id,

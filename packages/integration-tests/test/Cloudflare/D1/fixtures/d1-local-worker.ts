@@ -46,6 +46,16 @@ export default {
       ).all<{ id: string; name: string }>();
       return Response.json({ migrations: rows.results });
     }
+    if (url.pathname === "/wipe" && request.method === "POST") {
+      // Leaves the database as a deleted `.alchemy/local/d1` would: no tables.
+      const tables = await env.DB.prepare(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'",
+      ).all<{ name: string }>();
+      for (const { name } of tables.results) {
+        await env.DB.exec(`DROP TABLE "${name}"`);
+      }
+      return Response.json({ dropped: tables.results.map((t) => t.name) });
+    }
     if (url.pathname === "/users") {
       const rows = await env.DB.prepare("SELECT name FROM users ORDER BY name").all<{
         name: string;

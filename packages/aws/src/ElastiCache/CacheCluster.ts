@@ -302,7 +302,20 @@ export const CacheClusterProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* elasticache.deleteCacheCluster({ CacheClusterId: output.cacheClusterId }).pipe(
-            Effect.catchTag("CacheClusterNotFoundFault", () => Effect.void),
+            Effect.catchTags({
+              CacheClusterNotFoundFault: () => Effect.void,
+              // A cluster already `deleting` rejects a second delete for as
+              // long as the delete runs: an interrupted destroy, or a delete
+              // started outside the stack. Wait for that delete below.
+              InvalidCacheClusterStateFault: (error) =>
+                readCluster(output.cacheClusterId).pipe(
+                  Effect.flatMap((cluster) =>
+                    cluster === undefined || cluster.CacheClusterStatus === "deleting"
+                      ? Effect.void
+                      : Effect.fail(error),
+                  ),
+                ),
+            }),
             Effect.retry({
               while: (error) => error._tag === "InvalidCacheClusterStateFault",
               schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(12)]),

@@ -29,15 +29,11 @@ export type ShareRecipientProps = {
    */
   shareId: string;
   /**
-   * Recipient account identifier. Exactly one of `accountId` /
-   * `organizationId` must be set. Changing it triggers a replacement.
+   * Recipient account identifier. Changing it triggers a replacement.
+   * Cloudflare adds only accounts through this API; share with a whole
+   * organization through {@link Share}'s `recipients` instead.
    */
-  accountId?: string;
-  /**
-   * Recipient organization identifier. Exactly one of `accountId` /
-   * `organizationId` must be set. Changing it triggers a replacement.
-   */
-  organizationId?: string;
+  accountId: string;
 };
 
 export type ShareRecipientAttributes = {
@@ -81,8 +77,8 @@ export type ShareRecipient = Resource<
 >;
 
 /**
- * A recipient on an existing Cloudflare share — grants another account or
- * organization access to the share's resources.
+ * A recipient on an existing Cloudflare share — grants another account
+ * access to the share's resources.
  *
  * This is an existence-only resource: there is no update API, so every prop
  * change triggers a replacement. Association is eventually consistent
@@ -94,14 +90,6 @@ export type ShareRecipient = Resource<
  * const recipient = yield* Cloudflare.ResourceSharing.ShareRecipient("Partner", {
  *   shareId: share.shareId,
  *   accountId: "<recipient-account-id>",
- * });
- * ```
- *
- * **Example:** Share with an organization
- * ```typescript
- * const recipient = yield* Cloudflare.ResourceSharing.ShareRecipient("Org", {
- *   shareId: share.shareId,
- *   organizationId: "<recipient-organization-id>",
  * });
  * ```
  *
@@ -138,12 +126,8 @@ export const ShareRecipientProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const oldTarget =
-        output?.recipientAccountId ??
-        (olds?.accountId as string | undefined) ??
-        (olds?.organizationId as string | undefined);
-      const newTarget =
-        (news.accountId as string | undefined) ?? (news.organizationId as string | undefined);
+      const oldTarget = output?.recipientAccountId ?? (olds?.accountId as string | undefined);
+      const newTarget = news.accountId as string | undefined;
       if (
         typeof oldTarget === "string" &&
         typeof newTarget === "string" &&
@@ -164,9 +148,8 @@ export const ShareRecipientProvider = () =>
         return observed ? toAttributes(observed, acct, shareId) : undefined;
       }
       // Cold read — recover from lost state by matching the recipient
-      // account/organization id among the share's recipients.
-      const target =
-        (olds?.accountId as string | undefined) ?? (olds?.organizationId as string | undefined);
+      // account id among the share's recipients.
+      const target = olds?.accountId as string | undefined;
       if (target === undefined) return undefined;
       const match = yield* findRecipient(acct, shareId, target);
       return match ? toAttributes(match, acct, shareId) : undefined;
@@ -175,8 +158,7 @@ export const ShareRecipientProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const shareId = news.shareId as string;
-      const targetAccountId = news.accountId as string | undefined;
-      const targetOrganizationId = news.organizationId as string | undefined;
+      const targetAccountId = news.accountId as string;
 
       // Observe — the recipientId cached on `output` is a hint; fall
       // through to a natural-key lookup so an AlreadyExists race converges
@@ -185,8 +167,7 @@ export const ShareRecipientProvider = () =>
       const observed =
         (output?.recipientId
           ? yield* getRecipient(acct, shareId, output.recipientId)
-          : undefined) ??
-        (yield* findRecipient(acct, shareId, targetAccountId ?? targetOrganizationId ?? ""));
+          : undefined) ?? (yield* findRecipient(acct, shareId, targetAccountId));
 
       if (observed) {
         return toAttributes(observed, acct, shareId);
@@ -197,7 +178,6 @@ export const ShareRecipientProvider = () =>
         accountId: acct,
         shareId,
         recipientAccountId: targetAccountId,
-        organizationId: targetOrganizationId,
       });
       return toAttributes(created, acct, shareId);
     }),
@@ -267,7 +247,7 @@ const getRecipient = (accountId: string, shareId: string, recipientId: string) =
   );
 
 /**
- * Find a live recipient by its account/organization id. A missing share
+ * Find a live recipient by its account id. A missing share
  * surfaces as `ShareNotFound` — treat it as "no recipient".
  */
 const findRecipient = (accountId: string, shareId: string, target: string) =>

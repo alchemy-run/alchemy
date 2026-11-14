@@ -11,7 +11,17 @@ Boat runs sandboxes: Linux machines with Docker, passwordless `sudo` and a deskt
 
 ## A quick example
 
-A Worker creates a sandbox on each request, runs the code it was sent, and deletes the sandbox when the request ends:
+A snapshot is built once, at deploy: a sandbox with a repository cloned, saved under a name:
+
+```typescript title="src/Golden.ts"
+import * as Boat from "@alchemy.run/boat";
+
+export const Golden = Boat.Snapshot("Golden", {
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is ~/repo"],
+});
+```
+
+A Worker starts a sandbox from it on each request, with the repository already there, runs the command it was sent, and deletes the sandbox when the request ends:
 
 ```typescript title="src/Api.ts"
 import * as Boat from "@alchemy.run/boat";
@@ -19,21 +29,21 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Golden } from "./Golden.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const sandboxes = yield* Boat.CreateSandbox();
+    const sandboxes = yield* Boat.CreateSandbox(Golden);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const sandbox = yield* Effect.acquireRelease(
-          sandboxes.create({ type: "small", noEnv: true, autoStop: "5 minutes" }),
+          sandboxes.create({ noEnv: true, autoStop: "5 minutes" }),
           (sandbox) => Effect.ignore(sandbox.delete()),
         );
-        yield* sandbox.files.write("main.mjs", yield* request.text);
-        const result = yield* sandbox.exec("node main.mjs");
+        const result = yield* sandbox.exec(yield* request.text, { cwd: "/home/user/repo" });
         return yield* HttpServerResponse.json(result);
       }).pipe(Effect.scoped, Effect.orDie),
     };
@@ -41,7 +51,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-And the Stack deploys it:
+And the Stack deploys both:
 
 ```typescript title="alchemy.run.ts"
 import * as Boat from "@alchemy.run/boat";
@@ -50,6 +60,7 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";
+import { Golden } from "./src/Golden.ts";
 
 export default Alchemy.Stack(
   "MyApp",
@@ -58,8 +69,9 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const golden = yield* Golden;
     const api = yield* Api;
-    return { url: api.url.as<string>() };
+    return { snapshot: golden.name, url: api.url.as<string>() };
   }),
 );
 ```

@@ -1,12 +1,15 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 
 class Incremented extends Domain.Event("Incremented", { by: Schema.Number }) {}
@@ -76,6 +79,26 @@ const Wire = CounterApi.layerClient.pipe(
   Layer.provideMerge(Hosted),
 );
 
+// Live reads over WebSockets to a real server, served from the process that holds the keys.
+const SocketWire = Layer.unwrap(
+  Effect.gen(function* () {
+    const server = yield* HttpServer.HttpServer;
+    const port = "port" in server.address ? server.address.port : 0;
+    return CounterApi.layerClient.pipe(
+      Layer.provide(Domain.protocolWebSocket(`http://127.0.0.1:${port}`)),
+      Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+    );
+  }),
+).pipe(
+  Layer.provideMerge(
+    Layer.unwrap(Effect.map(CounterApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+      // Bun's graceful stop stalls when it starts as a socket closes.
+      Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: "200 millis" })),
+    ),
+  ),
+  Layer.provideMerge(Hosted),
+);
+
 type Client = Effect.Success<typeof CounterApi.client>;
 type Frame = { readonly envelope: { readonly seq: number } } | Domain.Read.CaughtUp;
 
@@ -120,6 +143,7 @@ const frames = (items: ReadonlyArray<Frame>) =>
 for (const [transport, layer] of [
   ["in process", InProcess],
   ["over the wire", Wire],
+  ["over WebSockets", SocketWire],
 ] as const) {
   describe(`Domain live reads ${transport}`, { tags: ["unit", "local"] }, () => {
     for (const kind of ["view", "stream"] as const) {

@@ -132,9 +132,10 @@ const bundleWorkerEntry = Effect.fn(function* (entry: string, generated = false)
 });
 
 /**
- * Bundle a fixture with `WorkerBundle` and return the modules rendered into
- * the files the build ships. The collector's `generateBundle` runs before the
- * built-in `unreachableChunksPlugin`, so it also sees chunks that are pruned
+ * Bundle a fixture with `WorkerBundle` and return the modules the build read
+ * (`parsed`) and the modules rendered into the files it ships (`rendered`).
+ * The collector's `generateBundle` runs before the built-in
+ * `unreachableChunksPlugin`, so it also sees chunks that are pruned
  * afterwards; only chunks in the returned output count.
  */
 const renderShippedModules = Effect.fn(function* (
@@ -144,6 +145,7 @@ const renderShippedModules = Effect.fn(function* (
   const path = yield* Path.Path;
   const packagesDir = yield* path.fromFileUrl(new URL("../../../../", import.meta.url));
   const chunks = new Map<string, string[]>();
+  const parsed = new Set<string>();
   const output = yield* (yield* WorkerBundle).build({
     id: "runtime-entry",
     main: path.join(
@@ -158,6 +160,9 @@ const renderShippedModules = Effect.fn(function* (
       input: {
         plugins: {
           name: "collect-rendered-modules",
+          moduleParsed: (info) => {
+            parsed.add(path.relative(packagesDir, info.id).replaceAll("\\", "/"));
+          },
           generateBundle: (_options, bundle) => {
             for (const chunk of Object.values(bundle)) {
               if (chunk.type !== "chunk") continue;
@@ -173,7 +178,10 @@ const renderShippedModules = Effect.fn(function* (
       },
     },
   });
-  return output.files.flatMap((file) => chunks.get(file.path) ?? []);
+  return {
+    parsed: [...parsed],
+    rendered: output.files.flatMap((file) => chunks.get(file.path) ?? []),
+  };
 });
 
 const isPlannerSource = (source: string) =>
@@ -228,10 +236,31 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
   );
 
   it.effect(
+    "does not read deploy-time binding wiring from a Worker's runtime graph (#3227)",
+    () =>
+      Effect.gen(function* () {
+        const { parsed } = yield* renderShippedModules("worker.ts", {
+          kind: "effect",
+          exports: {},
+        });
+        expect(parsed).toContain("cloudflare/src/Workers/Worker.ts");
+        expect(
+          parsed.filter((id) =>
+            [
+              "cloudflare/src/Workers/WorkerAsyncBindings.ts",
+              "cloudflare/src/LocalRuntime.ts",
+            ].includes(id),
+          ),
+        ).toEqual([]);
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
+
+  it.effect(
     "keeps the stack builder and auth store out of a bundled Worker",
     () =>
       Effect.gen(function* () {
-        const rendered = yield* renderShippedModules("worker.ts", { kind: "external" });
+        const { rendered } = yield* renderShippedModules("worker.ts", { kind: "external" });
         expect(rendered).toContain("alchemy/src/Resource.ts");
         expect(rendered.filter((id) => /^alchemy\/src\/(Stack\.ts$|Auth\/)/.test(id))).toEqual([]);
       }),
@@ -243,7 +272,10 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
       `keeps the Cloudflare API client out of a bundled Worker (${fixture})`,
       () =>
         Effect.gen(function* () {
-          const rendered = yield* renderShippedModules(fixture, { kind: "effect", exports: {} });
+          const { rendered } = yield* renderShippedModules(fixture, {
+            kind: "effect",
+            exports: {},
+          });
           expect(rendered).toContain("cloudflare/src/Workers/WorkerBridge.ts");
           // Deploy-only provider helpers (e.g. `findQueueByName`) reach the
           // distilled clients. `purePlugin` prunes them behind async bindings;

@@ -1,6 +1,7 @@
 import { Docker, DockerEnvironment } from "@alchemy.run/docker/Docker";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 
 /** Run `effect` with extra environment on every Docker CLI call it makes. */
@@ -11,6 +12,30 @@ export const withDockerEnv =
       Effect.provideService(effect, DockerEnvironment, { ...current, ...env }),
     );
 
+/**
+ * Remove a builder and its BuildKit container, and confirm it is gone. A
+ * loaded Docker daemon can time out deleting the container ("context
+ * deadline exceeded"), leaving a half-removed node whose build history the
+ * next builder of the same name would inherit.
+ */
+const removeBuilder = Effect.fn(function* (name: string) {
+  const docker = yield* Docker;
+  const exists = docker.run(["buildx", "inspect", name]).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  );
+  const retry = Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 5 });
+  if (yield* exists) yield* docker.run(["buildx", "rm", "--force", name]).pipe(retry);
+  // `buildx rm` can drop the builder while its container survives, and the
+  // container's named state volume holds the build history.
+  const node = `buildx_buildkit_${name}0`;
+  const container = yield* docker.run(["ps", "-aq", "--filter", `name=^${node}$`]);
+  if (container.stdout.trim()) yield* docker.run(["rm", "--force", node]).pipe(retry);
+  const state = `${node}_state`;
+  const volume = yield* docker.run(["volume", "ls", "-q", "--filter", `name=^${state}$`]);
+  if (volume.stdout.trim()) yield* docker.run(["volume", "rm", "--force", state]).pipe(retry);
+});
+
 export const withBuilder =
   (prefix: string, options?: { attestations?: boolean }) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -20,14 +45,11 @@ export const withBuilder =
       return yield* Effect.acquireUseRelease(
         // A killed run cannot release its builder. Remove any leftover first,
         // so every invocation starts from an empty cache under the same name.
-        docker
-          .run(["buildx", "rm", "--force", name])
-          .pipe(
-            Effect.ignore,
-            Effect.andThen(
-              docker.run(["buildx", "create", "--name", name, "--driver", "docker-container"]),
-            ),
+        removeBuilder(name).pipe(
+          Effect.andThen(
+            docker.run(["buildx", "create", "--name", name, "--driver", "docker-container"]),
           ),
+        ),
         () =>
           docker.run(["buildx", "inspect", "--bootstrap"]).pipe(
             Effect.andThen(effect),
@@ -36,7 +58,7 @@ export const withBuilder =
               BUILDX_NO_DEFAULT_ATTESTATIONS: String(options?.attestations === false),
             }),
           ),
-        () => docker.run(["buildx", "rm", "--force", name]).pipe(Effect.orDie),
+        () => removeBuilder(name).pipe(Effect.orDie),
       );
     });
 
