@@ -44,6 +44,7 @@ import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
 import { ownedProjects } from "./Project.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
 import { Service } from "./Service.ts";
+import { syncCheckSuites } from "./ServiceChecks.ts";
 import {
   deleteOwnedServiceDomain,
   ensureServiceDomain,
@@ -55,6 +56,7 @@ import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
+export { ServiceWaitForChecksNotApplied } from "./ServiceChecks.ts";
 export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({
@@ -1055,6 +1057,15 @@ export const ServiceProvider = () =>
           }
           const name = yield* resolveName(id, props.name, output?.name);
           const source = yield* resolveRailwayServiceSource(props);
+          // "Wait for CI" gates GitHub deploys. `image`, `main` and `context`
+          // services have none, so fail before any cloud call instead of
+          // ignoring the prop.
+          if (props.waitForChecks !== undefined && source.mode !== "repo") {
+            return yield* new ServiceSourceInvalid({
+              message:
+                "Railway.Service `waitForChecks` applies only to a `repo` service (Wait for CI gates GitHub deploys).",
+            });
+          }
           const hostedMain = source.mode === "main" ? source.main : undefined;
           const localContext: RailwayLocalContextSource | undefined =
             source.mode === "context" ? source : undefined;
@@ -1264,6 +1275,12 @@ export const ServiceProvider = () =>
               branch: props.branch,
             });
             if (branchChanged) needsDeploy = true;
+            yield* syncCheckSuites({
+              environmentId,
+              projectId,
+              serviceId: current.id,
+              waitForChecks: props.waitForChecks,
+            });
           }
 
           if (localContext !== undefined) {
