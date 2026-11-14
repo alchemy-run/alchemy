@@ -6,6 +6,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -119,6 +120,63 @@ test.provider.skipIf(!runLifecycle)(
         view: "SCHEMA_VIEW",
       });
       expect(refetched.columnFamilies?.cf?.gcRule?.maxNumVersions).toEqual(5);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Bigtable.Instance("Data", {
+            instanceId: created.instance.instanceId,
+            displayName: "alchemy-test-bt-table",
+            type: "PRODUCTION",
+            clusters: {
+              cluster: {
+                location: "us-central1-b",
+                serveNodes: 1,
+                defaultStorageType: "HDD",
+              },
+            },
+          });
+          const table = yield* GCP.Bigtable.Table("Users", {
+            instance: instance.name,
+            tableId: created.table.tableId,
+            columnFamilies: {
+              cf: { gcRule: { maxNumVersions: 5 } },
+            },
+            deletionProtection: true,
+          });
+          return { instance, table };
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Users",
+        tag: "GCP.Bigtable.TableDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Bigtable.Instance("Data", {
+            instanceId: created.instance.instanceId,
+            displayName: "alchemy-test-bt-table",
+            type: "PRODUCTION",
+            clusters: {
+              cluster: {
+                location: "us-central1-b",
+                serveNodes: 1,
+                defaultStorageType: "HDD",
+              },
+            },
+          });
+          const table = yield* GCP.Bigtable.Table("Users", {
+            instance: instance.name,
+            tableId: created.table.tableId,
+            columnFamilies: {
+              cf: { gcRule: { maxNumVersions: 5 } },
+            },
+            deletionProtection: false,
+          });
+          return { instance, table };
+        }),
+      );
 
       yield* stack.destroy();
 

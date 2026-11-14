@@ -6,6 +6,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -84,7 +85,7 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const deploy = (enabled: boolean) =>
+      const deploy = (enabled: boolean, deletionProtection = false) =>
         stack.deploy(
           Effect.gen(function* () {
             const network = yield* Network("LoggingNetwork", {
@@ -98,6 +99,7 @@ test.provider.skipIf(!!process.env.FAST)(
                 endpointPublicAccess: true,
               },
               logging: { clusterLogging: [{ types: ["api"], enabled }] },
+              deletionProtection,
             });
           }),
         );
@@ -121,6 +123,16 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const disabled = yield* deploy(false);
       expect(yield* apiLogging(disabled)).toBe(false);
+
+      // Deletion protection refuses the destroy, before any Kubernetes object
+      // is removed: the provider never lifts it. Turn it off and deploy, then
+      // destroy.
+      yield* deploy(false, true);
+      yield* expectDeleteRefused(stack, {
+        logicalId: "LoggingCluster",
+        tag: "EKSClusterDeletionProtected",
+      });
+      yield* deploy(false);
 
       yield* stack.destroy();
     }),

@@ -27,6 +27,16 @@ import type { Providers } from "./Providers.ts";
 
 export type PrimaryIpType = "ipv4" | "ipv6";
 
+/**
+ * Deletion was refused because the Primary IP has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class PrimaryIpDeleteProtected extends Data.TaggedError("Hetzner.PrimaryIpDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface PrimaryIpProps {
   /**
    * Address family. Cannot be changed after creation — changing it
@@ -450,10 +460,18 @@ export const PrimaryIpProvider = () =>
 
       return toAttrs(yield* refresh(current.id), { datacenter: news.datacenter });
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new PrimaryIpDeleteProtected({
+            id: current.id,
+            message: `Hetzner Primary IP '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
       if (current.assignee_id !== null) {

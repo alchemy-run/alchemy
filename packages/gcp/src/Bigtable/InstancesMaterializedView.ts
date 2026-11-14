@@ -83,6 +83,18 @@ export type InstancesMaterializedView = Resource<
  * materialized view this stack doesn't manage by its identifiers, in the
  * ambient project unless `project` names another.
  */
+/**
+ * Deletion was refused because the Bigtable materialized view has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class MaterializedViewDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.MaterializedViewDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstancesMaterializedViewLookup {
   /**
    * Materialized view id (the `{materialized_view}` segment of
@@ -369,10 +381,18 @@ export const InstancesMaterializedViewProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new MaterializedViewDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable materialized view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* unprotect(output.name, current.etag);
       }
       yield* bigtable

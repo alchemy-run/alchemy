@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
@@ -82,6 +83,22 @@ test.provider(
       expect(refetched.zone.labels.env).toEqual("prod");
       expect(refetched.zone.labels.role).toEqual("dns");
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "BasicZone",
+        tag: "Hetzner.ZoneDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Zone("BasicZone", {
+            name: created.name,
+            ttl: 7200,
+            labels: { env: "prod", role: "dns" },
+            deleteProtection: false,
+          });
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.zoneId);

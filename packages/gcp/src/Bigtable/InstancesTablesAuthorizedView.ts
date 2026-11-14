@@ -113,6 +113,18 @@ export type InstancesTablesAuthorizedView = Resource<
  * tables authorized view this stack doesn't manage by its identifiers, in
  * the ambient project unless `project` names another.
  */
+/**
+ * Deletion was refused because the Bigtable authorized view has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class AuthorizedViewDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.AuthorizedViewDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstancesTablesAuthorizedViewLookup {
   /**
    * Authorized view id (the `{authorized_view}` segment of
@@ -443,11 +455,19 @@ export const InstancesTablesAuthorizedViewProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output, olds }) {
+    delete: Effect.fn(function* ({ output, olds, force }) {
       const ignoreWarnings = olds?.ignoreWarnings ?? true;
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new AuthorizedViewDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable authorized view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* unprotect(output.name, current.etag, ignoreWarnings);
       }
       yield* bigtable

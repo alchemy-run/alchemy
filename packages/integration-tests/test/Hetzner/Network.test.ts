@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
@@ -123,6 +124,35 @@ test.provider(
         { destination: "10.10.0.0/24", gateway: "10.0.1.2" },
       ]);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Vpc",
+        tag: "Hetzner.NetworkDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Network("Vpc", {
+            ipRange: "10.0.0.0/16",
+            subnets: [
+              {
+                type: "cloud",
+                ipRange: "10.0.1.0/24",
+                networkZone: "eu-central",
+              },
+              {
+                type: "cloud",
+                ipRange: "10.0.2.0/24",
+                networkZone: "eu-central",
+              },
+            ],
+            routes: [{ destination: "10.10.0.0/24", gateway: "10.0.1.2" }],
+            exposeRoutesToVswitch: true,
+            deleteProtection: false,
+            labels: { env: "prod", role: "vpc" },
+          });
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.networkId);

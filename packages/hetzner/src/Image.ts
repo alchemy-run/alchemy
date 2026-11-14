@@ -62,6 +62,16 @@ export type ImageServer = {
   readonly serverId: number;
 };
 
+/**
+ * Deletion was refused because the image has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class ImageDeleteProtected extends Data.TaggedError("Hetzner.ImageDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface ImageProps {
   /**
    * Server to snapshot. Required on create. Changing the source Server
@@ -517,11 +527,19 @@ export const ImageProvider = () =>
 
       return toAttrs(current);
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new ImageDeleteProtected({
+            id: current.id,
+            message: `Hetzner image '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
 

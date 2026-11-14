@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { hetznerLoadBalancers, hetznerPrimaryIps } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 
@@ -208,6 +209,42 @@ test.provider(
       expect(listed?.algorithm).toEqual("least_connections");
       expect(listed?.loadBalancerType).toEqual("lb11");
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Edge",
+        tag: "Hetzner.LoadBalancerDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const server = yield* Hetzner.Server("Target", {
+            serverType: "cx23",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            startAfterCreate: false,
+          });
+          const network = yield* Hetzner.Network("LbNet", {
+            ipRange: "10.30.0.0/16",
+            subnets: [
+              {
+                type: "cloud",
+                ipRange: "10.30.1.0/24",
+                networkZone: "eu-central",
+              },
+            ],
+          });
+          return yield* Hetzner.LoadBalancer("Edge", {
+            location: "nbg1",
+            loadBalancerType: "lb11",
+            algorithm: "least_connections",
+            services: [tcpService(80, 8080)],
+            targets: [{ type: "server", server }],
+            networks: [network],
+            deleteProtection: false,
+            labels: { env: "prod", role: "lb" },
+          });
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.lb.id);

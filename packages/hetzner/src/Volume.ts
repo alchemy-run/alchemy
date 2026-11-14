@@ -48,6 +48,16 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  */
 export type VolumeServer = { readonly serverId: number };
 
+/**
+ * Deletion was refused because the volume has delete protection on, set
+ * outside the stack. Turn it off in the Hetzner Console or API before
+ * deleting it.
+ */
+export class VolumeDeleteProtected extends Data.TaggedError("Hetzner.VolumeDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface VolumeProps {
   /**
    * Size of the Volume in GB. Minimum 10, maximum 10240. Increasing size
@@ -477,11 +487,19 @@ export const VolumeProvider = () =>
 
       return toAttrs(current);
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new VolumeDeleteProtected({
+            id: current.id,
+            message: `Hetzner volume '${current.id}' has delete protection on. Turn it off in the Hetzner Console or API before deleting it.`,
+          });
+        }
         const { action } = yield* Hetzner.volumeActions.changeVolumeProtection({
           id: current.id,
           delete: false,

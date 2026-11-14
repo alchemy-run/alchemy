@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { hetznerPrimaryIps } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 
@@ -85,6 +86,35 @@ test.provider(
       expect(refetched.primary_ip.auto_delete).toEqual(true);
       expect(refetched.primary_ip.labels.env).toEqual("prod");
       expect(refetched.primary_ip.labels.role).toEqual("web");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.PrimaryIp("WebIp", {
+            type: "ipv6",
+            location: "nbg1",
+            autoDelete: true,
+            labels: { env: "prod", role: "web" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "WebIp",
+        tag: "Hetzner.PrimaryIpDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.PrimaryIp("WebIp", {
+            type: "ipv6",
+            location: "nbg1",
+            autoDelete: true,
+            labels: { env: "prod", role: "web" },
+            deleteProtection: false,
+          });
+        }),
+      );
 
       yield* stack.destroy();
 
