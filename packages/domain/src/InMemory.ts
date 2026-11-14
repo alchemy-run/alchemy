@@ -312,9 +312,16 @@ export const make = (
       };
       timers.set(key, armed);
       if (options.manual) return Effect.void;
-      return Effect.forkDetach(
-        Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
-      ).pipe(Effect.asVoid);
+      // The sleep can end before the platform's clock reaches `at` (Node
+      // rounds and coalesces timers, and `now` may be a different clock), so
+      // each wake sleeps again for what is left until this timer is due,
+      // fired, cancelled or replaced.
+      const wait: Effect.Effect<void> = Effect.suspend(() => {
+        if (timers.get(key) !== armed) return Effect.void;
+        const left = at - now();
+        return left > 0 ? Effect.sleep(left).pipe(Effect.andThen(wait)) : fireDue;
+      });
+      return Effect.forkDetach(wait).pipe(Effect.asVoid);
     });
 
   const workflows = InMemoryWorkflows.make({
