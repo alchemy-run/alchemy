@@ -1,0 +1,126 @@
+---
+title: "Part 1: Your First App"
+description: Create a Stack, write an Effect HTTP handler, and deploy it to App Platform with its own Container Registry.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = `alchemy@latest @alchemy.run/digitalocean@latest effect @effect/platform-node`;
+
+An App on App Platform is your program, built into an image and served over HTTPS. You'll write one, deploy it, and call it.
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- [Docker](https://docs.docker.com/get-docker/), to build the App's image
+- A DigitalOcean token stored in a profile. See [Setup](/digitalocean/setup).
+
+:::note[Costs]
+The smallest App instance costs about $5 a month, billed by the second, and the starter Container Registry is free. A database joins in part 3. Run `alchemy destroy` when you're done.
+:::
+
+## Create a project
+
+<PackageManagers init dir="my-app" />
+
+<PackageManagers add={pkgs} />
+
+## Create the Stack
+
+A Stack is everything you deploy together. Create `alchemy.run.ts`:
+
+```typescript title="alchemy.run.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {}),
+);
+```
+
+`DigitalOcean.providers()` deploys with your profile's token, into its team. `Alchemy.localState()` keeps Alchemy's record of what it created in `.alchemy/`, next to your code.
+
+## Declare a Container Registry
+
+App Platform runs images from your team's Container Registry, and a team has one. Declare it:
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
+```
+
+The `starter` tier is free and holds one repository. If your team already has a registry, skip this step: an App uses the team's registry when you don't name one.
+
+## Write the App
+
+An App is a class: its props say where it runs, and its Effect returns the handlers it serves.
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Registry } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc", registry: Registry },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from App Platform")),
+    };
+  }),
+) {}
+```
+
+`main: import.meta.url` tells Alchemy which file to bundle into the image.
+
+## Add the App to the Stack
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
++import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
+-  Effect.gen(function* () {}),
++  Effect.gen(function* () {
++    const api = yield* Api;
++    return { url: api.url };
++  }),
+);
+```
+
+The Stack's return value is printed after each deploy.
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+Alchemy creates the registry, builds and pushes the image, then waits until App Platform serves it. The first deploy takes a few minutes. It prints the App's address:
+
+```text
+url: https://api-xxxxx.ondigitalocean.app
+```
+
+## Call it
+
+```sh
+curl https://api-xxxxx.ondigitalocean.app
+# hello from App Platform
+```
+
+## Change it
+
+Edit the response text and deploy again. Alchemy builds a new image only when your code changed, and App Platform switches to it with no downtime.
+
+Next, in [Part 2](/digitalocean/tutorial/part-2), the App stores files in a Spaces bucket.

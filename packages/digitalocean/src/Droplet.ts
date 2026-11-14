@@ -32,10 +32,27 @@ import {
   withoutAlchemyTags,
 } from "./internal/ownership.ts";
 import { pollUntil, type PollBudget } from "./internal/poll.ts";
+import {
+  alchemyTagsFor,
+  deleteTagsIfUnused,
+  desiredTagsFor,
+  rejectReservedTags,
+  syncTags,
+} from "./internal/tags.ts";
 import type { Providers } from "./Providers.ts";
 import type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
 
 export type { DropletStatus } from "@distilled.cloud/digitalocean";
+
+/** When a droplet's automated backups run. */
+export interface DropletBackupPolicy {
+  /** `daily` backups are kept 7 days, `weekly` ones 4 weeks. */
+  plan: "daily" | "weekly";
+  /** The day a weekly backup runs. @default one DigitalOcean picks */
+  weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+  /** The UTC hour the four-hour backup window starts. */
+  hour: 0 | 4 | 8 | 12 | 16 | 20;
+}
 
 export type DropletProps = {
   /**
@@ -62,11 +79,20 @@ export type DropletProps = {
   sshKeys?: Array<string | number>;
 
   /**
-   * Enable automated backups. A change replaces the droplet.
+   * Enable automated backups. Updates in place.
    *
-   * @default false
+   * @default false, or true when `backupPolicy` is set
    */
   backups?: boolean;
+
+  /**
+   * When automated backups run and how long they're kept: `daily` backups
+   * are retained 7 days, `weekly` ones 4 weeks. Setting it turns backups
+   * on. Updates in place.
+   *
+   * @default DigitalOcean's weekly plan, in a window it picks
+   */
+  backupPolicy?: DropletBackupPolicy;
 
   /**
    * Enable IPv6. Enabling updates the droplet in place. Disabling replaces
@@ -131,6 +157,8 @@ export type Droplet = Resource<
   {
     /** Numeric droplet id. */
     dropletId: number;
+    /** Uniform resource name, `do:droplet:<id>`, for `ProjectResources`. */
+    urn: string;
     /** Droplet name and hostname. */
     name: string;
     /** Droplet status, for example `active`. */
@@ -304,13 +332,19 @@ const REPLACING_VALUES = [
   // `undefined` keeps the image default, which is not `false`.
   "withDropletAgent",
 ] as const;
-const REPLACING_FLAGS = ["backups", "monitoring"] as const;
+const REPLACING_FLAGS = ["monitoring"] as const;
 const REPLACING_LISTS = ["sshKeys", "volumes"] as const;
 
-// `name` and `tags` update in place; every other prop can replace the droplet.
-type InPlaceProp = "name" | "tags";
+// `name`, `tags` and backups update in place; every other prop can replace
+// the droplet.
+type InPlaceProp = "name" | "tags" | "backups" | "backupPolicy";
 type ReplacementProps = Omit<DropletProps, InPlaceProp>;
-const IN_PLACE_PROPS: ReadonlySet<string> = new Set<InPlaceProp>(["name", "tags"]);
+const IN_PLACE_PROPS: ReadonlySet<string> = new Set<InPlaceProp>([
+  "name",
+  "tags",
+  "backups",
+  "backupPolicy",
+]);
 
 const isOn = (flag: boolean | undefined) => flag ?? false;
 
@@ -398,6 +432,7 @@ const privateAddress = (networks: ReadonlyArray<NetworkV4> | undefined) =>
 
 const toAttrs = (droplet: ApiDroplet): DropletAttributes => ({
   dropletId: droplet.id,
+  urn: `do:droplet:${droplet.id}`,
   name: droplet.name,
   status: droplet.status,
   region: droplet.region.slug,
@@ -419,21 +454,6 @@ const physicalName = (id: string) =>
     lowercase: true,
     maxLength: NAME_MAX_LENGTH,
   });
-
-const rejectReservedTags = (tags: ReadonlyArray<string> | undefined) =>
-  Option.match(Arr.findFirst(tags ?? [], isAlchemyTag), {
-    onNone: () => Effect.void,
-    onSome: (tag) => Effect.fail(new DropletTagReserved({ tag })),
-  });
-
-const alchemyTagsFor = Effect.fn(function* (fqn: string, instanceId: string) {
-  return [yield* ownershipTagFor(fqn), generationTagFor(instanceId)];
-});
-
-const desiredTags = Effect.fn(function* (news: DropletProps, fqn: string, instanceId: string) {
-  yield* rejectReservedTags(news.tags);
-  return Arr.dedupe([...(news.tags ?? []), ...(yield* alchemyTagsFor(fqn, instanceId))]);
-});
 
 const listAllDroplets = (filter: Pick<ListDropletsRequest, "name" | "tag_name" | "type">) =>
   DO.listDroplets.items({ ...filter, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
@@ -547,10 +567,15 @@ const observeActionStatus = (dropletId: number, actionId: number) =>
     Effect.catchTag("NotFound", () => Effect.succeed<ActionStatus>("in-progress")),
   );
 
-const waitForAction = (dropletId: number, actionId: number) => {
+/** Waits for a droplet action to finish; fails unless it completed. */
+export const waitForAction = (
+  dropletId: number,
+  actionId: number,
+  budget: PollBudget = ACTION_POLL,
+) => {
   const failed = (status: ActionStatus) => new DropletActionFailed({ dropletId, actionId, status });
   return pollUntil(observeActionStatus(dropletId, actionId), {
-    ...ACTION_POLL,
+    ...budget,
     until: isFinished,
     onTimeout: failed,
   }).pipe(Effect.filterOrFail((status) => status === "completed", failed));
@@ -561,52 +586,63 @@ const runAction = Effect.fn(function* (dropletId: number, body: PostDropletActio
   yield* waitForAction(dropletId, posted.action.id);
 });
 
-const dropletResource = (dropletId: number) => ({
-  resource_id: String(dropletId),
-  resource_type: "droplet",
-});
-
-// The assign endpoint answers 404 for a tag that does not exist yet.
-const assignTag = (tag: string, dropletId: number) => {
-  const assignment = DO.assignTagResources({
-    tag_id: tag,
-    resources: [dropletResource(dropletId)],
-  });
-  return assignment.pipe(
-    Effect.catchTag("NotFound", () => DO.createTag({ name: tag }).pipe(Effect.andThen(assignment))),
-  );
-};
-
-// Deleting a tag removes it from every droplet that carries it.
-const deleteTagIfUnused = Effect.fn(function* (tag: string) {
-  const tagged = yield* listAllDroplets({ tag_name: tag });
-  if (tagged.length > 0) return;
-  yield* ignoreNotFound(DO.deleteTag({ tag_id: tag }));
-});
-
-const deleteTagsIfUnused = (tags: ReadonlyArray<string>) =>
-  Effect.forEach(tags, deleteTagIfUnused, { concurrency: "unbounded", discard: true });
-
-const unassignTag = Effect.fn(function* (tag: string, dropletId: number) {
-  yield* ignoreNotFound(
-    DO.unassignTagResources({ tag_id: tag, resources: [dropletResource(dropletId)] }),
-  );
-  if (isAlchemyTag(tag)) yield* deleteTagIfUnused(tag);
-});
-
-// Observed tags are the baseline, so adoption drops foreign tags.
-const syncTags = (droplet: ApiDroplet, desired: ReadonlyArray<string>) =>
-  Effect.all(
-    [
-      ...Arr.difference(desired, droplet.tags).map((tag) => assignTag(tag, droplet.id)),
-      ...Arr.difference(droplet.tags, desired).map((tag) => unassignTag(tag, droplet.id)),
-    ],
-    { concurrency: "unbounded", discard: true },
-  );
-
 const syncIpv6 = Effect.fn(function* (droplet: ApiDroplet, news: DropletProps) {
   if (!needsIpv6(droplet, news)) return;
   yield* runAction(droplet.id, { type: "enable_ipv6" });
+});
+
+const backupsWanted = (news: DropletProps) =>
+  isOn(news.backups) || (news.backups === undefined && news.backupPolicy !== undefined);
+
+const policyBody = (policy: DropletBackupPolicy | undefined) =>
+  policy === undefined
+    ? undefined
+    : { plan: policy.plan, weekday: policy.weekday, hour: policy.hour };
+
+const observeBackupPolicy = (dropletId: number) =>
+  DO.getDropletBackupPolicy({ droplet_id: dropletId }).pipe(
+    Effect.map((response) => response.policy),
+  );
+
+const policyMatches = (
+  observed: DO.DropletBackupPolicyRecord | undefined,
+  wanted: boolean,
+  policy: DropletBackupPolicy | undefined,
+) =>
+  (observed?.backup_enabled ?? false) === wanted &&
+  (!wanted ||
+    policy === undefined ||
+    (observed?.backup_policy?.plan === policy.plan &&
+      observed?.backup_policy?.hour === policy.hour &&
+      (policy.weekday === undefined || observed?.backup_policy?.weekday === policy.weekday)));
+
+// Backup actions can report `in-progress` for minutes after the policy has
+// changed, so wait on the policy itself (≈ 80 s budget).
+const BACKUP_POLL: PollBudget = { maxDelay: "5 seconds", times: 20 };
+
+// Read the live policy: the droplet's `features` list lags it.
+const syncBackups = Effect.fn(function* (droplet: ApiDroplet, news: DropletProps) {
+  const wanted = backupsWanted(news);
+  const observed = yield* observeBackupPolicy(droplet.id);
+  if (policyMatches(observed, wanted, news.backupPolicy)) return;
+  const enabled = observed?.backup_enabled ?? false;
+  const policy = policyBody(news.backupPolicy);
+  const body: PostDropletActionRequestBody = !wanted
+    ? { type: "disable_backups" }
+    : !enabled || policy === undefined
+      ? { type: "enable_backups", backup_policy: policy }
+      : { type: "change_backup_policy", backup_policy: policy };
+  const posted = yield* DO.postDropletAction({ droplet_id: droplet.id, body });
+  yield* pollUntil(observeBackupPolicy(droplet.id), {
+    ...BACKUP_POLL,
+    until: (observedPolicy) => policyMatches(observedPolicy, wanted, news.backupPolicy),
+    onTimeout: () =>
+      new DropletActionFailed({
+        dropletId: droplet.id,
+        actionId: posted.action.id,
+        status: "in-progress",
+      }),
+  });
 });
 
 const syncName = Effect.fn(function* (droplet: ApiDroplet, name: string) {
@@ -626,7 +662,8 @@ const createDroplet = Effect.fn(function* (
       size: news.size,
       image: news.image,
       ssh_keys: news.sshKeys,
-      backups: news.backups,
+      backups: backupsWanted(news),
+      backup_policy: policyBody(news.backupPolicy),
       ipv6: news.ipv6,
       monitoring: news.monitoring,
       tags: [...tags],
@@ -679,6 +716,7 @@ export const DropletProvider = () =>
   Provider.succeed(Droplet, {
     stables: [
       "dropletId",
+      "urn",
       "region",
       "sizeSlug",
       "imageId",
@@ -714,14 +752,16 @@ export const DropletProvider = () =>
       return (yield* needsReplacement(olds, news, output)) ? replacement(olds) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
-      const tags = yield* desiredTags(news, fqn, instanceId);
+      yield* rejectReservedTags(news.tags, (tag) => new DropletTagReserved({ tag }));
+      const tags = yield* desiredTagsFor(news.tags, fqn, instanceId);
       const name = news.name ?? (yield* physicalName(id));
 
       const observed = yield* observeGeneration(output, instanceId);
       const droplet = yield* ensureDroplet(observed, name, news, tags);
 
-      yield* syncTags(droplet, tags);
+      yield* syncTags("droplet", droplet.id, droplet.tags, tags);
       yield* syncIpv6(droplet, news);
+      yield* syncBackups(droplet, news);
       yield* syncName(droplet, name);
       return toAttrs(yield* waitUntilConverged(droplet.id, name, tags, news));
     }),

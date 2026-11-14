@@ -1,0 +1,46 @@
+---
+title: Firewalls
+description: Control which traffic reaches DigitalOcean Droplets with Cloud Firewalls, applied by Droplet id or by tag, with inbound and outbound rules.
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+A **Cloud Firewall** decides what traffic reaches the Droplets it's applied to, before it reaches them. It drops everything inbound that no rule allows. Apply it to Droplets by id, or by **tag** so that every Droplet with the tag, now or later, is covered.
+
+<Boundaries
+  nodes={[
+    { id: "client", label: "browser", type: "tcp 443", col: 1, row: 0 },
+    { id: "scanner", label: "scanner", type: "tcp 22", col: 0, row: 0 },
+    { id: "web", label: "Web", type: "Droplet · tag web", col: 2, row: 0, tone: "accent" },
+  ]}
+  zones={[{ id: "fw", label: "Web firewall", type: "applies to tag web", nodes: ["web"] }]}
+  links={[
+    { from: "client", to: "web", label: "allowed" },
+    { from: "scanner", to: "fw", kind: "blocked", label: "dropped" },
+  ]}
+  caption="The firewall allows HTTPS from anywhere and drops everything else, including SSH from addresses not on its list."
+/>
+
+## Create a firewall
+
+```typescript
+yield* DigitalOcean.Firewall("Web", {
+  tags: ["web"],
+  inboundRules: [
+    { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
+    { protocol: "tcp", ports: "22", addresses: ["203.0.113.4/32"] },
+  ],
+  outboundRules: [{ protocol: "tcp", ports: "1-65535", addresses: ["0.0.0.0/0", "::/0"] }],
+});
+```
+
+`ports` is one port or a range like `"8000-8100"`. A rule's sources can also be Droplet ids, load balancer ids, Kubernetes cluster ids or tags.
+
+## Apply it to Droplets
+
+`tags` covers every Droplet with the tag, including ones created later; `dropletIds: [host.dropletId]` names specific ones. Give a Droplet the tag with its own `tags` prop.
+
+## Limits
+
+- A firewall with no outbound rules blocks all outbound traffic, including package installs.
+- Cloud Firewalls apply to Droplets and Kubernetes nodes; managed databases have their own [trusted sources](/digitalocean/data/managed-databases#limit-who-can-connect).
