@@ -1,6 +1,7 @@
 import * as DNS from "alchemy/DNS/Adapter";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import { isResource } from "alchemy/Resource";
 /**
  * Custom-domain plumbing shared by AWS composites (the `AWS.Website.*`
  * sites and Router, `AWS.ECS.Service`, `AWS.Lambda.Function`): the ACM
@@ -12,7 +13,10 @@ import * as Output from "alchemy/Output";
  * `AWS.ACM.Certificate` plus `AWS.Route53.Record`s), so existing stacks plan
  * no changes. Any other DNS host validates the certificate externally:
  * `Certificate` (`dnsValidation: "external"`) → the adapter's validation
- * records → `AWS.ACM.CertificateValidation`.
+ * records → `AWS.ACM.CertificateValidation`. The built-in adapters return
+ * their record Resource, so custom adapters should likewise return a Resource
+ * or Output from `records` when they want the validation dependency captured;
+ * arbitrary values are intentionally treated as having no discoverable edge.
  *
  * Not exported from the AWS barrel.
  */
@@ -78,15 +82,31 @@ export const domainCertificate = Effect.fn("AWS.domainCertificate")(function* (
     ...rest,
     dnsValidation: "external",
   });
-  yield* adapter.records(`${id}Validation`, {
+  const dnsRecords = yield* adapter.records(`${id}Validation`, {
     records: Output.map(
       certificate.domainValidationOptions,
       validationRecordsOf,
     ) as unknown as Input<DNS.DnsRecord[]>,
     retain: true,
   });
+  const desiredValidationRecordFqdns = Output.map(certificate.domainValidationOptions, (options) =>
+    Array.from(
+      new Set(
+        validationRecordsOf(options).map((record) => record.name.replace(/\.$/, "").toLowerCase()),
+      ),
+    ).sort(),
+  );
+  const validationRecordFqdns = isResource(dnsRecords)
+    ? Output.map(
+        Output.all(Output.of(dnsRecords), desiredValidationRecordFqdns),
+        ([, fqdns]) => fqdns,
+      )
+    : Output.isOutput(dnsRecords)
+      ? Output.map(Output.all(dnsRecords, desiredValidationRecordFqdns), ([, fqdns]) => fqdns)
+      : desiredValidationRecordFqdns;
   const issued = yield* CertificateValidation(`${id}Issued`, {
     certificateArn: certificate.certificateArn,
+    validationRecordFqdns,
   });
   return { certificate, certificateArn: issued.certificateArn };
 });
