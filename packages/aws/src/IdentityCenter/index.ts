@@ -42,3 +42,4 @@ export * from "./ListUsersHttp.ts";
 export * from "./PermissionSet.ts";
 export * from "./UpdateUser.ts";
 export * from "./UpdateUserHttp.ts";
+export * from "./User.ts";
