@@ -56,11 +56,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidenterprise.insertStorelayoutclusters({
+          name: [{ locale: "en-US", text: "Alchemy Probe Cluster" }],
           enterpriseId: probeEnterpriseId,
           pageId: "alchemy-missing-page",
-          body: {
-            name: [{ locale: "en-US", text: "Alchemy Probe Cluster" }],
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");

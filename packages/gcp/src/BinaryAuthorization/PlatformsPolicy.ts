@@ -264,9 +264,9 @@ export const PlatformsPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           binaryauthorization.createProjectsPlatformsPolicies({
+            ...toBody(news, desiredDescription, undefined),
             parent: `projects/${env.project}/platforms/${platform}`,
             policyId,
-            body: toBody(news, desiredDescription, undefined),
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -282,8 +282,8 @@ export const PlatformsPolicyProvider = () =>
       if (descriptionChanged || gkeChanged) {
         current = yield* retryTransient(
           binaryauthorization.replacePlatformPolicyProjectsPlatformsPolicies({
+            ...toBody(news, desiredDescription, current.etag),
             name: current.name ?? name,
-            body: toBody(news, desiredDescription, current.etag),
           }),
         );
       }

@@ -478,30 +478,28 @@ export const StoragePoolProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsStoragePools({
+            network,
+            serviceLevel,
+            capacityGib,
+            zone: news.zone,
+            replicaZone: news.replicaZone,
+            kmsConfig,
+            activeDirectory,
+            ldapEnabled: news.ldapEnabled,
+            allowAutoTiering: news.allowAutoTiering,
+            type: news.type,
+            mode: news.mode,
+            qosType: news.qosType,
+            customPerformanceEnabled: news.customPerformanceEnabled,
+            totalThroughputMibps: gibOf(news.totalThroughputMibps),
+            totalIops: gibOf(news.totalIops),
+            hotTierSizeGib: gibOf(news.hotTierSizeGib),
+            enableHotTierAutoResize: news.enableHotTierAutoResize,
+            scaleType: news.scaleType,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             storagePoolId,
-            body: {
-              network,
-              serviceLevel,
-              capacityGib,
-              zone: news.zone,
-              replicaZone: news.replicaZone,
-              kmsConfig,
-              activeDirectory,
-              ldapEnabled: news.ldapEnabled,
-              allowAutoTiering: news.allowAutoTiering,
-              type: news.type,
-              mode: news.mode,
-              qosType: news.qosType,
-              customPerformanceEnabled: news.customPerformanceEnabled,
-              totalThroughputMibps: gibOf(news.totalThroughputMibps),
-              totalIops: gibOf(news.totalIops),
-              hotTierSizeGib: gibOf(news.hotTierSizeGib),
-              enableHotTierAutoResize: news.enableHotTierAutoResize,
-              scaleType: news.scaleType,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -546,22 +544,18 @@ export const StoragePoolProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsStoragePools({
+          labels: desiredLabels,
+          description: news.description,
+          capacityGib,
+          activeDirectory: desiredAd,
+          allowAutoTiering: news.allowAutoTiering ?? current.allowAutoTiering,
+          qosType: news.qosType ?? current.qosType,
+          totalThroughputMibps: gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps,
+          totalIops: gibOf(news.totalIops) ?? current.totalIops,
+          hotTierSizeGib: gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib,
+          enableHotTierAutoResize: news.enableHotTierAutoResize ?? current.enableHotTierAutoResize,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            capacityGib,
-            activeDirectory: desiredAd,
-            allowAutoTiering: news.allowAutoTiering ?? current.allowAutoTiering,
-            qosType: news.qosType ?? current.qosType,
-            totalThroughputMibps: gibOf(news.totalThroughputMibps) ?? current.totalThroughputMibps,
-            totalIops: gibOf(news.totalIops) ?? current.totalIops,
-            hotTierSizeGib: gibOf(news.hotTierSizeGib) ?? current.hotTierSizeGib,
-            enableHotTierAutoResize:
-              news.enableHotTierAutoResize ?? current.enableHotTierAutoResize,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

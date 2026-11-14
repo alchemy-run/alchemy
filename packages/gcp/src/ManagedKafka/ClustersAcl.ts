@@ -331,11 +331,7 @@ export const ClustersAclProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           kafka
-            .createProjectsLocationsClustersAcls({
-              parent: cluster,
-              aclId,
-              body: { aclEntries },
-            })
+            .createProjectsLocationsClustersAcls({ aclEntries, parent: cluster, aclId })
             .pipe(Effect.catchTag("Conflict", () => getAcl(name))),
         );
         current = created ?? undefined;
@@ -347,12 +343,10 @@ export const ClustersAclProvider = () =>
 
       if (entriesKey(current.aclEntries) !== entriesKey(aclEntries)) {
         current = yield* kafka.patchProjectsLocationsClustersAcls({
+          aclEntries,
+          etag: current.etag,
           name,
           updateMask: "acl_entries",
-          body: {
-            aclEntries,
-            etag: current.etag,
-          },
         });
       }
 

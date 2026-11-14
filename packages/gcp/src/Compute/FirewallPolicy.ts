@@ -523,8 +523,8 @@ const syncRules = (
           firewallPolicyId,
           parentId,
           compute.addRuleFirewallPolicies({
+            ...toRuleBody(rule),
             firewallPolicy: firewallPolicyId,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -535,9 +535,9 @@ const syncRules = (
           firewallPolicyId,
           parentId,
           compute.patchRuleFirewallPolicies({
+            ...toRuleBody(rule),
             firewallPolicy: firewallPolicyId,
             priority,
-            body: toRuleBody(rule),
           }),
         );
       }
@@ -655,10 +655,7 @@ export const FirewallPolicyProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* compute
-          .insertFirewallPolicies({
-            parentId,
-            body: insertBody(shortName, news, desiredDescription),
-          })
+          .insertFirewallPolicies({ ...insertBody(shortName, news, desiredDescription), parentId })
           .pipe(
             Effect.flatMap((operation) =>
               waitOrganizationOperation(operation, parentId, {
@@ -689,11 +686,9 @@ export const FirewallPolicyProvider = () =>
           firewallPolicyId,
           parentId,
           compute.patchFirewallPolicies({
+            description: desiredDescription,
+            fingerprint: current.fingerprint,
             firewallPolicy: firewallPolicyId,
-            body: {
-              description: desiredDescription,
-              fingerprint: current.fingerprint,
-            },
           }),
         );
         current = (yield* getById(firewallPolicyId)) ?? current;

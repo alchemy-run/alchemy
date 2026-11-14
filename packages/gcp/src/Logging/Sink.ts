@@ -431,10 +431,10 @@ export const SinkProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createSinks({
+            ...toCreateBody(sinkId, news, desiredDescription),
             parent: `projects/${env.project}`,
             uniqueWriterIdentity: news.uniqueWriterIdentity,
             customWriterIdentity: news.customWriterIdentity,
-            body: toCreateBody(sinkId, news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -497,11 +497,11 @@ export const SinkProvider = () =>
           body.interceptChildren = desiredInterceptChildren;
         }
         current = yield* logging.updateSinks({
+          ...body,
           sinkName: current.resourceName ?? name,
           uniqueWriterIdentity: news.uniqueWriterIdentity,
           customWriterIdentity: news.customWriterIdentity,
           updateMask: updateMask.join(","),
-          body,
         });
       }
 

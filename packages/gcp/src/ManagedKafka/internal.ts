@@ -578,11 +578,9 @@ export const stampSchemaRegistryOwnership = (
     }
     yield* kafka
       .createProjectsLocationsSchemaRegistriesSubjectsVersions({
+        schemaType: "AVRO",
+        schema,
         parent,
-        body: {
-          schemaType: "AVRO",
-          schema,
-        },
       })
       .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.void));
   });

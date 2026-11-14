@@ -463,26 +463,24 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
       if (current === undefined) {
         const created = yield* dm
           .createProjectsLocationsConversionWorkspacesMappingRules({
+            displayName,
+            ruleScope: news.ruleScope,
+            filter,
+            ruleOrder,
+            state: news.state ?? "ENABLED",
+            singleEntityRename: news.singleEntityRename,
+            multiEntityRename: news.multiEntityRename,
+            entityMove: news.entityMove,
+            sourceSqlChange: news.sourceSqlChange,
+            singlePackageChange: news.singlePackageChange,
+            setTablePrimaryKey: news.setTablePrimaryKey,
+            filterTableColumns: news.filterTableColumns,
+            multiColumnDataTypeChange: news.multiColumnDataTypeChange,
+            convertRowidColumn: news.convertRowidColumn,
+            singleColumnChange: news.singleColumnChange,
+            conditionalColumnSetValue: news.conditionalColumnSetValue,
             parent: conversionWorkspace,
             mappingRuleId,
-            body: {
-              displayName,
-              ruleScope: news.ruleScope,
-              filter,
-              ruleOrder,
-              state: news.state ?? "ENABLED",
-              singleEntityRename: news.singleEntityRename,
-              multiEntityRename: news.multiEntityRename,
-              entityMove: news.entityMove,
-              sourceSqlChange: news.sourceSqlChange,
-              singlePackageChange: news.singlePackageChange,
-              setTablePrimaryKey: news.setTablePrimaryKey,
-              filterTableColumns: news.filterTableColumns,
-              multiColumnDataTypeChange: news.multiColumnDataTypeChange,
-              convertRowidColumn: news.convertRowidColumn,
-              singleColumnChange: news.singleColumnChange,
-              conditionalColumnSetValue: news.conditionalColumnSetValue,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

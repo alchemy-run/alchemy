@@ -55,14 +55,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidpublisher.createMonetizationSubscriptions({
+          listings: [{ languageCode: "en-US", title: "Alchemy Probe" }],
           packageName: probePackageName,
           productId: "alchemy_probe_sub",
           "regionsVersion.version": "2025/01",
-          body: {
-            packageName: probePackageName,
-            productId: "alchemy_probe_sub",
-            listings: [{ languageCode: "en-US", title: "Alchemy Probe" }],
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

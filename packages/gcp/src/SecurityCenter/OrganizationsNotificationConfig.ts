@@ -274,11 +274,7 @@ export const OrganizationsNotificationConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* scc
-          .createOrganizationsNotificationConfigs({
-            parent: organization,
-            configId,
-            body,
-          })
+          .createOrganizationsNotificationConfigs({ ...body, parent: organization, configId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -301,12 +297,9 @@ export const OrganizationsNotificationConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsNotificationConfigs({
+          ...body,
           name: currentName,
           updateMask,
-          body: {
-            ...body,
-            name: currentName,
-          },
         });
       }
 

@@ -279,8 +279,8 @@ export const LeaderboardConfigurationProvider = () =>
 
       if (current === undefined) {
         current = yield* gamesConfiguration.insertLeaderboardConfigurations({
+          ...desired,
           applicationId,
-          body: desired,
         });
       }
 
@@ -299,8 +299,8 @@ export const LeaderboardConfigurationProvider = () =>
       });
       if (needsSync(current, synced)) {
         current = yield* gamesConfiguration.updateLeaderboardConfigurations({
+          ...synced,
           leaderboardId: current.id ?? news.leaderboardId ?? "",
-          body: synced,
         });
       }
 

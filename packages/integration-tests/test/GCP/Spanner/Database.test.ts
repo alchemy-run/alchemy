@@ -103,13 +103,13 @@ test.provider(
       expect(ddl.statements?.some((statement) => statement.includes("Users"))).toEqual(true);
 
       const session = yield* spanner.createProjectsInstancesDatabasesSessions({
+        session: {},
         database: created.database.name,
-        body: { session: {} },
       });
       const result = yield* spanner
         .executeSqlProjectsInstancesDatabasesSessions({
+          sql: "SELECT 1 AS n",
           session: session.name ?? "",
-          body: { sql: "SELECT 1 AS n" },
         })
         .pipe(
           Effect.ensuring(
@@ -165,13 +165,10 @@ test.provider(
 /** Rows of one query, read out-of-band through a fresh session. */
 const querySpanner = (database: string, sql: string) =>
   Effect.acquireUseRelease(
-    spanner.createProjectsInstancesDatabasesSessions({ database, body: { session: {} } }),
+    spanner.createProjectsInstancesDatabasesSessions({ session: {}, database }),
     (session) =>
       spanner
-        .executeSqlProjectsInstancesDatabasesSessions({
-          session: session.name ?? "",
-          body: { sql },
-        })
+        .executeSqlProjectsInstancesDatabasesSessions({ sql, session: session.name ?? "" })
         .pipe(Effect.map((result) => (result.rows ?? []) as unknown[][])),
     (session) =>
       spanner

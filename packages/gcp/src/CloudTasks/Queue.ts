@@ -425,10 +425,7 @@ export const QueueProvider = () =>
         // CreateQueue can appear to succeed for a tombstoned name. GetQueue
         // is the source of truth (up to ~3 days after delete).
         yield* cloudtasks
-          .createProjectsLocationsQueues({
-            parent,
-            body,
-          })
+          .createProjectsLocationsQueues({ ...body, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.void));
         current = yield* getByName(name);
       }
@@ -487,9 +484,9 @@ export const QueueProvider = () =>
 
       if (mask.length > 0) {
         current = yield* cloudtasks.patchProjectsLocationsQueues({
+          ...patchBody,
           name,
           updateMask: mask.join(","),
-          body: patchBody,
         });
       }
 

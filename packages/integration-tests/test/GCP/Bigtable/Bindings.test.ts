@@ -25,19 +25,13 @@ const hostRoles = (policy: bigtable.Policy) =>
 
 /** GetInstance and GetCluster grant bigtable.viewer on the instance only. */
 const expectInstanceGrants = Effect.gen(function* () {
-  const policy = yield* bigtable.getIamPolicyProjectsInstances({
-    resource: instanceName,
-    body: {},
-  });
+  const policy = yield* bigtable.getIamPolicyProjectsInstances({ resource: instanceName });
   expect(hostRoles(policy)).toEqual(["roles/bigtable.viewer"]);
 });
 
 /** GetTable grants bigtable.viewer on the table only. */
 const expectTableGrants = Effect.gen(function* () {
-  const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({
-    resource: tableName,
-    body: {},
-  });
+  const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({ resource: tableName });
   expect(hostRoles(policy)).toEqual(["roles/bigtable.viewer"]);
 });
 

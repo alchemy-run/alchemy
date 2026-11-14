@@ -227,10 +227,7 @@ test.provider(
         );
 
         // Drift is converged on the next first use.
-        yield* storage.patchBuckets({
-          bucket: bucketName,
-          body: { versioning: { enabled: false } },
-        });
+        yield* storage.patchBuckets({ versioning: { enabled: false }, bucket: bucketName });
         const again = yield* makeGcsState({ name });
         expect(yield* again.listStacks()).toEqual([]);
         expect((yield* storage.getBuckets({ bucket: bucketName })).versioning?.enabled).toBe(true);

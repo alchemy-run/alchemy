@@ -48,12 +48,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidmanagement.createEnterprisesWebApps({
+          title: "Alchemy Probe",
+          startUrl: "https://example.com/",
+          displayMode: "STANDALONE",
           parent: "enterprises/alchemy-missing-enterprise",
-          body: {
-            title: "Alchemy Probe",
-            startUrl: "https://example.com/",
-            displayMode: "STANDALONE",
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

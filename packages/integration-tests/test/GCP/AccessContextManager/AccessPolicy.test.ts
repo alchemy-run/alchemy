@@ -47,11 +47,9 @@ test.provider.skipIf(!runProbe)(
       const ctx = yield* projectContext();
       const error = yield* Effect.flip(
         acm.createAccessPolicies({
-          body: {
-            title: "alchemy-acm-probe",
-            parent: ctx.organization ?? "organizations/123456789012",
-            scopes: ctx.projectNumber.length > 0 ? [`projects/${ctx.projectNumber}`] : undefined,
-          },
+          title: "alchemy-acm-probe",
+          parent: ctx.organization ?? "organizations/123456789012",
+          scopes: ctx.projectNumber.length > 0 ? [`projects/${ctx.projectNumber}`] : undefined,
         }),
       );
       expect(error._tag).toBe("Forbidden");

@@ -561,13 +561,11 @@ export const DatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* spanner
           .createProjectsInstancesDatabases({
+            createStatement: createStatementOf(databaseId, dialect),
+            extraStatements: news.extraStatements,
+            encryptionConfig: news.encryptionConfig,
+            databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
             parent: instanceName(env.project, instanceId),
-            body: {
-              createStatement: createStatementOf(databaseId, dialect),
-              extraStatements: news.extraStatements,
-              encryptionConfig: news.encryptionConfig,
-              databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -588,12 +586,9 @@ export const DatabaseProvider = () =>
       if (observedProtection !== desiredProtection) {
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
+            enableDropProtection: desiredProtection,
             name,
             updateMask: "enableDropProtection",
-            body: {
-              name,
-              enableDropProtection: desiredProtection,
-            },
           }),
         );
         yield* waitForOperation(patched);
@@ -626,12 +621,9 @@ export const DatabaseProvider = () =>
       if (current.enableDropProtection === true) {
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
+            enableDropProtection: false,
             name: output.name,
             updateMask: "enableDropProtection",
-            body: {
-              name: output.name,
-              enableDropProtection: false,
-            },
           }),
         );
         yield* waitForOperation(patched);

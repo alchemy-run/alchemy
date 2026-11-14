@@ -285,17 +285,15 @@ export const HyperparameterTuningJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsHyperparameterTuningJobs({
+            displayName,
+            labels: desiredLabels,
+            maxTrialCount: news.maxTrialCount,
+            parallelTrialCount: news.parallelTrialCount,
+            maxFailedTrialCount: news.maxFailedTrialCount,
+            studySpec: news.studySpec,
+            trialJobSpec: news.trialJobSpec,
+            encryptionSpec: news.encryptionSpec,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              maxTrialCount: news.maxTrialCount,
-              parallelTrialCount: news.parallelTrialCount,
-              maxFailedTrialCount: news.maxFailedTrialCount,
-              studySpec: news.studySpec,
-              trialJobSpec: news.trialJobSpec,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(env.project, location, desiredLabels));

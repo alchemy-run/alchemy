@@ -91,9 +91,10 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
 
       const error = yield* Effect.flip(
         networksecurity.createProjectsLocationsSacAttachments({
+          sacRealm: realm.name,
+          nccGateway: gateway.name,
           parent: `projects/${project}/locations/us-central1`,
           sacAttachmentId: "alchemy-unpaired-probe",
-          body: { sacRealm: realm.name, nccGateway: gateway.name },
         }),
       );
       expect(error._tag).toEqual("SacRealmNotPaired");

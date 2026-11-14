@@ -262,11 +262,7 @@ export const ServicesBackupProvider = () =>
 
       if (current === undefined) {
         const created = yield* metastore
-          .createProjectsLocationsServicesBackups({
-            parent: service,
-            backupId,
-            body: { description },
-          })
+          .createProjectsLocationsServicesBackups({ description, parent: service, backupId })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.

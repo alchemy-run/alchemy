@@ -410,19 +410,17 @@ export const GlobalAddressProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertGlobalAddresses({
+            name: addressName,
+            description: news.description,
+            address: news.address,
+            addressType: news.addressType,
+            ipVersion: news.ipVersion,
+            prefixLength: news.prefixLength,
+            purpose: news.purpose,
+            network: news.network,
+            networkTier: news.networkTier,
+            ipv6EndpointType: news.ipv6EndpointType,
             project: env.project,
-            body: {
-              name: addressName,
-              description: news.description,
-              address: news.address,
-              addressType: news.addressType,
-              ipVersion: news.ipVersion,
-              prefixLength: news.prefixLength,
-              purpose: news.purpose,
-              network: news.network,
-              networkTier: news.networkTier,
-              ipv6EndpointType: news.ipv6EndpointType,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -448,12 +446,10 @@ export const GlobalAddressProvider = () =>
       if (upsert.length > 0 || removed.length > 0) {
         yield* compute
           .setLabelsGlobalAddresses({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             resource: addressName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, addressName)) ?? current;

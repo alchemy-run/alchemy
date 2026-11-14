@@ -45,12 +45,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         sasportal.createNodesDeploymentsDevices({
+          displayName: "alchemy-sasportal-probe",
+          fccId: "TESTFCC",
+          serialNumber: "ALCHEMYPROBE1",
           parent: "nodes/missing/deployments/missing",
-          body: {
-            displayName: "alchemy-sasportal-probe",
-            fccId: "TESTFCC",
-            serialNumber: "ALCHEMYPROBE1",
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

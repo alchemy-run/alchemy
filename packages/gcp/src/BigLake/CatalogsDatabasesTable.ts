@@ -389,9 +389,10 @@ export const CatalogsDatabasesTableProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           biglake.createProjectsLocationsCatalogsDatabasesTables({
+            type,
+            hiveOptions,
             parent: database,
             tableId,
-            body: { type, hiveOptions },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -408,17 +409,14 @@ export const CatalogsDatabasesTableProvider = () =>
       if (typeChanged || hiveChanged) {
         current = yield* retryTransient(
           biglake.patchProjectsLocationsCatalogsDatabasesTables({
+            type,
+            hiveOptions,
+            etag: current.etag,
             name: currentName,
             updateMask: updateMaskOf(
               typeChanged ? "type" : undefined,
               hiveChanged ? "hiveOptions" : undefined,
             ),
-            body: {
-              name: currentName,
-              type,
-              hiveOptions,
-              etag: current.etag,
-            },
           }),
         );
       }

@@ -45,8 +45,8 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         cloudchannel.createAccountsChannelPartnerLinksCustomers({
+          ...probeCustomerBody,
           parent: probePartner,
-          body: probeCustomerBody,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

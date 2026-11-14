@@ -46,12 +46,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
 
       const error = yield* Effect.flip(
         vault.createMattersHolds({
+          name: "Alchemy Vault Hold Probe",
+          corpus: "MAIL",
+          accounts: [{ email: "probe@example.com" }],
           matterId: "alchemy-missing-matter",
-          body: {
-            name: "Alchemy Vault Hold Probe",
-            corpus: "MAIL",
-            accounts: [{ email: "probe@example.com" }],
-          },
         }),
       );
       expect(error._tag).toEqual("VaultScopeInsufficient");

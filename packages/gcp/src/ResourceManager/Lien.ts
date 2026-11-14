@@ -334,14 +334,7 @@ export const LienProvider = () =>
 
       if (current === undefined) {
         const created = yield* resourcemanager
-          .createLiens({
-            body: {
-              parent,
-              origin,
-              reason,
-              restrictions,
-            },
-          })
+          .createLiens({ parent, origin, reason, restrictions })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.name !== undefined) {
           current = created;

@@ -26,7 +26,7 @@ export default FederatedLambda.make(
   Effect.gen(function* () {
     const publish = yield* GCP.PubSub.Publish(yield* Events);
     return {
-      fetch: publish({ body: { messages: [{ data: btoa("hello from lambda") }] } }).pipe(
+      fetch: publish({ messages: [{ data: btoa("hello from lambda") }] }).pipe(
         Effect.flatMap((response) => HttpServerResponse.json(response)),
         Effect.catchCause((cause) =>
           HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),

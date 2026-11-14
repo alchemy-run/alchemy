@@ -45,28 +45,26 @@ test.provider.skipIf(!!process.env.FAST)(
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (existing === undefined) {
         yield* compute.insertInstances({
+          name: instanceName,
+          machineType: `zones/${zone}/machineTypes/e2-micro`,
+          disks: [
+            {
+              boot: true,
+              autoDelete: true,
+              initializeParams: {
+                sourceImage: "projects/debian-cloud/global/images/family/debian-12",
+              },
+            },
+          ],
+          networkInterfaces: [{ network: "global/networks/default" }],
+          serviceAccounts: [{ email: "default", scopes: [CLOUD_PLATFORM] }],
+          shieldedInstanceConfig: {
+            enableSecureBoot: false,
+            enableVtpm: true,
+            enableIntegrityMonitoring: true,
+          },
           project,
           zone,
-          body: {
-            name: instanceName,
-            machineType: `zones/${zone}/machineTypes/e2-micro`,
-            disks: [
-              {
-                boot: true,
-                autoDelete: true,
-                initializeParams: {
-                  sourceImage: "projects/debian-cloud/global/images/family/debian-12",
-                },
-              },
-            ],
-            networkInterfaces: [{ network: "global/networks/default" }],
-            serviceAccounts: [{ email: "default", scopes: [CLOUD_PLATFORM] }],
-            shieldedInstanceConfig: {
-              enableSecureBoot: false,
-              enableVtpm: true,
-              enableIntegrityMonitoring: true,
-            },
-          },
         });
       }
       const foreign = yield* compute.getInstances({ project, zone, instance: instanceName }).pipe(

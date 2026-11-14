@@ -391,16 +391,14 @@ export const ServiceConnectionMapProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsServiceConnectionMaps({
+            serviceClass: news.serviceClass,
+            token: news.token,
+            producerPscConfigs,
+            consumerPscConfigs,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceConnectionMapId,
-            body: {
-              serviceClass: news.serviceClass,
-              token: news.token,
-              producerPscConfigs,
-              consumerPscConfigs,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -445,17 +443,14 @@ export const ServiceConnectionMapProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkconnectivity.patchProjectsLocationsServiceConnectionMaps({
+          labels: desiredLabels,
+          description: news.description,
+          token: news.token,
+          producerPscConfigs,
+          consumerPscConfigs,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            token: news.token,
-            producerPscConfigs,
-            consumerPscConfigs,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

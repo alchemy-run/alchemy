@@ -329,17 +329,15 @@ export const AccountTypesUserListProvider = () =>
       if (current === undefined) {
         current = yield* datamanager
           .createAccountTypesAccountsUserLists({
+            displayName,
+            description,
+            membershipStatus,
+            membershipDuration,
+            integrationCode,
+            accountAccessStatus,
+            targetNetworkInfo,
+            ingestedUserListInfo: ingested,
             parent,
-            body: {
-              displayName,
-              description,
-              membershipStatus,
-              membershipDuration,
-              integrationCode,
-              accountAccessStatus,
-              targetNetworkInfo,
-              ingestedUserListInfo: ingested,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -386,17 +384,15 @@ export const AccountTypesUserListProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* datamanager.patchAccountTypesAccountsUserLists({
+          displayName,
+          description,
+          membershipStatus,
+          membershipDuration,
+          integrationCode,
+          accountAccessStatus,
+          targetNetworkInfo,
           name: currentName,
           updateMask,
-          body: {
-            displayName,
-            description,
-            membershipStatus,
-            membershipDuration,
-            integrationCode,
-            accountAccessStatus,
-            targetNetworkInfo,
-          },
         });
       }
 

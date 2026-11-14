@@ -512,11 +512,7 @@ export const ReservationProvider = () =>
 
       if (current === undefined) {
         const created = yield* bigqueryreservation
-          .createProjectsLocationsReservations({
-            parent,
-            reservationId,
-            body: createBody,
-          })
+          .createProjectsLocationsReservations({ ...createBody, parent, reservationId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -564,12 +560,12 @@ export const ReservationProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* bigqueryreservation.patchProjectsLocationsReservations({
-          name: current.name ?? name,
-          updateMask: updateMask.join(","),
-          body: toBody(news, desiredLabels, {
+          ...toBody(news, desiredLabels, {
             slotCapacity,
             ignoreIdleSlots,
           }),
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
         });
       }
 

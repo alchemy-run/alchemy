@@ -87,8 +87,8 @@ test.provider(
         Buffer.from("alchemy-regional-secret", "utf8").toString("base64"),
       );
       const version = yield* secretmanager.addVersionProjectsLocationsSecrets({
+        payload: { data: payload },
         parent: created.name,
-        body: { payload: { data: payload } },
       });
       expect(version.name).toContain("/versions/");
 

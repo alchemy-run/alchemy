@@ -293,15 +293,13 @@ export const DataDomainProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsDataDomains({
+            displayName: news.displayName,
+            description: news.description,
+            parentDataDomain: news.parentDataDomain,
+            labels: desiredLabels,
+            contacts: news.contacts,
             parent: parentOf(env.project, location),
             dataDomainId,
-            body: {
-              displayName: news.displayName,
-              description: news.description,
-              parentDataDomain: news.parentDataDomain,
-              labels: desiredLabels,
-              contacts: news.contacts,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -323,6 +321,10 @@ export const DataDomainProvider = () =>
 
       if (labelsChanged || descriptionChanged || displayNameChanged || contactsChanged) {
         const operation = yield* dataplex.patchProjectsLocationsDataDomains({
+          displayName: news.displayName,
+          description: news.description,
+          labels: desiredLabels,
+          contacts: news.contacts,
           name: current.name ?? name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -332,13 +334,6 @@ export const DataDomainProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            displayName: news.displayName,
-            description: news.description,
-            labels: desiredLabels,
-            contacts: news.contacts,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

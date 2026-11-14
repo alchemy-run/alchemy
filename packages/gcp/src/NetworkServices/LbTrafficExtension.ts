@@ -370,16 +370,14 @@ export const LbTrafficExtensionProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsLbTrafficExtensions({
+            description: news.description,
+            labels: desiredLabels,
+            forwardingRules: desiredRules,
+            extensionChains: desiredChains,
+            loadBalancingScheme: news.loadBalancingScheme,
+            metadata: desiredMetadata,
             parent: parentOf(env.project, location),
             lbTrafficExtensionId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              forwardingRules: desiredRules,
-              extensionChains: desiredChains,
-              loadBalancingScheme: news.loadBalancingScheme,
-              metadata: desiredMetadata,
-            },
           })
           .pipe(
             Effect.retry({
@@ -409,17 +407,14 @@ export const LbTrafficExtensionProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsLbTrafficExtensions({
+          labels: desiredLabels,
+          description: news.description,
+          forwardingRules: desiredRules,
+          extensionChains: desiredChains,
+          loadBalancingScheme: news.loadBalancingScheme,
+          metadata: desiredMetadata,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            forwardingRules: desiredRules,
-            extensionChains: desiredChains,
-            loadBalancingScheme: news.loadBalancingScheme,
-            metadata: desiredMetadata,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

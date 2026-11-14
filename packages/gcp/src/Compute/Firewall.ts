@@ -537,8 +537,8 @@ export const FirewallProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertFirewalls({
+            ...insertBody(firewallName, env.project, news, desiredDescription),
             project: env.project,
-            body: insertBody(firewallName, env.project, news, desiredDescription),
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
@@ -605,11 +605,7 @@ export const FirewallProvider = () =>
 
       if (Object.keys(patch).length > 0) {
         yield* compute
-          .patchFirewalls({
-            project: env.project,
-            firewall: firewallName,
-            body: patch,
-          })
+          .patchFirewalls({ ...patch, project: env.project, firewall: firewallName })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.retry({

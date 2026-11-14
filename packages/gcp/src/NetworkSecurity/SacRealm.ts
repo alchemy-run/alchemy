@@ -335,12 +335,10 @@ export const SacRealmProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsSacRealms({
+            securityService,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             sacRealmId,
-            body: {
-              securityService,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({

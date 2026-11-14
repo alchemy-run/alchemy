@@ -33,8 +33,8 @@ test.provider(
 
       const error = yield* Effect.flip(
         marketplace.createBuyersClientsUsers({
+          email: "alchemy-abm-probe@example.com",
           parent: probeParent,
-          body: { email: "alchemy-abm-probe@example.com" },
         }),
       );
       expect(error._tag).toEqual("AuthorizedBuyersScopeInsufficient");

@@ -386,16 +386,14 @@ export const UnitProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsUnits({
+            unitKind,
+            tenant,
+            managementMode: news.managementMode,
+            maintenance: news.maintenance,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             unitId,
-            body: {
-              unitKind,
-              tenant,
-              managementMode: news.managementMode,
-              maintenance: news.maintenance,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -422,15 +420,12 @@ export const UnitProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsUnits({
+          etag: current.etag,
+          maintenance: news.maintenance,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            maintenance: news.maintenance,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

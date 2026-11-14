@@ -278,13 +278,11 @@ export const DataProductsDataAssetProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsDataProductsDataAssets({
+            labels: desiredLabels,
+            resource: news.resource,
+            accessGroupConfigs: news.accessGroupConfigs,
             parent: news.parent,
             dataAssetId,
-            body: {
-              labels: desiredLabels,
-              resource: news.resource,
-              accessGroupConfigs: news.accessGroupConfigs,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -305,6 +303,9 @@ export const DataProductsDataAssetProvider = () =>
 
       if (labelsChanged || configsChanged) {
         const operation = yield* dataplex.patchProjectsLocationsDataProductsDataAssets({
+          etag: current.etag,
+          labels: desiredLabels,
+          accessGroupConfigs: news.accessGroupConfigs,
           name: current.name ?? name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -312,12 +313,6 @@ export const DataProductsDataAssetProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            accessGroupConfigs: news.accessGroupConfigs,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

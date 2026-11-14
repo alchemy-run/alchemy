@@ -32,8 +32,8 @@ export const FetchCaCertsHttp = Layer.effect(
         request?: FetchCaCertsRequest,
       ) {
         return yield* fetchCaCertsProjectsLocationsCaPools({
+          ...(request?.requestId !== undefined ? { requestId: request.requestId } : {}),
           caPool: yield* name,
-          body: request?.requestId !== undefined ? { requestId: request.requestId } : {},
         });
       });
     });

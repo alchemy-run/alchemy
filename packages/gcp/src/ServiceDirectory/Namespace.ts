@@ -316,11 +316,9 @@ export const NamespaceProvider = () =>
       if (current === undefined) {
         const created = yield* servicedirectory
           .createProjectsLocationsNamespaces({
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             namespaceId,
-            body: {
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -334,12 +332,9 @@ export const NamespaceProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         current = yield* servicedirectory.patchProjectsLocationsNamespaces({
+          labels: desiredLabels,
           name,
           updateMask: "labels",
-          body: {
-            name,
-            labels: desiredLabels,
-          },
         });
       }
 

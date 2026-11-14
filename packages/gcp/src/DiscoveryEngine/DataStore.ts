@@ -358,20 +358,18 @@ export const DataStoreProvider = () =>
         // `projects/{p}/locations/{l}/dataStores/{id}`.
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStores({
+            displayName,
+            industryVertical,
+            contentConfig,
+            solutionTypes,
+            aclEnabled: news.aclEnabled === true ? true : undefined,
+            kmsKeyName: news.kmsKeyName,
             parent: collectionParent(env.project, location, "default_collection"),
             dataStoreId,
             skipDefaultSchemaCreation: news.skipDefaultSchemaCreation,
             createAdvancedSiteSearch: news.createAdvancedSiteSearch,
             disableCmek: news.disableCmek ?? true,
             cmekConfigName: news.cmekConfigName,
-            body: {
-              displayName,
-              industryVertical,
-              contentConfig,
-              solutionTypes,
-              aclEnabled: news.aclEnabled === true ? true : undefined,
-              kmsKeyName: news.kmsKeyName,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -390,6 +388,8 @@ export const DataStoreProvider = () =>
 
       if (displayNameChanged || solutionsChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStores({
+          displayName,
+          solutionTypes,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -397,11 +397,6 @@ export const DataStoreProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            solutionTypes,
-          },
         });
       }
 

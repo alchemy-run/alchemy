@@ -29,13 +29,11 @@ const makeDataApiExecutor = Effect.fn(function* (options: {
     batch: "atomic",
     execute: (sqlStatement) =>
       executeSql({
+        database: options.database,
+        user: options.user,
+        password: options.password,
+        sqlStatement,
         instance: options.instance,
-        body: {
-          database: options.database,
-          user: options.user,
-          password: options.password,
-          sqlStatement,
-        },
       }).pipe(
         Effect.mapError(migrationError(`executeSql on '${options.instance}'`)),
         // SQL errors come back inside a 200 response.

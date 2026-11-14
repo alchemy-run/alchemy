@@ -224,10 +224,7 @@ export const RuleSetProvider = () =>
 
       if (current === undefined) {
         const created = yield* cw
-          .createProjectsLocationsRuleSets({
-            parent,
-            body: { description, source, rules },
-          })
+          .createProjectsLocationsRuleSets({ description, source, rules, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created ??
@@ -247,15 +244,13 @@ export const RuleSetProvider = () =>
       const rulesChanged = !sameJson(current.rules, rules);
       if (descriptionChanged || sourceChanged || rulesChanged) {
         current = yield* cw.patchProjectsLocationsRuleSets({
-          name: currentName,
-          body: {
-            ruleSet: {
-              name: currentName,
-              description,
-              source,
-              rules,
-            },
+          ruleSet: {
+            name: currentName,
+            description,
+            source,
+            rules,
           },
+          name: currentName,
         });
       }
 

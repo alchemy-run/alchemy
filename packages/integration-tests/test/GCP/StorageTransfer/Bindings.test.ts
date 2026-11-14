@@ -32,8 +32,8 @@ let transferAccount: string;
 const projectRoles = () =>
   resourcemanager
     .getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(
       Effect.map((policy) =>
@@ -65,10 +65,7 @@ const grantBucketRole = (bucket: string, member: string, role: string) =>
     } else {
       bindings.push({ role, members: [member] });
     }
-    yield* storage.setIamPolicyBuckets({
-      bucket,
-      body: { ...policy, bindings },
-    });
+    yield* storage.setIamPolicyBuckets({ ...policy, bindings, bucket });
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "Conflict",

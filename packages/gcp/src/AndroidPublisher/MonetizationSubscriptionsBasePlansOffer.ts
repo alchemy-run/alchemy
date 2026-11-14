@@ -310,12 +310,12 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
       if (current === undefined) {
         const created = yield* androidpublisher
           .createMonetizationSubscriptionsBasePlansOffers({
+            ...desired,
             packageName,
             productId,
             basePlanId,
             offerId,
             "regionsVersion.version": regionsVersion,
-            body: desired,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -338,6 +338,7 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
         const updateMask = syncMask(current, desired);
         if (updateMask.length > 0) {
           current = yield* androidpublisher.patchMonetizationSubscriptionsBasePlansOffers({
+            ...desired,
             packageName,
             productId,
             basePlanId,
@@ -345,7 +346,6 @@ export const MonetizationSubscriptionsBasePlansOfferProvider = () =>
             updateMask,
             "regionsVersion.version": regionsVersion,
             latencyTolerance: news.latencyTolerance,
-            body: desired,
           });
         }
       }

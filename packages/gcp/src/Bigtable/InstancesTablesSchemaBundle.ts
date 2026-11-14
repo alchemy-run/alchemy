@@ -311,11 +311,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
 
       if (current === undefined) {
         const created = yield* bigtable
-          .createProjectsInstancesTablesSchemaBundles({
-            parent,
-            schemaBundleId,
-            body: { protoSchema },
-          })
+          .createProjectsInstancesTablesSchemaBundles({ protoSchema, parent, schemaBundleId })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
@@ -326,10 +322,11 @@ export const InstancesTablesSchemaBundleProvider = () =>
       if (descriptorsOf(current.protoSchema) !== news.protoDescriptors) {
         const patched = yield* bigtable
           .patchProjectsInstancesTablesSchemaBundles({
+            protoSchema,
+            etag: current.etag,
             name,
             updateMask: "proto_schema",
             ignoreWarnings,
-            body: { protoSchema, etag: current.etag },
           })
           .pipe(
             Effect.retry({

@@ -48,13 +48,11 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       const error = yield* Effect.flip(
         cloudidentity.createInboundSamlSsoProfiles({
-          body: {
-            customer,
-            displayName: "Alchemy SAML Probe",
-            idpConfig: {
-              entityId: "https://idp.example.com/metadata",
-              singleSignOnServiceUri: "https://idp.example.com/sso",
-            },
+          customer,
+          displayName: "Alchemy SAML Probe",
+          idpConfig: {
+            entityId: "https://idp.example.com/metadata",
+            singleSignOnServiceUri: "https://idp.example.com/sso",
           },
         }),
       );

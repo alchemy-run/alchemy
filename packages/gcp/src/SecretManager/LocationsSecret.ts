@@ -430,9 +430,9 @@ export const LocationsSecretProvider = () =>
       if (current === undefined) {
         const created = yield* secretmanager
           .createProjectsLocationsSecrets({
+            ...toCreateBody(news, desiredLabels),
             parent,
             secretId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -473,6 +473,15 @@ export const LocationsSecretProvider = () =>
         ttlChanged
       ) {
         current = yield* secretmanager.patchProjectsLocationsSecrets({
+          labels: desiredLabels,
+          annotations: desiredAnnotations,
+          versionAliases: desiredAliases,
+          topics: desiredTopics,
+          rotation: desiredRotation,
+          versionDestroyTtl: desiredDestroyTtl,
+          customerManagedEncryption: desiredCmek,
+          expireTime: news.expireTime,
+          ttl: ttlChanged ? news.ttl : undefined,
           name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -487,18 +496,6 @@ export const LocationsSecretProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            annotations: desiredAnnotations,
-            versionAliases: desiredAliases,
-            topics: desiredTopics,
-            rotation: desiredRotation,
-            versionDestroyTtl: desiredDestroyTtl,
-            customerManagedEncryption: desiredCmek,
-            expireTime: news.expireTime,
-            ttl: ttlChanged ? news.ttl : undefined,
-          },
         });
       }
 

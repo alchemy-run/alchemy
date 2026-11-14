@@ -40,11 +40,9 @@ export default class PubSubLiteBindingsHost extends GCP.Function<PubSubLiteBindi
       fetch: serveProbes({
         getTopic: getTopic(),
         getPartitions: getPartitions(),
-        computeHeadCursor: computeHead({ body: { partition: "0" } }),
+        computeHeadCursor: computeHead({ partition: "0" }),
         getSubscription: getSubscription(),
-        commitCursor: commitCursor({
-          body: { partition: "0", cursor: { offset: COMMITTED_OFFSET } },
-        }),
+        commitCursor: commitCursor({ partition: "0", cursor: { offset: COMMITTED_OFFSET } }),
         getReservation: getReservation(),
       }),
     };

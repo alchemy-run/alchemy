@@ -292,15 +292,13 @@ export const ModelProvider = () =>
       if (current === undefined) {
         yield* ml
           .createProjectsModels({
+            name: modelId,
+            description,
+            labels: desiredLabels,
+            regions,
+            onlinePredictionLogging,
+            onlinePredictionConsoleLogging,
             parent: `projects/${env.project}`,
-            body: {
-              name: modelId,
-              description,
-              labels: desiredLabels,
-              regions,
-              onlinePredictionLogging,
-              onlinePredictionConsoleLogging,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.void));
         current = yield* waitUntilExists(getModel(name), name);
@@ -321,18 +319,15 @@ export const ModelProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* ml.patchProjectsModels({
+          description,
+          defaultVersion:
+            defaultVersion !== undefined
+              ? {
+                  name: defaultVersion.includes("/") ? defaultVersion : defaultVersion,
+                }
+              : undefined,
           name: currentName,
           updateMask: mask,
-          body: {
-            name: currentName,
-            description,
-            defaultVersion:
-              defaultVersion !== undefined
-                ? {
-                    name: defaultVersion.includes("/") ? defaultVersion : defaultVersion,
-                  }
-                : undefined,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getModel(currentName), currentName);

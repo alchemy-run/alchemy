@@ -243,13 +243,11 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsDatasetsConversationsFeedbackLabels({
+            label,
+            labeledResource: news.labeledResource,
+            qaAnswerLabel: news.qaAnswerLabel,
             parent: news.parent,
             feedbackLabelId,
-            body: {
-              label,
-              labeledResource: news.labeledResource,
-              qaAnswerLabel: news.qaAnswerLabel,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -267,6 +265,9 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
 
       if (labelChanged || resourceChanged || qaChanged) {
         current = yield* cci.patchProjectsLocationsDatasetsConversationsFeedbackLabels({
+          label,
+          labeledResource: news.labeledResource,
+          qaAnswerLabel: news.qaAnswerLabel,
           name: current.name ?? name,
           updateMask: [
             labelChanged ? "label" : undefined,
@@ -275,12 +276,6 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            label,
-            labeledResource: news.labeledResource,
-            qaAnswerLabel: news.qaAnswerLabel,
-          },
         });
       }
 

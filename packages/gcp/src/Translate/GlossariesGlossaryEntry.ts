@@ -281,10 +281,7 @@ export const GlossariesGlossaryEntryProvider = () =>
 
       if (current === undefined) {
         const created = yield* retryTransient(
-          translate.createProjectsLocationsGlossariesGlossaryEntries({
-            parent,
-            body,
-          }),
+          translate.createProjectsLocationsGlossariesGlossaryEntries({ ...body, parent }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -300,13 +297,10 @@ export const GlossariesGlossaryEntryProvider = () =>
       if (descriptionChanged || pairChanged || setChanged) {
         current = yield* retryTransient(
           translate.patchProjectsLocationsGlossariesGlossaryEntries({
+            description,
+            termsPair: news.termsPair,
+            termsSet: news.termsSet,
             name: currentName,
-            body: {
-              name: currentName,
-              description,
-              termsPair: news.termsPair,
-              termsSet: news.termsSet,
-            },
           }),
         );
       }

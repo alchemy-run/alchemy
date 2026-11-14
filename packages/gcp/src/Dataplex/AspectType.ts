@@ -307,16 +307,14 @@ export const AspectTypeProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsAspectTypes({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            metadataTemplate: news.metadataTemplate,
+            dataClassification: news.dataClassification,
+            authorization: news.authorization,
             parent: parentOf(env.project, location),
             aspectTypeId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              metadataTemplate: news.metadataTemplate,
-              dataClassification: news.dataClassification,
-              authorization: news.authorization,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -340,6 +338,11 @@ export const AspectTypeProvider = () =>
       if (labelsChanged || descriptionChanged || displayNameChanged || templateChanged) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsAspectTypes({
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            displayName: news.displayName,
+            metadataTemplate: news.metadataTemplate,
             name: current.name ?? name,
             updateMask: [
               labelsChanged ? "labels" : undefined,
@@ -349,14 +352,6 @@ export const AspectTypeProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              displayName: news.displayName,
-              metadataTemplate: news.metadataTemplate,
-            },
           }),
         );
         yield* waitForOperation(operation);

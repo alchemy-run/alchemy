@@ -74,19 +74,15 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     return {
       fetch: serveProbes({
         publish: publish({
-          body: {
-            messages: [
-              {
-                data: Buffer.from(PUBLISH_PAYLOAD).toString("base64"),
-                attributes: { via: "Publish" },
-              },
-            ],
-          },
+          messages: [
+            {
+              data: Buffer.from(PUBLISH_PAYLOAD).toString("base64"),
+              attributes: { via: "Publish" },
+            },
+          ],
         }),
         pullAndAcknowledge: Effect.gen(function* () {
-          const page = yield* pull({
-            body: { maxMessages: 10, returnImmediately: false },
-          }).pipe(
+          const page = yield* pull({ maxMessages: 10, returnImmediately: false }).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
               until: (page) => untilSome(page.receivedMessages),
@@ -94,9 +90,7 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
             }),
           );
           const received = page.receivedMessages ?? [];
-          yield* acknowledge({
-            body: { ackIds: received.map((message) => message.ackId ?? "") },
-          });
+          yield* acknowledge({ ackIds: received.map((message) => message.ackId ?? "") });
           return received.map((message) =>
             Buffer.from(message.message?.data ?? "", "base64").toString("utf8"),
           );

@@ -615,8 +615,8 @@ export const GlobalForwardingRuleProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertGlobalForwardingRules({
+            ...toInsertBody(forwardingRuleName, news, desiredDescription),
             project: env.project,
-            body: toInsertBody(forwardingRuleName, news, desiredDescription),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -644,9 +644,9 @@ export const GlobalForwardingRuleProvider = () =>
       if (news.target !== undefined && resourceTail(current.target) !== resourceTail(news.target)) {
         yield* compute
           .setTargetGlobalForwardingRules({
+            target: news.target,
             project: env.project,
             forwardingRule: forwardingRuleName,
-            body: { target: news.target },
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
@@ -685,9 +685,9 @@ export const GlobalForwardingRuleProvider = () =>
         }
         yield* compute
           .patchGlobalForwardingRules({
+            ...patch,
             project: env.project,
             forwardingRule: forwardingRuleName,
-            body: patch,
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, forwardingRuleName)) ?? current;
@@ -700,12 +700,10 @@ export const GlobalForwardingRuleProvider = () =>
           const latest = (yield* getByName(env.project, forwardingRuleName)) ?? resolved;
           yield* compute
             .setLabelsGlobalForwardingRules({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               resource: forwardingRuleName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             })
             .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         }).pipe(

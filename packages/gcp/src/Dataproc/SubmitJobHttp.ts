@@ -40,21 +40,18 @@ export const SubmitJobHttp = Layer.effect(
         const resolvedProject = yield* projectId;
         const resolvedRegion = yield* region;
         const resolvedCluster = yield* clusterName;
-        const job = request.body?.job;
+        const job = request.job;
         return yield* submitProjectsRegionsJobs({
           ...request,
-          projectId: resolvedProject,
-          region: resolvedRegion,
-          body: {
-            ...request?.body,
-            job: {
-              ...job,
-              placement: {
-                ...job?.placement,
-                clusterName: job?.placement?.clusterName ?? resolvedCluster,
-              },
+          job: {
+            ...job,
+            placement: {
+              ...job?.placement,
+              clusterName: job?.placement?.clusterName ?? resolvedCluster,
             },
           },
+          projectId: resolvedProject,
+          region: resolvedRegion,
         });
       });
     });

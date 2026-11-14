@@ -294,13 +294,11 @@ export const PolicyProvider = () =>
       if (current === undefined) {
         const created = yield* iam
           .createPolicyPolicies({
+            displayName: news.displayName,
+            annotations: desiredAnnotations,
+            rules,
             parent,
             policyId,
-            body: {
-              displayName: news.displayName,
-              annotations: desiredAnnotations,
-              rules,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -335,13 +333,11 @@ export const PolicyProvider = () =>
 
       if (annotationsChanged || displayChanged || rulesChanged) {
         const updated = yield* iam.updatePolicies({
+          etag: current.etag,
+          displayName: news.displayName ?? current.displayName,
+          annotations: desiredAnnotations,
+          rules,
           name: current.name ?? name,
-          body: {
-            etag: current.etag,
-            displayName: news.displayName ?? current.displayName,
-            annotations: desiredAnnotations,
-            rules,
-          },
         });
         yield* waitForOperation(updated);
         current = (yield* getByName(current.name ?? name)) ?? current;

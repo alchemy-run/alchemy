@@ -272,7 +272,6 @@ export const QaScorecardsRevisionProvider = () =>
           .createProjectsLocationsQaScorecardsRevisions({
             parent: news.parent,
             qaScorecardRevisionId,
-            body: {},
           })
           .pipe(
             Effect.retry({

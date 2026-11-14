@@ -264,11 +264,9 @@ export const ApiProvider = () =>
 
       if (labelsChanged) {
         current = yield* apigee.patchOrganizationsApis({
+          labels: desiredLabels,
           name,
           updateMask: "labels",
-          body: {
-            labels: desiredLabels,
-          },
         });
       }
 

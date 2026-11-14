@@ -47,11 +47,9 @@ test.provider(
 
       const created = yield* Effect.flip(
         composer.createProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({
+          name: `${missingParent}/userWorkloadsConfigMaps/alchemy-missing`,
+          data: { LOG_LEVEL: "INFO" },
           parent: missingParent,
-          body: {
-            name: `${missingParent}/userWorkloadsConfigMaps/alchemy-missing`,
-            data: { LOG_LEVEL: "INFO" },
-          },
         }),
       );
       expect(created._tag).toEqual("NotFound");

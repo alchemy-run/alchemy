@@ -329,27 +329,22 @@ export const AuthProviderProvider = () =>
 
       if (current !== undefined && current.deleted === true) {
         current = yield* agentidentity
-          .undeleteProjectsLocationsAuthProviders({
-            name: current.name ?? name,
-            body: {},
-          })
+          .undeleteProjectsLocationsAuthProviders({ name: current.name ?? name })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       }
 
       if (current === undefined) {
         const created = yield* agentidentity
           .createProjectsLocationsAuthProviders({
+            labels: desiredLabels,
+            description,
+            allowedScopes: allowedScopes.length > 0 ? allowedScopes : undefined,
+            blockedScopes: blockedScopes.length > 0 ? blockedScopes : undefined,
+            workloadIds:
+              workloadIds !== undefined && workloadIds.length > 0 ? workloadIds : undefined,
+            authProviderTypeParams: typeParams,
             parent: `projects/${env.project}/locations/${location}`,
             authProviderId,
-            body: {
-              labels: desiredLabels,
-              description,
-              allowedScopes: allowedScopes.length > 0 ? allowedScopes : undefined,
-              blockedScopes: blockedScopes.length > 0 ? blockedScopes : undefined,
-              workloadIds:
-                workloadIds !== undefined && workloadIds.length > 0 ? workloadIds : undefined,
-              authProviderTypeParams: typeParams,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(output?.name ?? name)));
         current = created ?? undefined;
@@ -361,10 +356,7 @@ export const AuthProviderProvider = () =>
 
       const resource = current.name ?? name;
       if (current.deleted === true) {
-        current = yield* agentidentity.undeleteProjectsLocationsAuthProviders({
-          name: resource,
-          body: {},
-        });
+        current = yield* agentidentity.undeleteProjectsLocationsAuthProviders({ name: resource });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -395,17 +387,14 @@ export const AuthProviderProvider = () =>
 
       if (mask.length > 0) {
         current = yield* agentidentity.patchProjectsLocationsAuthProviders({
+          labels: desiredLabels,
+          description,
+          allowedScopes,
+          blockedScopes,
+          workloadIds,
+          authProviderTypeParams: typeParams,
           name: resource,
           updateMask: mask,
-          body: {
-            name: resource,
-            labels: desiredLabels,
-            description,
-            allowedScopes,
-            blockedScopes,
-            workloadIds,
-            authProviderTypeParams: typeParams,
-          },
         });
       }
 
@@ -414,12 +403,10 @@ export const AuthProviderProvider = () =>
       if (desiredDisabled && !observedDisabled) {
         current = yield* agentidentity.disableProjectsLocationsAuthProviders({
           name: current.name ?? resource,
-          body: {},
         });
       } else if (!desiredDisabled && observedDisabled) {
         current = yield* agentidentity.enableProjectsLocationsAuthProviders({
           name: current.name ?? resource,
-          body: {},
         });
       }
 

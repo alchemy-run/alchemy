@@ -401,17 +401,15 @@ export const AgentGatewayProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsAgentGateways({
+            labels: desiredLabels,
+            description: news.description,
+            googleManaged: desiredGoogle,
+            selfManaged: desiredSelf,
+            registries: desiredRegistries,
+            protocols: desiredProtocols,
+            networkConfig: desiredNetwork,
             parent: parentOf(env.project, location),
             agentGatewayId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              googleManaged: desiredGoogle,
-              selfManaged: desiredSelf,
-              registries: desiredRegistries,
-              protocols: desiredProtocols,
-              networkConfig: desiredNetwork,
-            },
           })
           .pipe(
             Effect.retry({
@@ -449,19 +447,16 @@ export const AgentGatewayProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsAgentGateways({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
+          googleManaged: desiredGoogle,
+          selfManaged: desiredSelf,
+          registries: desiredRegistries,
+          protocols: desiredProtocols,
+          networkConfig: desiredNetwork,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-            googleManaged: desiredGoogle,
-            selfManaged: desiredSelf,
-            registries: desiredRegistries,
-            protocols: desiredProtocols,
-            networkConfig: desiredNetwork,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

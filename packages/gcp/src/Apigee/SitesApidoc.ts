@@ -363,8 +363,8 @@ export const SitesApidocProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsSitesApidocs({
+            ...toBody(news, title, desiredDescription),
             parent: siteParent(org, siteId),
-            body: toBody(news, title, desiredDescription),
           })
           .pipe(
             Effect.map((response) => unwrap(response)),
@@ -393,8 +393,8 @@ export const SitesApidocProvider = () =>
 
       if (changed) {
         const updated = yield* apigee.updateOrganizationsSitesApidocs({
+          ...toBody(news, title, desiredDescription),
           name: resourceName(org, siteId, current.id ?? ""),
-          body: toBody(news, title, desiredDescription),
         });
         current = unwrap(updated) ?? current;
       }

@@ -305,13 +305,11 @@ export const BackupPlanAssociationProvider = () =>
       if (current === undefined) {
         const created = yield* backupdr
           .createProjectsLocationsBackupPlanAssociations({
+            resource: news.resource,
+            resourceType: news.resourceType,
+            backupPlan,
             parent: parentOf(env.project, location),
             backupPlanAssociationId,
-            body: {
-              resource: news.resource,
-              resourceType: news.resourceType,
-              backupPlan,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -337,9 +335,9 @@ export const BackupPlanAssociationProvider = () =>
 
       if (!sameText(current.backupPlan, backupPlan)) {
         const operation = yield* backupdr.patchProjectsLocationsBackupPlanAssociations({
+          backupPlan,
           name: current.name ?? name,
           updateMask: "backupPlan",
-          body: { backupPlan },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

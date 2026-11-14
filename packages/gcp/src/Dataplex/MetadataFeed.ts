@@ -257,10 +257,7 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
         bindings.push({ role, members: [member] });
       }
     }
-    yield* pubsub.setIamPolicyProjectsTopics({
-      resource,
-      body: { policy: { ...policy, bindings } },
-    });
+    yield* pubsub.setIamPolicyProjectsTopics({ policy: { ...policy, bindings }, resource });
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
@@ -370,14 +367,12 @@ export const MetadataFeedProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsMetadataFeeds({
+            scope,
+            filters,
+            labels: desiredLabels,
+            pubsubTopic: news.pubsubTopic,
             parent: locationParent(env.project, location),
             metadataFeedId: feedId,
-            body: {
-              scope,
-              filters,
-              labels: desiredLabels,
-              pubsubTopic: news.pubsubTopic,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -405,14 +400,12 @@ export const MetadataFeedProvider = () =>
           topicChanged ? "pubsub_topic" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* dataplex.patchProjectsLocationsMetadataFeeds({
+          scope,
+          filters,
+          labels: desiredLabels,
+          pubsubTopic: news.pubsubTopic,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            scope,
-            filters,
-            labels: desiredLabels,
-            pubsubTopic: news.pubsubTopic,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

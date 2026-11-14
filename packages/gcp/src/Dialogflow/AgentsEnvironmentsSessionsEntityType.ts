@@ -236,8 +236,8 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({
+            ...body,
             parent: `${environment}/sessions/${sessionId}`,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -256,10 +256,8 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
 
       if (modeChanged || entitiesChanged || legacySentinel) {
         current = yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({
-          // An `entities` update mask is silently ignored; the body is
-          // complete, so replace the whole resource.
+          ...body,
           name: currentName,
-          body: { ...body, name: currentName },
         });
       }
 

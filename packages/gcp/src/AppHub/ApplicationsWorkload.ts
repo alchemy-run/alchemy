@@ -348,14 +348,12 @@ export const ApplicationsWorkloadProvider = () =>
       if (current === undefined) {
         const created = yield* apphub
           .createProjectsLocationsApplicationsWorkloads({
+            discoveredWorkload,
+            displayName,
+            description,
+            attributes: news.attributes,
             parent: application,
             workloadId,
-            body: {
-              discoveredWorkload,
-              displayName,
-              description,
-              attributes: news.attributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -384,13 +382,11 @@ export const ApplicationsWorkloadProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* apphub.patchProjectsLocationsApplicationsWorkloads({
+          displayName,
+          description,
+          attributes: news.attributes,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            displayName,
-            description,
-            attributes: news.attributes,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

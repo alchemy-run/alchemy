@@ -48,10 +48,8 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       const error = yield* Effect.flip(
         cloudidentity.createGroupsMemberships({
+          preferredMemberKey: { id: "probe@example.com" },
           parent: "groups/alchemy-missing-group",
-          body: {
-            preferredMemberKey: { id: "probe@example.com" },
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

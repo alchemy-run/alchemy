@@ -63,8 +63,8 @@ export const GenerateContentHttp = Layer.effect(
 
       const generate = Effect.fn(`${TAG}(${id})`)(function* (request: GenerateContentRequest) {
         return yield* generateContent({
+          ...request,
           model: `projects/${yield* project}/locations/${location}/publishers/${publisher}/models/${model}`,
-          body: request,
         });
       });
 

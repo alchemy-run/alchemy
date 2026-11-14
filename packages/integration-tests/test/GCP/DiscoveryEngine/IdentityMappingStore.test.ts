@@ -62,12 +62,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         discoveryengine.createProjectsLocationsIdentityMappingStores({
+          name: `projects/${project}/locations/global/identityMappingStores/alchemyimismissing`,
           parent: `projects/${project}/locations/global`,
           identityMappingStoreId: "alchemyimismissing",
           disableCmek: true,
-          body: {
-            name: `projects/${project}/locations/global/identityMappingStores/alchemyimismissing`,
-          },
         }),
       );
       expect(error._tag).toEqual("IdentityProviderNotConfigured");

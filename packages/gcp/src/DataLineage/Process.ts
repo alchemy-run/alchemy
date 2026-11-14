@@ -224,13 +224,11 @@ export const ProcessProvider = () =>
       if (current === undefined) {
         const created = yield* datalineage
           .createProjectsLocationsProcesses({
+            name,
+            displayName: news.displayName,
+            origin: defaultOrigin(news.origin),
+            attributes,
             parent: locationParent(env.project, location),
-            body: {
-              name,
-              displayName: news.displayName,
-              origin: defaultOrigin(news.origin),
-              attributes,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -257,13 +255,10 @@ export const ProcessProvider = () =>
 
       if (originChanged || displayNameChanged || attributesChanged) {
         current = yield* datalineage.patchProjectsLocationsProcesses({
+          displayName,
+          origin: desiredOrigin,
+          attributes,
           name: resolvedName,
-          body: {
-            name: resolvedName,
-            displayName,
-            origin: desiredOrigin,
-            attributes,
-          },
         });
       }
 

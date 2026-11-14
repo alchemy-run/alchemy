@@ -68,12 +68,10 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertNetworkEdgeSecurityServices({
+          name: "alchemy-ness-probe",
+          description: "alchemy entitlement probe",
           project,
           region,
-          body: {
-            name: "alchemy-ness-probe",
-            description: "alchemy entitlement probe",
-          },
         }),
       );
       expect(error._tag).toEqual("CloudArmorEnterpriseRequired");

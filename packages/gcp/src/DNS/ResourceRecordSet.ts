@@ -375,11 +375,7 @@ export const ResourceRecordSetProvider = () =>
 
       if (current === undefined) {
         const created = yield* dns
-          .createResourceRecordSets({
-            project: env.project,
-            managedZone,
-            body: desired,
-          })
+          .createResourceRecordSets({ ...desired, project: env.project, managedZone })
           .pipe(Effect.catchTag("Conflict", () => getByName(env.project, managedZone, name, type)));
         current = created ?? undefined;
       }
@@ -398,11 +394,11 @@ export const ResourceRecordSetProvider = () =>
 
       if (ttlChanged || rrdatasChanged || routingChanged) {
         current = yield* dns.patchResourceRecordSets({
+          ...desired,
           project: env.project,
           managedZone,
           name,
           type,
-          body: desired,
         });
       }
 

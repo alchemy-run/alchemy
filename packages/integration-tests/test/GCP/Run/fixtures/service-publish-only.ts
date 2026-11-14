@@ -22,9 +22,9 @@ export default class BoundService extends GCP.Function<BoundService>()(
 
     return {
       fetch: Effect.gen(function* () {
-        const { messageIds } = yield* publish({
-          body: { messages: [{ data: btoa("again") }] },
-        }).pipe(Effect.orDie);
+        const { messageIds } = yield* publish({ messages: [{ data: btoa("again") }] }).pipe(
+          Effect.orDie,
+        );
         return yield* HttpServerResponse.json({
           published: (messageIds?.length ?? 0) > 0,
           step: 2,

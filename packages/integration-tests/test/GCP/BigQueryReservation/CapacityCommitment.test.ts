@@ -68,13 +68,11 @@ test.provider(
 
       const error = yield* Effect.flip(
         bigqueryreservation.createProjectsLocationsCapacityCommitments({
+          slotCount: "50",
+          plan: "FLEX_FLAT_RATE",
+          edition: "ENTERPRISE",
           parent: `projects/${project}/locations/us-central1`,
           capacityCommitmentId: "alchemy-bq-capacity-probe",
-          body: {
-            slotCount: "50",
-            plan: "FLEX_FLAT_RATE",
-            edition: "ENTERPRISE",
-          },
         }),
       );
       expect(error._tag).toEqual("CommitmentPlanNotSupported");

@@ -260,14 +260,12 @@ export const MeshProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsMeshes({
+            description: news.description,
+            labels: desiredLabels,
+            interceptionPort: news.interceptionPort,
+            envoyHeaders: news.envoyHeaders,
             parent: parentOf(env.project, location),
             meshId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              interceptionPort: news.interceptionPort,
-              envoyHeaders: news.envoyHeaders,
-            },
           })
           .pipe(
             Effect.retry({
@@ -295,15 +293,12 @@ export const MeshProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsMeshes({
+          labels: desiredLabels,
+          description: news.description,
+          interceptionPort: news.interceptionPort,
+          envoyHeaders: news.envoyHeaders,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            interceptionPort: news.interceptionPort,
-            envoyHeaders: news.envoyHeaders,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

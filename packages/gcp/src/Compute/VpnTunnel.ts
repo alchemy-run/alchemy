@@ -660,9 +660,9 @@ export const VpnTunnelProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertVpnTunnels({
+            ...toInsertBody(env.project, region, vpnTunnelName, news),
             project: env.project,
             region,
-            body: toInsertBody(env.project, region, vpnTunnelName, news),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -687,13 +687,11 @@ export const VpnTunnelProvider = () =>
           const latest = (yield* getByName(env.project, region, vpnTunnelName)) ?? resolved;
           yield* compute
             .setLabelsVpnTunnels({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               region,
               resource: vpnTunnelName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             })
             .pipe(
               Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

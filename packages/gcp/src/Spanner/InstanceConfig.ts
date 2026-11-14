@@ -429,17 +429,15 @@ export const InstanceConfigProvider = () =>
         const replicas = yield* desiredReplicas(env.project, env.region, news);
         const created = yield* spanner
           .createProjectsInstanceConfigs({
-            parent: `projects/${env.project}`,
-            body: {
-              instanceConfigId,
-              instanceConfig: {
-                name,
-                displayName,
-                baseConfig,
-                replicas,
-                labels: desiredLabels,
-              },
+            instanceConfigId,
+            instanceConfig: {
+              name,
+              displayName,
+              baseConfig,
+              replicas,
+              labels: desiredLabels,
             },
+            parent: `projects/${env.project}`,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -464,15 +462,13 @@ export const InstanceConfigProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstanceConfigs({
-            name,
-            body: {
-              instanceConfig: {
-                name,
-                displayName,
-                labels: desiredLabels,
-              },
-              updateMask: fieldMask.join(","),
+            instanceConfig: {
+              name,
+              displayName,
+              labels: desiredLabels,
             },
+            updateMask: fieldMask.join(","),
+            name,
           }),
         );
         yield* waitForOperation(patched);

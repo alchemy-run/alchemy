@@ -293,13 +293,11 @@ export const DnsThreatDetectorProvider = () =>
       if (current === undefined) {
         yield* networksecurity
           .createProjectsLocationsDnsThreatDetectors({
+            provider,
+            labels: desiredLabels,
+            excludedNetworks,
             parent: parentOf(env.project, location),
             dnsThreatDetectorId,
-            body: {
-              provider,
-              labels: desiredLabels,
-              excludedNetworks,
-            },
           })
           .pipe(
             Effect.retry({
@@ -327,13 +325,10 @@ export const DnsThreatDetectorProvider = () =>
 
       if (updateMask.length > 0) {
         yield* networksecurity.patchProjectsLocationsDnsThreatDetectors({
+          labels: desiredLabels,
+          excludedNetworks,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            excludedNetworks,
-          },
         });
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }

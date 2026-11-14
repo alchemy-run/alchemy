@@ -203,11 +203,9 @@ export const RulesetProvider = () =>
       if (current === undefined) {
         const created = yield* firebaserules
           .createProjectsRulesets({
+            source: desiredSource,
+            attachmentPoint: news.attachmentPoint,
             name: parent,
-            body: {
-              source: desiredSource,
-              attachmentPoint: news.attachmentPoint,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>

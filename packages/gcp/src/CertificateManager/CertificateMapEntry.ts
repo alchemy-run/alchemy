@@ -657,9 +657,9 @@ export const CertificateMapEntryProvider = () =>
       if (current === undefined) {
         const created = yield* certificatemanager
           .createProjectsLocationsCertificateMapsCertificateMapEntries({
+            ...toCreateBody(news, match, certificates, desiredLabels),
             parent: parent.parent,
             certificateMapEntryId,
-            body: toCreateBody(news, match, certificates, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -696,14 +696,11 @@ export const CertificateMapEntryProvider = () =>
 
         const operation =
           yield* certificatemanager.patchProjectsLocationsCertificateMapsCertificateMapEntries({
+            labels: desiredLabels,
+            description: news.description,
+            certificates,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-              certificates,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

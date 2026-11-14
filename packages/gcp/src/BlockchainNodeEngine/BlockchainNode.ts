@@ -578,9 +578,9 @@ export const BlockchainNodeProvider = () =>
       if (current === undefined) {
         const created = yield* bne
           .createProjectsLocationsBlockchainNodes({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             blockchainNodeId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -625,24 +625,19 @@ export const BlockchainNodeProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* bne.patchProjectsLocationsBlockchainNodes({
+          labels: desiredLabels,
+          ethereumDetails:
+            feeChanged || relaysChanged
+              ? {
+                  validatorConfig: {
+                    beaconFeeRecipient:
+                      desiredValidator?.beaconFeeRecipient ?? observedValidator?.beaconFeeRecipient,
+                    mevRelayUrls: desiredValidator?.mevRelayUrls ?? observedValidator?.mevRelayUrls,
+                  },
+                }
+              : undefined,
           name: latest.name ?? name,
           updateMask: mask,
-          body: {
-            name: latest.name ?? name,
-            labels: desiredLabels,
-            ethereumDetails:
-              feeChanged || relaysChanged
-                ? {
-                    validatorConfig: {
-                      beaconFeeRecipient:
-                        desiredValidator?.beaconFeeRecipient ??
-                        observedValidator?.beaconFeeRecipient,
-                      mevRelayUrls:
-                        desiredValidator?.mevRelayUrls ?? observedValidator?.mevRelayUrls,
-                    },
-                  }
-                : undefined,
-          },
         });
         yield* waitForOperation(operation);
         latest = yield* waitUntilExists(getByName(latest.name ?? name), latest.name ?? name);

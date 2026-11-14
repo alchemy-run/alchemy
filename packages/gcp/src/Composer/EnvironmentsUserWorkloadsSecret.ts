@@ -226,11 +226,9 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
       if (current === undefined) {
         const created = yield* composer
           .createProjectsLocationsEnvironmentsUserWorkloadsSecrets({
+            name,
+            data: desiredData,
             parent,
-            body: {
-              name,
-              data: desiredData,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -250,11 +248,8 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
 
       if (shouldSync) {
         current = yield* composer.updateProjectsLocationsEnvironmentsUserWorkloadsSecrets({
+          data: desiredData,
           name: current.name ?? name,
-          body: {
-            name: current.name ?? name,
-            data: desiredData,
-          },
         });
       }
 

@@ -331,14 +331,11 @@ export const GlossariesCategoryProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsGlossariesCategories({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
             parent: resolved.parent,
             categoryId,
-            body: {
-              parent: hierarchyParent,
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             retryQuota,
@@ -364,6 +361,10 @@ export const GlossariesCategoryProvider = () =>
       if (labelsChanged || descriptionChanged || displayNameChanged || parentChanged) {
         current = yield* retryQuota(
           dataplex.patchProjectsLocationsGlossariesCategories({
+            parent: hierarchyParent,
+            labels: desiredLabels,
+            description: news.description,
+            displayName: news.displayName,
             name: current.name ?? name,
             updateMask: [
               labelsChanged ? "labels" : undefined,
@@ -373,13 +374,6 @@ export const GlossariesCategoryProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              parent: hierarchyParent,
-              labels: desiredLabels,
-              description: news.description,
-              displayName: news.displayName,
-            },
           }),
         );
       }

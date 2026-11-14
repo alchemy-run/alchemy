@@ -218,8 +218,8 @@ export const ConnectionsEntityTypesEntityProvider = () =>
       if (current === undefined) {
         current = yield* retryTransient(
           connectors.createProjectsLocationsConnectionsEntityTypesEntities({
+            fields: desiredFields,
             parent,
-            body: { fields: desiredFields },
           }),
         );
       }
@@ -234,8 +234,8 @@ export const ConnectionsEntityTypesEntityProvider = () =>
       if (fieldsChanged && currentName.length > 0) {
         const patched = yield* retryTransient(
           connectors.patchProjectsLocationsConnectionsEntityTypesEntities({
+            fields: desiredFields,
             name: currentName,
-            body: { fields: desiredFields },
           }),
         );
         current = yield* refresh(currentName, patched);

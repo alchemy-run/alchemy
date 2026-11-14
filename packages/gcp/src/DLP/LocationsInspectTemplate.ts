@@ -278,16 +278,14 @@ export const LocationsInspectTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsLocationsInspectTemplates({
-            parent: locationParent(env.project, location),
-            body: {
-              templateId,
-              inspectTemplate: {
-                displayName: news.displayName,
-                description,
-                inspectConfig: news.inspectConfig,
-                allowLimitedAvailabilityInfoTypes,
-              },
+            templateId,
+            inspectTemplate: {
+              displayName: news.displayName,
+              description,
+              inspectConfig: news.inspectConfig,
+              allowLimitedAvailabilityInfoTypes,
             },
+            parent: locationParent(env.project, location),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -305,21 +303,19 @@ export const LocationsInspectTemplateProvider = () =>
 
       if (displayChanged || descriptionChanged || configChanged || limitedChanged) {
         current = yield* dlp.patchProjectsLocationsInspectTemplates({
-          name: current.name ?? name,
-          body: {
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              configChanged ? "inspectConfig" : undefined,
-              limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
-            ),
-            inspectTemplate: {
-              displayName: news.displayName,
-              description,
-              inspectConfig: news.inspectConfig,
-              allowLimitedAvailabilityInfoTypes,
-            },
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            configChanged ? "inspectConfig" : undefined,
+            limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
+          ),
+          inspectTemplate: {
+            displayName: news.displayName,
+            description,
+            inspectConfig: news.inspectConfig,
+            allowLimitedAvailabilityInfoTypes,
           },
+          name: current.name ?? name,
         });
       }
 

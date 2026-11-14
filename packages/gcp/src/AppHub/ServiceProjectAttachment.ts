@@ -212,11 +212,9 @@ export const ServiceProjectAttachmentProvider = () =>
       if (current === undefined) {
         const created = yield* apphub
           .createProjectsLocationsServiceProjectAttachments({
+            serviceProject,
             parent,
             serviceProjectAttachmentId: attachmentId,
-            body: {
-              serviceProject,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

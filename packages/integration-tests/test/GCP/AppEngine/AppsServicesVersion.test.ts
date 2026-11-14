@@ -67,12 +67,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         appengine.createAppsServicesVersions({
+          id: "alchemy-probe",
+          runtime: "python311",
           appsId: project,
           servicesId: "default",
-          body: {
-            id: "alchemy-probe",
-            runtime: "python311",
-          },
         }),
       );
       expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);

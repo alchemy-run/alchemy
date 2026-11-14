@@ -407,14 +407,12 @@ export const InterconnectAttachmentGroupProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInterconnectAttachmentGroups({
+            name: interconnectAttachmentGroupName,
+            description: desiredDescription,
+            intent,
+            attachments: news.attachments,
+            interconnectGroup: news.interconnectGroup,
             project: env.project,
-            body: {
-              name: interconnectAttachmentGroupName,
-              description: desiredDescription,
-              intent,
-              attachments: news.attachments,
-              interconnectGroup: news.interconnectGroup,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -441,16 +439,14 @@ export const InterconnectAttachmentGroupProvider = () =>
           env.project,
           interconnectAttachmentGroupName,
           compute.patchInterconnectAttachmentGroups({
+            etag: current.etag,
+            description: desiredDescription,
+            intent,
+            attachments: news.attachments !== undefined ? news.attachments : current.attachments,
+            interconnectGroup: news.interconnectGroup ?? current.interconnectGroup,
             project: env.project,
             interconnectAttachmentGroup: interconnectAttachmentGroupName,
             updateMask: "description,intent,attachments,interconnectGroup",
-            body: {
-              etag: current.etag,
-              description: desiredDescription,
-              intent,
-              attachments: news.attachments !== undefined ? news.attachments : current.attachments,
-              interconnectGroup: news.interconnectGroup ?? current.interconnectGroup,
-            },
           }),
         );
         current = (yield* getByName(env.project, interconnectAttachmentGroupName)) ?? current;

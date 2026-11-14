@@ -588,14 +588,12 @@ export const AutoscalerProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertAutoscalers({
+            name: autoscalerName,
+            target,
+            description,
+            autoscalingPolicy: policy,
             project: env.project,
             zone,
-            body: {
-              name: autoscalerName,
-              target,
-              description,
-              autoscalingPolicy: policy,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -622,15 +620,13 @@ export const AutoscalerProvider = () =>
       if (descriptionChanged || policyChanged || targetChanged) {
         yield* compute
           .patchAutoscalers({
+            name: autoscalerName,
+            target,
+            description,
+            autoscalingPolicy: policy,
             project: env.project,
             zone,
             autoscaler: autoscalerName,
-            body: {
-              name: autoscalerName,
-              target,
-              description,
-              autoscalingPolicy: policy,
-            },
           })
           .pipe(
             Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)),

@@ -231,8 +231,8 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       if (current === undefined) {
         current = yield* retryTransient(
           dataform.createProjectsLocationsRepositoriesWorkflowInvocations({
+            ...invocationBody(news),
             parent: repository,
-            body: invocationBody(news),
           }),
         );
       }

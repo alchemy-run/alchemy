@@ -338,9 +338,9 @@ export const SecurityMonitoringConditionProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsSecurityMonitoringConditions({
+            ...toBody(news),
             parent: orgParent(organization),
             securityMonitoringConditionId,
-            body: toBody(news),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -372,9 +372,9 @@ export const SecurityMonitoringConditionProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* apigee.patchOrganizationsSecurityMonitoringConditions({
+          ...toBody(news),
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: toBody(news),
         });
       }
 

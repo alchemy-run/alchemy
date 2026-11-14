@@ -58,25 +58,19 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidpublisher.createMonetizationSubscriptionsBasePlansOffers({
+          phases: [
+            {
+              duration: "P1W",
+              recurrenceCount: 1,
+              regionalConfigs: [{ regionCode: "US", free: {} }],
+            },
+          ],
+          regionalConfigs: [{ regionCode: "US", newSubscriberAvailability: true }],
           packageName: probePackageName,
           productId: "alchemy_probe_sub",
           basePlanId: "monthly",
           offerId: "intro",
           "regionsVersion.version": "2025/01",
-          body: {
-            packageName: probePackageName,
-            productId: "alchemy_probe_sub",
-            basePlanId: "monthly",
-            offerId: "intro",
-            phases: [
-              {
-                duration: "P1W",
-                recurrenceCount: 1,
-                regionalConfigs: [{ regionCode: "US", free: {} }],
-              },
-            ],
-            regionalConfigs: [{ regionCode: "US", newSubscriberAvailability: true }],
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

@@ -20,6 +20,33 @@ export type BoatError =
   | boat.FileNotFound
   | boat.ForkNeedsSnapshot
   | boat.SaveInProgress
+  | boat.AgentOutdated
+  | boat.AmbiguousOrg
+  | boat.CountRequiresFrom
+  | boat.CountWithFailFast
+  | boat.CountWithHostedPorts
+  | boat.FailFastWithHostedPorts
+  | boat.FastModeNotSupported
+  | boat.GatewayError
+  | boat.IdempotencyInProgress
+  | boat.IdempotencyKeyReused
+  | boat.InvalidFiles
+  | boat.InvalidHostedPorts
+  | boat.InvalidSetupScript
+  | boat.MachineClassPlanRequired
+  | boat.MemberSandboxLimitReached
+  | boat.MonitoringOffForAccount
+  | boat.NoReadyMachine
+  | boat.NoRunningTurn
+  | boat.NotOrgSandbox
+  | boat.RecoverResetFailed
+  | boat.RecoverTooSoon
+  | boat.RecoverUnsupported
+  | boat.SandboxHasNoMachine
+  | boat.SandboxIsReachable
+  | boat.SandboxLimitReached
+  | boat.SnapshotCompacted
+  | boat.SnapshotsOffForAccount
   | ExecTimedOut
   | SnapshotFailed
   | BoatUnexpectedResponse;

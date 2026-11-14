@@ -29,10 +29,7 @@ export const EvaluateGkePolicyHttp = Layer.effect(
       return Effect.fn(`GCP.BinaryAuthorization.EvaluateGkePolicy(${policy.LogicalId})`)(function* (
         request: EvaluateGkePolicyRequest,
       ) {
-        return yield* evaluate({
-          name: yield* name,
-          body: request,
-        });
+        return yield* evaluate({ ...request, name: yield* name });
       });
     });
   }),

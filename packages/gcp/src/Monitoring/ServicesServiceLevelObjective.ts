@@ -527,9 +527,9 @@ export const ServicesServiceLevelObjectiveProvider = () =>
       if (current === undefined) {
         const created = yield* monitoring
           .createServicesServiceLevelObjectives({
+            ...body,
             parent: service,
             serviceLevelObjectiveId: sloId,
-            body,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -574,12 +574,9 @@ export const ServicesServiceLevelObjectiveProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchServicesServiceLevelObjectives({
+          ...body,
           name: resource,
           updateMask: updateMask.join(","),
-          body: {
-            ...body,
-            name: resource,
-          },
         });
       }
 

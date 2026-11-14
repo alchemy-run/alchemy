@@ -564,9 +564,9 @@ export const SecurityProfileProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsSecurityProfiles({
+            ...toCreateBody(news, type, desiredLabels),
             parent: parentOf(env.project, location),
             securityProfileId,
-            body: toCreateBody(news, type, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -611,22 +611,17 @@ export const SecurityProfileProvider = () =>
           urlChanged ? "urlFilteringProfile" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsSecurityProfiles({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
+          threatPreventionProfile:
+            type === "THREAT_PREVENTION"
+              ? (toThreatPrevention(news.threatPreventionProfile) ?? {})
+              : undefined,
+          urlFilteringProfile:
+            type === "URL_FILTERING" ? (toUrlFiltering(news.urlFilteringProfile) ?? {}) : undefined,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-            threatPreventionProfile:
-              type === "THREAT_PREVENTION"
-                ? (toThreatPrevention(news.threatPreventionProfile) ?? {})
-                : undefined,
-            urlFilteringProfile:
-              type === "URL_FILTERING"
-                ? (toUrlFiltering(news.urlFilteringProfile) ?? {})
-                : undefined,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

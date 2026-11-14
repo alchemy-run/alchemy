@@ -280,14 +280,12 @@ export const OnlineEvaluatorProvider = () =>
 
       if (current === undefined) {
         const created = yield* aiplatform.createProjectsLocationsOnlineEvaluators({
+          displayName,
+          agentResource: news.agentResource,
+          metricSources: news.metricSources,
+          config,
+          cloudObservability: news.cloudObservability,
           parent,
-          body: {
-            displayName,
-            agentResource: news.agentResource,
-            metricSources: news.metricSources,
-            config,
-            cloudObservability: news.cloudObservability,
-          },
         });
         yield* waitForOperation(created, { alreadyExistsOk: true });
         const createdName = resourceNameFromOperation(created);
@@ -316,14 +314,11 @@ export const OnlineEvaluatorProvider = () =>
           metricsChanged ? "metric_sources" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched = yield* aiplatform.patchProjectsLocationsOnlineEvaluators({
+          displayName,
+          config,
+          metricSources: news.metricSources,
           name: observedName,
           updateMask: updateMask.join(","),
-          body: {
-            name: observedName,
-            displayName,
-            config,
-            metricSources: news.metricSources,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);

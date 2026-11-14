@@ -319,23 +319,21 @@ export const AppProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsApps({
+            displayName,
+            description,
+            metadata,
+            globalInstruction: news.globalInstruction,
+            toolExecutionMode: news.toolExecutionMode,
+            timeZoneSettings,
+            modelSettings,
+            rootAgent: news.rootAgent,
+            guardrails: news.guardrails,
+            locked: news.locked,
+            pinned: news.pinned,
+            defaultChannelProfile: news.defaultChannelProfile,
+            languageSettings: news.languageSettings,
             parent,
             appId,
-            body: {
-              displayName,
-              description,
-              metadata,
-              globalInstruction: news.globalInstruction,
-              toolExecutionMode: news.toolExecutionMode,
-              timeZoneSettings,
-              modelSettings,
-              rootAgent: news.rootAgent,
-              guardrails: news.guardrails,
-              locked: news.locked,
-              pinned: news.pinned,
-              defaultChannelProfile: news.defaultChannelProfile,
-              languageSettings: news.languageSettings,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -380,6 +378,19 @@ export const AppProvider = () =>
       ) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsApps({
+            displayName,
+            description,
+            metadata,
+            globalInstruction: news.globalInstruction,
+            toolExecutionMode: news.toolExecutionMode,
+            timeZoneSettings,
+            modelSettings,
+            rootAgent: news.rootAgent,
+            guardrails: news.guardrails,
+            locked: news.locked,
+            pinned: news.pinned,
+            defaultChannelProfile: news.defaultChannelProfile,
+            languageSettings: news.languageSettings,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -396,21 +407,6 @@ export const AppProvider = () =>
               channelChanged ? "default_channel_profile" : undefined,
               languageChanged ? "language_settings" : undefined,
             ),
-            body: {
-              displayName,
-              description,
-              metadata,
-              globalInstruction: news.globalInstruction,
-              toolExecutionMode: news.toolExecutionMode,
-              timeZoneSettings,
-              modelSettings,
-              rootAgent: news.rootAgent,
-              guardrails: news.guardrails,
-              locked: news.locked,
-              pinned: news.pinned,
-              defaultChannelProfile: news.defaultChannelProfile,
-              languageSettings: news.languageSettings,
-            },
           }),
         );
       }

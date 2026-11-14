@@ -205,10 +205,7 @@ export const SynonymSetProvider = () =>
 
       if (current === undefined) {
         const created = yield* cw
-          .createProjectsLocationsSynonymSets({
-            parent,
-            body: { context, synonyms },
-          })
+          .createProjectsLocationsSynonymSets({ context, synonyms, parent })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* waitUntilExists(getByName(name), name));
       }
@@ -224,12 +221,9 @@ export const SynonymSetProvider = () =>
       const synonymsChanged = !sameJson(current.synonyms ?? [], synonyms);
       if (contextChanged || synonymsChanged) {
         current = yield* cw.patchProjectsLocationsSynonymSets({
+          context,
+          synonyms,
           name: currentName,
-          body: {
-            name: currentName,
-            context,
-            synonyms,
-          },
         });
       }
 

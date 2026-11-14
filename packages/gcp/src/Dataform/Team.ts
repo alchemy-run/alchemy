@@ -184,8 +184,8 @@ export const TeamProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsTeamFolders({
+            displayName,
             parent: locationParent(env.project, location),
-            body: { displayName },
           }),
         ).pipe(
           Effect.catchTag("Conflict", () => findOwned(env.project, location, id, news.displayName)),
@@ -206,9 +206,9 @@ export const TeamProvider = () =>
       if (!sameText(current.displayName, displayName)) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsTeamFolders({
+            displayName,
             name: currentName,
             updateMask: updateMaskOf("displayName"),
-            body: { displayName },
           }),
         );
       }

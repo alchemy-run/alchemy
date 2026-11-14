@@ -434,20 +434,18 @@ export const UnitOperationProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsUnitOperations({
+            unit,
+            provision,
+            upgrade,
+            deprovision: news.deprovision === true ? {} : undefined,
+            parentUnitOperation,
+            rollout: news.rollout,
+            schedule: news.schedule,
+            cancel: news.cancel,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             unitOperationId,
-            body: {
-              unit,
-              provision,
-              upgrade,
-              deprovision: news.deprovision === true ? {} : undefined,
-              parentUnitOperation,
-              rollout: news.rollout,
-              schedule: news.schedule,
-              cancel: news.cancel,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -475,16 +473,13 @@ export const UnitOperationProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsUnitOperations({
+          etag: current.etag,
+          cancel: news.cancel,
+          schedule: news.schedule,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            cancel: news.cancel,
-            schedule: news.schedule,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

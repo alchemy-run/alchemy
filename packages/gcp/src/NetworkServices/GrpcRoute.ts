@@ -502,16 +502,14 @@ export const GrpcRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsGrpcRoutes({
+            labels: desiredLabels,
+            description: news.description,
+            hostnames: desiredHostnames,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
             parent: parentOf(env.project, location),
             grpcRouteId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              hostnames: desiredHostnames,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-            },
           })
           .pipe(
             Effect.retry({
@@ -547,17 +545,14 @@ export const GrpcRouteProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsGrpcRoutes({
+          labels: desiredLabels,
+          description: news.description,
+          hostnames: desiredHostnames,
+          rules: desiredRules,
+          meshes: desiredMeshes,
+          gateways: desiredGateways,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            hostnames: desiredHostnames,
-            rules: desiredRules,
-            meshes: desiredMeshes,
-            gateways: desiredGateways,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

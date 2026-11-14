@@ -65,13 +65,11 @@ test.provider(
       // 203.0.113.0/24 is TEST-NET-3; it can never be reserved in the project.
       const error = yield* Effect.flip(
         websecurityscanner.createProjectsScanConfigs({
+          displayName: "unreserved",
+          startingUrls: ["http://203.0.113.9/"],
+          targetPlatforms: ["COMPUTE"],
+          exportToSecurityCommandCenter: "DISABLED",
           parent: `projects/${project}`,
-          body: {
-            displayName: "unreserved",
-            startingUrls: ["http://203.0.113.9/"],
-            targetPlatforms: ["COMPUTE"],
-            exportToSecurityCommandCenter: "DISABLED",
-          },
         }),
       );
       expect(error._tag).toEqual("StartingUrlIpNotReserved");

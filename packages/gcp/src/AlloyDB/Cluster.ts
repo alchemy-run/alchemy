@@ -923,16 +923,8 @@ export const ClusterProvider = () =>
         const body = toCreateBody(news, desiredLabels, clusterType, networkConfig, pscEnabled);
         const created = yield* (
           clusterType === "SECONDARY"
-            ? alloydb.createsecondaryProjectsLocationsClusters({
-                parent,
-                clusterId,
-                body,
-              })
-            : alloydb.createProjectsLocationsClusters({
-                parent,
-                clusterId,
-                body,
-              })
+            ? alloydb.createsecondaryProjectsLocationsClusters({ ...body, parent, clusterId })
+            : alloydb.createProjectsLocationsClusters({ ...body, parent, clusterId })
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1013,21 +1005,18 @@ export const ClusterProvider = () =>
 
         const patched = yield* alloydb
           .patchProjectsLocationsClusters({
+            labels: desiredLabels,
+            displayName: news.displayName,
+            annotations: news.annotations,
+            automatedBackupPolicy: news.automatedBackupPolicy,
+            continuousBackupConfig: news.continuousBackupConfig,
+            maintenanceUpdatePolicy: news.maintenanceUpdatePolicy,
+            sslConfig: news.sslConfig,
+            dataplexConfig: news.dataplexConfig,
+            subscriptionType: news.subscriptionType,
+            databaseVersion: desiredVersion,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              displayName: news.displayName,
-              annotations: news.annotations,
-              automatedBackupPolicy: news.automatedBackupPolicy,
-              continuousBackupConfig: news.continuousBackupConfig,
-              maintenanceUpdatePolicy: news.maintenanceUpdatePolicy,
-              sslConfig: news.sslConfig,
-              dataplexConfig: news.dataplexConfig,
-              subscriptionType: news.subscriptionType,
-              databaseVersion: desiredVersion,
-            },
           })
           .pipe(
             Effect.retry({

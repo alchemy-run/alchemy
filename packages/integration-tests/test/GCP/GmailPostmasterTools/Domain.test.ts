@@ -48,9 +48,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        gmailpostmastertools.createDomains({
-          body: { domainId: "alchemy-probe.example.com" },
-        }),
+        gmailpostmastertools.createDomains({ domainId: "alchemy-probe.example.com" }),
       );
       expect(error._tag).toEqual("InsufficientScopes");
 

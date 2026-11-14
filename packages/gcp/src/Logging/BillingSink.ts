@@ -375,10 +375,10 @@ export const BillingSinkProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createBillingAccountsSinks({
+            ...toCreateBody(sinkId, news, desiredDescription),
             parent: billingAccountParent(billingAccountId),
             uniqueWriterIdentity: news.uniqueWriterIdentity,
             customWriterIdentity: news.customWriterIdentity,
-            body: toCreateBody(sinkId, news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -425,11 +425,11 @@ export const BillingSinkProvider = () =>
           };
         }
         current = yield* logging.patchBillingAccountsSinks({
+          ...body,
           sinkName: current.resourceName ?? name,
           uniqueWriterIdentity: news.uniqueWriterIdentity,
           customWriterIdentity: news.customWriterIdentity,
           updateMask: updateMask.join(","),
-          body,
         });
       }
 

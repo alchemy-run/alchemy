@@ -410,13 +410,11 @@ export const ProcessesRunsLineageEventProvider = () =>
         const startTime = news.startTime ?? (yield* nowIso());
         const created = yield* datalineage
           .createProjectsLocationsProcessesRunsLineageEvents({
+            name,
+            startTime,
+            endTime: news.endTime,
+            links: linksOf(news.links),
             parent: run,
-            body: {
-              name,
-              startTime,
-              endTime: news.endTime,
-              links: linksOf(news.links),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

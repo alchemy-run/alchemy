@@ -280,10 +280,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createGroups({
-            initialGroupConfig: news.initialGroupConfig ?? "EMPTY",
-            body: desired,
-          })
+          .createGroups({ ...desired, initialGroupConfig: news.initialGroupConfig ?? "EMPTY" })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
@@ -336,13 +333,11 @@ export const GroupProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         const patched = yield* cloudidentity.patchGroups({
+          displayName,
+          description,
+          labels,
           name,
           updateMask,
-          body: {
-            displayName,
-            description,
-            labels,
-          },
         });
         yield* waitForOperation(patched).pipe(
           Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),

@@ -317,14 +317,12 @@ export const PrivateConnectionsRouteProvider = () =>
       if (current === undefined) {
         const created = yield* ds
           .createProjectsLocationsPrivateConnectionsRoutes({
+            displayName,
+            labels: desiredLabels,
+            destinationAddress: news.destinationAddress,
+            destinationPort: news.destinationPort,
             parent,
             routeId,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              destinationAddress: news.destinationAddress,
-              destinationPort: news.destinationPort,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* settleOperation(created);

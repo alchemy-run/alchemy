@@ -416,6 +416,11 @@ export const ServiceConnectionPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsServiceConnectionPolicies({
+            network,
+            serviceClass: news.serviceClass,
+            pscConfig,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceConnectionPolicyId,
             subnetworkMode: news.subnetworkMode,
@@ -424,13 +429,6 @@ export const ServiceConnectionPolicyProvider = () =>
             "autoSubnetworkConfig.allocRangeSpace": news.autoSubnetworkConfig?.allocRangeSpace
               ? [...news.autoSubnetworkConfig.allocRangeSpace]
               : undefined,
-            body: {
-              network,
-              serviceClass: news.serviceClass,
-              pscConfig,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -488,16 +486,13 @@ export const ServiceConnectionPolicyProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkconnectivity.patchProjectsLocationsServiceConnectionPolicies({
+            labels: desiredLabels,
+            description: news.description,
+            serviceClass: news.serviceClass,
+            pscConfig,
+            etag: current.etag,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              serviceClass: news.serviceClass,
-              pscConfig,
-              etag: current.etag,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

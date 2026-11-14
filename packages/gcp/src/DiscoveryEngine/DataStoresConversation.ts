@@ -152,11 +152,9 @@ export const DataStoresConversationProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresConversations({
+            userPseudoId,
+            state: news.state,
             parent,
-            body: {
-              userPseudoId,
-              state: news.state,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
@@ -173,6 +171,8 @@ export const DataStoresConversationProvider = () =>
 
       if (userChanged || stateChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStoresConversations({
+          userPseudoId,
+          state: news.state,
           name: current.name ?? "",
           updateMask: [
             userChanged ? "user_pseudo_id" : undefined,
@@ -180,11 +180,6 @@ export const DataStoresConversationProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name,
-            userPseudoId,
-            state: news.state,
-          },
         });
       }
 

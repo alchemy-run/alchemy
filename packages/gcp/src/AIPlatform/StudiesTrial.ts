@@ -207,17 +207,13 @@ export const StudiesTrialProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsStudiesTrials({
+            clientId,
+            state: "ACTIVE",
+            parameters: news.parameters?.map((parameter) => ({
+              parameterId: parameter.parameterId,
+              value: parameter.value,
+            })),
             parent: news.parent,
-            body: {
-              clientId,
-              // Vizier rejects user trials without a status ("Can not add
-              // trial with status: UNKNOWN").
-              state: "ACTIVE",
-              parameters: news.parameters?.map((parameter) => ({
-                parameterId: parameter.parameterId,
-                value: parameter.value,
-              })),
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>

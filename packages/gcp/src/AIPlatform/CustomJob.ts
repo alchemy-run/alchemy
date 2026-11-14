@@ -281,13 +281,11 @@ export const CustomJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsCustomJobs({
+            displayName,
+            jobSpec: news.jobSpec,
+            labels: desiredLabels,
+            encryptionSpec: news.encryptionSpec,
             parent: parentOf(env.project, location),
-            body: {
-              displayName,
-              jobSpec: news.jobSpec,
-              labels: desiredLabels,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;

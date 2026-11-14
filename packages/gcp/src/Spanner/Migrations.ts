@@ -80,7 +80,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
     );
 
   const runDdl = (statements: ReadonlyArray<string>) =>
-    updateDdl({ database, body: { statements: [...statements] } }).pipe(
+    updateDdl({ statements: [...statements], database }).pipe(
       Effect.mapError(migrationError(`Spanner DDL on ${database}`)),
       Effect.flatMap(awaitDdl),
     );
@@ -96,10 +96,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
     Effect.gen(function* () {
       for (let attempt = 0; attempt < MAX_DDL_ATTEMPTS; attempt++) {
         const operationId = `${base}_${attempt}`;
-        const submitted = yield* updateDdl({
-          database,
-          body: { statements: [statement], operationId },
-        }).pipe(
+        const submitted = yield* updateDdl({ statements: [statement], operationId, database }).pipe(
           Effect.map((operation) => ({ operation, replayed: false })),
           Effect.catchTag("DdlOperationIdExists", () =>
             getOperation({ name: `${database}/operations/${operationId}` }).pipe(
@@ -120,12 +117,10 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
   const runDml = (statements: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const result = yield* executeBatchDml({
+        transaction: { begin: { readWrite: {} } },
+        seqno: "1",
+        statements: statements.map((sql) => ({ sql })),
         session,
-        body: {
-          transaction: { begin: { readWrite: {} } },
-          seqno: "1",
-          statements: statements.map((sql) => ({ sql })),
-        },
       }).pipe(Effect.mapError(migrationError(`Spanner DML on ${database}`)));
       if (result.status?.code) {
         return yield* new MigrationError({
@@ -138,7 +133,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
           message: `Spanner returned no transaction for DML on ${database}`,
         });
       }
-      yield* commit({ session, body: { transactionId } }).pipe(
+      yield* commit({ transactionId, session }).pipe(
         Effect.mapError(migrationError(`Committing DML on ${database}`)),
       );
     });
@@ -166,7 +161,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
       ? { migrationTableId: "spanner" as const, defaultSchema: "public" }
       : {}),
     query: (sql) =>
-      executeSql({ session, body: { sql: splitAll([sql])[0] ?? sql } }).pipe(
+      executeSql({ sql: splitAll([sql])[0] ?? sql, session }).pipe(
         Effect.mapError(migrationError(`Spanner query on ${database}`)),
         Effect.map((result) => {
           const fields = (result.metadata?.rowType?.fields ?? []).map((field) => field.name ?? "");
@@ -217,7 +212,7 @@ export const runDatabaseMigrations = Effect.fn(function* (options: {
     stamped: options.stamped,
     withExecutor: (apply) =>
       Effect.acquireUseRelease(
-        createSession({ database: options.database, body: {} }).pipe(
+        createSession({ database: options.database }).pipe(
           Effect.mapError(migrationError(`Opening a session on ${options.database}`)),
         ),
         (session) =>

@@ -309,10 +309,7 @@ export const InstancesNatAddressProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsInstancesNatAddresses({
-            parent,
-            body: { name: natAddressId },
-          })
+          .createOrganizationsInstancesNatAddresses({ name: natAddressId, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });

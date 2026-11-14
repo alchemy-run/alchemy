@@ -48,11 +48,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         gmailpostmastertools.createDomainsUsers({
+          userId: "alchemy-probe@example.com",
+          permission: "READER",
           parent: "domains/alchemy-missing.example.com",
-          body: {
-            userId: "alchemy-probe@example.com",
-            permission: "READER",
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

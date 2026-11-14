@@ -342,19 +342,17 @@ export const ScheduleProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsSchedules({
+            displayName,
+            cron: news.cron,
+            maxConcurrentRunCount,
+            maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
+            maxRunCount: news.maxRunCount,
+            startTime: news.startTime,
+            endTime: news.endTime,
+            allowQueueing: news.allowQueueing === true ? true : undefined,
+            createPipelineJobRequest: pipelineRequest,
+            createNotebookExecutionJobRequest: notebookRequest,
             parent,
-            body: {
-              displayName,
-              cron: news.cron,
-              maxConcurrentRunCount,
-              maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
-              maxRunCount: news.maxRunCount,
-              startTime: news.startTime,
-              endTime: news.endTime,
-              allowQueueing: news.allowQueueing === true ? true : undefined,
-              createPipelineJobRequest: pipelineRequest,
-              createNotebookExecutionJobRequest: notebookRequest,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
@@ -399,6 +397,14 @@ export const ScheduleProvider = () =>
         queueChanged
       ) {
         current = yield* aiplatform.patchProjectsLocationsSchedules({
+          displayName,
+          cron: news.cron,
+          maxConcurrentRunCount,
+          maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
+          maxRunCount: news.maxRunCount,
+          startTime: news.startTime,
+          endTime: news.endTime,
+          allowQueueing: news.allowQueueing === true,
           name,
           updateMask: [
             cronChanged ? "cron" : undefined,
@@ -412,17 +418,6 @@ export const ScheduleProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            cron: news.cron,
-            maxConcurrentRunCount,
-            maxConcurrentActiveRunCount: news.maxConcurrentActiveRunCount,
-            maxRunCount: news.maxRunCount,
-            startTime: news.startTime,
-            endTime: news.endTime,
-            allowQueueing: news.allowQueueing === true,
-          },
         });
       }
 
@@ -431,10 +426,7 @@ export const ScheduleProvider = () =>
         yield* aiplatform.pauseProjectsLocationsSchedules({ name });
         current = (yield* getByName(name)) ?? current;
       } else if (!desiredPaused && isPaused) {
-        yield* aiplatform.resumeProjectsLocationsSchedules({
-          name,
-          body: { catchUp: false },
-        });
+        yield* aiplatform.resumeProjectsLocationsSchedules({ catchUp: false, name });
         current = (yield* getByName(name)) ?? current;
       }
 

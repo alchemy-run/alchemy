@@ -364,14 +364,12 @@ export const FeaturestoreProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsFeaturestores({
+            labels: desiredLabels,
+            onlineServingConfig: news.onlineServingConfig,
+            onlineStorageTtlDays: news.onlineStorageTtlDays,
+            encryptionSpec: news.encryptionSpec,
             parent: `projects/${env.project}/locations/${location}`,
             featurestoreId: storeId,
-            body: {
-              labels: desiredLabels,
-              onlineServingConfig: news.onlineServingConfig,
-              onlineStorageTtlDays: news.onlineStorageTtlDays,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -411,14 +409,11 @@ export const FeaturestoreProvider = () =>
 
         const patched = yield* aiplatform
           .patchProjectsLocationsFeaturestores({
+            labels: desiredLabels,
+            onlineServingConfig: news.onlineServingConfig,
+            onlineStorageTtlDays: news.onlineStorageTtlDays,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              onlineServingConfig: news.onlineServingConfig,
-              onlineStorageTtlDays: news.onlineStorageTtlDays,
-            },
           })
           .pipe(
             Effect.retry({

@@ -318,12 +318,10 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         }
         const operation = yield* apigee
           .createOrganizationsEnvironmentsArchiveDeployments({
+            name,
+            gcsUri,
+            labels: desiredLabels,
             parent,
-            body: {
-              name,
-              gcsUri,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -346,9 +344,9 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         current = yield* apigee.patchOrganizationsEnvironmentsArchiveDeployments({
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: "labels",
-          body: { labels: desiredLabels },
         });
       }
 

@@ -60,9 +60,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         chromemanagement.createCustomersConnectorConfigs({
+          ...probeBody(project),
           parent: probeParent,
           connectorConfigId: "alchemy-probe",
-          body: probeBody(project),
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

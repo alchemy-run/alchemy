@@ -591,18 +591,16 @@ export const PacketMirroringProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertPacketMirrorings({
+            name: packetMirroringName,
+            description: desiredDescription,
+            enable: desiredEnable,
+            priority: desiredPriority,
+            network: { url: desiredNetwork },
+            collectorIlb: { url: desiredCollector },
+            mirroredResources: desiredMirrored,
+            filter: desiredFilter,
             project: env.project,
             region,
-            body: {
-              name: packetMirroringName,
-              description: desiredDescription,
-              enable: desiredEnable,
-              priority: desiredPriority,
-              network: { url: desiredNetwork },
-              collectorIlb: { url: desiredCollector },
-              mirroredResources: desiredMirrored,
-              filter: desiredFilter,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -655,10 +653,10 @@ export const PacketMirroringProvider = () =>
       if (Object.keys(patch).length > 0) {
         yield* compute
           .patchPacketMirrorings({
+            ...patch,
             project: env.project,
             region,
             packetMirroring: packetMirroringName,
-            body: patch,
           })
           .pipe(
             Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

@@ -642,9 +642,9 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* memcache
           .createProjectsLocationsInstances({
+            ...toCreateBody(news, desiredLabels, nodeCount, nodeConfig),
             parent: `projects/${env.project}/locations/${location}`,
             instanceId,
-            body: toCreateBody(news, desiredLabels, nodeCount, nodeConfig),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -670,8 +670,8 @@ export const InstanceProvider = () =>
         !versionDecreasing(currentVersion, desiredVersion)
       ) {
         const upgraded = yield* memcache.upgradeProjectsLocationsInstances({
+          memcacheVersion: desiredVersion,
           name,
-          body: { memcacheVersion: desiredVersion },
         });
         yield* waitForOperation(upgraded);
         current = yield* waitUntilReady(name);
@@ -707,16 +707,13 @@ export const InstanceProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* memcache.patchProjectsLocationsInstances({
+          labels: desiredLabels,
+          displayName: news.displayName,
+          nodeCount: desiredNodeCount,
+          maintenancePolicy: news.maintenancePolicy,
+          maintenanceVersion: news.maintenanceVersion,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            displayName: news.displayName,
-            nodeCount: desiredNodeCount,
-            maintenancePolicy: news.maintenancePolicy,
-            maintenanceVersion: news.maintenanceVersion,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
@@ -727,16 +724,14 @@ export const InstanceProvider = () =>
         paramsKey(current.parameters?.params) !== paramsKey(news.parameters);
       if (parametersChanged) {
         const updated = yield* memcache.updateParametersProjectsLocationsInstances({
+          updateMask: "parameters",
+          parameters: { params: news.parameters },
           name,
-          body: {
-            updateMask: "parameters",
-            parameters: { params: news.parameters },
-          },
         });
         yield* waitForOperation(updated);
         const applied = yield* memcache.applyParametersProjectsLocationsInstances({
+          applyAll: true,
           name,
-          body: { applyAll: true },
         });
         yield* waitForOperation(applied);
         current = yield* waitUntilReady(name);

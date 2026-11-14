@@ -436,15 +436,13 @@ export const RestorePlansRestoreProvider = () =>
       if (current === undefined) {
         const created = yield* gkebackup
           .createProjectsLocationsRestorePlansRestores({
+            backup,
+            filter: news.filter,
+            volumeDataRestorePolicyOverrides: news.volumeDataRestorePolicyOverrides,
+            description: news.description,
+            labels: desiredLabels,
             parent: plan,
             restoreId,
-            body: {
-              backup,
-              filter: news.filter,
-              volumeDataRestorePolicyOverrides: news.volumeDataRestorePolicyOverrides,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -466,13 +464,11 @@ export const RestorePlansRestoreProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkebackup.patchProjectsLocationsRestorePlansRestores({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

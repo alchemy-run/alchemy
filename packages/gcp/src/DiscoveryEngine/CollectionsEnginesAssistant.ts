@@ -252,16 +252,14 @@ export const CollectionsEnginesAssistantProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesAssistants({
+            displayName,
+            description,
+            webGroundingType: news.webGroundingType,
+            defaultWebGroundingToggleOff: groundingOff ? true : undefined,
+            generationConfig: news.generationConfig,
+            customerPolicy: news.customerPolicy,
             parent: news.engine,
             assistantId,
-            body: {
-              displayName,
-              description,
-              webGroundingType: news.webGroundingType,
-              defaultWebGroundingToggleOff: groundingOff ? true : undefined,
-              generationConfig: news.generationConfig,
-              customerPolicy: news.customerPolicy,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(fallbackName)));
         current = created ?? undefined;
@@ -291,6 +289,12 @@ export const CollectionsEnginesAssistantProvider = () =>
         policyChanged
       ) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesAssistants({
+          displayName,
+          description,
+          webGroundingType: news.webGroundingType,
+          defaultWebGroundingToggleOff: groundingOff,
+          generationConfig: news.generationConfig,
+          customerPolicy: news.customerPolicy,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -302,15 +306,6 @@ export const CollectionsEnginesAssistantProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description,
-            webGroundingType: news.webGroundingType,
-            defaultWebGroundingToggleOff: groundingOff,
-            generationConfig: news.generationConfig,
-            customerPolicy: news.customerPolicy,
-          },
         });
       }
 

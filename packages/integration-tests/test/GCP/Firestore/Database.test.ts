@@ -84,13 +84,12 @@ test.provider.skipIf(!!process.env.FAST)(
       // Alchemy writes no data into the database.
       const collections = yield* firestore.listCollectionIdsProjectsDatabasesDocuments({
         parent: `${created.name}/documents`,
-        body: {},
       });
       expect(collections.collectionIds ?? []).toEqual([]);
 
       yield* firestore.patchProjectsDatabasesDocuments({
+        fields: { name: { stringValue: "Alice" } },
         name: `${created.name}/documents/users/alice`,
-        body: { fields: { name: { stringValue: "Alice" } } },
       });
       const alice = yield* firestore.getProjectsDatabasesDocuments({
         name: `${created.name}/documents/users/alice`,

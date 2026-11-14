@@ -349,17 +349,15 @@ export const PublicDelegatedPrefixProvider = () =>
           env.project,
           region,
           compute.insertPublicDelegatedPrefixes({
+            name: prefixName,
+            description: desiredDescription,
+            parentPrefix: news.parentPrefix,
+            ipCidrRange: news.ipCidrRange,
+            mode: news.mode,
+            allocatablePrefixLength: news.allocatablePrefixLength,
+            isLiveMigration: news.isLiveMigration,
             project: env.project,
             region,
-            body: {
-              name: prefixName,
-              description: desiredDescription,
-              parentPrefix: news.parentPrefix,
-              ipCidrRange: news.ipCidrRange,
-              mode: news.mode,
-              allocatablePrefixLength: news.allocatablePrefixLength,
-              isLiveMigration: news.isLiveMigration,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -378,13 +376,11 @@ export const PublicDelegatedPrefixProvider = () =>
           env.project,
           region,
           compute.patchPublicDelegatedPrefixes({
+            description: desiredDescription,
+            fingerprint: current.fingerprint,
             project: env.project,
             region,
             publicDelegatedPrefix: prefixName,
-            body: {
-              description: desiredDescription,
-              fingerprint: current.fingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, region, prefixName)) ?? current;

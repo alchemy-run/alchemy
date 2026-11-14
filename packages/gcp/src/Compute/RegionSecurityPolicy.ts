@@ -507,10 +507,10 @@ const syncRules = (
           region,
           securityPolicyName,
           compute.addRuleRegionSecurityPolicies({
+            ...toRuleBody(rule),
             project,
             region,
             securityPolicy: securityPolicyName,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -522,11 +522,11 @@ const syncRules = (
           region,
           securityPolicyName,
           compute.patchRuleRegionSecurityPolicies({
+            ...toRuleBody(rule),
             project,
             region,
             securityPolicy: securityPolicyName,
             priority,
-            body: toRuleBody(rule),
           }),
         );
       }
@@ -651,9 +651,9 @@ export const RegionSecurityPolicyProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertRegionSecurityPolicies({
+            ...insertBody(securityPolicyName, news),
             project: env.project,
             region,
-            body: insertBody(securityPolicyName, news),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -724,10 +724,10 @@ export const RegionSecurityPolicyProvider = () =>
           region,
           securityPolicyName,
           compute.patchRegionSecurityPolicies({
+            ...patch,
             project: env.project,
             region,
             securityPolicy: securityPolicyName,
-            body: patch,
           }),
         );
         current = (yield* getByName(env.project, region, securityPolicyName)) ?? current;
@@ -747,13 +747,11 @@ export const RegionSecurityPolicyProvider = () =>
           region,
           securityPolicyName,
           compute.setLabelsRegionSecurityPolicies({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             region,
             resource: securityPolicyName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, region, securityPolicyName)) ?? current;

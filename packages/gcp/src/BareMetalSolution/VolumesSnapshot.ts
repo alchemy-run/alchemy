@@ -272,11 +272,9 @@ export const VolumesSnapshotProvider = () =>
       if (current === undefined) {
         const created = yield* baremetalsolution
           .createProjectsLocationsVolumesSnapshots({
+            name: name.length > 0 ? name : undefined,
+            description: desiredDescription,
             parent: volume,
-            body: {
-              name: name.length > 0 ? name : undefined,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

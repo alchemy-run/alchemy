@@ -362,16 +362,14 @@ export const RepositoriesReleaseConfigProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsRepositoriesReleaseConfigs({
+            gitCommitish: news.gitCommitish,
+            timeZone: news.timeZone,
+            cronSchedule: news.cronSchedule,
+            disabled,
+            codeCompilationConfig,
+            releaseCompilationResult: news.releaseCompilationResult,
             parent: repository,
             releaseConfigId,
-            body: {
-              gitCommitish: news.gitCommitish,
-              timeZone: news.timeZone,
-              cronSchedule: news.cronSchedule,
-              disabled,
-              codeCompilationConfig,
-              releaseCompilationResult: news.releaseCompilationResult,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -411,6 +409,12 @@ export const RepositoriesReleaseConfigProvider = () =>
       ) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsRepositoriesReleaseConfigs({
+            gitCommitish: news.gitCommitish,
+            timeZone: news.timeZone,
+            cronSchedule: news.cronSchedule,
+            disabled,
+            codeCompilationConfig,
+            releaseCompilationResult: news.releaseCompilationResult,
             name: currentName,
             updateMask: updateMaskOf(
               gitChanged ? "gitCommitish" : undefined,
@@ -420,14 +424,6 @@ export const RepositoriesReleaseConfigProvider = () =>
               compilationChanged ? "codeCompilationConfig" : undefined,
               resultChanged ? "releaseCompilationResult" : undefined,
             ),
-            body: {
-              gitCommitish: news.gitCommitish,
-              timeZone: news.timeZone,
-              cronSchedule: news.cronSchedule,
-              disabled,
-              codeCompilationConfig,
-              releaseCompilationResult: news.releaseCompilationResult,
-            },
           }),
         );
       }

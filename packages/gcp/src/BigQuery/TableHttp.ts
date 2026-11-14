@@ -102,26 +102,24 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
       Effect.gen(function* () {
         const ref = yield* table;
         const first = yield* queryJobs({
-          projectId: ref.project,
-          body: {
-            query: sql,
-            useLegacySql: false,
-            location: ref.location,
-            defaultDataset: {
-              projectId: ref.project,
-              datasetId: ref.datasetId,
-            },
-            timeoutMs: QUERY_WAIT_MS,
-            formatOptions: { useInt64Timestamp: true },
-            ...(params === undefined
-              ? {}
-              : {
-                  parameterMode: "NAMED",
-                  queryParameters: Object.entries(params).map(([name, value]) =>
-                    queryParameter(name, value),
-                  ),
-                }),
+          query: sql,
+          useLegacySql: false,
+          location: ref.location,
+          defaultDataset: {
+            projectId: ref.project,
+            datasetId: ref.datasetId,
           },
+          timeoutMs: QUERY_WAIT_MS,
+          formatOptions: { useInt64Timestamp: true },
+          ...(params === undefined
+            ? {}
+            : {
+                parameterMode: "NAMED",
+                queryParameters: Object.entries(params).map(([name, value]) =>
+                  queryParameter(name, value),
+                ),
+              }),
+          projectId: ref.project,
         });
         const jobId = first.jobReference?.jobId;
         const location = first.jobReference?.location ?? ref.location;
@@ -173,15 +171,13 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
         if (rows.length === 0) return;
         const ref = yield* table;
         const response = yield* insertAll({
+          rows: rows.map((row, index) => ({
+            json: encodeRow(row),
+            insertId: options?.insertIds?.[index],
+          })),
           projectId: ref.project,
           datasetId: ref.datasetId,
           tableId: ref.tableId,
-          body: {
-            rows: rows.map((row, index) => ({
-              json: encodeRow(row),
-              insertId: options?.insertIds?.[index],
-            })),
-          },
         });
         const insertErrors = response.insertErrors ?? [];
         if (insertErrors.length > 0) {

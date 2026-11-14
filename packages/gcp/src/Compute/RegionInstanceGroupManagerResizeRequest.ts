@@ -349,15 +349,13 @@ export const RegionInstanceGroupManagerResizeRequestProvider = () =>
           env.project,
           region,
           compute.insertRegionInstanceGroupManagerResizeRequests({
+            name: requestName,
+            description: desiredDescription,
+            resizeBy: news.resizeBy,
+            requestedRunDuration: news.requestedRunDuration,
             project: env.project,
             region,
             instanceGroupManager,
-            body: {
-              name: requestName,
-              description: desiredDescription,
-              resizeBy: news.resizeBy,
-              requestedRunDuration: news.requestedRunDuration,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));

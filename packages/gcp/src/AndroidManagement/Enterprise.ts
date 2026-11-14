@@ -263,13 +263,13 @@ export const EnterpriseProvider = () =>
       if (current === undefined) {
         const created = yield* androidmanagement
           .createEnterprises({
+            ...desired,
             projectId,
             signupUrlName: news.signupUrlName,
             enterpriseToken: news.enterpriseToken,
             agreementAccepted: customerManaged
               ? news.agreementAccepted
               : (news.agreementAccepted ?? true),
-            body: desired,
           })
           .pipe(
             Effect.catchTag("Conflict", () => findEnterpriseByDisplayName(projectId, displayName)),
@@ -313,11 +313,7 @@ export const EnterpriseProvider = () =>
       );
 
       if (updateMask.length > 0 && name.length > 0) {
-        current = yield* androidmanagement.patchEnterprises({
-          name,
-          updateMask,
-          body: desired,
-        });
+        current = yield* androidmanagement.patchEnterprises({ ...desired, name, updateMask });
       }
 
       const fresh = (yield* getEnterprise(name)) ?? current;

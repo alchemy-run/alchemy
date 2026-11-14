@@ -28,14 +28,12 @@ export const RecognizeHttp = Layer.effect(
         (value, index, all) => all.indexOf(value) === index,
       );
       return {
-        body: {
-          ...body,
-          config: {
-            ...config,
-            adaptation: {
-              ...adaptation,
-              phraseSetReferences: references,
-            },
+        ...body,
+        config: {
+          ...config,
+          adaptation: {
+            ...adaptation,
+            phraseSetReferences: references,
           },
         },
       };

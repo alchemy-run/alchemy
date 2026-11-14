@@ -660,7 +660,6 @@ const clearRotation = (name: string, current: kms.CryptoKey) => {
     .patchProjectsLocationsKeyRingsCryptoKeys({
       name,
       updateMask: "rotationPeriod,nextRotationTime",
-      body: {},
     })
     .pipe(
       Effect.catchTag("NotFound", () => Effect.void),
@@ -677,11 +676,9 @@ const releaseKey = (name: string, current: kms.CryptoKey) =>
     ? Effect.void
     : kms
         .patchProjectsLocationsKeyRingsCryptoKeys({
+          labels: { ...userLabels(current.labels), [RELEASED_LABEL]: "true" },
           name,
           updateMask: "labels",
-          body: {
-            labels: { ...userLabels(current.labels), [RELEASED_LABEL]: "true" },
-          },
         })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.void),
@@ -708,14 +705,13 @@ const ensureUsableVersion = (
     if (usable === undefined) {
       usable = yield* kms.createProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
         parent: name,
-        body: {},
       });
     }
     if (!symmetric) return current;
     const versionId = lastSegment(usable.name ?? "");
     yield* kms.updatePrimaryVersionProjectsLocationsKeyRingsCryptoKeys({
+      cryptoKeyVersionId: versionId,
       name,
-      body: { cryptoKeyVersionId: versionId },
     });
     return yield* waitPrimaryReady(name);
   });
@@ -883,22 +879,20 @@ export const CryptoKeyProvider = () =>
       if (current === undefined) {
         const created = yield* kms
           .createProjectsLocationsKeyRingsCryptoKeys({
+            purpose,
+            labels: desiredLabels,
+            versionTemplate: {
+              algorithm,
+              protectionLevel,
+            },
+            rotationPeriod,
+            nextRotationTime,
+            destroyScheduledDuration: news.destroyScheduledDuration,
+            importOnly: news.importOnly,
+            cryptoKeyBackend: news.cryptoKeyBackend,
             parent: parent.parent,
             cryptoKeyId,
             skipInitialVersionCreation: news.skipInitialVersionCreation,
-            body: {
-              purpose,
-              labels: desiredLabels,
-              versionTemplate: {
-                algorithm,
-                protectionLevel,
-              },
-              rotationPeriod,
-              nextRotationTime,
-              destroyScheduledDuration: news.destroyScheduledDuration,
-              importOnly: news.importOnly,
-              cryptoKeyBackend: news.cryptoKeyBackend,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -935,19 +929,17 @@ export const CryptoKeyProvider = () =>
           .filter((field): field is string => field !== undefined)
           .join(",");
         current = yield* kms.patchProjectsLocationsKeyRingsCryptoKeys({
+          labels: desiredLabels,
+          versionTemplate: algorithmChanged
+            ? {
+                algorithm,
+                protectionLevel: protectionLevel ?? current.versionTemplate?.protectionLevel,
+              }
+            : undefined,
+          rotationPeriod,
+          nextRotationTime,
           name,
           updateMask,
-          body: {
-            labels: desiredLabels,
-            versionTemplate: algorithmChanged
-              ? {
-                  algorithm,
-                  protectionLevel: protectionLevel ?? current.versionTemplate?.protectionLevel,
-                }
-              : undefined,
-            rotationPeriod,
-            nextRotationTime,
-          },
         });
       }
 

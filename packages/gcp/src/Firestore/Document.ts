@@ -290,12 +290,7 @@ export const DocumentProvider = () =>
 
       if (current === undefined) {
         const created = yield* firestore
-          .createDocumentProjectsDatabasesDocuments({
-            parent,
-            collectionId,
-            documentId,
-            body: { fields },
-          })
+          .createDocumentProjectsDatabasesDocuments({ fields, parent, collectionId, documentId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -306,13 +301,12 @@ export const DocumentProvider = () =>
 
       if (jsonOf(current.fields) !== jsonOf(fields)) {
         current = yield* firestore.patchProjectsDatabasesDocuments({
+          fields,
           name: current.name ?? name,
-          // Masking observed fields too removes the ones no longer desired.
           "updateMask.fieldPaths": Object.keys({
             ...current.fields,
             ...fields,
           }),
-          body: { fields },
         });
       }
 

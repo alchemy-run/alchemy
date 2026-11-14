@@ -312,21 +312,19 @@ export const AppsAgentProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsAppsAgents({
+            displayName,
+            description,
+            instruction: news.instruction,
+            modelSettings: news.modelSettings,
+            tools: news.tools,
+            toolsets: news.toolsets,
+            childAgents: news.childAgents,
+            guardrails: news.guardrails,
+            transferRules: news.transferRules,
+            remoteDialogflowAgent: news.remoteDialogflowAgent,
+            llmAgent,
             parent: app,
             agentId,
-            body: {
-              displayName,
-              description,
-              instruction: news.instruction,
-              modelSettings: news.modelSettings,
-              tools: news.tools,
-              toolsets: news.toolsets,
-              childAgents: news.childAgents,
-              guardrails: news.guardrails,
-              transferRules: news.transferRules,
-              remoteDialogflowAgent: news.remoteDialogflowAgent,
-              llmAgent,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -362,6 +360,17 @@ export const AppsAgentProvider = () =>
       ) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsAgents({
+            displayName,
+            description,
+            instruction: news.instruction,
+            modelSettings: news.modelSettings,
+            tools: news.tools,
+            toolsets: news.toolsets,
+            childAgents: news.childAgents,
+            guardrails: news.guardrails,
+            transferRules: news.transferRules,
+            remoteDialogflowAgent: news.remoteDialogflowAgent,
+            llmAgent,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -375,19 +384,6 @@ export const AppsAgentProvider = () =>
               rulesChanged ? "transfer_rules" : undefined,
               remoteChanged ? "remote_dialogflow_agent" : undefined,
             ),
-            body: {
-              displayName,
-              description,
-              instruction: news.instruction,
-              modelSettings: news.modelSettings,
-              tools: news.tools,
-              toolsets: news.toolsets,
-              childAgents: news.childAgents,
-              guardrails: news.guardrails,
-              transferRules: news.transferRules,
-              remoteDialogflowAgent: news.remoteDialogflowAgent,
-              llmAgent,
-            },
           }),
         );
       }

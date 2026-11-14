@@ -347,17 +347,15 @@ export const SourcesMigratingVmProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsSourcesMigratingVms({
+            sourceVmId: news.sourceVmId,
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            policy: news.policy,
+            computeEngineTargetDefaults: news.computeEngineTargetDefaults,
+            computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
             parent: source,
             migratingVmId,
-            body: {
-              sourceVmId: news.sourceVmId,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              policy: news.policy,
-              computeEngineTargetDefaults: news.computeEngineTargetDefaults,
-              computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -398,17 +396,14 @@ export const SourcesMigratingVmProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsSourcesMigratingVms({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
+          policy: news.policy,
+          computeEngineTargetDefaults: news.computeEngineTargetDefaults,
+          computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-            policy: news.policy,
-            computeEngineTargetDefaults: news.computeEngineTargetDefaults,
-            computeEngineDisksTargetDefaults: news.computeEngineDisksTargetDefaults,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

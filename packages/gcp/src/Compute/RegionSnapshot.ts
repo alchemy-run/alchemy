@@ -445,19 +445,17 @@ export const RegionSnapshotProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertRegionSnapshots({
+            name: snapshotName,
+            sourceDisk: news.sourceDisk,
+            sourceInstantSnapshot: news.sourceInstantSnapshot,
+            description: news.description,
+            labels: desiredLabels,
+            snapshotType: news.snapshotType,
+            storageLocations: news.storageLocations,
+            chainName: news.chainName,
+            guestFlush: news.guestFlush,
             project: env.project,
             region,
-            body: {
-              name: snapshotName,
-              sourceDisk: news.sourceDisk,
-              sourceInstantSnapshot: news.sourceInstantSnapshot,
-              description: news.description,
-              labels: desiredLabels,
-              snapshotType: news.snapshotType,
-              storageLocations: news.storageLocations,
-              chainName: news.chainName,
-              guestFlush: news.guestFlush,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
@@ -484,13 +482,11 @@ export const RegionSnapshotProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         const labeled = yield* compute.setLabelsRegionSnapshots({
+          labels: desiredLabels,
+          labelFingerprint: current.labelFingerprint,
           project: env.project,
           region,
           resource: snapshotName,
-          body: {
-            labels: desiredLabels,
-            labelFingerprint: current.labelFingerprint,
-          },
         });
         yield* waitRegionOperation(env.project, region, labeled);
         current = yield* getByName(env.project, region, snapshotName);

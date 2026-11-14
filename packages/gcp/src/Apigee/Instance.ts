@@ -550,8 +550,8 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsInstances({
+            ...toBody(news, instanceId, desiredDescription, location),
             parent: orgParent(organization),
-            body: toBody(news, instanceId, desiredDescription, location),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -597,25 +597,23 @@ export const InstanceProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* apigee.patchOrganizationsInstances({
+          description: desiredDescription,
+          displayName: news.displayName,
+          accessLoggingConfig: news.accessLoggingConfig
+            ? {
+                enabled: news.accessLoggingConfig.enabled === true,
+                filter: news.accessLoggingConfig.filter,
+              }
+            : undefined,
+          maintenanceUpdatePolicy: news.maintenanceUpdatePolicy
+            ? {
+                maintenanceChannel: news.maintenanceUpdatePolicy.maintenanceChannel,
+                maintenanceWindows: news.maintenanceUpdatePolicy.maintenanceWindows,
+              }
+            : undefined,
+          consumerAcceptList: desiredAccept,
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: {
-            description: desiredDescription,
-            displayName: news.displayName,
-            accessLoggingConfig: news.accessLoggingConfig
-              ? {
-                  enabled: news.accessLoggingConfig.enabled === true,
-                  filter: news.accessLoggingConfig.filter,
-                }
-              : undefined,
-            maintenanceUpdatePolicy: news.maintenanceUpdatePolicy
-              ? {
-                  maintenanceChannel: news.maintenanceUpdatePolicy.maintenanceChannel,
-                  maintenanceWindows: news.maintenanceUpdatePolicy.maintenanceWindows,
-                }
-              : undefined,
-            consumerAcceptList: desiredAccept,
-          },
         });
         yield* waitForOperation(patched, { budget: INSTANCE_BUDGET });
         current = (yield* getByName(name)) ?? current;

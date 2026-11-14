@@ -372,12 +372,10 @@ export const VmwareEngineNetworkProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsVmwareEngineNetworks({
+            type,
+            description: desiredDescription,
             parent: parentOf(env.project, location),
             vmwareEngineNetworkId: networkId,
-            body: {
-              type,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -408,12 +406,9 @@ export const VmwareEngineNetworkProvider = () =>
       ]);
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsVmwareEngineNetworks({
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

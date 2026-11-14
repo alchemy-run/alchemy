@@ -277,12 +277,10 @@ export const TopicProvider = () =>
       if (current === undefined) {
         yield* pubsub
           .createProjectsTopics({
+            labels: desiredLabels,
+            kmsKeyName: news.kmsKeyName,
+            messageRetentionDuration: news.messageRetentionDuration,
             name,
-            body: {
-              labels: desiredLabels,
-              kmsKeyName: news.kmsKeyName,
-              messageRetentionDuration: news.messageRetentionDuration,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub serves the topic, not just the create response.
@@ -302,22 +300,20 @@ export const TopicProvider = () =>
 
       if (labelsChanged || kmsChanged || retentionChanged) {
         current = yield* pubsub.patchProjectsTopics({
-          name,
-          body: {
-            topic: {
-              name,
-              labels: desiredLabels,
-              kmsKeyName: news.kmsKeyName,
-              messageRetentionDuration: news.messageRetentionDuration,
-            },
-            updateMask: [
-              labelsChanged ? "labels" : undefined,
-              kmsChanged ? "kmsKeyName" : undefined,
-              retentionChanged ? "messageRetentionDuration" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
+          topic: {
+            name,
+            labels: desiredLabels,
+            kmsKeyName: news.kmsKeyName,
+            messageRetentionDuration: news.messageRetentionDuration,
           },
+          updateMask: [
+            labelsChanged ? "labels" : undefined,
+            kmsChanged ? "kmsKeyName" : undefined,
+            retentionChanged ? "messageRetentionDuration" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          name,
         });
       }
 

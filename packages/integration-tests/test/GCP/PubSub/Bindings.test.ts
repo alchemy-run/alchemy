@@ -56,10 +56,7 @@ const drain = (subscription: string, count: number) =>
   Effect.gen(function* () {
     const seen: pubsub.ReceivedMessage[] = [];
     yield* pubsub
-      .pullProjectsSubscriptions({
-        subscription,
-        body: { maxMessages: 10, returnImmediately: false },
-      })
+      .pullProjectsSubscriptions({ maxMessages: 10, returnImmediately: false, subscription })
       .pipe(
         Effect.tap((page) =>
           Effect.gen(function* () {
@@ -67,8 +64,8 @@ const drain = (subscription: string, count: number) =>
             seen.push(...received);
             if (received.length > 0) {
               yield* pubsub.acknowledgeProjectsSubscriptions({
+                ackIds: received.map((m) => m.ackId ?? ""),
                 subscription,
-                body: { ackIds: received.map((m) => m.ackId ?? "") },
               });
             }
           }),
@@ -85,8 +82,8 @@ const drain = (subscription: string, count: number) =>
 /** Publish (out of band, as the deployer) one message. */
 const publishOutOfBand = (topic: string, text: string) =>
   pubsub.publishProjectsTopics({
+    messages: [{ data: Buffer.from(text).toString("base64") }],
     topic,
-    body: { messages: [{ data: Buffer.from(text).toString("base64") }] },
   });
 
 /** Nothing is redelivered once the ack deadline (10s) has passed. */
@@ -94,8 +91,9 @@ const expectNoRedelivery = (subscription: string) =>
   Effect.gen(function* () {
     yield* Effect.sleep("15 seconds");
     const page = yield* pubsub.pullProjectsSubscriptions({
+      maxMessages: 10,
+      returnImmediately: true,
       subscription,
-      body: { maxMessages: 10, returnImmediately: true },
     });
     expect(page.receivedMessages ?? []).toEqual([]);
   });
@@ -278,8 +276,8 @@ describe(
 
             const { project } = yield* GcpEnvironment.current;
             const policy = yield* resourcemanager.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             // schemas.validateMessage is authorized on the parent project
             // (a viewer grant on the schema alone answers 403).

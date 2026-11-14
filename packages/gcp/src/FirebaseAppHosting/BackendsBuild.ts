@@ -492,15 +492,13 @@ export const BackendsBuildProvider = () =>
       if (current === undefined) {
         const created = yield* firebaseapphosting
           .createProjectsLocationsBackendsBuilds({
+            source: news.source,
+            config: news.config,
+            displayName: news.displayName,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: backend,
             buildId,
-            body: {
-              source: news.source,
-              config: news.config,
-              displayName: news.displayName,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

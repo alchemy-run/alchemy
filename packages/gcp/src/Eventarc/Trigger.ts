@@ -803,19 +803,17 @@ export const TriggerProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsTriggers({
+            name,
+            labels: desiredLabels,
+            eventFilters,
+            destination,
+            transport,
+            channel: news.channel,
+            serviceAccount,
+            eventDataContentType: news.eventDataContentType,
+            retryPolicy: news.retryPolicy,
             parent: `projects/${env.project}/locations/${location}`,
             triggerId,
-            body: {
-              name,
-              labels: desiredLabels,
-              eventFilters,
-              destination,
-              transport,
-              channel: news.channel,
-              serviceAccount,
-              eventDataContentType: news.eventDataContentType,
-              retryPolicy: news.retryPolicy,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -857,16 +855,13 @@ export const TriggerProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* eventarc.patchProjectsLocationsTriggers({
+          labels: desiredLabels,
+          destination,
+          serviceAccount,
+          eventDataContentType: news.eventDataContentType,
+          retryPolicy: news.retryPolicy,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            destination,
-            serviceAccount,
-            eventDataContentType: news.eventDataContentType,
-            retryPolicy: news.retryPolicy,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

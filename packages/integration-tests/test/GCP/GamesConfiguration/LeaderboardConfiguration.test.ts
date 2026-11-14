@@ -48,16 +48,14 @@ test.provider.skipIf(!!applicationId)(
 
       const error = yield* Effect.flip(
         gamesConfiguration.insertLeaderboardConfigurations({
-          applicationId: probeApplicationId,
-          body: {
-            scoreOrder: "LARGER_IS_BETTER",
-            draft: {
-              name: {
-                translations: [{ locale: "en-US", value: "Alchemy Probe" }],
-              },
-              scoreFormat: { numberFormatType: "NUMERIC", numDecimalPlaces: 0 },
+          scoreOrder: "LARGER_IS_BETTER",
+          draft: {
+            name: {
+              translations: [{ locale: "en-US", value: "Alchemy Probe" }],
             },
+            scoreFormat: { numberFormatType: "NUMERIC", numDecimalPlaces: 0 },
           },
+          applicationId: probeApplicationId,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

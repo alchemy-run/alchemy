@@ -271,9 +271,9 @@ export const AgentsFlowProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsFlows({
+            ...body,
             parent: agent,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, agent, output?.name)));
         current = created ?? undefined;
@@ -293,6 +293,7 @@ export const AgentsFlowProvider = () =>
 
       if (displayChanged || descriptionChanged || nluChanged || lockedChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlows({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
@@ -301,7 +302,6 @@ export const AgentsFlowProvider = () =>
             nluChanged ? "nlu_settings" : undefined,
             lockedChanged ? "locked" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

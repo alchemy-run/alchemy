@@ -400,8 +400,8 @@ describe.skipIf(!!process.env.FAST).sequential(
       (_stack) =>
         Effect.gen(function* () {
           const published = yield* pubsub.publishProjectsTopics({
+            messages: [{ data: btoa("probe") }],
             topic: outputs.topicName,
-            body: { messages: [{ data: btoa("probe") }] },
           });
           const messageId = published.messageIds?.[0];
           expect(messageId).toEqual(expect.any(String));

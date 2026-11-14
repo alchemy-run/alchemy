@@ -35,14 +35,11 @@ export const CreateJobHttp = Layer.effect(
         const templateName = yield* name;
         const templateLocation = yield* location;
         const templateId = lastSegment(templateName);
-        const config = request?.body?.config;
+        const config = request?.config;
         return yield* createProjectsLocationsJobs({
+          ...request,
+          templateId: request?.templateId ?? (config === undefined ? templateId : undefined),
           parent: parentOfName(templateName, templateLocation),
-          body: {
-            ...request?.body,
-            templateId:
-              request?.body?.templateId ?? (config === undefined ? templateId : undefined),
-          },
         });
       });
     });

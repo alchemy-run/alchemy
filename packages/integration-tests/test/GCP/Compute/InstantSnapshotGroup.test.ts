@@ -38,14 +38,11 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInstantSnapshotGroups({
+          name: "alchemy-isg-probe",
+          description: "alchemy entitlement probe",
           project,
           zone,
           sourceConsistencyGroup: "does-not-exist",
-          body: {
-            name: "alchemy-isg-probe",
-            description: "alchemy entitlement probe",
-            sourceConsistencyGroup: "does-not-exist",
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");
@@ -82,15 +79,13 @@ test.provider(
       );
 
       yield* compute.addResourcePoliciesDisks({
+        resourcePolicies: [
+          created.policy.selfLink ??
+            `projects/${created.disk.project}/regions/us-central1/resourcePolicies/${created.policy.resourcePolicyName}`,
+        ],
         project: created.disk.project,
         zone,
         disk: created.disk.diskName,
-        body: {
-          resourcePolicies: [
-            created.policy.selfLink ??
-              `projects/${created.disk.project}/regions/us-central1/resourcePolicies/${created.policy.resourcePolicyName}`,
-          ],
-        },
       });
 
       const withGroup = yield* stack.deploy(

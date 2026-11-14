@@ -335,12 +335,10 @@ export const MembershipsFeatureProvider = () =>
       if (current === undefined) {
         const created = yield* gkehub
           .createProjectsLocationsMembershipsFeatures({
+            labels: desiredLabels,
+            spec: news.spec,
             parent: membership,
             featureId,
-            body: {
-              labels: desiredLabels,
-              spec: news.spec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -369,12 +367,10 @@ export const MembershipsFeatureProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkehub.patchProjectsLocationsMembershipsFeatures({
+          labels: desiredLabels,
+          spec: news.spec,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            spec: news.spec,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

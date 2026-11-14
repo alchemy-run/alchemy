@@ -311,9 +311,7 @@ export const MessageBusProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsMessageBuses({
-            parent: parentOf(env.project, location),
-            messageBusId,
-            body: compact({
+            ...compact({
               name,
               displayName: news.displayName,
               cryptoKeyName: desiredCrypto,
@@ -321,6 +319,8 @@ export const MessageBusProvider = () =>
               labels: desiredLabels,
               annotations: desiredAnnotations,
             }),
+            parent: parentOf(env.project, location),
+            messageBusId,
           })
           .pipe(
             Effect.retry({
@@ -348,16 +348,13 @@ export const MessageBusProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* eventarc.patchProjectsLocationsMessageBuses({
+          displayName: news.displayName,
+          cryptoKeyName: desiredCrypto,
+          loggingConfig: desiredLogging,
+          labels: desiredLabels,
+          annotations: desiredAnnotations ?? {},
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            displayName: news.displayName,
-            cryptoKeyName: desiredCrypto,
-            loggingConfig: desiredLogging,
-            labels: desiredLabels,
-            annotations: desiredAnnotations ?? {},
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

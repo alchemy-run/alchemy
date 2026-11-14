@@ -321,14 +321,12 @@ export const MulticastConsumerAssociationProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsMulticastConsumerAssociations({
+            description: news.description,
+            labels: desiredLabels,
+            network,
+            multicastDomainActivation,
             parent: parentOf(env.project, location),
             multicastConsumerAssociationId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              network,
-              multicastDomainActivation,
-            },
           })
           .pipe(
             Effect.retry({
@@ -355,13 +353,10 @@ export const MulticastConsumerAssociationProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkservices.patchProjectsLocationsMulticastConsumerAssociations({
+            labels: desiredLabels,
+            description: news.description,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

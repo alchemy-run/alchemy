@@ -1,7 +1,7 @@
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Layer from "effect/Layer";
 import { locationParentOf, makeTranslateTextBinding } from "./BindingHttp.ts";
-import { TranslateText } from "./TranslateText.ts";
+import { TranslateText, type TranslateTextRequest } from "./TranslateText.ts";
 
 /**
  * HTTP implementation of {@link TranslateText}.
@@ -15,12 +15,10 @@ export const TranslateTextHttp = Layer.effect(
     tag: "GCP.Translate.TranslateText",
     operation: translate.translateTextProjectsLocations,
     iam: { role: "roles/cloudtranslate.user" },
-    withBody: (name, request) => ({
+    withBody: (name, request: TranslateTextRequest | undefined) => ({
+      ...request?.body,
+      model: name,
       parent: locationParentOf(name),
-      body: {
-        ...request?.body,
-        model: name,
-      },
     }),
   }),
 );

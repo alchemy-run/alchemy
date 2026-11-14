@@ -564,9 +564,9 @@ export const UserProvider = () =>
       if (current === undefined) {
         const created = yield* sqladmin
           .insertUsers({
+            ...toBody(news, userName, instance, env.project),
             project: env.project,
             instance,
-            body: toBody(news, userName, instance, env.project),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -622,14 +622,14 @@ export const UserProvider = () =>
         iamEmailChanged
       ) {
         const patched = yield* sqladmin.updateUsers({
+          ...toBody(news, userName, instance, env.project, current, {
+            includePassword: passwordChanged,
+          }),
           project: env.project,
           instance,
           name: userName,
           ...(normalizeHost(host) ? { host: normalizeHost(host) } : {}),
           revokeExistingRoles: rolesChanged ? true : undefined,
-          body: toBody(news, userName, instance, env.project, current, {
-            includePassword: passwordChanged,
-          }),
         });
         yield* waitForOperation(env.project, patched);
         current = yield* waitUntilExists(env.project, instance, userName, host);

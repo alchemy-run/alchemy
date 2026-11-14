@@ -369,9 +369,9 @@ export const CloudExadataInfrastructureProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsCloudExadataInfrastructures({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             cloudExadataInfrastructureId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             retryQuota,

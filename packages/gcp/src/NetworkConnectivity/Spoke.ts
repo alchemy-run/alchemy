@@ -1070,9 +1070,9 @@ export const SpokeProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsSpokes({
+            ...body,
             parent: parentOf(env.project, location),
             spokeId,
-            body,
           })
           .pipe(
             Effect.retry({
@@ -1107,13 +1107,10 @@ export const SpokeProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networkconnectivity.patchProjectsLocationsSpokes({
+          etag: current.etag,
+          ...body,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            ...body,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

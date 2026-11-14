@@ -278,13 +278,11 @@ export const IpamAdminScopeProvider = () =>
       if (current === undefined) {
         const created = yield* cnr
           .createProjectsLocationsIpamAdminScopes({
+            scopes,
+            enabledAddonPlatforms,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             ipamAdminScopeId,
-            body: {
-              scopes,
-              enabledAddonPlatforms,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -311,13 +309,10 @@ export const IpamAdminScopeProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* cnr.patchProjectsLocationsIpamAdminScopes({
+          labels: desiredLabels,
+          enabledAddonPlatforms,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            enabledAddonPlatforms,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -328,10 +323,7 @@ export const IpamAdminScopeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const disable = yield* cnr
-        .disableProjectsLocationsIpamAdminScopes({
-          name: output.name,
-          body: {},
-        })
+        .disableProjectsLocationsIpamAdminScopes({ name: output.name })
         .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.undefined));
       if (disable !== undefined) {
         yield* waitForDeleteOperation(disable);

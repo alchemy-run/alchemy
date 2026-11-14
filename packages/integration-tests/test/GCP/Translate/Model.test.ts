@@ -37,12 +37,10 @@ const createEmptyDataset = (displayName: string) =>
       return existing.value.name;
     }
     const operation = yield* translate.createProjectsLocationsDatasets({
+      displayName,
+      sourceLanguageCode: "en",
+      targetLanguageCode: "es",
       parent,
-      body: {
-        displayName,
-        sourceLanguageCode: "en",
-        targetLanguageCode: "es",
-      },
     });
     yield* GCP.Translate.waitForOperation(operation);
     const created = yield* findDataset(parent, displayName);

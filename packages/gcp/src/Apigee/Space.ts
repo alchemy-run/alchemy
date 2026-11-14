@@ -268,11 +268,9 @@ export const SpaceProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsSpaces({
+            displayName: desiredDisplayName,
             parent: orgParent(org),
             spaceId,
-            body: {
-              displayName: desiredDisplayName,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -284,11 +282,9 @@ export const SpaceProvider = () =>
 
       if ((current.displayName ?? "") !== desiredDisplayName) {
         current = yield* apigee.patchOrganizationsSpaces({
+          displayName: desiredDisplayName,
           name: current.name ?? name,
           updateMask: "display_name",
-          body: {
-            displayName: desiredDisplayName,
-          },
         });
       }
 

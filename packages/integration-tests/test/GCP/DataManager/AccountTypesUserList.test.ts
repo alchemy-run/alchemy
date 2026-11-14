@@ -28,11 +28,9 @@ const lifecycleParent = process.env.GCP_TEST_DATAMANAGER_PARENT?.trim();
 
 const probeCreate = (parent: string) =>
   datamanager.createAccountTypesAccountsUserLists({
+    displayName: "Alchemy Datamanager Probe",
+    ingestedUserListInfo: { uploadKeyTypes: ["CONTACT_ID"] },
     parent,
-    body: {
-      displayName: "Alchemy Datamanager Probe",
-      ingestedUserListInfo: { uploadKeyTypes: ["CONTACT_ID"] },
-    },
   });
 
 test.provider(

@@ -304,13 +304,11 @@ export const SaaProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsSaas({
+            locations,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             saasId,
-            body: {
-              locations,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         // The create response omits server fields such as createTime.
@@ -337,15 +335,12 @@ export const SaaProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsSaas({
+          etag: current.etag,
+          locations,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            locations,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

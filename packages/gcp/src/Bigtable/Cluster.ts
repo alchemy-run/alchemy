@@ -539,9 +539,9 @@ export const ClusterProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesClusters({
+            ...toCreateBody(news, env.project, zone, storage),
             parent: `projects/${env.project}/instances/${instanceId}`,
             clusterId,
-            body: toCreateBody(news, env.project, zone, storage),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -569,12 +569,9 @@ export const ClusterProvider = () =>
 
       if (autoscalingChanged) {
         const patched = yield* bigtable.partialUpdateClusterProjectsInstancesClusters({
+          clusterConfig: desiredAutoscaling,
           name,
           updateMask: "cluster_config.cluster_autoscaling_config",
-          body: {
-            name,
-            clusterConfig: desiredAutoscaling,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
@@ -582,24 +579,18 @@ export const ClusterProvider = () =>
         const serveNodes = news.serveNodes ?? current.serveNodes ?? DEFAULT_SERVE_NODES;
         if (disableAutoscaling) {
           const patched = yield* bigtable.partialUpdateClusterProjectsInstancesClusters({
+            serveNodes,
+            clusterConfig: {},
             name,
             updateMask: "serve_nodes,cluster_config.cluster_autoscaling_config",
-            body: {
-              name,
-              serveNodes,
-              clusterConfig: {},
-            },
           });
           yield* waitForOperation(patched);
         } else {
           const updated = yield* bigtable.updateProjectsInstancesClusters({
+            location: current.location ?? clusterLocation(env.project, zone),
+            serveNodes,
+            defaultStorageType: current.defaultStorageType ?? storage,
             name,
-            body: {
-              name,
-              location: current.location ?? clusterLocation(env.project, zone),
-              serveNodes,
-              defaultStorageType: current.defaultStorageType ?? storage,
-            },
           });
           yield* waitForOperation(updated);
         }

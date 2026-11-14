@@ -337,12 +337,10 @@ export const ImportJobsImportDataFileProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsImportJobsImportDataFiles({
+            displayName,
+            format,
             parent: importJob,
             importDataFileId,
-            body: {
-              displayName,
-              format,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

@@ -87,7 +87,7 @@ export const TopicPullEventSource = Layer.effect(
         Effect.gen(function* () {
           const name = yield* subscriptionName;
           const { receivedMessages = [] } = yield* pullBatch({
-            body: { maxMessages: props.maxMessages ?? 10 },
+            maxMessages: props.maxMessages ?? 10,
           });
           const received = receivedMessages.filter(
             (item) => item.ackId !== undefined && item.message !== undefined,
@@ -102,9 +102,7 @@ export const TopicPullEventSource = Layer.effect(
               })),
             ),
           );
-          yield* ackBatch({
-            body: { ackIds: received.map((item) => item.ackId!) },
-          });
+          yield* ackBatch({ ackIds: received.map((item) => item.ackId!) });
         }).pipe(
           // A failed pull, ack, or handler must not end the consumer; the
           // unacked batch is redelivered after its ack deadline.

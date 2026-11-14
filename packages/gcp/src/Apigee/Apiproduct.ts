@@ -351,10 +351,7 @@ export const ApiproductProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsApiproducts({
-            parent: orgParent(organizationId),
-            body,
-          })
+          .createOrganizationsApiproducts({ ...body, parent: orgParent(organizationId) })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -378,10 +375,7 @@ export const ApiproductProvider = () =>
         !sameJson(current.attributes ?? [], desiredAttributes);
 
       if (needsUpdate) {
-        current = yield* apigee.updateOrganizationsApiproducts({
-          name,
-          body,
-        });
+        current = yield* apigee.updateOrganizationsApiproducts({ ...body, name });
       }
 
       return toAttrs(current, env.project, organizationId);

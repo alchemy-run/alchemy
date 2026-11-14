@@ -275,11 +275,9 @@ export const CrossSiteNetworkProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertCrossSiteNetworks({
+            name: crossSiteNetworkName,
+            description,
             project: env.project,
-            body: {
-              name: crossSiteNetworkName,
-              description,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -301,13 +299,11 @@ export const CrossSiteNetworkProvider = () =>
       if ((current.description ?? "") !== description) {
         yield* compute
           .patchCrossSiteNetworks({
+            name: crossSiteNetworkName,
+            description,
             project: env.project,
             crossSiteNetwork: crossSiteNetworkName,
             updateMask: "description",
-            body: {
-              name: crossSiteNetworkName,
-              description,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, crossSiteNetworkName);

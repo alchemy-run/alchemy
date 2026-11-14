@@ -350,10 +350,7 @@ export const SecuritySettingProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsSecuritySettings({
-            parent,
-            body,
-          })
+          .createProjectsLocationsSecuritySettings({ ...body, parent })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(parent, displayName)));
         current =
           created?.name !== undefined ? yield* waitUntilReadable(created.name, getByName) : created;
@@ -391,6 +388,7 @@ export const SecuritySettingProvider = () =>
         retentionStrategyChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsSecuritySettings({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -404,7 +402,6 @@ export const SecuritySettingProvider = () =>
             windowChanged ? "retention_window_days" : undefined,
             retentionStrategyChanged ? "retention_strategy" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

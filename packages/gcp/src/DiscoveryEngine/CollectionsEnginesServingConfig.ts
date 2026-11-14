@@ -295,19 +295,17 @@ export const CollectionsEnginesServingConfigProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesServingConfigs({
+            displayName,
+            solutionType,
+            rankingExpression: news.rankingExpression,
+            modelId: news.modelId,
+            diversityLevel: news.diversityLevel,
+            boostControlIds: news.boostControlIds,
+            filterControlIds: news.filterControlIds,
+            synonymsControlIds: news.synonymsControlIds,
+            redirectControlIds: news.redirectControlIds,
             parent: news.engine,
             servingConfigId: idValue,
-            body: {
-              displayName,
-              solutionType,
-              rankingExpression: news.rankingExpression,
-              modelId: news.modelId,
-              diversityLevel: news.diversityLevel,
-              boostControlIds: news.boostControlIds,
-              filterControlIds: news.filterControlIds,
-              synonymsControlIds: news.synonymsControlIds,
-              redirectControlIds: news.redirectControlIds,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(fallbackName)));
         current = created ?? undefined;
@@ -340,6 +338,14 @@ export const CollectionsEnginesServingConfigProvider = () =>
         redirectChanged
       ) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesServingConfigs({
+          displayName,
+          rankingExpression: news.rankingExpression,
+          modelId: news.modelId,
+          diversityLevel: news.diversityLevel,
+          boostControlIds: news.boostControlIds,
+          filterControlIds: news.filterControlIds,
+          synonymsControlIds: news.synonymsControlIds,
+          redirectControlIds: news.redirectControlIds,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -353,17 +359,6 @@ export const CollectionsEnginesServingConfigProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            rankingExpression: news.rankingExpression,
-            modelId: news.modelId,
-            diversityLevel: news.diversityLevel,
-            boostControlIds: news.boostControlIds,
-            filterControlIds: news.filterControlIds,
-            synonymsControlIds: news.synonymsControlIds,
-            redirectControlIds: news.redirectControlIds,
-          },
         });
       }
 

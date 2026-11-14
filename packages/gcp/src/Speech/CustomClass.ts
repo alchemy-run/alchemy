@@ -236,11 +236,9 @@ export const CustomClassProvider = () =>
       if (current === undefined) {
         const created = yield* speech
           .createProjectsLocationsCustomClasses({
+            customClassId,
+            customClass: { items },
             parent: locationParent(env.project, location),
-            body: {
-              customClassId,
-              customClass: { items },
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -267,12 +265,9 @@ export const CustomClassProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* speech.patchProjectsLocationsCustomClasses({
+          items,
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            items,
-          },
         });
       }
 

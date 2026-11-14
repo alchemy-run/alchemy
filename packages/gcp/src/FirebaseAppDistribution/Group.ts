@@ -163,9 +163,9 @@ export const GroupProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           firebaseappdistribution.createProjectsGroups({
+            displayName: desiredDisplay,
             parent,
             groupId,
-            body: { displayName: desiredDisplay },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getGroup(name)));
         current = created ?? undefined;
@@ -181,9 +181,9 @@ export const GroupProvider = () =>
       if (!sameText(current.displayName, desiredDisplay) && currentName.length > 0) {
         current = yield* retryTransient(
           firebaseappdistribution.patchProjectsGroups({
+            displayName: desiredDisplay,
             name: currentName,
             updateMask: "display_name",
-            body: { displayName: desiredDisplay },
           }),
         );
       }

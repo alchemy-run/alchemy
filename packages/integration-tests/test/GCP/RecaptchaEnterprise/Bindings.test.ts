@@ -69,14 +69,14 @@ describe(
 
             // The assessment exists server-side: annotating it succeeds.
             yield* recaptchaenterprise.annotateProjectsAssessments({
+              annotation: "LEGITIMATE",
               name: assessment.name ?? "",
-              body: { annotation: "LEGITIMATE" },
             });
 
             // reCAPTCHA keys have no IAM policy of their own.
             const policy = yield* crm.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>

@@ -360,10 +360,7 @@ export const AgentsPlaybookProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsPlaybooks({
-            parent: agent,
-            body,
-          })
+          .createProjectsLocationsAgentsPlaybooks({ ...body, parent: agent })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
@@ -409,6 +406,7 @@ export const AgentsPlaybookProvider = () =>
         outputChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsPlaybooks({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -423,7 +421,6 @@ export const AgentsPlaybookProvider = () =>
             inputChanged ? "input_parameter_definitions" : undefined,
             outputChanged ? "output_parameter_definitions" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

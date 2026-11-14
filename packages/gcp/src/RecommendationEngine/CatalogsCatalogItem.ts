@@ -373,10 +373,7 @@ export const CatalogsCatalogItemProvider = () =>
 
       if (current === undefined) {
         const created = yield* recommendationengine
-          .createProjectsLocationsCatalogsCatalogItems({
-            parent: catalog,
-            body,
-          })
+          .createProjectsLocationsCatalogsCatalogItems({ ...body, parent: catalog })
           .pipe(Effect.catchTag("Conflict", () => getCatalogItem(name)));
         current = created ?? undefined;
       }
@@ -404,9 +401,10 @@ export const CatalogsCatalogItemProvider = () =>
 
       if (mask.length > 0) {
         current = yield* recommendationengine.patchProjectsLocationsCatalogsCatalogItems({
+          ...body,
+          id: catalogItemId,
           name,
           updateMask: mask,
-          body: { ...body, id: catalogItemId },
         });
       }
 

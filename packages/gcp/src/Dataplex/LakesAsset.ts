@@ -425,15 +425,13 @@ export const LakesAssetProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesZonesAssets({
+            displayName: news.displayName,
+            description: news.description,
+            labels: desiredLabels,
+            resourceSpec,
+            discoverySpec,
             parent: zone,
             assetId,
-            body: {
-              displayName: news.displayName,
-              description: news.description,
-              labels: desiredLabels,
-              resourceSpec,
-              discoverySpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -472,15 +470,13 @@ export const LakesAssetProvider = () =>
           readModeChanged ? "resource_spec.read_access_mode" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* dataplex.patchProjectsLocationsLakesZonesAssets({
+          displayName: news.displayName,
+          description: news.description,
+          labels: desiredLabels,
+          resourceSpec,
+          discoverySpec,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName: news.displayName,
-            description: news.description,
-            labels: desiredLabels,
-            resourceSpec,
-            discoverySpec,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

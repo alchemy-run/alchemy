@@ -444,8 +444,8 @@ export const MetricDescriptorProvider = () =>
       const upsert = () =>
         monitoring
           .createProjectsMetricDescriptors({
+            ...toBody(type, news, ownership),
             name: parentOf(env.project),
-            body: toBody(type, news, ownership),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
 

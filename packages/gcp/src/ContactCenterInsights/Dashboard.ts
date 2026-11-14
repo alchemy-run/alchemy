@@ -306,15 +306,13 @@ export const DashboardProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsDashboards({
+            displayName,
+            description,
+            filter: news.filter,
+            dateRangeConfig: news.dateRangeConfig,
+            rootContainer: news.rootContainer,
             parent,
             dashboardId,
-            body: {
-              displayName,
-              description,
-              filter: news.filter,
-              dateRangeConfig: news.dateRangeConfig,
-              rootContainer: news.rootContainer,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -338,6 +336,11 @@ export const DashboardProvider = () =>
         rootChanged
       ) {
         current = yield* cci.patchProjectsLocationsDashboards({
+          displayName,
+          description,
+          filter: news.filter,
+          dateRangeConfig: news.dateRangeConfig,
+          rootContainer: news.rootContainer,
           name: current.name ?? name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -348,14 +351,6 @@ export const DashboardProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description,
-            filter: news.filter,
-            dateRangeConfig: news.dateRangeConfig,
-            rootContainer: news.rootContainer,
-          },
         });
       }
 

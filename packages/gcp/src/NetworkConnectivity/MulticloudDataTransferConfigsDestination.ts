@@ -339,14 +339,12 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsMulticloudDataTransferConfigsDestinations({
+            ipPrefix: news.ipPrefix,
+            endpoints,
+            description: news.description,
+            labels: desiredLabels,
             parent: news.parent,
             destinationId,
-            body: {
-              ipPrefix: news.ipPrefix,
-              endpoints,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -382,15 +380,12 @@ export const MulticloudDataTransferConfigsDestinationProvider = () =>
         const operation =
           yield* networkconnectivity.patchProjectsLocationsMulticloudDataTransferConfigsDestinations(
             {
+              labels: desiredLabels,
+              description: news.description,
+              endpoints,
+              etag: current.etag,
               name: current.name ?? name,
               updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-                endpoints,
-                etag: current.etag,
-              },
             },
           );
         yield* waitForOperation(operation);

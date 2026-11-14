@@ -375,23 +375,21 @@ export const NotebookExecutionJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsNotebookExecutionJobs({
+            displayName: news.displayName ?? jobId,
+            labels: desiredLabels,
+            notebookRuntimeTemplateResourceName: news.notebookRuntimeTemplateResourceName,
+            customEnvironmentSpec: news.customEnvironmentSpec,
+            directNotebookSource: news.directNotebookSource,
+            gcsNotebookSource: news.gcsNotebookSource,
+            dataformRepositorySource: news.dataformRepositorySource,
+            gcsOutputUri: news.gcsOutputUri,
+            serviceAccount: news.serviceAccount,
+            executionUser: news.executionUser,
+            kernelName: news.kernelName,
+            executionTimeout: news.executionTimeout,
+            encryptionSpec: news.encryptionSpec,
             parent: locationParent(env.project, location),
             notebookExecutionJobId: jobId,
-            body: {
-              displayName: news.displayName ?? jobId,
-              labels: desiredLabels,
-              notebookRuntimeTemplateResourceName: news.notebookRuntimeTemplateResourceName,
-              customEnvironmentSpec: news.customEnvironmentSpec,
-              directNotebookSource: news.directNotebookSource,
-              gcsNotebookSource: news.gcsNotebookSource,
-              dataformRepositorySource: news.dataformRepositorySource,
-              gcsOutputUri: news.gcsOutputUri,
-              serviceAccount: news.serviceAccount,
-              executionUser: news.executionUser,
-              kernelName: news.kernelName,
-              executionTimeout: news.executionTimeout,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

@@ -279,13 +279,11 @@ export const DnsZoneProvider = () =>
       if (current === undefined) {
         const operation = yield* apigee
           .createOrganizationsDnsZones({
+            description: desiredDescription,
+            domain: news.domain,
+            peeringConfig: news.peeringConfig,
             parent: organization,
             dnsZoneId,
-            body: {
-              description: desiredDescription,
-              domain: news.domain,
-              peeringConfig: news.peeringConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {

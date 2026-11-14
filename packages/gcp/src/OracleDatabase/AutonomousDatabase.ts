@@ -609,9 +609,9 @@ export const AutonomousDatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsAutonomousDatabases({
+            ...toCreateBody(news, desiredLabels, env.project),
             parent: parentOf(env.project, location),
             autonomousDatabaseId,
-            body: toCreateBody(news, desiredLabels, env.project),
           })
           .pipe(
             retryQuota,
@@ -691,24 +691,21 @@ export const AutonomousDatabaseProvider = () =>
 
         const operation = yield* retryQuota(
           oracle.patchProjectsLocationsAutonomousDatabases({
+            labels: desiredLabels,
+            properties: {
+              cpuCoreCount: props.cpuCoreCount,
+              computeCount: props.computeCount,
+              dataStorageSizeGb: props.dataStorageSizeGb,
+              dataStorageSizeTb: props.dataStorageSizeTb,
+              isAutoScalingEnabled: props.isAutoScalingEnabled,
+              isStorageAutoScalingEnabled: props.isStorageAutoScalingEnabled,
+              encryptionKey: props.encryptionKey,
+              localDataGuardEnabled: props.localDataGuardEnabled,
+              localAdgAutoFailoverMaxDataLossLimitDuration:
+                props.localAdgAutoFailoverMaxDataLossLimitDuration,
+            },
             name: ready.name ?? name,
             updateMask: mask.join(","),
-            body: {
-              name: ready.name ?? name,
-              labels: desiredLabels,
-              properties: {
-                cpuCoreCount: props.cpuCoreCount,
-                computeCount: props.computeCount,
-                dataStorageSizeGb: props.dataStorageSizeGb,
-                dataStorageSizeTb: props.dataStorageSizeTb,
-                isAutoScalingEnabled: props.isAutoScalingEnabled,
-                isStorageAutoScalingEnabled: props.isStorageAutoScalingEnabled,
-                encryptionKey: props.encryptionKey,
-                localDataGuardEnabled: props.localDataGuardEnabled,
-                localAdgAutoFailoverMaxDataLossLimitDuration:
-                  props.localAdgAutoFailoverMaxDataLossLimitDuration,
-              },
-            },
           }),
         );
         yield* waitForOperation(operation);

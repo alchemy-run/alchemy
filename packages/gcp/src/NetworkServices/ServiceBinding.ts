@@ -280,13 +280,11 @@ export const ServiceBindingProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsServiceBindings({
+            description: news.description,
+            labels: desiredLabels,
+            service,
             parent: parentOf(env.project, location),
             serviceBindingId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              service,
-            },
           })
           .pipe(
             Effect.retry({
@@ -312,13 +310,10 @@ export const ServiceBindingProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsServiceBindings({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

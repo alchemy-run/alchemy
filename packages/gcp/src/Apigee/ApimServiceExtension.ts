@@ -341,9 +341,9 @@ export const ApimServiceExtensionProvider = () =>
       if (current === undefined) {
         yield* apigee
           .createOrganizationsApimServiceExtensions({
+            ...body,
             parent: orgParent(organizationId),
             apimServiceExtensionId: extensionId,
-            body,
           })
           .pipe(
             Effect.flatMap((operation) => waitForOperation(operation)),
@@ -365,9 +365,9 @@ export const ApimServiceExtensionProvider = () =>
 
       if (needsUpdate) {
         const operation = yield* apigee.patchOrganizationsApimServiceExtensions({
+          ...body,
           name,
           updateMask: "lbForwardingRule,network,networkConfigs,extensionProcessor,extensions",
-          body,
         });
         yield* waitForOperation(operation);
         current = (yield* getByName(name)) ?? current;

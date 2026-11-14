@@ -514,19 +514,14 @@ export const RouteProvider = () =>
       }
 
       if (current === undefined) {
-        yield* compute
-          .insertRoutes({
-            project: env.project,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.void),
-          );
+        yield* compute.insertRoutes({ ...desired, project: env.project }).pipe(
+          Effect.flatMap((operation) =>
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.void),
+        );
         current = yield* requireRoute(env.project, routeName);
       }
 

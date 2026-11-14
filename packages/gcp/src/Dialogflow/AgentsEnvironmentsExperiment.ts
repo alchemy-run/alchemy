@@ -284,10 +284,7 @@ export const AgentsEnvironmentsExperimentProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsEnvironmentsExperiments({
-            parent: environment,
-            body,
-          })
+          .createProjectsLocationsAgentsEnvironmentsExperiments({ ...body, parent: environment })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, environment, output?.name)));
         current = created ?? undefined;
       }
@@ -307,6 +304,7 @@ export const AgentsEnvironmentsExperimentProvider = () =>
 
       if (displayChanged || descriptionChanged || definitionChanged || lengthChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsExperiments({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -314,7 +312,6 @@ export const AgentsEnvironmentsExperimentProvider = () =>
             definitionChanged ? "definition" : undefined,
             lengthChanged ? "experiment_length" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

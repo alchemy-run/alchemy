@@ -316,9 +316,9 @@ export const CollectionsEnginesControlProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesControls({
+            ...desired,
             parent: news.engine,
             controlId,
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(fallbackName)));
         current = created ?? undefined;
@@ -338,6 +338,7 @@ export const CollectionsEnginesControlProvider = () =>
       // Actions are immutable; diff replaces the control when they change.
       if (displayNameChanged || useCasesChanged || conditionsChanged) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesControls({
+          ...desired,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -346,7 +347,6 @@ export const CollectionsEnginesControlProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: { name, ...desired },
         });
       }
 

@@ -258,13 +258,11 @@ export const GroupProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsGroups({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             groupId,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -290,14 +288,11 @@ export const GroupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* mc.patchProjectsLocationsGroups({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

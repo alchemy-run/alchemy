@@ -361,13 +361,11 @@ export const EntryGroupsEntryLinkProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsEntryGroupsEntryLinks({
+            entryLinkType,
+            entryReferences,
+            aspects: news.aspects,
             parent: resolved.parent,
             entryLinkId,
-            body: {
-              entryLinkType,
-              entryReferences,
-              aspects: news.aspects,
-            },
           })
           .pipe(
             retryQuota,
@@ -389,11 +387,8 @@ export const EntryGroupsEntryLinkProvider = () =>
       if (aspectsChanged) {
         current = yield* retryQuota(
           dataplex.patchProjectsLocationsEntryGroupsEntryLinks({
+            aspects: news.aspects,
             name: current.name ?? name,
-            body: {
-              name: current.name ?? name,
-              aspects: news.aspects,
-            },
           }),
         );
       }

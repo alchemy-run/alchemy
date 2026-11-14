@@ -215,12 +215,10 @@ export const SpecialistPoolProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsSpecialistPools({
+            displayName,
+            specialistManagerEmails: managers,
+            specialistWorkerEmails: workers,
             parent,
-            body: {
-              displayName,
-              specialistManagerEmails: managers,
-              specialistWorkerEmails: workers,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -250,6 +248,9 @@ export const SpecialistPoolProvider = () =>
 
       if (displayChanged || managersChanged || workersChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsSpecialistPools({
+          displayName,
+          specialistManagerEmails: managers,
+          specialistWorkerEmails: workers,
           name,
           updateMask: [
             displayChanged ? "displayName" : undefined,
@@ -258,12 +259,6 @@ export const SpecialistPoolProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            specialistManagerEmails: managers,
-            specialistWorkerEmails: workers,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

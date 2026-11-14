@@ -1006,18 +1006,16 @@ export const FunctionProvider = () =>
       if (current === undefined) {
         const created = yield* cloudfunctions
           .createProjectsLocationsFunctions({
+            name,
+            description: news.description,
+            labels: desiredLabels,
+            kmsKeyName: news.kmsKeyName,
+            environment,
+            buildConfig: mergeBuildConfig(buildConfig, undefined),
+            serviceConfig,
+            eventTrigger: news.eventTrigger,
             parent: `projects/${env.project}/locations/${location}`,
             functionId,
-            body: {
-              name,
-              description: news.description,
-              labels: desiredLabels,
-              kmsKeyName: news.kmsKeyName,
-              environment,
-              buildConfig: mergeBuildConfig(buildConfig, undefined),
-              serviceConfig,
-              eventTrigger: news.eventTrigger,
-            },
           })
           .pipe(
             retryActAs,
@@ -1115,23 +1113,20 @@ export const FunctionProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* cloudfunctions.patchProjectsLocationsFunctions({
+          labels: desiredLabels,
+          description: news.description,
+          kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
+          buildConfig: desiredBuild ?? current.buildConfig,
+          serviceConfig: {
+            ...current.serviceConfig,
+            ...desiredService,
+            service: undefined,
+            uri: undefined,
+            revision: undefined,
+          },
+          eventTrigger: news.eventTrigger ?? current.eventTrigger,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
-            buildConfig: desiredBuild ?? current.buildConfig,
-            serviceConfig: {
-              ...current.serviceConfig,
-              ...desiredService,
-              service: undefined,
-              uri: undefined,
-              revision: undefined,
-            },
-            eventTrigger: news.eventTrigger ?? current.eventTrigger,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);

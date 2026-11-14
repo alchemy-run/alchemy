@@ -235,11 +235,9 @@ export const ensureHostServiceAccount = (options: {
     if (existing?.email === undefined || existing.email.length === 0) {
       created = yield* iam
         .createProjectsServiceAccounts({
+          accountId,
+          serviceAccount: { displayName: ALCHEMY_HOST_SA_DISPLAY_NAME },
           name: `projects/${options.project}`,
-          body: {
-            accountId,
-            serviceAccount: { displayName: ALCHEMY_HOST_SA_DISPLAY_NAME },
-          },
         })
         .pipe(
           Effect.as(true),

@@ -25,8 +25,8 @@ let hostAccount: string;
 const hostProjectRoles = Effect.gen(function* () {
   const { project } = yield* GcpEnvironment.current;
   const policy = yield* resourcemanager.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
@@ -104,8 +104,8 @@ describe(
             const tag = expectAuthorized(outcome);
             const direct = yield* tagOf(
               firebasedataconnect.executeGraphqlProjectsLocationsServices({
+                query: "{ __typename }",
                 name: serviceName,
-                body: { query: "{ __typename }" },
               }),
             );
             expect(tag).toEqual(direct);
@@ -127,8 +127,8 @@ describe(
             const tag = expectAuthorized(outcome);
             const direct = yield* tagOf(
               firebasedataconnect.executeGraphqlReadProjectsLocationsServices({
+                query: "{ __typename }",
                 name: serviceName,
-                body: { query: "{ __typename }" },
               }),
             );
             expect(tag).toEqual(direct);
@@ -150,8 +150,8 @@ describe(
             const tag = expectAuthorized(outcome);
             const direct = yield* tagOf(
               firebasedataconnect.executeQueryProjectsLocationsServicesConnectors({
+                operationName: "ListAlchemyNotes",
                 name: connectorName,
-                body: { operationName: "ListAlchemyNotes" },
               }),
             );
             expect(tag).toEqual(direct);
@@ -173,11 +173,9 @@ describe(
             const tag = expectAuthorized(outcome);
             const direct = yield* tagOf(
               firebasedataconnect.executeMutationProjectsLocationsServicesConnectors({
+                operationName: "CreateAlchemyNote",
+                variables: { title: "hello" },
                 name: connectorName,
-                body: {
-                  operationName: "CreateAlchemyNote",
-                  variables: { title: "hello" },
-                },
               }),
             );
             expect(tag).toEqual(direct);

@@ -48,10 +48,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        androidpublisher.insertEdits({
-          packageName: probePackageName,
-          body: {},
-        }),
+        androidpublisher.insertEdits({ packageName: probePackageName }),
       );
       expect(error._tag).toEqual("Forbidden");
 

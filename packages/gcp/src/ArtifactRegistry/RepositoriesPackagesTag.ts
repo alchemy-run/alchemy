@@ -299,13 +299,7 @@ export const RepositoriesPackagesTagProvider = () =>
 
       if (current === undefined) {
         const created = yield* artifactregistry
-          .createProjectsLocationsRepositoriesPackagesTags({
-            parent: packageName,
-            tagId,
-            body: {
-              version,
-            },
-          })
+          .createProjectsLocationsRepositoriesPackagesTags({ version, parent: packageName, tagId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -317,12 +311,9 @@ export const RepositoriesPackagesTagProvider = () =>
       const observed = current.name ?? name;
       if (!sameText(current.version, version)) {
         current = yield* artifactregistry.patchProjectsLocationsRepositoriesPackagesTags({
+          version,
           name: observed,
           updateMask: "version",
-          body: {
-            name: observed,
-            version,
-          },
         });
       }
 

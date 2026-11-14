@@ -56,15 +56,13 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInterconnects({
+          name: "alchemy-ix-probe",
+          description: "alchemy entitlement probe",
+          location: `projects/${project}/global/interconnectLocations/iad-zone1-1`,
+          interconnectType: "DEDICATED",
+          linkType: "LINK_TYPE_ETHERNET_10G_LR",
+          requestedLinkCount: 1,
           project,
-          body: {
-            name: "alchemy-ix-probe",
-            description: "alchemy entitlement probe",
-            location: `projects/${project}/global/interconnectLocations/iad-zone1-1`,
-            interconnectType: "DEDICATED",
-            linkType: "LINK_TYPE_ETHERNET_10G_LR",
-            requestedLinkCount: 1,
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

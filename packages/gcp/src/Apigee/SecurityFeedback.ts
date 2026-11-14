@@ -319,9 +319,9 @@ export const SecurityFeedbackProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsSecurityFeedback({
+            ...toBody(news, desiredComment),
             parent: orgParent(organization),
             securityFeedbackId,
-            body: toBody(news, desiredComment),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -350,9 +350,9 @@ export const SecurityFeedbackProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* apigee.patchOrganizationsSecurityFeedback({
+          ...toBody(news, desiredComment),
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: toBody(news, desiredComment),
         });
       }
 

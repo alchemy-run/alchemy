@@ -496,25 +496,23 @@ export const DatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* firestore
           .createProjectsDatabases({
+            locationId: location,
+            type,
+            databaseEdition: news.databaseEdition
+              ? normalizeEdition(news.databaseEdition)
+              : undefined,
+            concurrencyMode: news.concurrencyMode,
+            pointInTimeRecoveryEnablement: news.pointInTimeRecoveryEnablement,
+            appEngineIntegrationMode: news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
+            deleteProtectionState: desiredProtection,
+            realtimeUpdatesMode: news.realtimeUpdatesMode,
+            firestoreDataAccessMode: news.firestoreDataAccessMode,
+            mongodbCompatibleDataAccessMode: news.mongodbCompatibleDataAccessMode,
+            cmekConfig: news.cmekConfig?.kmsKeyName
+              ? { kmsKeyName: news.cmekConfig.kmsKeyName }
+              : undefined,
             parent: `projects/${env.project}`,
             databaseId,
-            body: {
-              locationId: location,
-              type,
-              databaseEdition: news.databaseEdition
-                ? normalizeEdition(news.databaseEdition)
-                : undefined,
-              concurrencyMode: news.concurrencyMode,
-              pointInTimeRecoveryEnablement: news.pointInTimeRecoveryEnablement,
-              appEngineIntegrationMode: news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
-              deleteProtectionState: desiredProtection,
-              realtimeUpdatesMode: news.realtimeUpdatesMode,
-              firestoreDataAccessMode: news.firestoreDataAccessMode,
-              mongodbCompatibleDataAccessMode: news.mongodbCompatibleDataAccessMode,
-              cmekConfig: news.cmekConfig?.kmsKeyName
-                ? { kmsKeyName: news.cmekConfig.kmsKeyName }
-                : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -563,11 +561,7 @@ export const DatabaseProvider = () =>
 
       if (mask.length > 0) {
         const patched = yield* retryConcurrentChanges(
-          firestore.patchProjectsDatabases({
-            name,
-            updateMask: mask.join(","),
-            body: patchBody,
-          }),
+          firestore.patchProjectsDatabases({ ...patchBody, name, updateMask: mask.join(",") }),
         );
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);
@@ -586,11 +580,9 @@ export const DatabaseProvider = () =>
       ) {
         const patched = yield* retryConcurrentChanges(
           firestore.patchProjectsDatabases({
+            deleteProtectionState: DEFAULT_DELETE_PROTECTION,
             name: output.name,
             updateMask: "deleteProtectionState",
-            body: {
-              deleteProtectionState: DEFAULT_DELETE_PROTECTION,
-            },
           }),
         );
         yield* waitForOperation(patched);

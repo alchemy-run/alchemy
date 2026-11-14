@@ -382,27 +382,23 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
         const created = yield* retryTransient(
           kafka
             .createProjectsLocationsSchemaRegistriesContextsSubjectsVersions({
+              schemaType: news.schemaType,
+              version: news.version,
+              normalize: news.normalize,
+              id: news.id,
+              schema: news.schema,
+              references: news.references,
               parent,
-              body: {
-                schemaType: news.schemaType,
-                version: news.version,
-                normalize: news.normalize,
-                id: news.id,
-                schema: news.schema,
-                references: news.references,
-              },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         const lookedUp = yield* kafka
           .lookupVersionProjectsLocationsSchemaRegistriesContextsSubjects({
+            schema: news.schema,
+            schemaType: news.schemaType,
+            normalize: news.normalize,
+            references: news.references,
             parent,
-            body: {
-              schema: news.schema,
-              schemaType: news.schemaType,
-              normalize: news.normalize,
-              references: news.references,
-            },
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         current =

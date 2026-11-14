@@ -283,9 +283,9 @@ export const FolderBucketsLinkProvider = () =>
       if (current === undefined) {
         yield* logging
           .createFoldersLocationsBucketsLinks({
+            description: desiredDescription,
             parent: news.bucketName,
             linkId,
-            body: { description: desiredDescription },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed<logging.Operation>({ done: true })),

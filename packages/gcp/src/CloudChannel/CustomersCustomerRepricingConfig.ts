@@ -260,10 +260,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudchannel
-          .createAccountsCustomersCustomerRepricingConfigs({
-            parent,
-            body: { repricingConfig },
-          })
+          .createAccountsCustomersCustomerRepricingConfigs({ repricingConfig, parent })
           .pipe(Effect.catchTag("Conflict", () => findCustomerRepricing(parent, name, month)));
         current = created ?? undefined;
       }
@@ -288,8 +285,8 @@ export const CustomersCustomerRepricingConfigProvider = () =>
 
       if (changed && currentName.length > 0) {
         current = yield* cloudchannel.patchAccountsCustomersCustomerRepricingConfigs({
+          repricingConfig,
           name: currentName,
-          body: { name: currentName, repricingConfig },
         });
       }
 

@@ -397,10 +397,7 @@ export const ExternalVpnGatewayProvider = () =>
           }));
         }
         const created = yield* compute
-          .insertExternalVpnGateways({
-            project: env.project,
-            body,
-          })
+          .insertExternalVpnGateways({ ...body, project: env.project })
           .pipe(
             Effect.flatMap((operation) =>
               waitGlobalOperation(env.project, operation, {
@@ -426,12 +423,10 @@ export const ExternalVpnGatewayProvider = () =>
           const latest = (yield* getByName(env.project, externalVpnGatewayName)) ?? resolved;
           yield* compute
             .setLabelsExternalVpnGateways({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               resource: externalVpnGatewayName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             })
             .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         }).pipe(

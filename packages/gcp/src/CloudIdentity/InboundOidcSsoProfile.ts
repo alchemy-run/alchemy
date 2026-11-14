@@ -196,7 +196,7 @@ export const InboundOidcSsoProfileProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudidentity
-          .createInboundOidcSsoProfiles({ body: desired })
+          .createInboundOidcSsoProfiles({ ...desired })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
@@ -238,13 +238,11 @@ export const InboundOidcSsoProfileProvider = () =>
 
       if (updateMask.length > 0 && name.length > 0) {
         const patched = yield* cloudidentity.patchInboundOidcSsoProfiles({
+          displayName,
+          idpConfig: news.idpConfig,
+          rpConfig: news.rpConfig,
           name,
           updateMask,
-          body: {
-            displayName,
-            idpConfig: news.idpConfig,
-            rpConfig: news.rpConfig,
-          },
         });
         yield* waitForOperation(patched).pipe(
           Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),

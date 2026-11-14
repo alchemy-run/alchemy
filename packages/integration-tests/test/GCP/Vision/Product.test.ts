@@ -48,12 +48,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         vision.createProjectsLocationsProducts({
+          displayName: "Alchemy probe",
+          productCategory: "homegoods-v2",
           parent: `projects/${project}/locations/${location}`,
           productId: "alchemy-vision-probe",
-          body: {
-            displayName: "Alchemy probe",
-            productCategory: "homegoods-v2",
-          },
         }),
       );
       expect(error._tag).toEqual("ProductSearchNotOnboarded");

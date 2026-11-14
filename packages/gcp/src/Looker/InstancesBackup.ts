@@ -504,10 +504,7 @@ export const InstancesBackupProvider = () =>
 
       if (current === undefined) {
         const created = yield* looker
-          .createProjectsLocationsInstancesBackups({
-            parent: ref.instanceName,
-            body: { name },
-          })
+          .createProjectsLocationsInstancesBackups({ name, parent: ref.instanceName })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);

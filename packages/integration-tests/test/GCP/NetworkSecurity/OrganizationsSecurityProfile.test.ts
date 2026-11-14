@@ -74,9 +74,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_NETWORKSECURITY)(
         : "0";
       const error = yield* Effect.flip(
         networksecurity.createOrganizationsLocationsSecurityProfiles({
+          type: "THREAT_PREVENTION",
+          threatPreventionProfile: {},
           parent: `organizations/${organization}/locations/global`,
           securityProfileId: "alchemy-org-secprofile-probe",
-          body: { type: "THREAT_PREVENTION", threatPreventionProfile: {} },
         }),
       );
       expect(error._tag).toBe("Forbidden");

@@ -65,8 +65,8 @@ test.provider.skipIf(!!process.env.FAST || runLifecycle)(
       });
       const error = yield* Effect.flip(
         discoveryengine.createProjectsLocationsDataStoresConversations({
+          userPseudoId: "alchemy-probe",
           parent: parent.name ?? "",
-          body: { userPseudoId: "alchemy-probe" },
         }),
       );
       expect(error._tag).toEqual("LlmAddOnRequired");

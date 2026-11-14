@@ -418,12 +418,10 @@ export const BucketsDatasetsLinkProvider = () =>
       if (current === undefined) {
         const created = yield* observability
           .createProjectsLocationsBucketsDatasetsLinks({
+            displayName: news.displayName,
+            description: desiredDescription,
             parent: parent.name,
             linkId,
-            body: {
-              displayName: news.displayName,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -447,12 +445,10 @@ export const BucketsDatasetsLinkProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* observability.patchProjectsLocationsBucketsDatasetsLinks({
+          displayName: news.displayName,
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName: news.displayName,
-            description: desiredDescription,
-          },
         });
         yield* waitForOperation(patched).pipe(Effect.catchTag("NotFound", () => Effect.void));
         current = (yield* getByName(current.name ?? name)) ?? current;

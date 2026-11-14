@@ -499,11 +499,7 @@ export const KeyProvider = () =>
 
       if (current === undefined || isDeleted(current)) {
         const created = yield* apikeys
-          .createProjectsLocationsKeys({
-            parent,
-            keyId,
-            body: toCreateBody(news, desiredAnnotations),
-          })
+          .createProjectsLocationsKeys({ ...toCreateBody(news, desiredAnnotations), parent, keyId })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -537,15 +533,12 @@ export const KeyProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* apikeys.patchProjectsLocationsKeys({
+          etag: current.etag,
+          annotations: desiredAnnotations,
+          displayName: news.displayName,
+          restrictions: news.restrictions ?? {},
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            etag: current.etag,
-            annotations: desiredAnnotations,
-            displayName: news.displayName,
-            restrictions: news.restrictions ?? {},
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilActive(name);

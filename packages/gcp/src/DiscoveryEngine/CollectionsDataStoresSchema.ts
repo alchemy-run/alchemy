@@ -217,12 +217,10 @@ export const CollectionsDataStoresSchemaProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStoresSchemas({
+            jsonSchema,
+            structSchema: news.structSchema,
             parent: news.dataStore,
             schemaId,
-            body: {
-              jsonSchema,
-              structSchema: news.structSchema,
-            },
           })
           .pipe(
             Effect.retry({
@@ -248,12 +246,9 @@ export const CollectionsDataStoresSchemaProvider = () =>
 
       if (jsonChanged || structChanged) {
         const patched = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresSchemas({
+          jsonSchema,
+          structSchema: news.structSchema,
           name: resource,
-          body: {
-            name: resource,
-            jsonSchema,
-            structSchema: news.structSchema,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(resource);

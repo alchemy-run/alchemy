@@ -525,13 +525,11 @@ export const makeImageSource = Effect.gen(function* () {
     }
     const created = yield* artifactregistry
       .createProjectsLocationsRepositories({
+        format: "DOCKER",
+        mode: "STANDARD_REPOSITORY",
+        labels: desiredLabels,
         parent: `projects/${env.project}/locations/${options.location}`,
         repositoryId: options.repositoryId,
-        body: {
-          format: "DOCKER",
-          mode: "STANDARD_REPOSITORY",
-          labels: desiredLabels,
-        },
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {

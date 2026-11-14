@@ -329,17 +329,15 @@ const syncStateBucketAccess = (bucket: string, project: string) =>
     const missing = members.filter((member) => !(existing?.members ?? []).includes(member));
     if (missing.length === 0) return;
     yield* storage.setIamPolicyBuckets({
+      ...policy,
+      bindings: existing
+        ? bindings.map((binding) =>
+            binding === existing
+              ? { ...binding, members: [...(binding.members ?? []), ...missing] }
+              : binding,
+          )
+        : [...bindings, { role: STATE_OBJECT_ROLE, members }],
       bucket,
-      body: {
-        ...policy,
-        bindings: existing
-          ? bindings.map((binding) =>
-              binding === existing
-                ? { ...binding, members: [...(binding.members ?? []), ...missing] }
-                : binding,
-            )
-          : [...bindings, { role: STATE_OBJECT_ROLE, members }],
-      },
     });
   }).pipe(
     Effect.retry({
@@ -367,13 +365,11 @@ const ensureStateBucket = (bucket: string, project: string, location: string) =>
       yield* Effect.logInfo(`Cloud Storage state store: creating bucket ${bucket} in ${location}`);
       yield* storage
         .insertBuckets({
+          name: bucket,
+          location,
+          iamConfiguration: desiredIamConfiguration,
+          versioning: { enabled: true },
           project,
-          body: {
-            name: bucket,
-            location,
-            iamConfiguration: desiredIamConfiguration,
-            versioning: { enabled: true },
-          },
         })
         .pipe(
           // A concurrent first use created it first.
@@ -386,11 +382,9 @@ const ensureStateBucket = (bucket: string, project: string, location: string) =>
         observed.versioning?.enabled !== true;
       if (drifted) {
         yield* storage.patchBuckets({
+          iamConfiguration: desiredIamConfiguration,
+          versioning: { enabled: true },
           bucket,
-          body: {
-            iamConfiguration: desiredIamConfiguration,
-            versioning: { enabled: true },
-          },
         });
       }
     }

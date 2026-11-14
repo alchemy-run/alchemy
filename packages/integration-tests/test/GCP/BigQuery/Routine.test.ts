@@ -88,12 +88,10 @@ test.provider(
       expect(fetched.returnType?.typeKind).toEqual("INT64");
 
       const queried = yield* bigquery.queryJobs({
+        query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
+        useLegacySql: false,
+        location: "US-CENTRAL1",
         projectId: created.project,
-        body: {
-          query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
-          useLegacySql: false,
-          location: "US-CENTRAL1",
-        },
       });
       expect(queried.jobComplete).toEqual(true);
       expect(queried.rows?.[0]?.f?.[0]?.v).toEqual("6");
@@ -133,12 +131,10 @@ test.provider(
       expect(fetchedUpdate.description).toContain("multiply by four");
 
       const queriedUpdate = yield* bigquery.queryJobs({
+        query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
+        useLegacySql: false,
+        location: "US-CENTRAL1",
         projectId: created.project,
-        body: {
-          query: `SELECT \`${created.project}.${created.datasetId}.${created.routineId}\`(2) AS n`,
-          useLegacySql: false,
-          location: "US-CENTRAL1",
-        },
       });
       expect(queriedUpdate.jobComplete).toEqual(true);
       expect(queriedUpdate.rows?.[0]?.f?.[0]?.v).toEqual("8");

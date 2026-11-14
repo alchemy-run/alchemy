@@ -401,16 +401,14 @@ export const ClusterProvider = () =>
       if (current === undefined) {
         const created = yield* kafka
           .createProjectsLocationsClusters({
+            gcpConfig,
+            capacityConfig: capacity,
+            rebalanceConfig,
+            tlsConfig: news.tlsConfig,
+            updateOptions: news.updateOptions,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             clusterId,
-            body: {
-              gcpConfig,
-              capacityConfig: capacity,
-              rebalanceConfig,
-              tlsConfig: news.tlsConfig,
-              updateOptions: news.updateOptions,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             retryCreateQuota,
@@ -448,6 +446,11 @@ export const ClusterProvider = () =>
         updateOptionsChanged
       ) {
         const op = yield* kafka.patchProjectsLocationsClusters({
+          labels: desiredLabels,
+          capacityConfig: capacity,
+          rebalanceConfig,
+          tlsConfig: news.tlsConfig,
+          updateOptions: news.updateOptions,
           name,
           updateMask: fieldMask([
             labelsChanged && "labels",
@@ -456,13 +459,6 @@ export const ClusterProvider = () =>
             tlsChanged && "tls_config",
             updateOptionsChanged && "update_options",
           ]),
-          body: {
-            labels: desiredLabels,
-            capacityConfig: capacity,
-            rebalanceConfig,
-            tlsConfig: news.tlsConfig,
-            updateOptions: news.updateOptions,
-          },
         });
         yield* waitForOperation(op);
         current = yield* waitUntilReady(getCluster(name), name, (cluster) => cluster.state);

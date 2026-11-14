@@ -165,15 +165,7 @@ const deactivateThenDelete = (projectId: string, accessId: string) =>
     if (current === undefined) return;
     if (normalizeState(current.state) === "ACTIVE") {
       yield* storage
-        .updateProjectsHmacKeys({
-          projectId,
-          accessId,
-          body: {
-            accessId,
-            state: "INACTIVE",
-            etag: current.etag,
-          },
-        })
+        .updateProjectsHmacKeys({ state: "INACTIVE", etag: current.etag, projectId, accessId })
         .pipe(
           Effect.catchTags({
             NotFound: () => Effect.undefined,
@@ -284,13 +276,10 @@ export const HmacKeyProvider = () =>
             return latest;
           }
           return yield* storage.updateProjectsHmacKeys({
+            state: desiredState,
+            etag: latest.etag,
             projectId,
             accessId,
-            body: {
-              accessId,
-              state: desiredState,
-              etag: latest.etag,
-            },
           });
         }).pipe(
           Effect.retry({

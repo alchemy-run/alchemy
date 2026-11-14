@@ -276,12 +276,12 @@ const patchPolicy = (name: string, updateMask: string, body: bqdp.DataPolicy) =>
       return yield* new DataPolicyNotResolved({ resourceName: name });
     }
     return yield* bqdp.patchProjectsLocationsDataPolicies({
-      name,
-      updateMask,
-      body: compact({
+      ...compact({
         ...body,
         etag: latest.etag,
       }),
+      name,
+      updateMask,
     });
   }).pipe(
     Effect.retry({
@@ -357,11 +357,9 @@ export const DataPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* bqdp
           .createProjectsLocationsDataPolicies({
+            dataPolicyId,
+            dataPolicy: toCreateBody(news, dataPolicyType),
             parent,
-            body: {
-              dataPolicyId,
-              dataPolicy: toCreateBody(news, dataPolicyType),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => observe(id, name, env.project, location)));
         current = created ?? undefined;

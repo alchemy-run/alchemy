@@ -411,9 +411,9 @@ export const MachineImageProvider = () =>
         }
         const inserted = yield* compute
           .insertMachineImages({
+            ...insertBody(machineImageName, news, desiredLabels),
             project: env.project,
             sourceInstance: news.sourceInstance,
-            body: insertBody(machineImageName, news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
@@ -441,12 +441,10 @@ export const MachineImageProvider = () =>
       if (upsert.length > 0 || removed.length > 0) {
         yield* compute
           .setLabelsMachineImages({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             resource: machineImageName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, machineImageName)) ?? current;

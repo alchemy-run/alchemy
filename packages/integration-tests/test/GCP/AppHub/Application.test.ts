@@ -44,12 +44,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         apphub.createProjectsLocationsApplications({
+          displayName: "probe",
+          scope: { type: "REGIONAL" },
           parent: `projects/${project}/locations/${location}`,
           applicationId: "alchemy-apphub-probe",
-          body: {
-            displayName: "probe",
-            scope: { type: "REGIONAL" },
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

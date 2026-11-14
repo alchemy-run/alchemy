@@ -426,9 +426,9 @@ export const FolderBucketProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createFoldersLocationsBuckets({
+            ...toCreateBody(news, desiredDescription),
             parent: locationParent(parent, location),
             bucketId,
-            body: toCreateBody(news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -496,9 +496,9 @@ export const FolderBucketProvider = () =>
           body.cmekSettings = { kmsKeyName: news.cmekSettings?.kmsKeyName };
         }
         current = yield* logging.patchFoldersLocationsBuckets({
+          ...body,
           name: current.name ?? name,
           updateMask: syncMask.join(","),
-          body,
         });
         if (isPendingBucket(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);
@@ -507,9 +507,9 @@ export const FolderBucketProvider = () =>
 
       if (lockedChanged) {
         current = yield* logging.patchFoldersLocationsBuckets({
+          locked: true,
           name: current.name ?? name,
           updateMask: "locked",
-          body: { locked: true },
         });
         if (isPendingBucket(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);

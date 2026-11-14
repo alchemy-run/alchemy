@@ -71,10 +71,8 @@ test.provider.skipIf(entitled)(
 
       const error = yield* Effect.flip(
         workloadmanager.createProjectsLocationsDeploymentsActuations({
+          name: `${missingDeployment}/actuations/alchemy-actuation-probe`,
           parent: missingDeployment,
-          body: {
-            name: `${missingDeployment}/actuations/alchemy-actuation-probe`,
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

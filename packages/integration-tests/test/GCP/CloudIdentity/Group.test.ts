@@ -46,15 +46,13 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       const error = yield* Effect.flip(
         cloudidentity.createGroups({
-          initialGroupConfig: "EMPTY",
-          body: {
-            parent: customer,
-            groupKey: { id: "alchemy-probe@example.com" },
-            labels: {
-              "cloudidentity.googleapis.com/groups.discussion_forum": "",
-            },
-            displayName: "Alchemy Cloud Identity Probe",
+          parent: customer,
+          groupKey: { id: "alchemy-probe@example.com" },
+          labels: {
+            "cloudidentity.googleapis.com/groups.discussion_forum": "",
           },
+          displayName: "Alchemy Cloud Identity Probe",
+          initialGroupConfig: "EMPTY",
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

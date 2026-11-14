@@ -408,11 +408,7 @@ export const ServicesConnectorProvider = () =>
 
       if (current === undefined) {
         const created = yield* firebasedataconnect
-          .createProjectsLocationsServicesConnectors({
-            parent: service,
-            connectorId,
-            body,
-          })
+          .createProjectsLocationsServicesConnectors({ ...body, parent: service, connectorId })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -441,9 +437,9 @@ export const ServicesConnectorProvider = () =>
         yield* retryStaleEtag(
           firebasedataconnect
             .patchProjectsLocationsServicesConnectors({
+              ...body,
               name: patchName,
               updateMask: mask,
-              body,
             })
             .pipe(Effect.flatMap((operation) => waitForOperation(operation))),
         );

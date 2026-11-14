@@ -206,11 +206,9 @@ export const RepositoriesWorkspaceProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsRepositoriesWorkspaces({
+            disableMoves: news.disableMoves === true ? true : undefined,
             parent: repository,
             workspaceId,
-            body: {
-              disableMoves: news.disableMoves === true ? true : undefined,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

@@ -369,17 +369,15 @@ export const DatasetProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsDatasets({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            metadataSchemaUri,
+            metadata: news.metadata ?? {},
+            encryptionSpec: news.encryptionSpec,
+            modelReference: news.modelReference,
+            savedQueries: news.savedQueries,
             parent: parentOf(env.project, location),
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              metadataSchemaUri,
-              metadata: news.metadata ?? {},
-              encryptionSpec: news.encryptionSpec,
-              modelReference: news.modelReference,
-              savedQueries: news.savedQueries,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -411,6 +409,9 @@ export const DatasetProvider = () =>
 
       if (labelsChanged || displayNameChanged || descriptionChanged) {
         current = yield* aiplatform.patchProjectsLocationsDatasets({
+          labels: desiredLabels,
+          displayName,
+          description: news.description,
           name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -419,12 +420,6 @@ export const DatasetProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            displayName,
-            description: news.description,
-          },
         });
       }
 

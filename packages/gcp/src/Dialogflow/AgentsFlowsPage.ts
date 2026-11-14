@@ -237,9 +237,9 @@ export const AgentsFlowsPageProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsFlowsPages({
+            ...body,
             parent: flow,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, flow, output?.name)));
         current = created ?? undefined;
@@ -258,6 +258,7 @@ export const AgentsFlowsPageProvider = () =>
 
       if (displayChanged || descriptionChanged || fulfillmentChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlowsPages({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
@@ -265,7 +266,6 @@ export const AgentsFlowsPageProvider = () =>
             descriptionChanged ? "description" : undefined,
             fulfillmentChanged ? "entry_fulfillment" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

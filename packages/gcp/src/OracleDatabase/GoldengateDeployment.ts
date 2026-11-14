@@ -525,9 +525,9 @@ export const GoldengateDeploymentProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsGoldengateDeployments({
+            ...toCreateBody(news, desiredLabels, displayName, odbNetwork, odbSubnet),
             parent: parentOf(env.project, location),
             goldengateDeploymentId,
-            body: toCreateBody(news, desiredLabels, displayName, odbNetwork, odbSubnet),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

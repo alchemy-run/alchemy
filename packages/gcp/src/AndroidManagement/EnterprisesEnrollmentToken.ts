@@ -228,8 +228,8 @@ export const EnterprisesEnrollmentTokenProvider = () =>
 
       if (current === undefined) {
         current = yield* androidmanagement.createEnterprisesEnrollmentTokens({
+          ...desired,
           parent,
-          body: desired,
         });
       }
 

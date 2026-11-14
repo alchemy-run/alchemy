@@ -312,14 +312,12 @@ export const DatasetsHl7V2StoreProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsHl7V2Stores({
+            labels: desiredLabels,
+            rejectDuplicateMessage: news.rejectDuplicateMessage,
+            parserConfig: news.parserConfig,
+            notificationConfigs: news.notificationConfigs,
             parent: dataset,
             hl7V2StoreId,
-            body: {
-              labels: desiredLabels,
-              rejectDuplicateMessage: news.rejectDuplicateMessage,
-              parserConfig: news.parserConfig,
-              notificationConfigs: news.notificationConfigs,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -344,6 +342,10 @@ export const DatasetsHl7V2StoreProvider = () =>
       if (labelsChanged || rejectChanged || parserChanged || notificationsChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsHl7V2Stores({
+            labels: desiredLabels,
+            rejectDuplicateMessage: news.rejectDuplicateMessage,
+            parserConfig: news.parserConfig,
+            notificationConfigs: news.notificationConfigs,
             name: currentName,
             updateMask: updateMaskOf(
               labelsChanged ? "labels" : undefined,
@@ -351,12 +353,6 @@ export const DatasetsHl7V2StoreProvider = () =>
               parserChanged ? "parserConfig.allowNullHeader" : undefined,
               notificationsChanged ? "notificationConfigs" : undefined,
             ),
-            body: {
-              labels: desiredLabels,
-              rejectDuplicateMessage: news.rejectDuplicateMessage,
-              parserConfig: news.parserConfig,
-              notificationConfigs: news.notificationConfigs,
-            },
           }),
         );
       }

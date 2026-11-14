@@ -55,16 +55,14 @@ test.provider(
       expect(fetched.description).toEqual("alchemy test dataset");
 
       const queried = yield* bigquery.queryJobs({
-        projectId: created.project,
-        body: {
-          query: "SELECT 1 AS n",
-          useLegacySql: false,
-          location: created.location,
-          defaultDataset: {
-            projectId: created.project,
-            datasetId: created.datasetId,
-          },
+        query: "SELECT 1 AS n",
+        useLegacySql: false,
+        location: created.location,
+        defaultDataset: {
+          projectId: created.project,
+          datasetId: created.datasetId,
         },
+        projectId: created.project,
       });
       expect(queried.jobComplete).toEqual(true);
 

@@ -346,15 +346,10 @@ export const TargetTcpProxyProvider = () =>
         if (news.loadBalancingScheme !== undefined) {
           body.loadBalancingScheme = news.loadBalancingScheme;
         }
-        yield* compute
-          .insertTargetTcpProxies({
-            project: env.project,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertTargetTcpProxies({ ...body, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, targetTcpProxyName);
       }
 
@@ -365,9 +360,9 @@ export const TargetTcpProxyProvider = () =>
       if (resourceTail(current.service) !== resourceTail(desiredService)) {
         yield* compute
           .setBackendServiceTargetTcpProxies({
+            service: desiredService,
             project: env.project,
             targetTcpProxy: targetTcpProxyName,
-            body: { service: desiredService },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetTcpProxyName);
@@ -381,9 +376,9 @@ export const TargetTcpProxyProvider = () =>
       if ((current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredProxyHeader) {
         yield* compute
           .setProxyHeaderTargetTcpProxies({
+            proxyHeader: desiredProxyHeader,
             project: env.project,
             targetTcpProxy: targetTcpProxyName,
-            body: { proxyHeader: desiredProxyHeader },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetTcpProxyName);

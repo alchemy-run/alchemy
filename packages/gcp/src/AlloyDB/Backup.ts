@@ -574,9 +574,9 @@ export const BackupProvider = () =>
         const parent = `projects/${env.project}/locations/${location}`;
         const created = yield* alloydb
           .createProjectsLocationsBackups({
+            ...toCreateBody(news, desiredLabels, ref.clusterName, backupType),
             parent,
             backupId,
-            body: toCreateBody(news, desiredLabels, ref.clusterName, backupType),
           })
           .pipe(
             // The cluster only accepts backups a few minutes after its
@@ -620,14 +620,11 @@ export const BackupProvider = () =>
 
         const patched = yield* alloydb
           .patchProjectsLocationsBackups({
+            labels: desiredLabels,
+            displayName: news.displayName,
+            annotations: news.annotations,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              displayName: news.displayName,
-              annotations: news.annotations,
-            },
           })
           .pipe(
             Effect.retry({

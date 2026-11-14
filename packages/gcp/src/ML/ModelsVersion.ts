@@ -383,27 +383,25 @@ export const ModelsVersionProvider = () =>
       if (current === undefined) {
         const created = yield* ml
           .createProjectsModelsVersions({
+            name: versionId,
+            description,
+            labels: desiredLabels,
+            deploymentUri: news.deploymentUri,
+            runtimeVersion: news.runtimeVersion,
+            pythonVersion: news.pythonVersion,
+            framework: news.framework,
+            machineType: news.machineType,
+            autoScaling: news.autoScaling,
+            manualScaling: news.manualScaling,
+            container: news.container,
+            packageUris: news.packageUris,
+            predictionClass: news.predictionClass,
+            serviceAccount: news.serviceAccount,
+            acceleratorConfig: news.acceleratorConfig,
+            explanationConfig: news.explanationConfig,
+            routes: news.routes,
+            requestLoggingConfig: news.requestLoggingConfig,
             parent: model,
-            body: {
-              name: versionId,
-              description,
-              labels: desiredLabels,
-              deploymentUri: news.deploymentUri,
-              runtimeVersion: news.runtimeVersion,
-              pythonVersion: news.pythonVersion,
-              framework: news.framework,
-              machineType: news.machineType,
-              autoScaling: news.autoScaling,
-              manualScaling: news.manualScaling,
-              container: news.container,
-              packageUris: news.packageUris,
-              predictionClass: news.predictionClass,
-              serviceAccount: news.serviceAccount,
-              acceleratorConfig: news.acceleratorConfig,
-              explanationConfig: news.explanationConfig,
-              routes: news.routes,
-              requestLoggingConfig: news.requestLoggingConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -432,15 +430,12 @@ export const ModelsVersionProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* ml.patchProjectsModelsVersions({
+          description,
+          autoScaling: news.autoScaling,
+          manualScaling: news.manualScaling,
+          requestLoggingConfig: news.requestLoggingConfig,
           name: currentName,
           updateMask: mask,
-          body: {
-            name: currentName,
-            description,
-            autoScaling: news.autoScaling,
-            manualScaling: news.manualScaling,
-            requestLoggingConfig: news.requestLoggingConfig,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getVersion(currentName), currentName);

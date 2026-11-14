@@ -349,16 +349,13 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsApisRevisionsDebugsessions({
+            name: debugsessionId,
+            filter: news.filter,
+            validity: news.validity,
+            count: news.count,
+            tracesize: news.tracesize,
             parent,
             timeout: news.timeout,
-            body: {
-              name: debugsessionId,
-              timeout: news.timeout,
-              filter: news.filter,
-              validity: news.validity,
-              count: news.count,
-              tracesize: news.tracesize,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

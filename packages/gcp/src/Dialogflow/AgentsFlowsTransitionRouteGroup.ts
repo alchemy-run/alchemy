@@ -270,9 +270,9 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsFlowsTransitionRouteGroups({
+            ...body,
             parent: flow,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, flow, output?.name)));
         current = created ?? undefined;
@@ -295,13 +295,13 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
 
       if (displayChanged || routesChanged) {
         current = yield* dialogflow.patchProjectsLocationsAgentsFlowsTransitionRouteGroups({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             routesChanged ? "transition_routes" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

@@ -305,13 +305,7 @@ export const SnapshotProvider = () =>
 
       if (current === undefined) {
         yield* pubsub
-          .createProjectsSnapshots({
-            name,
-            body: {
-              subscription: subscriptionName,
-              labels: desiredLabels,
-            },
-          })
+          .createProjectsSnapshots({ subscription: subscriptionName, labels: desiredLabels, name })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub consistently serves the snapshot; the next
         // call (label patch) can otherwise hit a lagging replica.
@@ -326,14 +320,12 @@ export const SnapshotProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         current = yield* pubsub.patchProjectsSnapshots({
-          name,
-          body: {
-            snapshot: {
-              name,
-              labels: desiredLabels,
-            },
-            updateMask: "labels",
+          snapshot: {
+            name,
+            labels: desiredLabels,
           },
+          updateMask: "labels",
+          name,
         });
       }
 

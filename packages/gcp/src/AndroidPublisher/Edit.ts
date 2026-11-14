@@ -129,10 +129,7 @@ export const EditProvider = () =>
 
       if (current === undefined) {
         const created = yield* androidpublisher
-          .insertEdits({
-            packageName,
-            body: {},
-          })
+          .insertEdits({ packageName })
           .pipe(Effect.catchTag("Conflict", () => getEdit(packageName, editId)));
         current = created ?? undefined;
       }

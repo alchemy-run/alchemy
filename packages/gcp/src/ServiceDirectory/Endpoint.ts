@@ -608,14 +608,12 @@ export const EndpointProvider = () =>
       if (current === undefined) {
         const created = yield* servicedirectory
           .createProjectsLocationsNamespacesServicesEndpoints({
+            address: desiredAddress,
+            port: desiredPort,
+            annotations: desiredAnnotations,
+            network: desiredNetwork,
             parent: parent.parent,
             endpointId,
-            body: {
-              address: desiredAddress,
-              port: desiredPort,
-              annotations: desiredAnnotations,
-              network: desiredNetwork,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -640,14 +638,11 @@ export const EndpointProvider = () =>
           .filter((field): field is string => field !== undefined)
           .join(",");
         current = yield* servicedirectory.patchProjectsLocationsNamespacesServicesEndpoints({
+          annotations: desiredAnnotations,
+          address: desiredAddress,
+          port: desiredPort,
           name,
           updateMask,
-          body: {
-            name,
-            annotations: desiredAnnotations,
-            address: desiredAddress,
-            port: desiredPort,
-          },
         });
       }
 

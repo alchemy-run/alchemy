@@ -69,10 +69,8 @@ test.provider.skipIf(runLifecycle)(
       );
       const error = yield* Effect.flip(
         resourcemanager.createFolders({
-          body: {
-            parent: parent ?? "organizations/0",
-            displayName: "probe-folder",
-          },
+          parent: parent ?? "organizations/0",
+          displayName: "probe-folder",
         }),
       );
       expect(error._tag).toEqual("Forbidden");

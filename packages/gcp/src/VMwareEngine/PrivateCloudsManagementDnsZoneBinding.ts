@@ -319,13 +319,11 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateCloudsManagementDnsZoneBindings({
+            description: desiredDescription,
+            vpcNetwork,
+            vmwareEngineNetwork,
             parent: privateCloud,
             managementDnsZoneBindingId: bindingId,
-            body: {
-              description: desiredDescription,
-              vpcNetwork,
-              vmwareEngineNetwork,
-            },
           })
           .pipe(
             Effect.retry({
@@ -357,12 +355,9 @@ export const PrivateCloudsManagementDnsZoneBindingProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* vmwareengine.patchProjectsLocationsPrivateCloudsManagementDnsZoneBindings({
+            description: desiredDescription,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

@@ -271,12 +271,10 @@ export const GatewaySecurityPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsGatewaySecurityPolicies({
+            description: desiredDescription,
+            tlsInspectionPolicy,
             parent: parentOf(env.project, location),
             gatewaySecurityPolicyId,
-            body: {
-              description: desiredDescription,
-              tlsInspectionPolicy,
-            },
           })
           .pipe(
             Effect.retry({
@@ -306,13 +304,10 @@ export const GatewaySecurityPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsGatewaySecurityPolicies({
+          description: desiredDescription,
+          tlsInspectionPolicy,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            tlsInspectionPolicy,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

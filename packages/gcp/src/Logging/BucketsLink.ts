@@ -422,9 +422,9 @@ export const BucketsLinkProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createProjectsLocationsBucketsLinks({
+            description: desiredDescription,
             parent: parent.name,
             linkId,
-            body: { description: desiredDescription },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

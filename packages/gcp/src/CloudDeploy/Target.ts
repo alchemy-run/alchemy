@@ -531,22 +531,20 @@ export const TargetProvider = () =>
       if (current === undefined) {
         const created = yield* clouddeploy
           .createProjectsLocationsTargets({
+            description: news.description,
+            requireApproval: desiredApproval,
+            gke: destination.gke,
+            run: destination.run,
+            anthosCluster: destination.anthosCluster,
+            customTarget: destination.customTarget,
+            multiTarget: destination.multiTarget,
+            executionConfigs: news.executionConfigs,
+            deployParameters: desiredParameters,
+            associatedEntities: news.associatedEntities,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             targetId,
-            body: {
-              description: news.description,
-              requireApproval: desiredApproval,
-              gke: destination.gke,
-              run: destination.run,
-              anthosCluster: destination.anthosCluster,
-              customTarget: destination.customTarget,
-              multiTarget: destination.multiTarget,
-              executionConfigs: news.executionConfigs,
-              deployParameters: desiredParameters,
-              associatedEntities: news.associatedEntities,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -585,23 +583,21 @@ export const TargetProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* clouddeploy.patchProjectsLocationsTargets({
+          etag: current.etag,
+          description: news.description,
+          requireApproval: desiredApproval,
+          gke: destination.gke,
+          run: destination.run,
+          anthosCluster: destination.anthosCluster,
+          customTarget: destination.customTarget,
+          multiTarget: destination.multiTarget,
+          executionConfigs: news.executionConfigs,
+          deployParameters: desiredParameters,
+          associatedEntities: news.associatedEntities,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            description: news.description,
-            requireApproval: desiredApproval,
-            gke: destination.gke,
-            run: destination.run,
-            anthosCluster: destination.anthosCluster,
-            customTarget: destination.customTarget,
-            multiTarget: destination.multiTarget,
-            executionConfigs: news.executionConfigs,
-            deployParameters: desiredParameters,
-            associatedEntities: news.associatedEntities,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

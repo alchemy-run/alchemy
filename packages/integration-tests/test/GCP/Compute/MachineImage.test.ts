@@ -112,24 +112,22 @@ const ensureVm = () =>
     if ((yield* getVm()) === undefined) {
       const operation = yield* compute
         .insertInstances({
+          name: vmName,
+          machineType: `zones/${zone}/machineTypes/e2-micro`,
+          disks: [
+            {
+              boot: true,
+              autoDelete: true,
+              type: "PERSISTENT",
+              initializeParams: {
+                sourceImage: "projects/debian-cloud/global/images/family/debian-12",
+                diskSizeGb: "10",
+              },
+            },
+          ],
+          networkInterfaces: [{ network: "global/networks/default" }],
           project,
           zone,
-          body: {
-            name: vmName,
-            machineType: `zones/${zone}/machineTypes/e2-micro`,
-            disks: [
-              {
-                boot: true,
-                autoDelete: true,
-                type: "PERSISTENT",
-                initializeParams: {
-                  sourceImage: "projects/debian-cloud/global/images/family/debian-12",
-                  diskSizeGb: "10",
-                },
-              },
-            ],
-            networkInterfaces: [{ network: "global/networks/default" }],
-          },
         })
         .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
       if (operation !== undefined) {

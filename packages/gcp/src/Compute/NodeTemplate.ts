@@ -443,19 +443,17 @@ export const NodeTemplateProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNodeTemplates({
+            name: nodeTemplateName,
+            description: desiredDescription,
+            nodeType: news.nodeType,
+            nodeTypeFlexibility: news.nodeTypeFlexibility,
+            cpuOvercommitType: news.cpuOvercommitType,
+            nodeAffinityLabels: news.nodeAffinityLabels,
+            disks: news.disks,
+            accelerators: news.accelerators,
+            serverBinding: news.serverBinding,
             project: env.project,
             region,
-            body: {
-              name: nodeTemplateName,
-              description: desiredDescription,
-              nodeType: news.nodeType,
-              nodeTypeFlexibility: news.nodeTypeFlexibility,
-              cpuOvercommitType: news.cpuOvercommitType,
-              nodeAffinityLabels: news.nodeAffinityLabels,
-              disks: news.disks,
-              accelerators: news.accelerators,
-              serverBinding: news.serverBinding,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>

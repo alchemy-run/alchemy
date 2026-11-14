@@ -289,8 +289,8 @@ export const FirewallpolicyProvider = () =>
       if (current === undefined) {
         const created = yield* recaptchaenterprise
           .createProjectsFirewallpolicies({
+            ...toBody(path, description, condition, actions),
             parent: `projects/${env.project}`,
-            body: toBody(path, description, condition, actions),
           })
           .pipe(Effect.catchTag("Conflict", () => getFirewallPolicy(lookupName)));
         current = created ?? undefined;
@@ -318,9 +318,9 @@ export const FirewallpolicyProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* recaptchaenterprise.patchProjectsFirewallpolicies({
+          ...toBody(path, description, condition, actions),
           name,
           updateMask,
-          body: { ...toBody(path, description, condition, actions), name },
         });
       }
 

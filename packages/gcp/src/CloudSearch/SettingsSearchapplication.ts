@@ -270,7 +270,7 @@ export const SettingsSearchapplicationProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudsearch
-          .createSettingsSearchapplications({ body: desired })
+          .createSettingsSearchapplications({ ...desired })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
@@ -323,9 +323,9 @@ export const SettingsSearchapplicationProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* cloudsearch.patchSettingsSearchapplications({
+          ...desired,
           name: toSearchApplicationName(resourceName),
           updateMask,
-          body: desired,
         });
         yield* waitForOperation(patched);
         const refreshed = yield* waitUntilExists(getSearchApplication(resourceName), resourceName);

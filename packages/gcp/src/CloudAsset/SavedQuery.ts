@@ -301,11 +301,7 @@ export const SavedQueryProvider = () =>
 
       if (current === undefined) {
         const created = yield* cloudasset
-          .createSavedQueries({
-            parent,
-            savedQueryId,
-            body,
-          })
+          .createSavedQueries({ ...body, parent, savedQueryId })
           .pipe(
             Effect.catchTag("Conflict", () => observe(env.project, savedQueryId, output?.name)),
           );
@@ -329,11 +325,7 @@ export const SavedQueryProvider = () =>
       );
 
       if (updateMask.length > 0) {
-        current = yield* cloudasset.patchSavedQueries({
-          name: currentName,
-          updateMask,
-          body: { ...body, name: currentName },
-        });
+        current = yield* cloudasset.patchSavedQueries({ ...body, name: currentName, updateMask });
       }
 
       return toAttrs(current, env.project);

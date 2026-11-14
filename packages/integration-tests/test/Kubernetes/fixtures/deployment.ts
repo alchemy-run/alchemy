@@ -80,9 +80,7 @@ export default class EksHostApi extends Kubernetes.Deployment<EksHostApi>()(
           });
         }
         if (url.pathname === "/publish") {
-          return yield* publish({
-            body: { messages: [{ data: btoa(EKS_GCP_MESSAGE) }] },
-          }).pipe(
+          return yield* publish({ messages: [{ data: btoa(EKS_GCP_MESSAGE) }] }).pipe(
             Effect.flatMap((response) => HttpServerResponse.json(response)),
             Effect.catchCause((cause) =>
               HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),

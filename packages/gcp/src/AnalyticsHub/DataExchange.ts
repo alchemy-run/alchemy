@@ -321,11 +321,7 @@ export const DataExchangeProvider = () =>
 
       if (current === undefined) {
         const created = yield* retryTransient(
-          analyticshub.createProjectsLocationsDataExchanges({
-            parent,
-            dataExchangeId,
-            body,
-          }),
+          analyticshub.createProjectsLocationsDataExchanges({ ...body, parent, dataExchangeId }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -362,6 +358,7 @@ export const DataExchangeProvider = () =>
       ) {
         current = yield* retryTransient(
           analyticshub.patchProjectsLocationsDataExchanges({
+            ...body,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "displayName" : undefined,
@@ -373,7 +370,6 @@ export const DataExchangeProvider = () =>
               discoveryChanged ? "discoveryType" : undefined,
               sharingChanged ? "sharingEnvironmentConfig" : undefined,
             ),
-            body: { name: currentName, ...body },
           }),
         );
       }

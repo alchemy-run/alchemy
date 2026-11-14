@@ -47,11 +47,9 @@ test.provider(
 
       const created = yield* Effect.flip(
         composer.createProjectsLocationsEnvironmentsUserWorkloadsSecrets({
+          name: `${missingParent}/userWorkloadsSecrets/alchemy-missing`,
+          data: { password: btoa("s3cret") },
           parent: missingParent,
-          body: {
-            name: `${missingParent}/userWorkloadsSecrets/alchemy-missing`,
-            data: { password: btoa("s3cret") },
-          },
         }),
       );
       expect(created._tag).toEqual("NotFound");

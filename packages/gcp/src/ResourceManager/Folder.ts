@@ -291,12 +291,7 @@ export const FolderProvider = () =>
 
       if (current === undefined) {
         const created = yield* resourcemanager
-          .createFolders({
-            body: {
-              parent,
-              displayName,
-            },
-          })
+          .createFolders({ parent, displayName })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
@@ -322,13 +317,10 @@ export const FolderProvider = () =>
 
       if ((current.displayName ?? "") !== displayName) {
         const operation = yield* resourcemanager.patchFolders({
+          displayName,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: "displayName",
-          body: {
-            name: current.name ?? name,
-            displayName,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, parent, displayName);
@@ -336,8 +328,8 @@ export const FolderProvider = () =>
 
       if (current.parent !== undefined && !sameHierarchyParent(current.parent, parent)) {
         const operation = yield* resourcemanager.moveFolders({
+          destinationParent: parent,
           name: current.name ?? name,
-          body: { destinationParent: parent },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, parent, displayName);

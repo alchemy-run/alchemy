@@ -587,10 +587,7 @@ export const KeyProvider = () =>
 
       if (current === undefined) {
         const created = yield* recaptchaenterprise
-          .createProjectsKeys({
-            parent: `projects/${env.project}`,
-            body: desired,
-          })
+          .createProjectsKeys({ ...desired, parent: `projects/${env.project}` })
           .pipe(Effect.catchTag("Conflict", () => findOwnedKey(env.project, id, lookupName)));
         current = created ?? undefined;
       }
@@ -635,11 +632,7 @@ export const KeyProvider = () =>
       );
 
       if (updateMask.length > 0) {
-        current = yield* recaptchaenterprise.patchProjectsKeys({
-          name,
-          updateMask,
-          body: { ...desired, name },
-        });
+        current = yield* recaptchaenterprise.patchProjectsKeys({ ...desired, name, updateMask });
       }
 
       return toAttrs(current, env.project);

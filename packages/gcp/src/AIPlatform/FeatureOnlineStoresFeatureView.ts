@@ -446,19 +446,17 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsFeatureOnlineStoresFeatureViews({
+            labels: desiredLabels,
+            bigQuerySource: news.bigQuerySource,
+            featureRegistrySource: news.featureRegistrySource,
+            vertexRagSource: news.vertexRagSource,
+            syncConfig: news.syncConfig,
+            indexConfig: news.indexConfig,
+            optimizedConfig: news.optimizedConfig,
+            serviceAgentType: news.serviceAgentType,
             parent,
             featureViewId: viewId,
             runSyncImmediately: news.runSyncImmediately === true,
-            body: {
-              labels: desiredLabels,
-              bigQuerySource: news.bigQuerySource,
-              featureRegistrySource: news.featureRegistrySource,
-              vertexRagSource: news.vertexRagSource,
-              syncConfig: news.syncConfig,
-              indexConfig: news.indexConfig,
-              optimizedConfig: news.optimizedConfig,
-              serviceAgentType: news.serviceAgentType,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -509,17 +507,14 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
 
         const patched = yield* aiplatform
           .patchProjectsLocationsFeatureOnlineStoresFeatureViews({
+            labels: desiredLabels,
+            bigQuerySource: news.bigQuerySource,
+            featureRegistrySource: news.featureRegistrySource,
+            syncConfig: news.syncConfig,
+            optimizedConfig: news.optimizedConfig,
+            serviceAgentType: news.serviceAgentType,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              bigQuerySource: news.bigQuerySource,
-              featureRegistrySource: news.featureRegistrySource,
-              syncConfig: news.syncConfig,
-              optimizedConfig: news.optimizedConfig,
-              serviceAgentType: news.serviceAgentType,
-            },
           })
           .pipe(
             Effect.retry({

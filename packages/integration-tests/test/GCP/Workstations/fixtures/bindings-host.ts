@@ -59,9 +59,7 @@ export default class WorkstationsBindingsHost extends GCP.Function<WorkstationsB
         getWorkstation: getWorkstation().pipe(
           Effect.map((live) => ({ name: live.name, state: live.state })),
         ),
-        generateAccessToken: generateAccessToken({
-          body: { ttl: "600s" },
-        }).pipe(
+        generateAccessToken: generateAccessToken({ ttl: "600s" }).pipe(
           Effect.map((token) => ({
             hasToken: (token.accessToken ?? "").length > 0,
             expireTime: token.expireTime,

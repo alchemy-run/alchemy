@@ -345,14 +345,12 @@ export const ApplicationsServiceProvider = () =>
       if (current === undefined) {
         const created = yield* apphub
           .createProjectsLocationsApplicationsServices({
+            discoveredService,
+            displayName,
+            description,
+            attributes: news.attributes,
             parent: application,
             serviceId,
-            body: {
-              discoveredService,
-              displayName,
-              description,
-              attributes: news.attributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -381,13 +379,11 @@ export const ApplicationsServiceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* apphub.patchProjectsLocationsApplicationsServices({
+          displayName,
+          description,
+          attributes: news.attributes,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            displayName,
-            description,
-            attributes: news.attributes,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
