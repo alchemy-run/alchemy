@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 A saga runs a process that spans several aggregates. An aggregate changes one instance at a time, and no transaction spans two, so a process that touches several runs as a series of steps, each committed on its own. When a step fails after earlier ones succeeded, the saga undoes them with compensations.
 
-A saga is an [Effect workflow](https://effect.website/docs/workflow). Each step's result is stored, so a run that's interrupted resumes after its last finished step, and a run can wait hours or days for a signal or a timer. A policy usually decides when to start one.
+A saga is an [Effect workflow](https://effect.website/docs/v4/api/effect/workflow/Workflow). Each step's result is stored, so a run that's interrupted resumes after its last finished step, and a run can wait hours or days for a signal or a timer. A policy usually decides when to start one.
 
 In the example bank, a transfer is a saga: it debits one account, credits another, and refunds the debit if the credit fails.
 
