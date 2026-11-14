@@ -736,9 +736,12 @@ const REGISTER_RETRY_MS = 2_000;
 /** The id an instance was listed under, saved so jobs that fire later find it. */
 const ID_KEY = "bf:id";
 
+/** The job that lists an instance in the directory, after its first commit. */
+const REGISTER_JOB = "bf-register";
+
 /**
- * List an instance in the directory before its first commit, so every
- * instance with an event can be reached when a consumer is added later.
+ * List an instance in the directory, so every instance with an event can be
+ * reached when a consumer is added later.
  */
 const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
   Effect.gen(function* () {
@@ -747,6 +750,40 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
     yield* net.node.register(Backfill.leafOf(ref), ref);
     yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
   });
+
+/**
+ * Note, in the storage write of an instance's commit, that it still has to be
+ * listed in the directory. The first commit doesn't wait for the directory
+ * (which may have to link new nodes up to its root): the {@link REGISTER_JOB}
+ * lists the instance after the call returns, and is retried until it does.
+ * Every instance that has committed can still be found, as the job is stored
+ * with the commit and survives an eviction or a restart.
+ *
+ * Call it inside the commit's transaction.
+ */
+const listAfterCommit = (jobs: Backfill.Jobs, id: string) =>
+  Effect.gen(function* () {
+    const state = yield* ObjectState;
+    if (yield* state.storage.get<boolean>("registered")) return;
+    yield* state.storage.put({ [ID_KEY]: id });
+    yield* jobs.schedule(REGISTER_JOB, 0);
+  });
+
+/**
+ * The register job: list the instance in the directory, then ask for a reader
+ * for each consumer it is behind (one deployed between its commit and now, that
+ * the run which listed the directory didn't find it for). A failure tries again.
+ */
+const registerJob = (
+  net: Backfill.Network,
+  ref: Backfill.SourceRef,
+  source: Backfill.Source,
+  jobs: Backfill.Jobs,
+) =>
+  ensureRegistered(net, ref).pipe(
+    Effect.andThen(source.catchUp),
+    Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
+  );
 
 const aggregateObject = (
   kit: AggregateKit,
@@ -768,18 +805,30 @@ const aggregateObject = (
 
     // This instance as a backfill source: consumers added later pull its events.
     let source: Backfill.Source | undefined;
-    const runtime = yield* backfillRuntime(random, (id) =>
-      id === "bf-flush"
-        ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
-            stored === undefined ? Effect.void : sourceFor(stored).flush,
-          )
-        : Effect.void,
+    const runtime = yield* backfillRuntime(
+      random,
+      (id): Effect.Effect<void, never, ObjectState | RuntimeContext> =>
+        id === "bf-flush" || id === REGISTER_JOB
+          ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
+              stored === undefined
+                ? Effect.void
+                : id === REGISTER_JOB
+                  ? registerJob(
+                      net,
+                      { source: kit.name, id: stored },
+                      sourceFor(stored),
+                      runtime.jobs,
+                    )
+                  : sourceFor(stored).flush,
+            )
+          : Effect.void,
     );
     const sourceFor = (id: string): Backfill.Source =>
       (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
         ref: { source: kit.name, id },
         singleSource: (target) => planOf(target)?.singleSource === true,
         model,
+        targets: () => kit.targets,
         log: (after, limit) =>
           runtime.provide(
             state.storage
@@ -836,6 +885,8 @@ const aggregateObject = (
               version: result.version,
             });
             yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+            // Listed in the directory after the call returns, not before it commits.
+            yield* listAfterCommit(runtime.jobs, id);
             // Live to caught-up consumers; through the backfill to lagging ones.
             const live = yield* Backfill.routeCommit(
               sourceFor(id),
@@ -854,7 +905,6 @@ const aggregateObject = (
       });
     const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
-        yield* ensureRegistered(net, { source: kit.name, id });
         const { sent, kick } = yield* exclusively(commit(id, command, meta));
         if (kick) yield* outbox.kick;
         return sent;
@@ -882,7 +932,6 @@ const aggregateObject = (
       }) =>
         Effect.gen(function* () {
           const key = `scheduled:${job.name ?? job.meta.commandId}`;
-          yield* ensureRegistered(net, { source: kit.name, id: job.id });
           const kick = yield* exclusively(
             Effect.gen(function* () {
               // A job scheduled before tokens existed has none, and runs.
@@ -1059,6 +1108,8 @@ const viewObject = (
           if (id.startsWith("drive:")) return runFor().run(id);
           if (key === undefined) return Effect.void;
           if (id === "bf-flush") return sourceFor(key).flush;
+          if (id === REGISTER_JOB)
+            return registerJob(net, { source: kit.name, id: key }, sourceFor(key), runtime.jobs);
           if (id.startsWith("bf-merge:"))
             // Listed before its first entry, as on the live path, but here in the key's
             // own job: its sources' messages don't wait on the directory.
@@ -1102,6 +1153,7 @@ const viewObject = (
         },
         singleSource: (target) => planOf(target)?.singleSource === true,
         model,
+        targets: () => kit.targets,
         log: (after, limit) =>
           runtime.provide(
             state.storage
@@ -1139,10 +1191,17 @@ const viewObject = (
       receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
         reportDefects(
           Effect.gen(function* () {
-            yield* ensureRegistered(net, { source: kit.name, id: key });
+            // Saved before anything else: the key's backfill jobs find it by this id.
+            if ((yield* state.storage.get<string>(ID_KEY)) === undefined)
+              yield* state.storage.put({ [ID_KEY]: key });
             // While a backfill runs, the key buffers deliveries and merges them in order.
             if (!(yield* consumerFor(key).admit(target, deliveries))) return;
-            yield* exclusively(state.storage.transaction(apply(key, deliveries)));
+            // Listed in the directory after the call returns, not before its first entry.
+            yield* exclusively(
+              state.storage.transaction(
+                Effect.andThen(listAfterCommit(runtime.jobs, key), apply(key, deliveries)),
+              ),
+            );
             yield* flushAfter;
           }),
         ),

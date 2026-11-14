@@ -170,6 +170,62 @@ describe("Domain backfill (simulated)", { tags: ["unit", "local"] }, () => {
       }),
   );
 
+  // An instance lists itself in the directory after its first commit returns. A consumer
+  // deployed in between can run its whole sweep without finding it.
+  scenario(
+    "an instance committed but not yet listed when a run lists the directory is caught up once it lists itself",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 4, 12, 3)) yield* commit();
+        sim.holdListing = true;
+        sim.now += 1;
+        yield* sim.commit("A/gap", ["k0"]);
+        yield* sim.deploy();
+        // The run finishes without it: its leaf holds no instance of it.
+        yield* sim.run();
+        expect([...sim.nodes.values()].some((node) => node.object.data.has("i:A:gap"))).toBe(false);
+        // It lists itself, and asks for a reader though nothing commits on it again.
+        yield* sim.list("A/gap");
+        yield* sim.run();
+      }),
+  );
+
+  scenario(
+    "an instance committed but not yet listed is caught up by the next commit, before it lists itself",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 4, 12, 3)) yield* commit();
+        sim.holdListing = true;
+        sim.now += 1;
+        yield* sim.commit("A/gap", ["k0"]);
+        yield* sim.deploy();
+        yield* sim.run([
+          () => {
+            sim.now += 1;
+            return sim.commit("A/gap", ["k1"]);
+          },
+        ]);
+        yield* sim.list("A/gap");
+        yield* sim.run();
+      }),
+  );
+
+  scenario(
+    "an instance that lists itself while a run lists the directory is caught up, with faults",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 4, 12, 3)) yield* commit();
+        sim.holdListing = true;
+        for (let i = 0; i < 4; i++) {
+          sim.now += 1;
+          yield* sim.commit(`A/gap${i}`, [`k${i % 3}`]);
+        }
+        yield* sim.deploy();
+        yield* sim.run(Array.from({ length: 4 }, (_, i) => () => sim.list(`A/gap${i}`)));
+      }),
+    { faults: { callBefore: 0.05, callAfter: 0.05, crash: 0.05 }, seeds: 30 },
+  );
+
   /** Commit `count` events, each to the key named after its instance: a view keyed by its source. */
   const own = (sim: Sim, sources: number, count: number, prefix = "s") =>
     Array.from({ length: count }, (_, i) => () => {
