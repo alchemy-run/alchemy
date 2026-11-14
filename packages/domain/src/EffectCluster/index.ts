@@ -21,6 +21,7 @@ import { PgClient } from "@effect/sql-pg";
 import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import { decodeRpcArgs, encodeRpcArgs } from "alchemy/Rpc";
 import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
 import { decodeResult, encodeResult, payloadCodec } from "alchemy/WorkflowEncoding";
 import type * as Cause from "effect/Cause";
@@ -307,7 +308,7 @@ const remote =
               : (...args: ReadonlyArray<unknown>) =>
                   Effect.flatMap(namespace.getByName(`${cls}/${key}`), (client) =>
                     client
-                      .Call({ method: String(method), args: JSON.stringify(args) })
+                      .Call({ method: String(method), args: encodeRpcArgs(args) })
                       .pipe(Effect.map((result) => JSON.parse(result) as unknown)),
                   ),
         },
@@ -669,7 +670,7 @@ export const layerEntities = <PoolReq>(
                 const method = record[payload.method];
                 return typeof method === "function"
                   ? (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
-                      ...(JSON.parse(payload.args) as ReadonlyArray<unknown>),
+                      ...decodeRpcArgs(payload.args),
                     )
                   : Effect.die(new Error(`${id} has no method ${payload.method}`));
               }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),

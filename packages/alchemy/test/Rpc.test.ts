@@ -50,6 +50,9 @@ const shape = {
   echo: (a: string, b: number) => Effect.succeed({ a, b }),
   maybe: (key: string) => Effect.succeed(key === "present" ? "value" : null),
   identity: (value: unknown) => Effect.succeed(value),
+  // JSON has no `undefined`, so the result names which arguments arrived undefined.
+  undefinedArgs: (...args: ReadonlyArray<unknown>) =>
+    Effect.succeed(args.map((arg) => (arg === undefined ? "undefined" : arg))),
   boomTagged: () => Effect.fail(new BoomError({ code: 42 })),
   boomPlain: () => Effect.fail(new Error("plain boom")),
   countJsonl: (n: number) => Stream.range(1, n).pipe(Stream.map((i) => ({ i }))),
@@ -72,6 +75,19 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
       withRpc(shape, (stub) =>
         Effect.gen(function* () {
           expect(yield* stub.ping()).toBe("pong");
+        }),
+      ),
+    );
+
+    it.effect("keeps an undefined argument undefined, in any position", () =>
+      withRpc(shape, (stub) =>
+        Effect.gen(function* () {
+          expect(yield* stub.undefinedArgs("a", undefined, null, undefined)).toEqual([
+            "a",
+            "undefined",
+            null,
+            "undefined",
+          ]);
         }),
       ),
     );

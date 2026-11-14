@@ -87,6 +87,8 @@ const scenario = (
     readonly seeds?: number;
     /** More consumers deployed at the same time. */
     readonly others?: ReadonlyArray<string>;
+    /** Carry RPC arguments over the JSON transport the Effect Cluster and Rivet hosts use. */
+    readonly json?: boolean;
   } = {},
 ) =>
   it.effect(
@@ -103,6 +105,7 @@ const scenario = (
               undefined,
               options.others,
             );
+            sim.json = options.json ?? false;
             yield* run(sim);
             yield* verify(sim);
           }).pipe(Effect.annotateLogs({ seed })),
@@ -132,6 +135,12 @@ describe("Domain backfill (simulated)", { tags: ["unit", "local"] }, () => {
   scenario("many sources and keys, applied in timestamp order", (sim) => backfill(sim, 9, 60, 5));
 
   scenario("a hot key fed by every source", (sim) => backfill(sim, 25, 80, 1));
+
+  scenario(
+    "a directory listed over the JSON RPC transport, with an undefined first-page cursor",
+    (sim) => backfill(sim, 9, 60, 5),
+    { json: true },
+  );
 
   scenario("leaves that fill split, and a run reaches the instances they moved", (sim) =>
     Effect.gen(function* () {

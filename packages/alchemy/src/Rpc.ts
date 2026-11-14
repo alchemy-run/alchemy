@@ -542,6 +542,35 @@ export const rpcMethodOf = (request: { readonly url: string }): string | undefin
 };
 
 /**
+ * Stands in for an `undefined` argument on the wire. JSON has no `undefined`:
+ * inside an array it becomes `null`, so a method called `list(path, undefined)`
+ * would otherwise receive `list(path, null)` on the other side.
+ */
+const UNDEFINED_ARG = { "~alchemy/rpc": "undefined" } as const;
+
+const isUndefinedArg = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.keys(value).length === 1 &&
+  (value as Record<string, unknown>)["~alchemy/rpc"] === "undefined";
+
+/**
+ * Encode a method's arguments for a JSON transport, keeping an `undefined`
+ * argument `undefined` on the other side. Properties set to `undefined` inside
+ * an argument are dropped by JSON, which the callee reads as `undefined` too.
+ */
+export const encodeRpcArgs = (args: ReadonlyArray<unknown>): string =>
+  JSON.stringify(args.map((arg) => (arg === undefined ? UNDEFINED_ARG : arg)));
+
+/** Decode arguments encoded by {@link encodeRpcArgs}. Throws when `text` is not a JSON array. */
+export const decodeRpcArgs = (text: string): Array<unknown> => {
+  const args: unknown = text.length > 0 ? JSON.parse(text) : [];
+  if (!Array.isArray(args)) throw new TypeError("RPC arguments must be a JSON array");
+  return args.map((arg) => (isUndefinedArg(arg) ? undefined : arg));
+};
+
+/**
  * Build a typed RPC stub over a plain `fetch` transport. Any property that
  * isn't an own property of `base` is treated as a remote method: calling it
  * `POST`s `{baseUrl}{RPC_PATH_PREFIX}{name}` with the JSON-encoded arguments
@@ -568,7 +597,7 @@ export const makeFetchRpcStub = <Shape>(options: {
           Effect.gen(function* () {
             const request = HttpClientRequest.post(
               `${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`,
-            ).pipe(HttpClientRequest.bodyText(JSON.stringify(args), "application/json"));
+            ).pipe(HttpClientRequest.bodyText(encodeRpcArgs(args), "application/json"));
             const response = yield* options
               .fetch(request)
               .pipe(Effect.mapError((cause) => new RpcCallError({ method: prop, cause })));
@@ -628,7 +657,7 @@ export const serveRpc = <Req = never>(
     // malformed argument payload is a client error, so answer 400.
     const argsResult = yield* Effect.result(
       Effect.try({
-        try: () => (text.length > 0 ? (JSON.parse(text) as unknown[]) : []),
+        try: () => decodeRpcArgs(text),
         catch: (cause) => new RpcDecodeError({ cause }),
       }),
     );
