@@ -70,11 +70,6 @@ export type MulticastGroupConsumerActivationProps = {
    */
   multicastGroupRangeActivation: string;
   /**
-   * Deprecated multicast group resource name. Prefer
-   * `multicastGroupRangeActivation`.
-   */
-  multicastGroup?: string;
-  /**
    * Human-readable description.
    */
   description?: string;
@@ -104,8 +99,6 @@ export type MulticastGroupConsumerActivation = Resource<
     multicastConsumerAssociation: string | undefined;
     /** Attached multicast group range activation. */
     multicastGroupRangeActivation: string | undefined;
-    /** Deprecated multicast group name, if set. */
-    multicastGroup: string | undefined;
     /** User-provided description. */
     description: string | undefined;
     /** Logging configuration. */
@@ -203,9 +196,6 @@ const toAssociation = (project: string, location: string, value: string | undefi
 const toRangeActivation = (project: string, location: string, value: string | undefined) =>
   value ? toNamedResource(project, location, "multicastGroupRangeActivations", value) : undefined;
 
-const toGroup = (project: string, location: string, value: string | undefined) =>
-  value ? toNamedResource(project, location, "multicastGroups", value) : undefined;
-
 const toLogConfig = (
   config: MulticastLogConfig | networkservices.MulticastLogConfig | undefined,
 ): MulticastLogConfig | undefined => {
@@ -233,7 +223,6 @@ const toAttrs = (activation: networkservices.MulticastGroupConsumerActivation, p
       location,
       activation.multicastGroupRangeActivation,
     ),
-    multicastGroup: toGroup(proj, location, activation.multicastGroup),
     description: activation.description,
     logConfig: toLogConfig(activation.logConfig),
     resourceState: activation.resourceState,
@@ -372,7 +361,6 @@ export const MulticastGroupConsumerActivationProvider = () =>
         location,
         news.multicastGroupRangeActivation,
       );
-      const multicastGroup = toGroup(env.project, location, news.multicastGroup);
       const logConfig = toLogConfig(news.logConfig);
 
       let current = yield* getByName(name);
@@ -384,7 +372,6 @@ export const MulticastGroupConsumerActivationProvider = () =>
             labels: desiredLabels,
             multicastConsumerAssociation,
             multicastGroupRangeActivation,
-            multicastGroup,
             logConfig,
             parent: parentOf(env.project, location),
             multicastGroupConsumerActivationId,
