@@ -1,5 +1,7 @@
+import { Retry as StripeRetry } from "@distilled.cloud/stripe/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -274,6 +276,7 @@ export const providers = () =>
         UpdateTerminalReaderHttp,
       ),
     ),
+    Layer.provideMerge(Layer.succeed(StripeRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(StripeAuth),
     Layer.provideMerge(ProfileStoreLive),

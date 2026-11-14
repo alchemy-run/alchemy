@@ -60,8 +60,9 @@ from JSDoc (see AGENTS.md "Documentation Generation").
    `website/src/components/diagrams/` in the shared style, try it on its best
    page, and show the user before using it elsewhere.
 8. **Build, look, push.** Run `pnpm run build` in `website/` (it regenerates
-   llms and the reference). Put every new or changed diagram on one sheet with
-   `scripts/diagram-sheet.py` and read it, screenshot whole pages with
+   llms and the reference). Check every changed Tree with
+   `scripts/tree-check.mjs` at both widths, put every new or changed diagram
+   on one sheet with `scripts/diagram-sheet.py` and read it, screenshot whole pages with
    `scripts/screenshot.sh`, and check links with `scripts/check-links.sh`. Commit
    and push after each coherent change; don't batch a day's work. Docs-only PRs
    get a `docs(<scope>):` title. Add the `deploy-website` label for a preview at
@@ -145,6 +146,14 @@ Each of these was a correction. Don't relearn them.
   variables and caps them at 4 KB; Worker `Config` binds as `secret_text`) and
   links the core page. Move anything worth keeping to the core page rather than
   deleting it.
+- **Example names read as placeholders.** Name example resources so nobody
+  mistakes them for a platform feature or a concept they must learn:
+  `MyEnv`, `MyTemplate`, `MyImage`, `MySandbox`, `acme`, `user-42`. An
+  `Agents` environment and an `Agent` template were rejected because
+  "Agents" reads like something the platform has. Keep a product's real
+  names (Cloudflare Agents, Boat's Agents page) and words that describe the
+  use ("agent loops"), and rename the diagram, prose, code and example
+  together so they still match.
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
 
@@ -187,6 +196,62 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   arrow is only for something that moves or calls. Never write containment into a
   label either ("subnet in your VPC"): draw every layer, and don't drop
   layers to make a smaller copy of a diagram the chapter already draws.
+- **Connections are arrows, not text.** Draw what holds what as borders and
+  what calls what as `links` on a `Tree`, each with a short verb ("binds",
+  "mounts", "runs as"). Writing "binds Uploads · Rooms · Jobs" inside a box
+  was rejected as no thought given to how the boxes connect.
+  More: [Tree: borders and arrows](references/structure.md#tree-borders-and-arrows).
+- **Every node connects to the story, or goes.** A box with no arrow and no
+  role in the caption is noise: Boat's `DevBox` sat under the app relating to
+  nothing ("no idea how DevBox relates to anything"), and E2B's and Modal's
+  secrets floated unconnected. Connect each secret, volume and image to what
+  uses it, or cut it and let the section that covers it draw it.
+- **A box holds only what really runs or lives in it.** Before nesting, check
+  the source for where each thing runs. Rivet's pools were drawn inside the
+  control plane, but nodes run on their own clouds and connect out to it; a
+  namespace is a grouping of pools, so it became a dashed border around them,
+  outside the control plane. Don't invent a container either: Effect Cluster
+  has no "control plane", so its Api (your app) sits outside a border around
+  the pool and its database.
+- **Name what each box is, and label arrows with the action.** A box the
+  reader can't place gets asked about ("is it my Api or Effect Cluster's?"):
+  type a caller `your app`. An arrow label is a verb (`calls lobby`, `routes`,
+  `creates`), never the destination's name. "gateway" on an arrow made the
+  gateway read as part of the caller, so draw the destination as its own box.
+- **Show who creates run-time objects, and how many.** Sandboxes, volumes and
+  sessions an app creates while it runs need their creator drawn (your Worker,
+  with an arrow labelled `creates one per person`), and two instances when the
+  count is the point (`session-sam`, `session-ana` booting from one image).
+  "Volume · one per user" was rejected: it read as one shared volume, and "user"
+  was ambiguous (the platform's account holder, or a person using the app?).
+- **Parallel inputs sit side by side.** A snapshot (the disk) and an
+  environment (the secrets) both feed a sandbox, so put them in one row above
+  it, each arrow labelled with what it supplies (`disk`, `secrets`). Stacked one
+  above the other, the environment looked like a step between the snapshot and
+  the sandbox ("I don't understand why environment is where it is").
+- **Answer structural questions from the source before drawing.** Does a
+  project sit in an organization? Is there a region? Is the organization a
+  container or a billing target? Grep the platform's SDK and docs, then draw
+  what's true: a GCP project inside its organization; Boat with no region and
+  an account that "can bill an organization instead". Say in the caption what a
+  reader might expect but won't find.
+- **No wasted space.** A full-width bar for one small box, a column of empty
+  space beside a stacked layout, and a container mostly empty around one box
+  were each called out. Try the caller beside what it calls (an arrow straight
+  across) and the runtime's pieces side by side before settling on a tall stack.
+- **Every diagram works on a phone and a desktop, flush.** Lay boxes out with
+  `areas` and `phoneAreas` so arrows run short and straight at both widths,
+  then run `scripts/tree-check.mjs` and read its screenshots before showing
+  anyone. Ragged rows, stretched or empty boxes, labels on lines and
+  arrowheads on tiny stubs were each caught by the user first, which is what
+  the checker is for.
+- **The same thing gets the same icon on every page.** Postgres is always
+  `brand:postgresql`, whether it's a container, a managed database or a branch's
+  compute. An Api that is a service, app or container is always `server`; one
+  that is a Worker or Function is `square-function`. Images (`package`) and
+  volumes (`hard-drive`) keep their kind's icon. Before picking an icon, grep
+  the other diagrams for the same thing and reuse theirs. The Docker diagram
+  drew Postgres and Api with generic container icons and was flagged.
 - **A property is not a node.** An instance's type and image, or a Worker's
   tokens, go inside its box (`specs`), not in boxes of their own with arrows.
 - **Draw the platform's real model, in full.** An AWS organization is a tree of
@@ -212,6 +277,17 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   page before you push.
 
 ## When you finish
+
+Before you show the user anything:
+
+- Run `scripts/tree-check.mjs` on every changed page (or `--all` after a
+  component change), and read both widths' screenshots. A diagram that comes
+  back from review is a check you didn't run: add it to the checker, prove it
+  fires on the bad version, then fix the diagram.
+- `.claude/skills/<name>` holds symlinks into `.agents/skills/<name>`. Stage
+  skill edits from `.agents/skills/…`: `git add .claude/skills/…` stages
+  nothing, and a skill update was reported as pushed when it never was.
+  Confirm with `git show --stat HEAD` before saying it's pushed.
 
 Tell the user what changed per provider, what you verified (build, links,
 screenshots), and show each new or changed diagram on its own (`diagram-sheet.py

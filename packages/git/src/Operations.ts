@@ -448,6 +448,10 @@ export const makeOperations = Effect.gen(function* () {
         // soft-deleted. A second DELETE mid-drain is an idempotent 204,
         // and re-arming is what recovers a purge whose alarm was lost
         // (crash between markDeleted and the first alarm run).
+        const removeRegistryRow = () =>
+          registryStub()
+            .removeRow(entry.repoId)
+            .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
         yield* repos
           .getByName(entry.repoId)
           .startPurge()
@@ -458,10 +462,7 @@ export const makeOperations = Effect.gen(function* () {
               // orphan, or a purge that already wiped storage. There is
               // nothing to purge, so free the name directly (never 404:
               // the caller can see this repo, so DELETE must remove it).
-              RepoNotFound: () =>
-                registryStub()
-                  .removeRow(entry.repoId)
-                  .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error))),
+              RepoNotFound: removeRegistryRow,
             }),
           );
         yield* registryStub()

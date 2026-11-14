@@ -900,9 +900,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "branchId and branchGitName are mutually exclusive",
-        );
+        expect(error.message).toContain("branchId and branchGitName are mutually exclusive");
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
     {
@@ -939,9 +937,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "branchId and branchGitName are mutually exclusive",
-        );
+        expect(error.message).toContain("branchId and branchGitName are mutually exclusive");
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
     {
@@ -2119,7 +2115,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("explicit adoption");
+        expect(error.message).toContain("explicit adoption");
         expect(calls).toEqual([["listAppDomains", "service-1"]]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -2178,7 +2174,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .reconcile(reconcileInput("CustomDomain", { app: "service-1", hostname: raced.hostname }))
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("explicit adoption");
+        expect(error.message).toContain("explicit adoption");
         expect(calls).toContainEqual([
           "createAppDomain",
           { appId: "service-1", input: { hostname: raced.hostname } },
@@ -2606,9 +2602,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "is managed by Prisma and cannot be managed by Alchemy",
-        );
+        expect(error.message).toContain("is managed by Prisma and cannot be managed by Alchemy");
         expect(calls).toEqual([
           [
             "listEnvironmentVariables",
@@ -2924,9 +2918,9 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           .pipe(Effect.flip);
 
         expect(invalidKey).toBeInstanceOf(Error);
-        expect((invalidKey as Error).message).toContain("must match POSIX env-var key shape");
+        expect(invalidKey.message).toContain("must match POSIX env-var key shape");
         expect(emptyValue).toBeInstanceOf(Error);
-        expect((emptyValue as Error).message).toContain("value must be non-empty");
+        expect(emptyValue.message).toContain("value must be non-empty");
         expect(calls).toEqual([]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -3628,8 +3622,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("immutable source");
-        expect((error as Error).message).toContain('"replica"');
+        expect(error.message).toContain("immutable source");
+        expect(error.message).toContain('"replica"');
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
     {
@@ -3803,9 +3797,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain(
-          "cannot be distinguished from a foreign database",
-        );
+        expect(error.message).toContain("cannot be distinguished from a foreign database");
         expect(created).toBe(false);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },
@@ -4032,7 +4024,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((error as Error).message).toContain("created unexpected default database");
+        expect(error.message).toContain("created unexpected default database");
         expect(routesOf(fake.captured)).toEqual(["POST /v1/projects"]);
         expect(fake.captured[0]?.bodyJson).toEqual({
           name: "app",
@@ -5240,17 +5232,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           )
           .pipe(Effect.flip);
 
-        expect((projectError as Error).message).toContain("appeared after the adoption check");
-        expect((databaseError as Error).message).toContain("appeared after the adoption check");
+        expect(projectError.message).toContain("appeared after the adoption check");
+        expect(databaseError.message).toContain("appeared after the adoption check");
         expect(connectionOut.connectionId).toBe("connection-1");
         expect(Redacted.value(connectionOut.directConnectionString!)).toBe(
           "postgres://app:rotated-password@db.prisma.test/database-1",
         );
         expect(Redacted.value(connectionOut.password!)).toBe("rotated-password");
-        expect((branchError as Error).message).toContain("appeared after the adoption check");
-        expect((serviceError as Error).message).toContain("not owned by this App resource");
-        expect((envError as Error).message).toContain("appeared after the adoption check");
-        expect((repoError as Error).message).toContain("appeared after the adoption check");
+        expect(branchError.message).toContain("appeared after the adoption check");
+        expect(serviceError.message).toContain("not owned by this App resource");
+        expect(envError.message).toContain("appeared after the adoption check");
+        expect(repoError.message).toContain("appeared after the adoption check");
         expect(
           fake.captured
             .filter((request) => request.method === "POST")

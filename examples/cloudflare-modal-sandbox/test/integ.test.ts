@@ -14,31 +14,44 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-const stack = beforeAll(deploy(Stack));
-
+// The deploy builds the Node and Warm images; a cold Modal build takes minutes.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
+// The binding prefixes the volume's name with this stack and stage's owner
+// digest, so a constant user is already unique per stage. Deriving it from the
+// stage pushed `home-<user>` past Modal's 64-character name limit in worktrees.
+const user = "tester";
+
+const run = (url: string, command: string) =>
+  Test.executeWhenReady(
+    HttpClientRequest.post(`${url}/users/${user}/run`).pipe(HttpClientRequest.bodyText(command)),
+  ).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => body as { exitCode: number; output: string }),
+  );
+
 test(
-  "a user's notes live on their volume and a sandbox reads them",
+  "starts each sandbox from the Warm image, with the user's files mounted",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const base = url.replace(/\/+$/, "");
-
-    const ready = yield* Test.getWhenReady(base);
-    expect(ready.status).toBe(200);
+    const repo = yield* run(url, "node -p \"require('./package.json').name\" && pnpm --version");
+    expect(repo.exitCode).toBe(0);
+    expect(repo.output).toContain("@sindresorhus/is");
 
     const put = yield* HttpClient.execute(
-      HttpClientRequest.put(`${base}/notes?user=ada`).pipe(
-        HttpClientRequest.bodyText("hello from ada"),
+      HttpClientRequest.put(`${url}/users/${user}/files/notes.md`).pipe(
+        HttpClientRequest.bodyText("hello"),
       ),
     );
-    expect(put.status).toBe(200);
+    expect(((yield* put.json) as { content: string }).content).toBe("hello");
 
-    const run = yield* HttpClient.execute(HttpClientRequest.get(`${base}/run?user=ada`));
-    const result = (yield* run.json) as { exitCode: number; stdout: string };
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("package.json");
-    expect(result.stdout).toContain("hello from ada");
+    const notes = yield* run(url, "cat /home/user/notes.md");
+    expect(notes.output).toBe("hello");
+
+    // The user's volume was created at runtime: delete it through the API.
+    const removed = yield* HttpClient.execute(HttpClientRequest.delete(`${url}/users/${user}`));
+    expect(removed.status).toBe(204);
   }),
   { timeout: 600_000 },
 );

@@ -405,7 +405,7 @@ WantedBy=multi-user.target
         yield* Hetzner.volumeActions
           .attachVolume({
             id: volumeId,
-            server: input.serverId,
+            assignee: { id: input.serverId, type: "server" },
             // No automount: Hetzner would mount the device at
             // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
             // our own `mount` at the service path fail with
@@ -426,6 +426,10 @@ WantedBy=multi-user.target
             ),
             Effect.catchTag(["UnprocessableEntity", "Locked", "Conflict"], () => Effect.void),
           );
+        const readVolume = Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+          Effect.map(({ volume }) => volume),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
         volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
           Effect.flatMap(({ volume }) =>
             volume.server === input.serverId
@@ -442,11 +446,7 @@ WantedBy=multi-user.target
             ]),
           }),
           Effect.catchTags({
-            AttachPending: () =>
-              Hetzner.volumes.getVolume({ id: volumeId }).pipe(
-                Effect.map(({ volume }) => volume),
-                Effect.catchTag("NotFound", () => Effect.undefined),
-              ),
+            AttachPending: () => readVolume,
             NotFound: () => Effect.undefined,
           }),
         );

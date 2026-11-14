@@ -1,5 +1,5 @@
 /** The conformance model, hosted on Rivet Durable Objects. */
-import * as DomainRivet from "@alchemy.run/rivet/Domain";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import * as Layer from "effect/Layer";
 import { ConformanceLive } from "../../Domain/conformance/model.ts";
 import { DomainPool } from "./domain-cluster.ts";

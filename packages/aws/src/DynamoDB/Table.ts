@@ -1288,43 +1288,46 @@ export const TableProvider = () =>
             return yield* new TableUnexpectedResponse({ message: `Table ${tableName} not found` });
           }
 
+          const readTags = dynamodb
+            .listTagsOfResource({
+              ResourceArn: table.TableArn,
+            })
+            .pipe(
+              Effect.retry({
+                while: isRetryableReadError,
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+              }),
+            );
+          const readContinuousBackups = dynamodb
+            .describeContinuousBackups({
+              TableName: tableName,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "InternalServerError",
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+              }),
+              Effect.catchTag("TableNotFoundException", () =>
+                Effect.succeed({ ContinuousBackupsDescription: undefined }),
+              ),
+            );
+          const readTimeToLive = dynamodb
+            .describeTimeToLive({
+              TableName: tableName,
+            })
+            .pipe(
+              Effect.retry({
+                while: isRetryableReadError,
+                schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({ TimeToLiveDescription: undefined }),
+              ),
+            );
           const [tagsResult, continuousBackupsResult, ttlResult] = yield* Effect.all([
-            dynamodb
-              .listTagsOfResource({
-                ResourceArn: table.TableArn,
-              })
-              .pipe(
-                Effect.retry({
-                  while: isRetryableReadError,
-                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
-                }),
-              ),
-            dynamodb
-              .describeContinuousBackups({
-                TableName: tableName,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (e) => e._tag === "InternalServerError",
-                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
-                }),
-                Effect.catchTag("TableNotFoundException", () =>
-                  Effect.succeed({ ContinuousBackupsDescription: undefined }),
-                ),
-              ),
-            dynamodb
-              .describeTimeToLive({
-                TableName: tableName,
-              })
-              .pipe(
-                Effect.retry({
-                  while: isRetryableReadError,
-                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(30)]),
-                }),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed({ TimeToLiveDescription: undefined }),
-                ),
-              ),
+            readTags,
+            readContinuousBackups,
+            readTimeToLive,
           ]);
 
           return {
@@ -1669,16 +1672,10 @@ export const TableProvider = () =>
                   // own, and one can deny the tag read outright (a restrictive
                   // resource policy live; a peer test's table under the local
                   // emulator). A table we cannot read is not ours to return.
-                  // `TableNotFoundException` completes the set: a peer can
-                  // delete a table between `listTables` and our describes, and
-                  // that is what DynamoDB raises for a table that vanished.
+                  // A table a peer deletes between `listTables` and our
+                  // describes already reads as `undefined` in `readTableState`.
                   Effect.catchTag(
-                    [
-                      "ValidationException",
-                      "AccessDeniedException",
-                      "TableNotFoundException",
-                      "ResourceNotFoundException",
-                    ],
+                    ["ValidationException", "AccessDeniedException"],
                     () => Effect.undefined,
                   ),
                 ),
@@ -1687,18 +1684,14 @@ export const TableProvider = () =>
             return states.filter((state) => state !== undefined).map((state) => toAttrs(state));
           }),
         lookup: Effect.fn(function* ({ tableName }) {
-          const state = yield* readTableState(tableName).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
-          );
+          const state = yield* readTableState(tableName);
           return state ? toAttrs(state) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output, previous }) {
           const tableName =
             output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);
           if (!tableName) return undefined;
-          const state = yield* readTableState(tableName).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
-          );
+          const state = yield* readTableState(tableName);
           if (!state) return undefined;
           const attrs = {
             ...toAttrs(state),

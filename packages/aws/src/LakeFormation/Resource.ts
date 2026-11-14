@@ -208,11 +208,12 @@ export const ResourceProvider = () =>
               // service-linked role to deregister last S3 location" even
               // though the registration IS removed (verified live). Verify
               // and only re-fail if the registration is still present.
-              LastServiceLinkedRoleRegistration: (error) =>
-                lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
+              LastServiceLinkedRoleRegistration: Effect.fn(function* (error) {
+                return yield* lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
                   Effect.flatMap(() => Effect.fail(error)),
                   Effect.catchTag("EntityNotFoundException", () => Effect.void),
-                ),
+                );
+              }),
             }),
           );
         }),

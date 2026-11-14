@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
@@ -6,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -32,7 +34,10 @@ const EVENTS = 10;
 const SEED_BATCH = 10;
 
 const state = Cloudflare.state();
-const { test, deploy, destroy } = Test.make({ providers: Cloudflare.providers(), state });
+const { test, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+  state,
+});
 
 class NotYet extends Data.TaggedError("NotYet")<{
   readonly status: number;
@@ -73,7 +78,7 @@ const now = Effect.sync(() => Date.now());
 const stackOf = <W extends typeof BenchV1>(worker: W) =>
   Alchemy.Stack(
     `DomainScale-${accounts}`,
-    { providers: Cloudflare.providers(), state },
+    { providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()), state },
     Effect.gen(function* () {
       const deployed = yield* worker;
       return { url: deployed.url.as<string>(), workerName: deployed.workerName };

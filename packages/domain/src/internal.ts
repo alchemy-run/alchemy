@@ -1,11 +1,25 @@
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
 
 export { DefinitionError } from "./DefinitionError.ts";
+
+/**
+ * The schema of a command's or a query's `input`. With no fields it is an
+ * empty record, not `Schema.Struct({})`: an empty Struct accepts any value
+ * but `null`, and its JSON Schema has no `type`, so an agent calling the tool
+ * may send the string `"{}"`. The empty record is a JSON object with no
+ * properties. The declared type stays `Schema.Struct<F>`.
+ *
+ * @internal
+ */
+export const inputSchema = <F extends Schema.Struct.Fields>(fields: F | undefined) =>
+  (fields === undefined || Object.keys(fields).length === 0
+    ? Schema.Record(Schema.String, Schema.Never)
+    : Schema.Struct(fields)) as unknown as Schema.Struct<F>;
 
 const tags = new WeakMap<object, string>();
 

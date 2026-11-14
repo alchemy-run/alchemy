@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { declarable } from "./internal/Declared.ts";
 import {
   movesOrganization,
   organizationIdFor,
@@ -61,7 +62,7 @@ export type Webhooks = Resource<
  * @resource
  * @product Organization
  */
-export const Webhooks = Resource<Webhooks>("Daytona.Webhooks");
+export const Webhooks = declarable<Webhooks>()(Resource<Webhooks>("Daytona.Webhooks"));
 
 const status = (organizationId: string) =>
   webhooks.getWebhookControllerInitializationStatus({ organizationId }).pipe(

@@ -28,7 +28,7 @@ import type { Providers } from "../Providers.ts";
 import { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
-import { withLocalD1Executor, withLocalD1Query } from "./LocalD1Gateway.ts";
+import { localD1IsEmpty, withLocalD1Executor, withLocalD1Query } from "./LocalD1Gateway.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
@@ -669,6 +669,16 @@ export const ProviderLocal = () =>
       // doesn't include them.
       const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
 
+      // Resource state can outlive the simulator's storage (a deleted
+      // `.alchemy/local/d1`, a state store shared with another checkout), so
+      // recorded migration/import hashes don't prove the data is there.
+      // Observe the simulator whenever state says something was applied.
+      const lostLocalData = (output: Database["Attributes"] | undefined) =>
+        output?.databaseId &&
+        (hasEntries(output.migrationsHashes) || hasEntries(output.importHashes))
+          ? localD1IsEmpty(output.databaseId).pipe(Effect.provideContext(runtimeContext))
+          : Effect.succeed(false);
+
       return {
         stables: ["accountId"],
         diff: Effect.fn(function* ({ news = {}, output }) {
@@ -677,6 +687,9 @@ export const ProviderLocal = () =>
           if (!isResolved(news)) return undefined;
           if (output.accountId !== accountId) {
             return { action: "replace" } as const;
+          }
+          if (yield* lostLocalData(output)) {
+            return { action: "update" } as const;
           }
           // Detect migration/import file drift — same rules as the live
           // provider.
@@ -698,6 +711,10 @@ export const ProviderLocal = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const accountId = yield* localAccountId;
           const databaseId = output?.databaseId ?? generateLocalId();
+          // An empty simulator lost the data the recorded import hashes
+          // describe, so every import file re-applies. Migrations need no
+          // such check: they run against the database's own ledger.
+          const dataLost = hasEntries(output?.importHashes) && (yield* lostLocalData(output));
 
           // Sync migrations — the shared pipeline, driven through the
           // ephemeral local gateway so the SAME bookkeeping applies
@@ -719,7 +736,7 @@ export const ProviderLocal = () =>
           const importHashes = yield* applySqlImports({
             importFiles: news.importFiles,
             rootDir: yield* rootDir,
-            previous: output?.importHashes,
+            previous: dataLost ? undefined : output?.importHashes,
             apply: (file) =>
               withLocalD1Query(databaseId, (query) => {
                 // One statement per batch entry: the simulator's SQLite
@@ -766,6 +783,9 @@ const createDatabaseName = (id: string, name: string | undefined) =>
   });
 
 const rootDir = Effect.sync(() => process.cwd());
+
+const hasEntries = (record: Record<string, string> | undefined) =>
+  record !== undefined && Object.keys(record).length > 0;
 
 /**
  * Resolve a clone source spec into a concrete database UUID. Looks up by

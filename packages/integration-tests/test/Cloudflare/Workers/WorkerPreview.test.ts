@@ -1,11 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { declareDurableObjectApplication } from "@alchemy.run/cloudflare/Containers/DurableObjectApplication";
 import { WorkerPreviewConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as containers from "@distilled.cloud/cloudflare/containers";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as path from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -14,6 +18,26 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
+
+const loggingScript = `export default { fetch(request) { console.log("preview-log:" + new URL(request.url).searchParams.get("m")); return new Response("logged"); } };`;
+
+/** Workers Logs events whose message carries `marker`, from the last 15 minutes. */
+const logEvents = (accountId: string, marker: string) =>
+  // Re-evaluate the timeframe per poll: rows are keyed by ingestion time.
+  Effect.suspend(() =>
+    workers.queryObservabilityTelemetry({
+      accountId,
+      queryId: "adhoc-preview-observability",
+      view: "events",
+      timeframe: { from: Date.now() - 15 * 60 * 1000, to: Date.now() },
+      limit: 50,
+      parameters: {
+        filters: [
+          { key: "$metadata.message", operation: "includes", type: "string", value: marker },
+        ],
+      },
+    }),
+  ).pipe(Effect.map((response) => response.events?.events ?? []));
 
 const envScript = `export default { fetch(_request, env) { return new Response([env.LINEAR.teamIds.FIN, env.LINEAR.stateIds["FIN/Triage"], env.LINEAR.stateIds["In Review"], env.SIGNING_KEY.algorithm.namedCurve].join("|")); } };`;
 
@@ -114,6 +138,90 @@ describe.concurrent(
     );
 
     test.provider(
+      "Preview records logs by default and syncs observability from props",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const getObservability = (parent: string, previewId: string) =>
+            workers
+              .getPreview({ accountId, workerId: parent, previewId })
+              .pipe(Effect.map((preview) => preview.observability));
+
+          const v1 = yield* stack.deploy(
+            Effect.gen(function* () {
+              const parent = yield* Cloudflare.Worker("ObsParent", { script: loggingScript });
+              const preview = yield* Cloudflare.Worker("ObsPreview", {
+                script: loggingScript,
+                preview: { of: parent },
+              });
+              return { parent, preview };
+            }),
+          );
+
+          // A new Preview starts with observability off; the Worker's
+          // default (logs on) must be on it before the deployment.
+          const observed = yield* getObservability(v1.parent.workerName, v1.preview.previewId!);
+          expect(observed?.logs?.enabled).toBe(true);
+          expect(observed?.logs?.invocationLogs).toBe(true);
+          expect(observed?.traces?.enabled ?? false).toBe(false);
+
+          const marker = `${v1.preview.previewSlug}-${Date.now()}`;
+          yield* expectUrlContains(`${v1.preview.url!}?m=${marker}`, "logged", {
+            label: "Preview serves the logging script",
+          });
+          const events = yield* logEvents(accountId, marker).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (events) => events.length > 0,
+              times: 24,
+            }),
+          );
+          expect(events.length).toBeGreaterThan(0);
+
+          const withTraces = Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("ObsParent", { script: loggingScript });
+            const preview = yield* Cloudflare.Worker("ObsPreview", {
+              script: loggingScript,
+              preview: { of: parent },
+              observability: {
+                enabled: true,
+                logs: { enabled: true, invocationLogs: true },
+                traces: { enabled: true },
+              },
+            });
+            return { parent, preview };
+          });
+          const v2 = yield* stack.deploy(withTraces);
+          expect(v2.preview.previewId).toEqual(v1.preview.previewId);
+          const traced = yield* getObservability(v2.parent.workerName, v2.preview.previewId!);
+          expect(traced?.traces?.enabled).toBe(true);
+          expect(traced?.logs?.enabled).toBe(true);
+
+          const plan = yield* stack.plan(withTraces);
+          expect(plan.resources.ObsPreview?.action).toBe("noop");
+
+          // Removing traces from the props turns them off on the Preview.
+          const v3 = yield* stack.deploy(
+            Effect.gen(function* () {
+              const parent = yield* Cloudflare.Worker("ObsParent", { script: loggingScript });
+              const preview = yield* Cloudflare.Worker("ObsPreview", {
+                script: loggingScript,
+                preview: { of: parent },
+              });
+              return { parent, preview };
+            }),
+          );
+          const untraced = yield* getObservability(v3.parent.workerName, v3.preview.previewId!);
+          expect(untraced?.traces?.enabled ?? false).toBe(false);
+          expect(untraced?.logs?.enabled).toBe(true);
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
       "Preview sees json and secret_key binding payloads exactly as declared",
       (stack) =>
         Effect.gen(function* () {
@@ -150,6 +258,79 @@ describe.concurrent(
           yield* stack.destroy();
         }).pipe(logLevel),
       { timeout: 240_000 },
+    );
+
+    test.provider(
+      "Preview of a Worker with a container-backed Durable Object starts its container",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const program = Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("ContainerPreviewParent", {
+              script: script("container-parent"),
+            });
+            const shell = Cloudflare.Container("PreviewShell", {
+              schedulingPolicy: "durable_object",
+              image: "alpine:3.21",
+            });
+            const preview = yield* Cloudflare.Worker("ContainerPreview", {
+              main: path.resolve(import.meta.dirname, "fixtures/preview-container/worker.ts"),
+              env: {
+                SANDBOX: Cloudflare.DurableObject("PreviewSandbox", { containers: [shell] }),
+              },
+              preview: { of: parent },
+            });
+            const application = yield* declareDurableObjectApplication(preview, "PreviewSandbox");
+            return { parent, preview, application };
+          });
+          const { parent, preview, application } = yield* stack.deploy(program);
+
+          // The recorded namespaces settle the plan: an unchanged redeploy
+          // must not keep planning the healing update for older Previews.
+          const settled = yield* stack.plan(program);
+          const actionOf = (logicalId: string) =>
+            Object.values(settled.resources).find((node) => node.resource.LogicalId === logicalId)
+              ?.action;
+          expect(actionOf("ContainerPreview")).toBe("noop");
+          expect(actionOf("ContainerPreviewParent")).toBe("noop");
+
+          // The Preview reports its own namespace, and the class's container
+          // application is attached to it.
+          const namespaceId = preview.durableObjectNamespaces.PreviewSandbox;
+          expect(namespaceId).toBeDefined();
+          expect(application.durableObjects?.namespaceId).toEqual(namespaceId);
+
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* containers.getContainerApplication({
+            accountId,
+            applicationId: application.applicationId,
+          });
+          expect(observed.durableObjects?.namespaceId).toEqual(namespaceId);
+
+          yield* expectUrlContains(preview.url!, "alpine 3.21", {
+            label: "the Preview's Durable Object starts its container",
+            timeout: "180 seconds",
+          });
+
+          yield* stack.destroy();
+
+          const applicationGone = yield* containers
+            .getContainerApplication({ accountId, applicationId: application.applicationId })
+            .pipe(
+              Effect.map(() => false),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(true)),
+            );
+          expect(applicationGone).toBe(true);
+          const previewGone = yield* workers
+            .getPreview({ accountId, workerId: parent.workerName, previewId: preview.previewId! })
+            .pipe(
+              Effect.map(() => false),
+              Effect.catchTag(["PreviewNotFound", "WorkerNotFound"], () => Effect.succeed(true)),
+            );
+          expect(previewGone).toBe(true);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
     );
 
     test.provider(

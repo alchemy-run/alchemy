@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -20,49 +19,57 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const { executeWhenReady } = Test;
 
+const run = (url: string, command: string) =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText(command)),
+  ).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => body as { result: string; exitCode: number }),
+  );
+
 test(
-  "runs a command in a fresh sandbox",
+  "starts each sandbox from the Warm snapshot",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const response = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/run`).pipe(
-        HttpClientRequest.bodyJsonUnsafe({ command: "node --version" }),
-      ),
-    );
-    const body = (yield* response.json) as { exitCode: number; result: string };
-    expect(body.exitCode).toBe(0);
-    expect(body.result).toMatch(/^v22\./);
+    const repo = yield* run(url, "node -p \"require('./package.json').name\"");
+    expect(repo).toMatchObject({ exitCode: 0 });
+    expect(repo.result.trim()).toBe("@sindresorhus/is");
+    const node = yield* run(url, "node --version");
+    expect(node.result).toMatch(/^v24\./);
   }),
   { timeout: 300_000 },
 );
 
 test(
-  "keeps a user's files on their volume across sandboxes",
+  "keeps a user's changes in their own sandbox",
   Effect.gen(function* () {
     const { url, snapshot } = yield* stack;
     // Derived from the stage-scoped snapshot name, so stages never share a user.
-    const user = snapshot.slice(-8).toLowerCase();
-    const visit = HttpClient.execute(HttpClientRequest.put(`${url}/users/${user}/sandbox`)).pipe(
-      Effect.flatMap((r) => r.json),
-      Effect.map((b) => (b as { visits: number }).visits),
+    const user = snapshot
+      .slice(-8)
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-");
+    const put = yield* executeWhenReady(
+      HttpClientRequest.put(`${url}/users/${user}/files/notes.md`).pipe(
+        HttpClientRequest.bodyText("hello"),
+      ),
     );
-    expect(yield* visit).toBe(1);
-    expect(yield* visit).toBe(2);
-    // A new sandbox mounts the same volume, so the visits carry over.
-    yield* HttpClient.execute(HttpClientRequest.delete(`${url}/users/${user}/sandbox`));
-    expect(yield* visit).toBe(3);
-    // Runtime objects outlive the stack: remove the user's sandbox and volume.
-    // The volume frees up about a minute after the sandbox is deleted.
-    const removed = yield* HttpClient.execute(
-      HttpClientRequest.delete(`${url}/users/${user}`),
-    ).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("10 seconds"),
-        until: (r) => r.status !== 409,
-        times: 12,
-      }),
+    const first = (yield* put.json) as { sandboxId: string; content: string };
+    expect(first.content).toBe("hello");
+
+    const get = yield* HttpClient.execute(
+      HttpClientRequest.get(`${url}/users/${user}/files/notes.md`),
     );
+    const second = (yield* get.json) as { sandboxId: string; content: string };
+    expect(second.sandboxId).toBe(first.sandboxId);
+
+    // A fresh sandbox from Warm doesn't have the user's change.
+    const fresh = yield* run(url, "test -f notes.md && echo yes || echo no");
+    expect(fresh.result.trim()).toBe("no");
+
+    // The user's sandbox was created at runtime: delete it through the API.
+    const removed = yield* HttpClient.execute(HttpClientRequest.delete(`${url}/users/${user}`));
     expect(removed.status).toBe(204);
   }),
-  { timeout: 600_000 },
+  { timeout: 300_000 },
 );

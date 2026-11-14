@@ -3,7 +3,7 @@ title: Operate services
 description: Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
 ---
 
-These bindings let a running program watch and steer your Modal services.
+A running program can watch your Modal services and steer them: read a function's backlog and an App's logs, scale ahead of traffic, and roll a deploy back. Each is a binding, so the host gets only the access that one call needs.
 
 ## Watch a function's backlog
 
@@ -40,7 +40,7 @@ const errors = yield* backend.logs({ since: new Date(Date.now() - 3_600_000), st
 
 Logs cover every function, server and sandbox in the App.
 
-## Roll back
+## Roll a deploy back
 
 ```typescript
 const backend = yield* Modal.WriteApp(Backend);

@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetBillingPortalConfigurations,
   GetBillingPortalConfiguration,
@@ -827,11 +826,8 @@ export const BillingPortalConfigurationProvider = () =>
           ...(news.loginPage !== undefined
             ? { login_page: { enabled: news.loginPage.enabled } }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-billing-portal-configuration-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-billing-portal-configuration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

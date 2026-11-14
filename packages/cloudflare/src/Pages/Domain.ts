@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -240,7 +241,15 @@ export const DomainProvider = () =>
           .pipe(
             Effect.catchTag("PagesDomainAlreadyExists", (originalError) =>
               Effect.gen(function* () {
-                const existing = yield* getDomain(accountId, projectName, news.name);
+                // A fresh attachment can read as not found for a while after
+                // create reports it exists: re-read until it shows up.
+                const existing = yield* getDomain(accountId, projectName, news.name).pipe(
+                  Effect.repeat({
+                    schedule: Schedule.spaced("2 seconds"),
+                    until: (domain) => domain !== undefined,
+                    times: 20,
+                  }),
+                );
                 if (!existing) return yield* originalError;
                 return existing;
               }),

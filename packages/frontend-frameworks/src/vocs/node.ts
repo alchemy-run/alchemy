@@ -14,7 +14,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { runBuildChild } from "../core/BuildChild.ts";
-import { isInsideDevChild, runDevChild } from "../core/DevChild.ts";
 import {
   DeployTargetError,
   Framework,
@@ -185,19 +184,6 @@ export const make = (options: VocsNodeFrameworkOptions = {}) =>
         readonly host?: string;
       }) => {
         const root = resolveRoot(devOptions?.root);
-        if (!isInsideDevChild()) {
-          return runDevChild({
-            // Vocs's Vite dev server (like its build) exhausts memory under
-            // Bun; run the dev child under Node from PATH.
-            runtime: "node",
-            framework: "vocs",
-            module: "@alchemy.run/frontend-frameworks/vocs/node",
-            callerUrl: import.meta.url,
-            rootDir: root,
-            makeOptions: { ...options, root },
-            devOptions: { ...devOptions, root },
-          });
-        }
         return withFramework(root, (framework) =>
           framework.dev({
             root,

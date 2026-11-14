@@ -40,6 +40,7 @@ import {
   ENVIRONMENT_NAME_HEADER,
 } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
+import { workerSocketPath } from "./worker-request.ts";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
@@ -49,17 +50,19 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices.RuntimeServices>,
   exportTypes: ExportTypes,
-  /** See `RuntimeWorker.onRestart`. */
+  /** Called when a replacement `workerd` process serves again; see `RuntimeWorker.onEvent`. */
   onRestart?: () => void,
 ) => {
   const scope = Scope.makeUnsafe();
   const proxySharedSecret = crypto.randomUUID();
+  const socketPath = workerSocketPath();
   const address = await serve(
     options,
     entryEnvironment,
     server,
     exportTypes,
     proxySharedSecret,
+    socketPath,
     onRestart,
   ).pipe(
     // `provideMerge`: the assets layer's construction reads `Loopback` (and
@@ -76,7 +79,7 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     Scope.provide(scope),
     Effect.runPromise,
   );
-  return { address, proxySharedSecret, close: () => closeScope(scope) };
+  return { address, socketPath, proxySharedSecret, close: () => closeScope(scope) };
 };
 
 export const createDefaultContext = async (): Promise<
@@ -191,6 +194,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   exportTypes: ExportTypes,
   proxySharedSecret: string,
+  entrySocketPath: string | undefined,
   onRestart?: () => void,
 ) {
   const runtime = yield* Runtime.Runtime;
@@ -206,13 +210,19 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     ...options.worker,
     name,
     proxySharedSecret,
+    entrySocketPath,
     // The stable proxy in front relays TLS as-is, so a dev server on HTTPS
     // is public on HTTPS.
     publicUrl:
       options.worker?.publicUrl && server.config.server.https
         ? options.worker.publicUrl.replace(/^http:/, "https:")
         : options.worker?.publicUrl,
-    onRestart,
+    onEvent: (event) => {
+      // Reconnect first: a user callback that throws must not leave the
+      // module runner on the dead process.
+      if (event.type === "workerd.process.started" && event.generation > 0) onRestart?.();
+      return options.worker?.onEvent?.(event);
+    },
     modules: yield* Effect.promise(() =>
       makeWorkerModules(exportTypes, {
         ...entryEnvironment,
@@ -243,6 +253,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
           return HttpServerResponse.jsonUnsafe(result);
         }),
       }),
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- `startServer` runs this with `Effect.runPromise` and provides only RuntimeServices, so user hooks' requirements are erased by `BindingHooks` (`BindingHook<any>`)
       ...(options.worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [

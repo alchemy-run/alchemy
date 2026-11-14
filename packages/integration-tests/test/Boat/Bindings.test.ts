@@ -10,10 +10,12 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { TEST_ORG } from "./fixtures/org.ts";
 import { BindingBox } from "./fixtures/resources.ts";
 import BoatWorker from "./fixtures/worker.ts";
 
-const providers = Layer.mergeAll(Boat.providers(), Cloudflare.providers());
+// Every binding call from the Worker sends the deployer's org.
+const providers = Layer.mergeAll(Boat.providers({ org: TEST_ORG }), Cloudflare.providers());
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
 
 const Stack = Alchemy.Stack(
@@ -22,7 +24,10 @@ const Stack = Alchemy.Stack(
   Effect.gen(function* () {
     const box = yield* BindingBox;
     const worker = yield* BoatWorker;
-    return { url: worker.url.as<string>(), boxId: box.sandboxId };
+    return {
+      url: worker.url.as<string>(),
+      boxId: box.sandboxId,
+    };
   }),
 );
 
@@ -47,6 +52,17 @@ const get = <A>(path: string) =>
     expect(res.status).toBe(200);
     return body;
   });
+
+describe("BoatBindings", () => {
+  test(
+    "binds the deployer's org and API URL into the host next to its key",
+    Effect.gen(function* () {
+      const body = yield* get<{ org: string; apiBaseUrl: string }>("/boat/account");
+      expect(body).toEqual({ org: TEST_ORG, apiBaseUrl: Boat.DEFAULT_API_BASE_URL });
+    }),
+    { tags, timeout: 180_000 },
+  );
+});
 
 describe("CreateSandbox", () => {
   test(
