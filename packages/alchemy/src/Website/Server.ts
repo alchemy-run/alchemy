@@ -550,7 +550,6 @@ export const ServerProviderLocal = () =>
     import.meta.resolve(`./ServerLocal${moduleExtension(import.meta.url)}`, import.meta.url),
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const fs = yield* FileSystem.FileSystem;
       const stack = yield* Stack;
       return {
         start: Effect.fn(function* ({ id, fqn, news: props }) {
