@@ -84,8 +84,6 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
  * The class type returned by {@link make}.
  */
 export interface RejectionClass<Tag extends string, F extends Fields> extends Schema.Class<
-  // What `make` returns: the yieldable error `new` builds, which is what a
-  // command's `rejects` and `decide` take.
   Instance<Tag, F> & Cause.YieldableError,
   Schema.TaggedStruct<Tag, F>,
   Cause.YieldableError
