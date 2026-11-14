@@ -118,7 +118,7 @@ export const findDiskByName = Effect.fn(function* (name: string) {
 export const getDisk = (id: string) =>
   archil.getDisk({ id }).pipe(
     Effect.map(({ data }) => (data.status === "deleted" ? undefined : data)),
-    Effect.catchTag("DiskNotFound", () => Effect.undefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Wait until a disk is `available`. */
@@ -178,7 +178,7 @@ export const findSandboxByName = Effect.fn(function* (name: string) {
 export const getSandbox = (sid: string) =>
   archil.getSandbox({ sid }).pipe(
     Effect.map(({ data }) => (data.status === "deleted" ? undefined : data)),
-    Effect.catchTag("SandboxNotFound", () => Effect.undefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const settledSandboxStates = new Set(["running", "paused", "stopped", "exited"]);

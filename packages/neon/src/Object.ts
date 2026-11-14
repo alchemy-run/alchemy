@@ -183,6 +183,11 @@ export const serializeObjectValue = (value: unknown) =>
       }),
   });
 
+export class ObjectBodyReadError extends Data.TaggedError("ObjectBodyReadError")<{
+  message: string;
+  cause: unknown;
+}> {}
+
 export const storageBodyBytes = (body: Stream.Stream<Uint8Array, Error> | undefined) =>
   body === undefined
     ? Effect.succeed(new Uint8Array())
@@ -196,6 +201,13 @@ export const storageBodyBytes = (body: Stream.Stream<Uint8Array, Error> | undefi
           }
           return bytes;
         }),
+        Effect.mapError(
+          (cause) =>
+            new ObjectBodyReadError({
+              message: `Failed to read object body: ${cause.message}`,
+              cause,
+            }),
+        ),
       );
 
 const hashBytes = (bytes: Uint8Array) =>

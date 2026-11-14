@@ -11,16 +11,27 @@ Take one small app: chat rooms. Each room is an Actor, and an API calls a room b
 
 <Tree
   nodes={[
-    { id: "cp", label: "Control plane", type: "Rivet", icon: "brand:rivet" },
-    { id: "gateway", label: "Gateway", type: "HTTPS + token", parent: "cp", wide: true, tone: "accent", icon: "shield-check" },
-    { id: "ns", label: "dev", type: "namespace", parent: "cp", dashed: true, wide: true, icon: "folder" },
-    { id: "default", label: "Default", type: "pool · 2 nodes on AWS", parent: "ns", icon: "brand:aws" },
+    { id: "api", label: "Api", type: "your code", icon: "server" },
+    { id: "cp", label: "Control plane", type: "Rivet", icon: "brand:rivet", areas: ["gateway", "engines"] },
+    { id: "gateway", label: "Gateway", type: "HTTPS + token", parent: "cp", tone: "accent", icon: "shield-check" },
+    { id: "engines", label: "Engines", type: "every actor's data", parent: "cp", icon: "database" },
+    { id: "ns", label: "dev", type: "namespace", dashed: true, icon: "folder", areas: ["default", "media", "services"] },
+    { id: "default", label: "Default", type: "pool · AWS", parent: "ns", icon: "brand:aws", areas: ["lobby kitchen"], phoneAreas: ["lobby kitchen"] },
     { id: "lobby", label: "lobby", type: "Room", parent: "default", icon: "circle-user-round" },
     { id: "kitchen", label: "kitchen", type: "Room", parent: "default", icon: "circle-user-round" },
-    { id: "media", label: "Media", type: "pool · 1 node on Fly", parent: "ns", icon: "brand:fly" },
+    { id: "media", label: "Media", type: "pool · Fly", parent: "ns", icon: "brand:fly" },
     { id: "studio", label: "studio", type: "Transcoder", parent: "media", icon: "circle-user-round" },
+    { id: "services", label: "Services", type: "Rivet Services pool", parent: "ns", icon: "brand:rivet" },
+    { id: "chatlog", label: "ChatLog", type: "Durable Stream", parent: "services", icon: "scroll-text" },
   ]}
-  caption="Your Api calls a room through the gateway, with a token. The dev namespace holds the stage's pools and the actors they run. Each pool's nodes run on its own cloud and connect out to the control plane, which keeps every actor's data and routes each call to the node running it."
+  areas={["api ns", "cp ns"]}
+  phoneAreas={["api", "cp", "ns"]}
+  colGap={4.5}
+  links={[
+    { from: "api", to: "gateway", label: "calls" },
+    { from: "ns", to: "cp", label: "connect out" },
+  ]}
+  caption="Your Api calls a room through the control plane's gateway, with a token. The control plane keeps every actor's data. The dev namespace's pools run on their own clouds, one of them Rivet Services with a durable stream, and their nodes connect out to the control plane, which routes each call to the node running the actor."
 />
 
 ## Durable Objects: a class and its instances

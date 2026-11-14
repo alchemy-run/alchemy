@@ -29,9 +29,9 @@ export default class DrizzleWorkflowWorker extends Cloudflare.Worker<DrizzleWork
   },
   Effect.gen(function* () {
     const workflow = yield* DrizzleWorkflow;
-    // `proxyChain` defers the connect to the first query, so the pool opens
-    // inside a fetch event — where the per-event scope is provided — not
-    // here at init.
+    // The database connects on its first query, so the pool opens inside a
+    // fetch event — where the per-event scope is provided — not here at
+    // init.
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 

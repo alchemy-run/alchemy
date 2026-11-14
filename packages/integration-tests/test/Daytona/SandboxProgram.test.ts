@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Daytona from "@alchemy.run/daytona";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -5,10 +6,15 @@ import * as sandboxes from "@distilled.cloud/daytona/sandbox";
 import * as volumes from "@distilled.cloud/daytona/volumes";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import Agent from "./fixtures/program/agent.ts";
+import TracedAgent from "./fixtures/program/traced.ts";
 
-const { test } = Test.make({ providers: Daytona.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Daytona.providers(), Cloudflare.providers()),
+});
 
 const tags = ["provider:daytona", "provider:daytona:sandbox", "live"];
 
@@ -98,4 +104,34 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(["gone", "deleted", "pending_delete", "deleting"]).toContain(volume);
     }),
   { tags, timeout: 600_000 },
+);
+
+// Below Tier 3, sandbox egress is an allowlist that excludes workers.dev, so
+// the collector's url answers ECONNRESET. Run with DAYTONA_TEST_NETWORK=1 on
+// an account that can reach it.
+test.provider.skipIf(!process.env.DAYTONA_TEST_NETWORK)(
+  "a sandbox program exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const agent = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedAgent;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(agent.url!, "daytona")).toBe("did work daytona");
+      const traces = yield* waitForWorkSpan(collector.url!, "daytona");
+      expect(traces).toContain("work:daytona");
+      expect(traces).toContain("daytona-sandbox-e2e");
+
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:cloudflare", "provider:cloudflare:worker"], timeout: 600_000 },
 );

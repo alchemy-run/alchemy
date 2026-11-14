@@ -22,8 +22,10 @@ import * as Stream from "effect/Stream";
 import { Site } from "./fixtures/bindings-shared.ts";
 import BucketApi, { Data as BucketData, OBJECT_BODY, OBJECT_KEY } from "./fixtures/bucket-api.ts";
 import RedisApi, { Cache, REDIS_VALUE } from "./fixtures/redis-api.ts";
+import { railwayApi } from "./limit.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  limit: railwayApi,
   providers: Railway.providers(),
 });
 

@@ -14,6 +14,11 @@ const { test } = Test.make({ providers: AWS.providers() });
 // dominates the runtime.
 const runLive = !process.env.FAST;
 
+// Skipped under the floci runner: in dev the composite deploys only the
+// framework dev server (no Lambda/S3/CloudFront), so this test's live
+// topology assertions are meaningless there.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
 // Built in place: vinext and its RSC toolchain resolve only from the
 // example's own node_modules (build output is gitignored there).
 const rootDir = pathe.resolve(import.meta.dirname, "../../../../../examples/aws-website-vinext");
@@ -22,7 +27,7 @@ const memo = {
   include: ["app/**", "public/**", "package.json", "vite.config.ts", "tsconfig.json"],
 };
 
-describe.skipIf(!runLive)(
+describe.skipIf(!runLive || runEmulated)(
   "AWS.Website.Vinext",
   { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"] },
   () => {

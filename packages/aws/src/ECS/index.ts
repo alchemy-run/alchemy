@@ -3,6 +3,8 @@ export * from "./Cluster.ts";
 export * from "./ClusterEventSource.ts";
 export * from "./ContinueServiceDeployment.ts";
 export * from "./ContinueServiceDeploymentHttp.ts";
+export * from "./CreateSandbox.ts";
+export * from "./CreateSandboxHttp.ts";
 export * from "./DescribeContainerInstances.ts";
 export * from "./DescribeContainerInstancesHttp.ts";
 export * from "./DescribeServiceDeployments.ts";

@@ -8,7 +8,9 @@
  * never reach a host. The binding captures the key as a named runtime
  * Output; inside the deployed host it is read back from the host's env,
  * still `Redacted`. Every runtime call provides `Credentials` from it, so
- * nothing reads `process.env`.
+ * nothing reads `process.env`. The deployer's org and API URL are bound
+ * alongside it (`BOAT_ORG`, `BOAT_API_BASE_URL`), so the host's calls bill
+ * the same wallet the deploy did.
  *
  * Bindings that create sandboxes at run time label them with the host's
  * `alchemy.stack` / `alchemy.stage` / `alchemy.id`, computed at deploy and
@@ -16,6 +18,7 @@
  * delete them.
  */
 import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/boat-dev/Credentials";
+import { orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Binding from "alchemy/Binding";
 import type { PropsInput } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
@@ -60,18 +63,37 @@ export const bindBoat = Effect.fn("Boat.bind")(function* (
   // stack satisfies it at plan time.
   const makeKey = yield* ApiKey;
   let apiKey: Output.Output<Redacted.Redacted<string>, never> = output(Redacted.make(""));
+  let deployer = { apiBaseUrl: DEFAULT_API_BASE_URL, org: "" };
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const host = yield* Binding.Host;
     if (host !== undefined) {
       const key = yield* Namespace.push(host.LogicalId, makeKey(keyId, scope));
       apiKey = key.key as Output.Output<Redacted.Redacted<string>, never>;
+      const credentials = yield* Effect.serviceOption(Credentials);
+      if (Option.isSome(credentials)) {
+        const { apiBaseUrl, org } = yield* credentials.value.pipe(
+          orDieCredentialsUnavailable("Boat"),
+        );
+        deployer = { apiBaseUrl, org: org ?? "" };
+      }
     }
   }
   const key = yield* Output.named(apiKey, envName).asEffect();
+  const apiBaseUrl = yield* Output.named(
+    output(deployer.apiBaseUrl),
+    "BOAT_API_BASE_URL",
+  ).asEffect();
+  const org = yield* Output.named(output(deployer.org), "BOAT_ORG").asEffect();
   const services = Layer.mergeAll(
     Layer.succeed(
       Credentials,
-      Effect.map(key, (value) => ({ apiKey: value, apiBaseUrl: DEFAULT_API_BASE_URL })),
+      Effect.all([key, apiBaseUrl, org]).pipe(
+        Effect.map(([apiKey, apiBaseUrl, org]) => ({
+          apiKey,
+          apiBaseUrl: apiBaseUrl || DEFAULT_API_BASE_URL,
+          ...(org ? { org } : {}),
+        })),
+      ),
     ),
     FetchHttpClient.layer,
   );

@@ -16,10 +16,6 @@ import { waitForOperation as waitForLongRunning, type LongRunningOperation } fro
 export const DEFAULT_GLOBAL = "global";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
-export const DEFAULT_CONNECTION_TYPE = "TCP_PROXY";
-export const DEFAULT_GATEWAY_TYPE = "TCP_PROXY";
-export const DEFAULT_HOST_TYPE = "GCP_REGIONAL_MIG";
-export const DEFAULT_GATEWAY_KIND = "GCP_REGIONAL_MIG";
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.BeyondCorp.ResourceNotResolved")<{
   resourceName: string;

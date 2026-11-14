@@ -77,6 +77,18 @@ export interface InstanceMetadataOptions {
 }
 
 /**
+ * AWS Nitro Enclaves options for launched instances. Enabling them also lets
+ * the instance run Nitro Sandboxes, lightweight VMs isolated by the Nitro
+ * hypervisor, on instance types that support them.
+ */
+export interface InstanceEnclaveOptions {
+  /**
+   * Whether the instance can run Nitro Enclaves and Nitro Sandboxes.
+   */
+  enabled: boolean;
+}
+
+/**
  * Shared props for EC2-backed hosted runtimes (an Instance that bundles and
  * runs an application entrypoint).
  */
@@ -105,6 +117,8 @@ export interface Ec2HostedProps extends PlatformProps {
   tags?: Record<string, string>;
   /** Instance Metadata Service options applied at launch. */
   metadataOptions?: InstanceMetadataOptions;
+  /** Nitro Enclaves and Nitro Sandboxes options applied at launch. */
+  enclaveOptions?: InstanceEnclaveOptions;
   /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
   /**
@@ -981,6 +995,7 @@ systemctl enable --now ${unitName}.service
       | "availabilityZone"
       | "tags"
       | "metadataOptions"
+      | "enclaveOptions"
     >,
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
@@ -1024,6 +1039,7 @@ systemctl enable --now ${unitName}.service
             InstanceMetadataTags: news.metadataOptions.instanceMetadataTags,
           }
         : undefined,
+      EnclaveOptions: news.enclaveOptions ? { Enabled: news.enclaveOptions.enabled } : undefined,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [

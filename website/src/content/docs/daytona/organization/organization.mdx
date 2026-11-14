@@ -7,6 +7,8 @@ import Tree from "../../../../components/diagrams/Tree.astro";
 
 People reach an organization as **members**. Each member is an `owner` or a `member`, and a member also gets **roles**: named sets of the same permissions API keys carry. Someone who isn't in the organization yet gets an **invitation**, with the roles they'll have once they accept.
 
+## A role is a set of permissions
+
 <Tree
   nodes={[
     { id: "org", label: "acme", type: "organization" },
@@ -61,7 +63,7 @@ Destroy cancels the invitation if it is still pending.
 
 Destroy puts back the access Bob had before. Set `removeOnDestroy: true` to remove him instead.
 
-## Single sign-on
+## Sign members in with SSO
 
 ```typescript title="src/Sso.ts"
 import * as Daytona from "@alchemy.run/daytona";
@@ -92,6 +94,6 @@ export const Settings = Daytona.OrganizationSettings("Settings", {
 
 Only the settings you declare change, and destroy puts the old values back.
 
-## What stays in the dashboard
+## Some actions stay in the dashboard
 
 Signing in, accepting invitations and linking accounts act as a person, not as your organization, so you do them in the Daytona dashboard.

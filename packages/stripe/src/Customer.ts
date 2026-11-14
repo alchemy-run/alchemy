@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteCustomer,
   GetCustomers,
@@ -279,11 +278,8 @@ export const CustomerProvider = () =>
           ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
           ...(desiredPhone.length > 0 ? { phone: desiredPhone } : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-customer-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-customer-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

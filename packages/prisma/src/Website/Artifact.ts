@@ -120,7 +120,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
     ancestors?: ReadonlySet<string>,
     runtimePackage?: boolean,
     boundary?: string,
-  ) => Effect.Effect<void, Error | PlatformError> = Effect.fn(function* (
+  ) => Effect.Effect<void, ArtifactOperationFailed | PlatformError> = Effect.fn(function* (
     source,
     ancestors = new Set(),
     runtimePackage = false,

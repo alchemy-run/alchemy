@@ -7,6 +7,8 @@ import Records from "../../../../components/diagrams/Records.astro";
 
 Daytona records what happens in your organization in three places. Sandboxes send **telemetry** (logs, traces and metrics) to Daytona's collector, or to your own OpenTelemetry backend. **Webhooks** deliver events about your sandboxes and snapshots to endpoints you add. And the **audit log** keeps every change made to the organization: who or what did it, the action, and the object it touched, including the stops and archives Daytona makes on its own.
 
+## Three records of what happened
+
 <Records
   title="Audit log · acme"
   columns={["time", "action", "target"]}
@@ -21,7 +23,7 @@ Daytona records what happens in your organization in three places. Sandboxes sen
   query={{ label: "Daytona's own actions", rows: [2, 4] }}
 />
 
-## Export telemetry
+## Export telemetry to your backend
 
 ```typescript title="src/Telemetry.ts"
 import * as Daytona from "@alchemy.run/daytona";

@@ -26,7 +26,7 @@ import {
   type DurableObjectRuntimeContext,
   type HostedDurableObject,
 } from "../DurableObject.ts";
-import { NodeHost } from "./NodeHost.ts";
+import { NodeHost } from "../Host.ts";
 import { runDurableObjects } from "./Runtime.ts";
 
 /** Build each entrypoint's class phase, then run the node until it is stopped. */

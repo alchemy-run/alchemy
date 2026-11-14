@@ -264,7 +264,7 @@ export const removeDiskUser = Effect.fn(function* (attrs: {
       identifier: attrs.type === "awssts" ? undefined : attrs.identifier,
       principal: attrs.type === "awssts" ? attrs.principal : undefined,
     })
-    .pipe(Effect.catchTag("DiskNotFound", () => Effect.void));
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
 });
 
 export const DiskUserProvider = () =>
@@ -309,7 +309,7 @@ export const DiskUserProvider = () =>
             identifier: output?.identifier,
             principal: output?.principal ?? olds?.principal,
             nickname,
-          }).pipe(Effect.catchTag("DiskNotFound", () => Effect.undefined));
+          }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (!observed) return undefined;
           return (
             output ?? {
