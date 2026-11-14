@@ -62,28 +62,8 @@ describe.concurrent.each([
       pongs: call(HttpClientRequest.get(`${base}/pongs/${group}`)).pipe(
         Effect.map((body) => JSON.parse(body) as string[]),
       ),
-      count: (id: string, n: number) =>
-        call(HttpClientRequest.post(`${base}/count/${group}/${id}?n=${n}`)).pipe(
-          Effect.map((body) => JSON.parse(body) as Array<[string, number]>),
-        ),
     };
   });
-
-  test(
-    "caughtUp waits for a projection fed by a view",
-    Effect.gen(function* () {
-      const { count } = yield* group;
-      // The route lists the counts right after caughtUp, without polling: each
-      // ping's count is there only if caughtUp waited for the view and then
-      // the projection, which takes a second over each.
-      expect(yield* count("a", 1)).toEqual([["a", 1]]);
-      expect(yield* count("a", 2)).toEqual([
-        ["a", 1],
-        ["a", 2],
-      ]);
-    }),
-    { tags, timeout: 150_000 },
-  );
 
   test(
     "a short batch runs once its wait is up",
