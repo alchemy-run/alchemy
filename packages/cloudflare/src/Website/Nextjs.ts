@@ -1,5 +1,4 @@
 import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
@@ -13,8 +12,9 @@ import {
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
+  type WorkspaceMemoOptions,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
 /**
  * The module specifier of the Next.js source provider. Loaded with a
@@ -25,23 +25,20 @@ import {
 const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 
 export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules" | "dev"
+  FrameworkWebsiteProps<Bindings>,
+  "dev"
 > {
   /**
-   * The Next.js project root. Defaults to the process working directory.
-   */
-  rootDir?: string;
-  /**
    * Controls which files are content-hashed to decide whether the OpenNext
-   * build needs to re-run. By default every project file outside build
-   * outputs (`.next`, `.open-next`, `dist`) and `node_modules` is hashed,
-   * plus the nearest package-manager lockfile. Narrow the scope with
+   * build needs to re-run. By default every non-gitignored project file
+   * outside build outputs (`.next`, `.open-next`, `dist`) and `node_modules`
+   * is hashed, plus root `.env*` files and the nearest package-manager
+   * lockfile. Narrow the scope with
    * `include`/`exclude` globs when the default is too broad.
    * `open-next.config.ts` itself is always hashed. When narrowing `include`,
    * also include any helpers imported by that config.
    */
-  memo?: MemoOptions;
+  memo?: WorkspaceMemoOptions;
   /**
    * Binds KV caches and the same-worker Durable Object revalidation queue.
    * Without `open-next.config.ts`, Alchemy selects matching KV adapters;
@@ -350,7 +347,6 @@ export const Nextjs: {
             // route 404s until `.next` is warm) — pin the dev child to node.
             runtime: "node",
             options: {
-              root: props?.rootDir,
               memo: props?.memo,
               cache: props?.isr ? "kv" : "static-assets",
               ...props?.openNext,

@@ -40,20 +40,37 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const call = (path: string, init?: { method?: "PUT"; body?: string }) =>
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    const client = yield* HttpClient.HttpClient;
     const request =
       init?.method === "PUT"
         ? HttpClientRequest.put(`${url}${path}`).pipe(HttpClientRequest.bodyText(init.body ?? ""))
         : HttpClientRequest.get(`${url}${path}`);
-    return yield* client
-      .execute(request)
-      .pipe(Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }));
+    return yield* client.execute(request).pipe(
+      // Keep the Worker's error text (its Cause) in the failure.
+      Effect.flatMap((res) =>
+        res.status >= 200 && res.status < 300
+          ? Effect.succeed(res)
+          : Effect.flatMap(res.text, (text) =>
+              Effect.fail(new RouteFailed({ path, status: res.status, text })),
+            ),
+      ),
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
+    );
   });
 
 const json = <A>(path: string) =>
   call(path).pipe(Effect.flatMap((r) => r.json as Effect.Effect<A, any>));
 const text = (path: string) => call(path).pipe(Effect.flatMap((r) => r.text));
 
+class RouteFailed extends Data.TaggedError("RouteFailed")<{
+  readonly path: string;
+  readonly status: number;
+  readonly text: string;
+}> {
+  override get message() {
+    return `${this.path} answered ${this.status}: ${this.text}`;
+  }
+}
 class MountRouteFailed extends Data.TaggedError("MountRouteFailed")<{ readonly text: string }> {}
 class ProxyNotReady extends Data.TaggedError("ProxyNotReady")<{ readonly status: number }> {}
 
@@ -262,6 +279,66 @@ describe("BranchDisk", () => {
   );
 });
 
+/**
+ * Many requests create one name at once. Archil fails every create but the
+ * first (409 `conflict` on branches, `sandbox_name_conflict` on sandboxes),
+ * and each binding has to converge on the object the winner made.
+ */
+const race = <A>(path: string) =>
+  Effect.gen(function* () {
+    // Warm the Worker with a retried call, then race without retries: a
+    // retry would find the winner's object and hide a create that failed.
+    yield* call("/delete-disk?name=warm-up");
+    const { url } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    return yield* Effect.all(
+      Array.from({ length: 6 }, () =>
+        client.get(`${url}${path}`).pipe(Effect.flatMap((r) => r.json as Effect.Effect<A, any>)),
+      ),
+      { concurrency: "unbounded" },
+    );
+  });
+
+describe("concurrent creates", () => {
+  test(
+    "BranchDisk: concurrent creates of one branch all return it",
+    Effect.gen(function* () {
+      const all = yield* race<{ branch: Archil.BranchAttributes }>("/branch?name=session-race");
+      expect(new Set(all.map((b) => b.branch.filesystemId)).size).toBe(1);
+    }),
+    { tags, timeout: 180_000 },
+  );
+  test(
+    "CreateDisk: concurrent creates of one disk all return it",
+    Effect.gen(function* () {
+      const all = yield* race<{ id: string }>("/create-disk?name=race-1");
+      yield* call("/delete-disk?name=race-1");
+      expect(new Set(all.map((d) => d.id)).size).toBe(1);
+    }),
+    { tags, timeout: 180_000 },
+  );
+  test(
+    "CreateSandbox: concurrent creates of one sandbox all return it",
+    Effect.gen(function* () {
+      const all = yield* race<{ id: string }>("/create-sandbox?name=race-1");
+      yield* call("/delete-sandbox?name=race-1");
+      expect(new Set(all.map((x) => x.id)).size).toBe(1);
+    }),
+    { tags, timeout: 180_000 },
+  );
+});
+
+describe("CreateSandbox on a paused sandbox", () => {
+  test(
+    "exec resumes a paused sandbox and runs",
+    Effect.gen(function* () {
+      const body = yield* json<{ paused: string; stdout: string }>("/paused?name=paused-1");
+      expect(body).toEqual({ paused: "paused", stdout: "awake" });
+    }),
+    { tags, timeout: 240_000 },
+  );
+});
+
 describe("CreateImage", () => {
   test(
     "an image builds at run time",
@@ -395,7 +472,10 @@ describe("MountDisk", () => {
             res.status === 200 ? Effect.succeed(text) : Effect.fail(new MountRouteFailed({ text })),
           ),
         ),
-        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 18 }),
+        // A cold start can hold a request open; give up on it and ask again
+        // rather than wait out the whole test.
+        Effect.timeout("30 seconds"),
+        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 7 }),
         Effect.catchTag("MountRouteFailed", (e) => Effect.succeed(e.text)),
       );
       expect(body).toBe("through fuse");

@@ -6,8 +6,10 @@ import * as Alchemy from "alchemy";
 import { localState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { TEST_ORG } from "./fixtures/org.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers: Boat.providers() });
+const team = Test.make({ providers: Boat.providers({ org: TEST_ORG }) });
 
 const tags = ["provider:boat", "provider:boat:sandbox", "live"];
 
@@ -152,6 +154,38 @@ test.provider(
       // A lookup is never owned: destroying this stack leaves the sandbox in place.
       yield* stack.destroy();
       expect((yield* observe(sandboxId))?.id).toBe(sandboxId);
+    }),
+  { tags, timeout: 180_000 },
+);
+
+team.test.provider(
+  "an org's sandbox bills the org, and is shared and made private again in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (visibility: "shared" | "private") =>
+        Boat.Sandbox("TeamBox", {
+          type: "small",
+          noEnv: true,
+          autoStop: "10 minutes",
+          visibility,
+        });
+
+      const shared = yield* stack.deploy(program("shared"));
+      expect(shared.org?.name.toLowerCase()).toBe(TEST_ORG.toLowerCase());
+      expect(shared.visibility).toBe("shared");
+      expect((yield* observe(shared.sandboxId))?.visibility).toBe("shared");
+
+      const plan = yield* stack.plan(program("shared"));
+      expect(plan.resources.TeamBox.action).toBe("noop");
+
+      const made = yield* stack.deploy(program("private"));
+      expect(made.sandboxId).toBe(shared.sandboxId);
+      expect((yield* observe(shared.sandboxId))?.visibility).toBe("private");
+
+      yield* stack.destroy();
+      yield* expectGone(shared.sandboxId);
     }),
   { tags, timeout: 180_000 },
 );

@@ -5,6 +5,7 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";
+import { Golden } from "./src/Golden.ts";
 
 export default Alchemy.Stack(
   "BoatAgentSandboxExample",
@@ -13,7 +14,8 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
+    const golden = yield* Golden;
     const api = yield* Api;
-    return { url: api.url.as<string>() };
+    return { snapshot: golden.name, url: api.url.as<string>() };
   }),
 );

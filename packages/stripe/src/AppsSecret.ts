@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetAppsSecrets,
   GetAppsSecretsFind,
@@ -314,11 +313,8 @@ export const AppsSecretProvider = () =>
           payload: news.payload,
           scope: toWireScope(scope),
           ...(desiredExpiresAt !== undefined ? { expires_at: desiredExpiresAt } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey,
-          }),
-        );
+          idempotencyKey,
+        });
 
       if (current === undefined) {
         current = yield* put(`alchemy-apps-secret-${instanceId}`).pipe(

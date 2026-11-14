@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { declarable } from "./internal/Declared.ts";
 import { isOwnedName, resolveName } from "./internal/Names.ts";
 import { resolved, type Ref } from "./internal/Ref.ts";
 import type { Providers } from "./Providers.ts";
@@ -59,7 +60,7 @@ export type Runner = Resource<"Daytona.Runner", RunnerProps, RunnerAttributes, n
  * @resource
  * @product Region
  */
-export const Runner = Resource<Runner>("Daytona.Runner");
+export const Runner = declarable<Runner>()(Resource<Runner>("Daytona.Runner"));
 
 const regionId = (region: RunnerProps["region"]) => Effect.succeed(resolved(region).regionId);
 

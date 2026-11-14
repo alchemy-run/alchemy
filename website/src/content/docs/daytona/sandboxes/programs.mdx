@@ -7,6 +7,8 @@ import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A sandbox can run a program you write, the same way a Worker or a Lambda does. Alchemy bundles it, uploads it into the sandbox, and runs it with Node in a session of its own. The program serves HTTP on a port, reached through the sandbox's preview URL, and keeps running as long as the sandbox does.
 
+## The sandbox outlives the program
+
 The sandbox outlives the program. A code change restarts the process in the same sandbox, at the same URL. Only a change Daytona can't make to a running sandbox, like a new mount, replaces it.
 
 <Timeline
@@ -17,7 +19,7 @@ The sandbox outlives the program. A code change restarts the process in the same
     { id: "sbx2", label: "sandbox 2" },
   ]}
   bars={[
-    { lane: "sbx1", start: 0, end: 6.8, label: "agent.url stays the same" },
+    { lane: "sbx1", start: 0, end: 6.8, label: "sandbox.url stays the same" },
     { lane: "proc", start: 0, end: 3.4, label: "bundle a1b2" },
     { lane: "proc", start: 3.6, end: 6.8, label: "bundle c3d4" },
     { lane: "sbx2", start: 7, end: 10, label: "new sandbox" },
@@ -31,14 +33,14 @@ The sandbox outlives the program. A code change restarts the process in the same
 
 ## Run a program
 
-```typescript title="src/Agent.ts"
+```typescript title="src/MySandbox.ts"
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Base } from "./Images.ts";
 
-export default class Agent extends Daytona.Sandbox<Agent>()(
-  "Agent",
+export default class MySandbox extends Daytona.Sandbox<MySandbox>()(
+  "MySandbox",
   { snapshot: Base, main: import.meta.url, port: 3000, public: true },
   Effect.gen(function* () {
     return {
@@ -48,9 +50,9 @@ export default class Agent extends Daytona.Sandbox<Agent>()(
 ) {}
 ```
 
-`agent.url` is the preview URL of port 3000. `public` opens it to anyone; a private sandbox's preview needs its token in `X-Daytona-Preview-Token`. See [Network and previews](/daytona/networking/network).
+`sandbox.url` is the preview URL of port 3000. `public` opens it to anyone; a private sandbox's preview needs its token in `X-Daytona-Preview-Token`. See [Network and previews](/daytona/networking/network).
 
-## Redeploy it
+## A deploy restarts the process
 
 A code change uploads the new bundle and restarts the process. The sandbox and its URL stay the same.
 
@@ -58,7 +60,7 @@ A sandbox with `main` doesn't auto-stop. If it stopped anyway, its process ended
 
 ## Mount a volume in the program
 
-```typescript title="src/Agent.ts"
+```typescript title="src/MySandbox.ts"
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -66,8 +68,8 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Base } from "./Images.ts";
 import { Data } from "./Storage.ts";
 
-export default class Agent extends Daytona.Sandbox<Agent>()(
-  "Agent",
+export default class MySandbox extends Daytona.Sandbox<MySandbox>()(
+  "MySandbox",
   { snapshot: Base, main: import.meta.url, public: true },
   Effect.gen(function* () {
     const data = yield* Daytona.MountVolume(Data, { path: "/data" });
@@ -89,6 +91,6 @@ A mount binding that needs a client in the image, such as an `alchemy/Mount` cap
 
 Daytona sandboxes provide FUSE, so FUSE clients work. A client that needs NFS fails the deploy with `MountUnsupported`.
 
-## What the program can reach
+## The program reaches what its sandbox does
 
 The program reaches the network the way its sandbox does. Below Daytona's Tier 3, that is only an allowlist of essential services, so bindings that call Daytona's API work, but calls to another sandbox's toolbox are refused. From Tier 3, the program reaches the whole internet. See [Network and previews](/daytona/networking/network).

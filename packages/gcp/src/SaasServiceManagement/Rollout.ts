@@ -65,15 +65,10 @@ export type RolloutProps = {
    */
   rolloutKind?: string;
   /**
-   * Release rolled out to target units. Mutually exclusive with
-   * `flagRelease`. Immutable — changing it replaces the rollout.
+   * Release rolled out to target units. Immutable — changing it replaces
+   * the rollout.
    */
   release?: string;
-  /**
-   * Flag release rolled out to target units. Mutually exclusive with
-   * `release`. Immutable — changing it replaces the rollout.
-   */
-  flagRelease?: string;
   /**
    * CEL filter reducing the eligible unit population for this rollout.
    */
@@ -118,8 +113,6 @@ export type Rollout = Resource<
     release: string | undefined;
     /** Release id (last path segment). */
     releaseId: string | undefined;
-    /** Flag release resource name. */
-    flagRelease: string | undefined;
     /** CEL unit filter. */
     unitFilter: string | undefined;
     /** Effective unit filter snapshotted at start. */
@@ -185,10 +178,10 @@ export interface RolloutLookup {
 
 /**
  * An App Lifecycle Manager rollout — one execution of a RolloutKind
- * against a Release (or FlagRelease).
+ * against a Release.
  *
- * `rolloutId`, `location`, `rolloutKind`, `release`, and `flagRelease`
- * replace the rollout. Unit filter, strategy override, control action,
+ * `rolloutId`, `location`, `rolloutKind`, and `release` replace the
+ * rollout. Unit filter, strategy override, control action,
  * labels, and annotations update in place. Requests to pause or cancel
  * are only accepted while the rollout is non-terminal.
  *
@@ -242,7 +235,6 @@ const toAttrs = (item: saasservicemgmt.Rollout, project: string) => {
     rolloutKindId: item.rolloutKind ? lastSegment(item.rolloutKind) : undefined,
     release: item.release,
     releaseId: item.release ? lastSegment(item.release) : undefined,
-    flagRelease: item.flagRelease,
     unitFilter: item.unitFilter,
     effectiveUnitFilter: item.effectiveUnitFilter,
     rolloutOrchestrationStrategy: item.rolloutOrchestrationStrategy,
@@ -325,10 +317,7 @@ export const RolloutProvider = () =>
         extra:
           (news.rolloutKind !== undefined &&
             !sameRef(olds?.rolloutKind ?? output?.rolloutKind, news.rolloutKind)) ||
-          (news.release !== undefined &&
-            !sameRef(olds?.release ?? output?.release, news.release)) ||
-          (news.flagRelease !== undefined &&
-            (olds?.flagRelease ?? output?.flagRelease ?? "") !== news.flagRelease),
+          (news.release !== undefined && !sameRef(olds?.release ?? output?.release, news.release)),
       });
     }),
 
@@ -388,7 +377,6 @@ export const RolloutProvider = () =>
             body: {
               rolloutKind,
               release,
-              flagRelease: news.flagRelease,
               unitFilter: news.unitFilter,
               rolloutOrchestrationStrategy: news.rolloutOrchestrationStrategy,
               control: news.control,

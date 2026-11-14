@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import type { Data, Fields } from "./Event.ts";
+import { inputSchema } from "./internal.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Projection from "./Projection.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -258,6 +259,11 @@ export interface Definition<
  * if (page.cursor) yield* bank.AccountLedger({ account: accountId }, { after: page.cursor });
  * ```
  *
+ * **Example:** Every entry, as a Stream
+ * ```typescript
+ * const entries = yield* bank.AccountLedger.entries({ account: accountId }).pipe(Stream.runCollect);
+ * ```
+ *
  * Right after its own command, a client passes the command's receipt as
  * `atLeast`. The query finds the keys to wait on in that command's events,
  * waits until every read in `waitsFor` has handled them, then runs the handler.
@@ -317,7 +323,7 @@ export const make = <
   const middleware = definition.middleware ?? [];
   const rpc = Rpc.make(name, {
     payload: {
-      input: Schema.Struct(definition.input ?? {}),
+      input: inputSchema(definition.input),
       atLeast: Schema.optional(Schema.Union([Receipt, Schema.Array(Receipt)])),
       ...(definition.paged
         ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }

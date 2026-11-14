@@ -1,0 +1,126 @@
+---
+title: Engines & contexts
+description: How a Docker context chooses the engine a resource lands on — the CLI's current context, a Docker.Context over SSH or TCP, an existing context by lookup — and who can reach an engine.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything Docker creates lives on one **engine**: its images, containers, networks and volumes. The `docker` CLI reaches engines through **contexts**, named endpoints such as the local socket, `ssh://deploy@example.com` or a TCP address with TLS. There's no account or region above the engine. The engine is the whole boundary, so a deploy goes wherever the context points.
+
+<Tree
+  areas={["cli desktop", "cli vps"]}
+  phoneAreas={["cli", "desktop", "vps"]}
+  colGap={8}
+  nodes={[
+    { id: "cli", label: "alchemy deploy", type: "docker CLI · your machine", icon: "square-terminal" },
+    { id: "desktop", label: "Docker Desktop", type: "engine · local socket", icon: "brand:docker", areas: ["db"] },
+    { id: "db", label: "postgres", type: "container", parent: "desktop", icon: "brand:postgresql" },
+    { id: "vps", label: "vps", type: "engine · ssh://deploy@example.com", icon: "brand:docker", areas: ["web"] },
+    { id: "web", label: "web", type: "container", parent: "vps", icon: "server", tone: "accent" },
+  ]}
+  links={[
+    { from: "cli", to: "desktop", label: "current context" },
+    { from: "cli", to: "vps", label: "context: vps" },
+  ]}
+  caption="A resource without a context lands on the engine the CLI's current context points at. A resource with context: vps lands on the server, over SSH. Both are in one Stack."
+/>
+
+## The current context
+
+A resource without a `context` uses the CLI's current context, the same engine `docker ps` lists:
+
+```sh
+docker context ls
+docker context use desktop-linux
+```
+
+The CLI's own variables still apply. `DOCKER_CONTEXT` picks a context for one command, and `DOCKER_HOST` points at an engine directly:
+
+```sh
+DOCKER_HOST=ssh://deploy@example.com docker ps
+```
+
+## Declare a context
+
+`Docker.Context` creates a named context, so the Stack itself says where things go:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const vps = yield* Docker.Context("vps", {
+      docker: "host=ssh://deploy@example.com",
+      description: "production server",
+    });
+
+    const web = yield* Docker.Container("web", {
+      context: vps,
+      image: "nginx:alpine",
+      ports: [{ external: 80, internal: 80 }],
+      start: true,
+    });
+
+    return { container: web.name };
+  }),
+);
+```
+
+Every Docker resource takes `context`, as the resource or as a context name. Passing the resource also makes `web` deploy after `vps` exists.
+
+## Reach a server over SSH
+
+An `ssh://` context runs every Docker command on the server, builds included. Nothing needs installing there besides Docker. SSH signs in with your keys or agent, as `ssh deploy@example.com` would, and Docker refuses passwords in the URL.
+
+A TCP endpoint with TLS names its certificate files by path:
+
+```typescript
+const remote = yield* Docker.Context("remote", {
+  docker: "host=tcp://203.0.113.10:2376,ca=/certs/ca.pem,cert=/certs/cert.pem,key=/certs/key.pem",
+});
+```
+
+Docker stores the context, endpoint included, as plain text under `~/.docker/contexts`, so keep secrets out of it.
+
+## Use an existing context
+
+`Docker.Context.lookup` references a context someone else created. Alchemy reads it and never changes or removes it:
+
+```typescript
+const remote = Docker.Context.lookup({ name: "prod-host" });
+
+const api = yield* Docker.Container("api", {
+  context: remote,
+  image: "nginx:alpine",
+});
+```
+
+## One target for dev, another for production
+
+`Alchemy.ALCHEMY_DEV` is true during `alchemy dev`, so one Stack can run locally while you develop and on the server when you deploy:
+
+```typescript
+const dev = yield* Alchemy.ALCHEMY_DEV;
+
+const target = yield* Docker.Context("target", {
+  name: dev ? "local" : "vps",
+  docker: dev ? undefined : "host=ssh://deploy@example.com",
+});
+```
+
+Changing a context's endpoint updates it in place. Renaming it, or removing its endpoint, replaces it.
+
+## Who can reach an engine
+
+An engine has no users or permissions of its own. Access to its socket is full control of the machine: start a privileged container and you're root on the host. Guard the socket like a root login. On a server, that means SSH keys for a dedicated `deploy` user in the `docker` group, never the daemon's TCP port open without TLS client certificates.
+
+## Next
+
+Registry passwords are the only credentials Docker resources take. See [Registries & credentials](/docker/registries).

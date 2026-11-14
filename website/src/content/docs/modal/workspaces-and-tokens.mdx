@@ -17,10 +17,10 @@ A **workspace** holds your apps, images, Volumes, Dicts, Queues and Secrets, the
 <Tree
   nodes={[
     { id: "ws", label: "acme", type: "workspace" },
-    { id: "dev", label: "Agents-dev", type: "environment", parent: "ws" },
+    { id: "dev", label: "MyEnv-dev", type: "environment", parent: "ws" },
     { id: "devCoder", label: "Coder", type: "app", parent: "dev" },
     { id: "devWeights", label: "Weights", type: "Volume", parent: "dev" },
-    { id: "prod", label: "Agents-prod", type: "environment", parent: "ws" },
+    { id: "prod", label: "MyEnv-prod", type: "environment", parent: "ws" },
     { id: "prodCoder", label: "Coder", type: "app", parent: "prod" },
     { id: "prodWeights", label: "Weights", type: "Volume", parent: "prod" },
   ]}
@@ -35,17 +35,17 @@ Declare one environment and put everything in it. Alchemy names it from your app
 ```typescript title="src/environments.ts"
 import * as Modal from "@alchemy.run/modal";
 
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 
-export const Coder = Modal.App("Coder", { environment: Agents });
+export const Coder = Modal.App("Coder", { environment: MyEnv });
 
-export const Weights = Modal.Volume("Weights", { environment: Agents });
+export const Weights = Modal.Volume("Weights", { environment: MyEnv });
 ```
 
 An environment can cap what its stage spends:
 
 ```typescript title="src/environments.ts"
-export const Agents = Modal.Environment("Agents", {
+export const MyEnv = Modal.Environment("MyEnv", {
   maxConcurrentTasks: 50,
   maxConcurrentGpus: 4,
   budget: 200,
@@ -64,7 +64,7 @@ Pick **Browser login**. Alchemy opens modal.com, you approve, and Modal creates 
 
 A token is a token id (`ak-…`) and a secret (`as-…`). It acts on everything in its workspace, and doesn't expire.
 
-## One profile per workspace
+## Give production its own workspace
 
 The [stage](/environments/stages) decides **what** you deploy: its own environment and the names inside it. The profile decides **where**: which workspace's token Alchemy uses.
 
@@ -77,7 +77,7 @@ The [stage](/environments/stages) decides **what** you deploy: its own environme
 
 Many stages can share a workspace, each in its own environment. Give production a workspace of its own when you want its members and bill kept apart too.
 
-## Access narrower than yours
+## Each runtime gets a service user
 
 Your runtimes never get your token. When a Worker or Lambda binds a Modal object, deploy creates a **service user** for it and grants it a role in the bound object's environment: `viewer` to read, `contributor` to write or create.
 
@@ -93,7 +93,7 @@ Declare a service user yourself for anything outside the Stack, like a CI job:
 
 ```typescript title="src/identities.ts"
 export const Deployer = Modal.ServiceUser("Deployer", {
-  environments: [{ environment: Agents, role: "contributor" }],
+  environments: [{ environment: MyEnv, role: "contributor" }],
 });
 ```
 
@@ -101,7 +101,7 @@ Its `tokenId` and `tokenSecret` are a token pair like yours, that only works in 
 
 Service users need Modal's Team or Enterprise plan. See [Access control](/modal/security/access-control) for the Starter plan, and for environments only some members may change.
 
-## In CI
+## Deploy from CI with a token
 
 Set the same variables the `modal` CLI reads:
 

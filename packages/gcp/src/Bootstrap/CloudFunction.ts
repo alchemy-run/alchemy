@@ -127,7 +127,7 @@ export const makeHandler = (entrypoint: unknown) => {
       SecureRandom.layerWebCrypto,
       Logger.layer([Logger.consolePretty()]),
     );
-    const program = resolveProgram("program", { telemetry: true }).pipe(
+    const program = resolveProgram("program").pipe(
       Effect.provide(
         entrypointLayer(entrypoint).pipe(
           Layer.provideMerge(stackFromEnv),

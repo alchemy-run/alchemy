@@ -9,6 +9,7 @@ import {
   logLevel,
   probeAccount,
   probeDataSource,
+  reviewsV1betaRetired,
   productReviewDataSource,
   runProductReviewLifecycle,
 } from "./common.ts";
@@ -47,7 +48,7 @@ test.provider.skipIf(!runProductReviewLifecycle)(
   },
 );
 
-test.provider.skipIf(runProductReviewLifecycle)(
+test.provider.skipIf(runProductReviewLifecycle || reviewsV1betaRetired)(
   "insertAccountsProductReviews without Product Reviews access fails with InsufficientScopes",
   (stack) =>
     Effect.gen(function* () {

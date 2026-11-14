@@ -6,16 +6,16 @@ import * as Sql from "effect/sql/SqlClient";
 
 /**
  * Dialect-agnostic route handlers exercising the full `SqlClient` constructor
- * surface through an alchemy `SQL.*` client (a `proxyChain`-wrapped client,
- * so every helper call below also regression-tests deferred-proxy replay —
- * nested fragments used to be handed to the driver as opaque proxies).
+ * surface through an alchemy `SQL.*` client. The client is built at
+ * Construction phase and connects per execution, so every helper call below
+ * also checks that statements built before a connection exists run on one.
  *
  * Each fixture worker defines an init effect that pulls its own bindings,
  * builds the clients, and calls {@link makeSqlRoutes} to get the handler
  * interface; `fetch` just delegates to it.
  */
 export interface SqlRoutesOptions {
-  /** The `proxyChain`-wrapped client under test. */
+  /** The client under test. */
   readonly sql: Sql.SqlClient;
   /**
    * The users service built against the generic `SqlClient` tag with
@@ -89,8 +89,8 @@ export const makeSqlRoutes = (options: SqlRoutesOptions): SqlRoutes => {
         return yield* HttpServerResponse.json({ ok: true });
       }
 
-      // POST /users — single-row `sql.insert(row)` nested in an outer template
-      // (the original proxyChain regression), read back with `sql.and` over
+      // POST /users — single-row `sql.insert(row)` nested in an outer
+      // template, read back with `sql.and` over
       // nested `sql\`...\`` fragments.
       if (request.method === "POST" && path === "/users") {
         const row = (yield* request.json) as UserRow;

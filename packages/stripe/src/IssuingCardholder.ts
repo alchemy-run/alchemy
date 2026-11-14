@@ -1,4 +1,4 @@
-import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
+import type { StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetIssuingCardholders,
   GetIssuingCardholder,
@@ -791,11 +791,8 @@ export const IssuingCardholderProvider = () =>
                 spending_controls: toWireSpendingControls(news.spendingControls),
               }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-issuing-cardholder-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-issuing-cardholder-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

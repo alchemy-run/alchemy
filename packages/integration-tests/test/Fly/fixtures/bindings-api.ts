@@ -1,4 +1,5 @@
 import * as Fly from "@alchemy.run/fly";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -59,20 +60,18 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
         if (path === "/health") {
           const resolvedApp = yield* appName;
           const resolvedSecret = yield* secretName;
-          const token = process.env.FLY_API_TOKEN ?? "";
+          // Read through Config, which unpacks Alchemy's bound Redacted form.
+          const token = Redacted.value(yield* Config.Redacted("FLY_API_TOKEN").pipe(Effect.orDie));
           return yield* HttpServerResponse.json({
             ok: true,
             appName: resolvedApp,
             secretName: resolvedSecret,
             hasFlySecretMarkerEnv: process.env.FLY_SECRET_Marker !== undefined,
-            hasToken: token.length > 0,
-            tokenKind: token.startsWith("{")
-              ? "marker"
-              : token.startsWith("FlyV1")
-                ? "flyv1"
-                : token.length > 0
-                  ? "other"
-                  : "missing",
+            tokenKind: token.startsWith("FlyV1 ")
+              ? "flyv1"
+              : token.startsWith("{")
+                ? "marker"
+                : "other",
           });
         }
 
