@@ -1,12 +1,14 @@
 import { applyEnvRegionOverride, parseAwsSsoLoginOutput } from "@alchemy.run/aws/AuthProvider";
 import { describe, expect, it } from "@alchemy.run/test";
 import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
+import { exec } from "alchemy/Util/exec";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
 
 const withEnv = (env: Record<string, string>) =>
   Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
@@ -14,6 +16,124 @@ const withEnv = (env: Record<string, string>) =>
 // Simulates credentials resolved from an SSO profile whose ~/.aws/config
 // region differs from the region the user explicitly set in the environment.
 const profileCreds = { accountId: "123456789012", region: "us-west-2" };
+
+describe("aws-profile", { tags: ["unit", "provider:aws", "local"] }, () => {
+  for (const { name, profileRegion, env, region } of [
+    {
+      name: "resolves credential_process without stored keys and prefers the profile region",
+      profileRegion: "us-west-2",
+      env: { AWS_DEFAULT_REGION: "eu-west-1" },
+      region: "us-west-2",
+    },
+    {
+      name: "keeps a China profile region when the default is commercial",
+      profileRegion: "cn-north-1",
+      env: { AWS_DEFAULT_REGION: "us-east-1" },
+      region: "cn-north-1",
+    },
+    {
+      name: "lets AWS_REGION override the profile region",
+      profileRegion: "us-west-2",
+      env: { AWS_REGION: "us-east-2" },
+      region: "us-east-2",
+    },
+    {
+      name: "uses AWS_DEFAULT_REGION when the profile has no region",
+      profileRegion: undefined,
+      env: { AWS_DEFAULT_REGION: "eu-west-1" },
+      region: "eu-west-1",
+    },
+  ]) {
+    it.effect(name, () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-aws-profile-" });
+        const helper = path.join(dir, "credentials.sh");
+        const config = path.join(dir, "config");
+        const credentials = path.join(dir, "credentials");
+        yield* fs.writeFileString(
+          helper,
+          `printf '%s' '{"Version":1,"AccessKeyId":"process-key","SecretAccessKey":"process-secret","SessionToken":"process-token"}'\n`,
+        );
+        yield* fs.writeFileString(credentials, "");
+        yield* fs.writeFileString(
+          config,
+          `[profile sandbox]\ncredential_process = /bin/sh "${helper}"\n${profileRegion ? `region = ${profileRegion}\n` : ""}`,
+        );
+        // distilled reads the real process environment. Isolate it in a child
+        // instead of changing process.env in the concurrent test runner.
+        const executable = yield* Effect.sync(() => process.execPath);
+        const result = yield* exec(
+          ChildProcess.make(
+            executable,
+            [path.join(import.meta.dirname, "fixtures", "aws-profile.ts")],
+            {
+              extendEnv: false,
+              env: {
+                HOME: dir,
+                ALCHEMY_HOME: dir,
+                AWS_CONFIG_FILE: config,
+                AWS_SHARED_CREDENTIALS_FILE: credentials,
+                AWS_PROFILE: "not-the-selected-profile",
+                ...env,
+              },
+            },
+          ),
+        );
+        expect(result.stderr).toBe("");
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({
+          accountId: "123456789012",
+          region,
+          credentialRegion: region,
+          processCredentials: true,
+          source: { type: "aws-profile", details: "sandbox" },
+        });
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+    );
+  }
+
+  it.effect("uses the profile region while acquiring web identity credentials", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-aws-profile-" });
+      const config = path.join(dir, "config");
+      const credentials = path.join(dir, "credentials");
+      const token = path.join(dir, "token");
+      yield* fs.writeFileString(token, "local-test-token");
+      yield* fs.writeFileString(credentials, "");
+      yield* fs.writeFileString(
+        config,
+        `[profile sandbox]\nregion = cn-north-1\nrole_arn = arn:aws-cn:iam::123456789012:role/review\nweb_identity_token_file = ${token}\n`,
+      );
+      const executable = yield* Effect.sync(() => process.execPath);
+      const result = yield* exec(
+        ChildProcess.make(
+          executable,
+          [path.join(import.meta.dirname, "fixtures", "aws-profile.ts")],
+          {
+            extendEnv: false,
+            env: {
+              HOME: dir,
+              ALCHEMY_HOME: dir,
+              AWS_CONFIG_FILE: config,
+              AWS_SHARED_CREDENTIALS_FILE: credentials,
+              AWS_DEFAULT_REGION: "us-east-1",
+              AWS_PROFILE_TEST_ACTION: "refresh",
+            },
+          },
+        ),
+      );
+      expect(result.stderr).toBe("");
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        hostname: "sts.cn-north-1.amazonaws.com.cn",
+      });
+    }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+  );
+});
 
 describe("parseAwsSsoLoginOutput", { tags: ["unit", "provider:aws", "local"] }, () => {
   it("reads browser authorization JSON", () => {

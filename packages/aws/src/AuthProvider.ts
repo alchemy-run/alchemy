@@ -6,9 +6,11 @@ import {
   AwsCredentialProviderError,
   Credentials,
   ExpiredSSOToken,
+  fromIni,
   InvalidSSOToken,
 } from "@distilled.cloud/aws/Credentials";
 import * as STS from "@distilled.cloud/aws/sts";
+import { loadSharedConfigFiles } from "@distilled.cloud/aws/util/shared-config";
 import {
   AuthError,
   AuthProviderLayer,
@@ -111,6 +113,12 @@ export const AwsAuthConfigSchema = Schema.Union([
     accountId: Schema.optional(Schema.String),
   }),
   Schema.Struct({
+    method: Schema.Literal("aws-profile"),
+    awsProfile: Schema.String,
+    /** Backfilled from STS on first use so later runs skip the call. */
+    accountId: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
     method: Schema.Literal("stored"),
     accountId: Schema.optional(Schema.String),
     accessKeyId: Schema.String,
@@ -135,6 +143,12 @@ const options: Array<{
     value: "console-login",
     label: "Console login",
     description: "sign in with AWS Management Console credentials (aws login)",
+  },
+  {
+    value: "aws-profile",
+    label: "AWS profile",
+    description:
+      "use an AWS CLI profile (credential_process, role_arn, web identity, keys, SSO, aws login)",
   },
   {
     value: "stored",
@@ -166,10 +180,16 @@ const loginFields: ReadonlyArray<ConfigureField> = [
   { name: "loginProfile", label: "AWS profile name (from ~/.aws/config)" },
 ];
 
+/** `--set` fields for `--method aws-profile` (nothing persisted; profile resolved). */
+const awsProfileFields: ReadonlyArray<ConfigureField> = [
+  { name: "awsProfile", label: "AWS profile name (from ~/.aws/config)" },
+];
+
 const configureMethods: ReadonlyArray<ConfigureMethod> = [
   { method: "stored", fields: keysFields },
   { method: "sso", fields: ssoFields },
   { method: "console-login", fields: loginFields },
+  { method: "aws-profile", fields: awsProfileFields },
 ];
 
 export interface AwsResolvedCredentials {
@@ -351,6 +371,22 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 return config;
               }),
             ),
+            Match.when("aws-profile", () =>
+              Effect.gen(function* () {
+                const awsProfile = yield* Interaction.text({
+                  message: "AWS profile name (from ~/.aws/config)",
+                  placeholder: "default",
+                  defaultValue: "default",
+                });
+                const accountId = yield* verifyAwsProfile(awsProfile ?? "default");
+                yield* Interaction.success("AWS profile resolved.");
+                return {
+                  method: "aws-profile" as const,
+                  awsProfile: awsProfile ?? "default",
+                  accountId,
+                };
+              }),
+            ),
             Match.when("stored", () => loginStored()),
             Match.exhaustive,
           ),
@@ -467,10 +503,26 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             return { method: "console-login" as const, loginProfile };
           }),
         ),
+        Match.when("aws-profile", () =>
+          Effect.gen(function* () {
+            const values = yield* validateFieldValues(
+              AWS_AUTH_PROVIDER_NAME,
+              awsProfileFields,
+              input.values,
+            );
+            const awsProfile = storedValueText(values.awsProfile) ?? "";
+            // `Auth.loadProfile` accepts only SSO and `login_session`
+            // profiles, so validate by resolving the profile once and asking
+            // STS who it is. Nothing else is persisted: the AWS CLI
+            // configuration owns the profile.
+            const accountId = yield* verifyAwsProfile(awsProfile);
+            return { method: "aws-profile" as const, awsProfile, accountId };
+          }),
+        ),
         Match.orElse(() =>
           Effect.fail(
             AuthError.make({
-              message: `AWS: unknown method '${input.method}'. Valid methods: stored, sso, console-login.`,
+              message: `AWS: unknown method '${input.method}'. Valid methods: stored, sso, console-login, aws-profile.`,
             }),
           ),
         ),
@@ -619,6 +671,51 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
               } satisfies AwsResolvedCredentials;
             }),
           ),
+          Match.when({ method: "aws-profile" }, (config) =>
+            Effect.gen(function* () {
+              const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
+              // Nothing is persisted: distilled's `fromIni` resolves the
+              // profile on each command, whatever its kind, and caches the
+              // credentials until they near expiry.
+              const region = yield* awsProfileRegion(config.awsProfile);
+              const credentials = (yield* awsProfileCredentials(config.awsProfile, region)).pipe(
+                Effect.mapError((error) =>
+                  error._tag === "SourceError"
+                    ? new AwsCredentialProviderError({
+                        message: error.message,
+                        provider: "aws-profile",
+                        cause: error,
+                      })
+                    : error,
+                ),
+              );
+              const resolved = yield* credentials.pipe(
+                Effect.mapError((cause) =>
+                  AuthError.make({
+                    message: `AWS profile '${config.awsProfile}' did not resolve credentials: ${cause.message} ${reconfigure}`,
+                    cause,
+                  }),
+                ),
+              );
+              const accountId =
+                config.accountId ??
+                (yield* getEnvRequired("AWS_ACCOUNT_ID").pipe(
+                  Effect.catch(() => getAccountId({ ...resolved, region })),
+                ));
+              if (config.accountId === undefined && updateConfig !== undefined) {
+                yield* updateConfig({ ...config, accountId });
+              }
+              return {
+                accountId,
+                credentials,
+                region,
+                source: {
+                  type: "aws-profile" as const,
+                  details: config.awsProfile,
+                },
+              } satisfies AwsResolvedCredentials;
+            }),
+          ),
           Match.exhaustive,
           // Pass diagnosable failures through untouched: NeedsReauth (stored
           // credentials missing) and the specific AuthErrors raised above
@@ -720,6 +817,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             }),
           ),
         ),
+        Match.when({ method: "aws-profile" }, () => Effect.void),
         Match.when({ method: "stored" }, () => Effect.void),
         Match.exhaustive,
       );
@@ -730,6 +828,13 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
           loginSSO(config, config.authorizationMethod ?? "oauth"),
         ),
         Match.when({ method: "console-login" }, (config) => loginConsole(config)),
+        // The AWS CLI configuration owns the profile's login; refreshing
+        // verifies it and persists the account it now resolves to.
+        Match.when({ method: "aws-profile" }, (config) =>
+          verifyAwsProfile(config.awsProfile).pipe(
+            Effect.map((accountId) => ({ ...config, accountId })),
+          ),
+        ),
         Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
         Match.exhaustive,
         Effect.mapError((e) => AuthError.make({ message: `login failed: ${e.message}`, cause: e })),
@@ -864,6 +969,57 @@ const loadLoginProfile = (loginProfile: string) =>
         : AuthError.make({
             message: `AWS profile '${loginProfile}' has no login_session in ~/.aws/config. Run \`aws login --profile ${loginProfile}\` (AWS CLI v2.32+).`,
           }),
+    ),
+  );
+
+/**
+ * Credentials for an AWS CLI profile, as distilled's `fromIni`
+ * resolves it: static keys, `credential_process`, `role_arn` with
+ * `source_profile` or `credential_source`, `web_identity_token_file`,
+ * `login_session` and SSO. A profile with `mfa_serial` fails: no MFA code
+ * prompt is wired in.
+ */
+const awsProfileCredentials = (awsProfile: string, region: string) =>
+  Effect.service(Credentials).pipe(
+    Effect.provide(fromIni({ profile: awsProfile })),
+    Effect.map(Effect.provide(Region.of(region))),
+  );
+
+/** The region used for both profile reads and identity verification. */
+const awsProfileRegion = (awsProfile: string) =>
+  Effect.gen(function* () {
+    const files = yield* loadSharedConfigFiles.pipe(
+      Effect.mapError((cause) =>
+        AuthError.make({
+          message: `AWS: could not read the AWS CLI configuration: ${cause.message}`,
+          cause,
+        }),
+      ),
+    );
+    const region =
+      (yield* getEnv("AWS_REGION")) ??
+      files.configFile[awsProfile]?.region ??
+      (yield* getEnv("AWS_DEFAULT_REGION"));
+    if (!region) {
+      return yield* AuthError.make({
+        message: `AWS profile '${awsProfile}' has no region. Set one with \`aws configure set region <region> --profile ${awsProfile}\` or set AWS_REGION.`,
+      });
+    }
+    return region;
+  });
+
+/** Resolve an AWS CLI profile once and return its account, via STS `GetCallerIdentity`. */
+const verifyAwsProfile = (awsProfile: string) =>
+  Effect.gen(function* () {
+    const region = yield* awsProfileRegion(awsProfile);
+    const credentials = yield* awsProfileCredentials(awsProfile, region).pipe(Effect.flatten);
+    return yield* getAccountId({ ...credentials, region });
+  }).pipe(
+    Effect.mapError((cause) =>
+      AuthError.make({
+        message: `AWS profile '${awsProfile}' did not resolve credentials: ${cause.message}`,
+        cause,
+      }),
     ),
   );
 
