@@ -1,0 +1,167 @@
+---
+title: Choosing a runtime
+description: How App Platform services and jobs, Functions, Kubernetes and Droplets differ in what starts them, how they scale and what they cost, and how to choose one for each part of an app.
+---
+
+import DAG from "../../../../components/DAG.astro";
+import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+DigitalOcean gives you several places to run code. They differ in what starts your program, how long it lives, and how much of the machine underneath is yours to look after. App Platform and Functions run the same kind of Alchemy program and take the same bindings. Kubernetes and Droplets run what you put on them.
+
+<Responsibility
+  platform="DigitalOcean"
+  columns={[
+    { label: "Function", type: "per request" },
+    { label: "App service", type: "on requests" },
+    { label: "App job", type: "on a schedule" },
+    { label: "Kubernetes", type: "DOKS" },
+    { label: "Droplet", type: "a VM" },
+  ]}
+  rows={[
+    { label: "your program", you: [true, true, true, true, true] },
+    { label: "image", you: [false, true, true, true, true] },
+    { label: "scaling", you: [false, true, true, true, true] },
+    { label: "orchestration", you: [false, false, false, true, true] },
+    { label: "OS & patching", you: [false, false, false, false, true] },
+    { label: "hardware", you: [false, false, false, false, false] },
+  ]}
+  caption="From left to right, DigitalOcean manages less and you decide more. Only a Droplet leaves the operating system to you."
+/>
+
+## The same program on App Platform and Functions
+
+You declare either one with an id, its configuration and an Effect. Construction binds what the program uses, and it returns a `fetch` handler:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc" },
+  Effect.gen(function* () {
+    const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
+    return {
+      fetch: Effect.gen(function* () {
+        const object = yield* getObject({ Key: "hello.txt" });
+        return HttpServerResponse.text(String(object.ContentLength ?? 0));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Spaces.GetObjectHttp)),
+) {}
+```
+
+Change `DigitalOcean.App` to `DigitalOcean.Functions.Function` and `region` to `namespace`, and the same handler runs as a Function. The bindings don't change.
+
+## App Platform services: answer HTTP
+
+An [App](/digitalocean/compute/app-platform) runs your program as a container behind HTTPS, with as many instances as you ask for. Instances keep running between requests, so there's no cold start, and you pay for them by the second whether or not traffic arrives.
+
+It's an easy place to start, and it fits APIs, websites and anything that holds state in memory between requests.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "i1", label: "instance 1" },
+    { id: "i2", label: "instance 2" },
+  ]}
+  bars={[
+    { lane: "i1", start: 0, end: 10, label: "running · many requests at once" },
+    { lane: "i2", start: 0, end: 10, label: "running" },
+  ]}
+  marks={[{ at: 8.5, label: "no traffic" }]}
+  caption="An App keeps its instances running. Each serves many requests at once, and idle instances are still billed."
+/>
+
+## App Platform jobs: run on a schedule
+
+A [scheduled job](/digitalocean/compute/app-platform#run-a-scheduled-job) runs the App's own image on a cron schedule, does its work and exits. It shares the App's code and bindings, so a nightly report is a few lines next to the handler.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "job", label: "nightly job" }]}
+  bars={[
+    { lane: "job", start: 1, end: 3, label: "runs, then exits" },
+    { lane: "job", start: 6, end: 8, label: "next night" },
+  ]}
+  marks={[{ at: 1, label: "03:00" }, { at: 6, label: "03:00" }]}
+  caption="A job runs to completion at each scheduled time. Between runs nothing runs."
+/>
+
+## Functions: run per request
+
+A [Function](/digitalocean/compute/functions) runs only while a request is in flight and is billed per run, in gigabyte-seconds. An idle Function costs nothing. A cold one takes a moment to start.
+
+It fits spiky or rare traffic: webhooks, small APIs, scheduled tasks with a trigger.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "f", label: "function" }]}
+  bars={[
+    { lane: "f", start: 0.2, end: 0.9, tone: "warn" },
+    { lane: "f", start: 0.9, end: 2.6, label: "request" },
+    { lane: "f", start: 2.8, end: 4.5, label: "request" },
+    { lane: "f", start: 7.2, end: 7.9, tone: "warn" },
+    { lane: "f", start: 7.9, end: 9.6, label: "request" },
+  ]}
+  marks={[{ at: 5.9, label: "idle: nothing billed" }]}
+  caption="A Function runs per request. A warm one answers at once; after a while idle, the next request starts it cold."
+/>
+
+## Kubernetes: run anything on a cluster
+
+[DigitalOcean Kubernetes](/digitalocean/compute/kubernetes) runs the control plane; your workloads run on node pools, groups of Droplets of one size. You apply manifests from the same Stack.
+
+A cluster takes about ten minutes to create and its nodes cost money while they exist. Choose it when you want Kubernetes itself: Helm charts, operators, or workloads you already run on it.
+
+<Tree
+  nodes={[
+    { id: "c", label: "K8s", type: "DOKS cluster" },
+    { id: "n1", label: "node 1", type: "s-2vcpu-4gb", parent: "c", dashed: true },
+    { id: "p1", label: "api", type: "Pod", parent: "n1", tone: "accent" },
+    { id: "p2", label: "worker", type: "Pod", parent: "n1" },
+    { id: "n2", label: "node 2", type: "s-2vcpu-4gb", parent: "c", dashed: true },
+    { id: "p3", label: "api", type: "Pod", parent: "n2", tone: "accent" },
+  ]}
+  caption="Kubernetes places your Pods on the node pool's Droplets. DigitalOcean runs the control plane and patches the nodes."
+/>
+
+## Droplets: a virtual machine
+
+A [Droplet](/digitalocean/compute/droplets) is a VM: you choose its size and image, and everything on it is yours, from the packages to the security updates. It runs, and is billed, until you destroy it.
+
+Choose it for software that needs a whole machine: a game server, a database you run yourself, a long-running process with local disk.
+
+<Tree
+  nodes={[
+    {
+      id: "d", label: "Host", type: "Droplet", icon: "server",
+      specs: [["size", "s-1vcpu-1gb"], ["image", "ubuntu-24-04-x64"], ["region", "nyc3"]],
+    },
+  ]}
+  caption="A Droplet is one machine with the size, image and region you chose. You run and patch what's on it."
+/>
+
+## Mix runtimes in one app
+
+An app rarely needs just one. A common shape is an App for the API with a nightly job, and a Function for webhooks the API calls:
+
+<DAG
+  nodes={[
+    { id: "api", label: "Api", type: "App service", col: 1, row: 0 },
+    { id: "hook", label: "Resize", type: "Function", col: 2, row: 0 },
+    { id: "job", label: "Report", type: "App job", col: 0, row: 1 },
+    { id: "files", label: "Uploads", type: "Spaces bucket", col: 1, row: 1 },
+  ]}
+  edges={[
+    { from: "api", to: "hook", label: "InvokeFunction" },
+    { from: "api", to: "files", label: "PutObject" },
+    { from: "job", to: "files", label: "PutObject" },
+  ]}
+/>
+
+Each runtime gets its own keys from its own bindings, each reaching one resource.
