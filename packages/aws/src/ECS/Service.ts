@@ -15,6 +15,7 @@ import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toMillis, toWireSeconds } from "alchemy/Util/Duration";
+import { withWebhookHost, type WebhookHost } from "alchemy/WebhookHost";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -962,7 +963,7 @@ export interface ServiceLookup {
   serviceName: string;
 }
 
-export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
+export type ServiceServices = Credentials | Region | ServerHost | WebhookHost | AWSEnvironment;
 
 /**
  * The impl shape for an effectful `Service`: a long-running server returning
@@ -1392,7 +1393,10 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  */
 export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
   LookupMethod<Service> = Platform("AWS.ECS.Service", {
-  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+  // A service behind its load balancer can receive webhooks
+  // (`Stripe.ConsumeEventsLive`, ...).
+  createRuntimeContext: ((id: string) =>
+    withWebhookHost(createContainerRuntimeContext("AWS.ECS.Service")(id))) as (
     id: string,
   ) => ServiceRuntimeContext,
   // Compose the managed load balancer (owned ALB/listeners or shared-listener
