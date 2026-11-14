@@ -2,6 +2,7 @@ import * as NodeZlib from "node:zlib";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
+import { isLiveId } from "@alchemy.run/cloudflare/LocalRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -1512,6 +1513,138 @@ describe.concurrent(
       }).pipe(logLevel),
     );
 
+    // Cloudflare rejects a default application created without its Durable
+    // Object binding ("This account requires a Durable Object binding when
+    // creating a default application."), and a cycle precreates before the
+    // Worker has a namespace. Precreate publishes the image and creates no
+    // application; reconcile creates it once, attached (#3264).
+    test.provider(
+      "a fresh Worker and Container cycle creates one attached application",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* RemoteContainerWorker;
+            const app = yield* RemoteContainer.Application;
+            return { url: worker.url.as<string>(), app };
+          });
+
+          const { app } = yield* scratch.deploy(program);
+          expect(isLiveId(app.applicationId)).toBe(true);
+          const namespaceId = app.durableObjects?.namespaceId;
+          expect(namespaceId).toBeDefined();
+          const named = (yield* Containers.listContainerApplications({ accountId })).filter(
+            (item) => item.name === app.applicationName,
+          );
+          expect(named.map((item) => item.id)).toEqual([app.applicationId]);
+          expect(
+            yield* live(accountId, app.applicationId).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ContainerApplicationNotFound",
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            ),
+          ).toMatchObject({ durableObjects: { namespaceId } });
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* waitForApplicationDeleted(accountId, app.applicationId)).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    // A crash after precreate leaves a `creating` row holding precreate's
+    // placeholder: a `dev:` id with the application's real name. A crash after
+    // reconcile created the application leaves the same row. Redeploying from
+    // either converges on one attached application, and destroy from the
+    // second still deletes it.
+    test.provider(
+      "redeploys and destroys a Worker and Container cycle interrupted after precreate",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* RemoteContainerWorker;
+            const app = yield* RemoteContainer.Application;
+            return { url: worker.url.as<string>(), app };
+          });
+          const key = { stack: scratch.name, stage: scratch.stage, fqn: "RemoteContainer" };
+          const interruptAfterPrecreate = Effect.gen(function* () {
+            const state = yield* yield* State;
+            const row = yield* state.get(key);
+            assert(row?.status === "created" || row?.status === "updated");
+            yield* state.set({
+              ...key,
+              value: {
+                ...row,
+                status: "creating",
+                attr: {
+                  ...row.attr,
+                  applicationId: "dev:interrupted-precreate",
+                  instances: undefined,
+                  maxInstances: undefined,
+                  configuration: {},
+                  durableObjects: undefined,
+                  createdAt: "",
+                  version: undefined,
+                },
+              },
+            });
+          }).pipe(Effect.provide(scratch.state));
+          const applicationsNamed = (name: string) =>
+            Containers.listContainerApplications({ accountId }).pipe(
+              Effect.map((apps) =>
+                apps.filter((item) => item.name === name).map((item) => item.id),
+              ),
+            );
+
+          const first = yield* scratch.deploy(program);
+          const namespaceId = first.app.durableObjects?.namespaceId;
+          expect(namespaceId).toBeDefined();
+
+          // Crashed between precreate and reconcile: no application exists.
+          yield* Containers.deleteContainerApplication({
+            accountId,
+            applicationId: first.app.applicationId,
+          });
+          expect(
+            yield* waitForApplicationDeleted(accountId, first.app.applicationId),
+          ).toBeUndefined();
+          yield* interruptAfterPrecreate;
+          const recreated = yield* scratch.deploy(program);
+          expect(isLiveId(recreated.app.applicationId)).toBe(true);
+          expect(recreated.app.applicationId).not.toBe(first.app.applicationId);
+          expect(recreated.app.durableObjects).toEqual({ namespaceId });
+          expect(yield* applicationsNamed(recreated.app.applicationName)).toEqual([
+            recreated.app.applicationId,
+          ]);
+
+          // Crashed after reconcile created the application, before state
+          // recorded it: the redeploy takes it over instead of creating another.
+          yield* interruptAfterPrecreate;
+          const resumed = yield* scratch.deploy(program);
+          expect(resumed.app.applicationId).toBe(recreated.app.applicationId);
+          expect(resumed.app.durableObjects).toEqual({ namespaceId });
+          expect(yield* applicationsNamed(resumed.app.applicationName)).toEqual([
+            recreated.app.applicationId,
+          ]);
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          // The same interruption, then destroy: the application is deleted.
+          yield* interruptAfterPrecreate;
+          yield* scratch.destroy();
+          expect(
+            yield* waitForApplicationDeleted(accountId, recreated.app.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
     // Placement constraints pass through to Cloudflare unchanged and read back
     // stable, so an unchanged redeploy plans no update. Whether an instance
     // lands in the jurisdiction depends on account capacity; this pins the API
@@ -1898,8 +2031,8 @@ describe.concurrent(
     );
 
     // The Durable Object attachment is immutable, so a reconcile that finds an
-    // application without it (precreate's stub, or a deploy that died between
-    // precreate and reconcile) deletes and re-creates the application. When
+    // application without it (a deploy that died between creating and
+    // attaching it, or one created out of band) deletes and re-creates the application. When
     // the source hash has drifted in between, that path rebuilds the image and
     // must apply the same digest comparison as a plain update.
     test.provider(
