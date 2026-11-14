@@ -98,6 +98,15 @@ export interface EventClass<Tag extends string, F extends Fields> extends Schema
   Schema.TaggedStruct<Tag, F>,
   {}
 > {
+  /**
+   * Builds an instance of the class `make` is called on, so a subclass's own
+   * members are part of the result (as they are at runtime).
+   */
+  make<C extends abstract new (...args: any) => Instance<Tag, F>>(
+    this: C,
+    input: EventClass<Tag, F>["~type.make.in"],
+    options?: Schema.MakeOptions,
+  ): InstanceType<C>;
   readonly kind: "Event";
   readonly annotations: DomainAnnotations;
   readonly tag: Tag;
