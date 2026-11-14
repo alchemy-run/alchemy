@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { MfaChallenge } from "../MfaChallenge.middleware.ts";
-import { Cents } from "../Money.ts";
+import { Amount, Cents } from "../Money.ts";
 import { Session } from "../Session.middleware.ts";
 import { AccountId } from "./Account.id.ts";
 import { Frozen } from "./Frozen.rejection.ts";
@@ -24,7 +24,7 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   target: AccountId,
   middleware: [Session, MfaChallenge],
-  input: { amount: Cents },
+  input: { amount: Amount },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
   reply: { balance: Cents },

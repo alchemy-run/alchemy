@@ -99,7 +99,25 @@ export interface Members<
   readonly sagas?: G;
   /** The queries it answers, from the stores its projections write. */
   readonly queries?: Q;
+  /**
+   * Rules that hold across the model's aggregates whenever nothing is left to
+   * react: every policy has handled the events it reacts to and every saga
+   * has finished or waits. Each is named and given every instance, with its
+   * state and the events it recorded: `true` while the rule holds.
+   * `Explore.check` looks for a sequence of commands that breaks one.
+   */
+  readonly invariants?: { readonly [name: string]: (model: Instances<A>) => boolean };
 }
+
+/** Every instance of a model's aggregates, by aggregate name: what a model invariant is given. */
+export type Instances<A extends ReadonlyArray<Aggregate.Any>> = {
+  readonly [K in A[number] as K["aggregateName"]]: ReadonlyArray<{
+    readonly id: Aggregate.IdOf<K>;
+    readonly state: Aggregate.StateOf<K>;
+    /** Every event the instance recorded, oldest first. */
+    readonly events: ReadonlyArray<Aggregate.EventOf<K>>;
+  }>;
+};
 
 /**
  * The class type returned by {@link make}.
@@ -128,6 +146,8 @@ export interface ModelClass<
   readonly streams: Parts["streams"];
   /** The model's queries, in order. */
   readonly queries: Parts["queries"];
+  /** The model's own invariants, by name. */
+  readonly invariants: { readonly [name: string]: (model: never) => boolean };
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -330,6 +350,9 @@ export const make = <
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
+    static readonly invariants = (members.invariants ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
     static readonly aggregates = definitions.aggregates;
     static readonly commands = [
       ...new Set(definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands)),

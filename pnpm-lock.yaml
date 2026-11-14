@@ -576,6 +576,9 @@ catalogs:
     octane:
       specifier: 0.16.0
       version: 0.16.0
+    oxc-parser:
+      specifier: 0.141.0
+      version: 0.141.0
     oxfmt:
       specifier: ^0.74.0
       version: 0.74.0
@@ -732,6 +735,9 @@ catalogs:
     yauzl:
       specifier: ^3.4.0
       version: 3.4.0
+    z3-solver:
+      specifier: 5.3.3
+      version: 5.3.3
   frontend-peer:
     vite:
       specifier: ^7.0.0 || ^8.0.0
@@ -2314,12 +2320,21 @@ importers:
         specifier: 4.1.4
         version: 4.1.4
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)(vitest@5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.141.0
       vitest:
         specifier: 'catalog:'
         version: 5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      z3-solver:
+        specifier: 'catalog:'
+        version: 5.3.3
 
   examples/cloudflare-domain/packages/server:
     dependencies:
@@ -9520,9 +9535,15 @@ importers:
       foldkit:
         specifier: 'catalog:'
         version: 0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.141.0
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
+      z3-solver:
+        specifier: 'catalog:'
+        version: 5.3.3
 
   packages/doppler:
     dependencies:
@@ -22604,6 +22625,9 @@ packages:
       '@astrojs/markdown-remark':
         optional: true
 
+  async-mutex@0.3.2:
+    resolution: {integrity: sha512-HuTK7E7MT7jZEh1P9GtRW9+aTWiDWWi9InbZ5hjxrnRa39KS4BW04+xLBhYNS2aXhHUIKZSw3gj4Pn1pj+qGAA==}
+
   async-sema@3.1.1:
     resolution: {integrity: sha512-tLRNUXati5MFePdAk8dw7Qt7DpxPB60ofAgn8WRhW6a2rcimZnYBP9oxHiv0OHy+Wz7kPMG+t4LGdt31+4EmGg==}
 
@@ -29644,6 +29668,10 @@ packages:
     peerDependenciesMeta:
       '@yuku-toolchain/wasm':
         optional: true
+
+  z3-solver@5.3.3:
+    resolution: {integrity: sha512-7M2HEYYypcaFib2UOLuR69PHqoOWfXC2VhiVnQggm4ykJXWUfZyZxNhhy9ai1yiu4/yPA9X/rutqSGgafNB4TA==}
+    engines: {node: '>=16'}
 
   zeptomatch@2.1.0:
     resolution: {integrity: sha512-KiGErG2J0G82LSpniV0CtIzjlJ10E04j02VOudJsPyPwNZgGnRKQy7I1R7GMyg/QswnE4l7ohSGrQbQbjXPPDA==}
@@ -42229,6 +42257,10 @@ snapshots:
       - uploadthing
       - yaml
 
+  async-mutex@0.3.2:
+    dependencies:
+      tslib: 2.8.1
+
   async-sema@3.1.1: {}
 
   async@3.2.6: {}
@@ -52570,6 +52602,10 @@ snapshots:
       '@yuku-toolchain/linux-x64': 0.25.0
       '@yuku-toolchain/win32-arm64': 0.25.0
       '@yuku-toolchain/win32-x64': 0.25.0
+
+  z3-solver@5.3.3:
+    dependencies:
+      async-mutex: 0.3.2
 
   zeptomatch@2.1.0:
     dependencies:

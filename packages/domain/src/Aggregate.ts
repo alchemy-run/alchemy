@@ -130,6 +130,13 @@ export interface Definition<
   readonly state: S;
   /** The state of an instance that has never committed an event. */
   readonly initial: S["Type"];
+  /**
+   * Rules that hold for every state the aggregate can reach, each named and
+   * given the state: `true` while the rule holds. They say what must never
+   * happen; `decide` and `evolve` say what does. `Prove.invariants` proves
+   * that no command can break one.
+   */
+  readonly invariants?: { readonly [name: string]: (state: S["Type"]) => boolean };
   /** Every command this aggregate handles, each declaring the events it records. */
   readonly commands: C;
   /**
@@ -260,6 +267,7 @@ export interface AnyDefinition {
   readonly id: IdSchema;
   readonly state: Schema.Top;
   readonly initial: unknown;
+  readonly invariants?: AnyHandlers;
   readonly commands: ReadonlyArray<Command.Any>;
   readonly events: ReadonlyArray<Event.Any>;
   readonly decide: AnyHandlers;
