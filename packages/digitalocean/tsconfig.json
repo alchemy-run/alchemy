@@ -20,7 +20,19 @@
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/s3/tsconfig.json"
+    },
+    {
       "path": "../alchemy/tsconfig.json"
+    },
+    {
+      "path": "../sql/tsconfig.json"
+    },
+    {
+      "path": "../kubernetes/tsconfig.json"
+    },
+    {
+      "path": "../docker/tsconfig.json"
     }
   ]
 }
