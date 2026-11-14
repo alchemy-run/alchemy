@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 /**
  * The credential-demand seam for credential-free `alchemy dev`.
  *
@@ -105,24 +106,34 @@ export class CredentialsRequired extends Data.TaggedError("CredentialsRequired")
 export const failCredentialsRequired = (fqn: string) =>
   Effect.fn(function* <A, E, R>(self: Effect.Effect<A, E, R>) {
     const isUnavailable = Schema.is(CredentialsUnavailable);
-    // Annotated: the catch handler returns this or a re-fail of E, and a
-    // union of Effects does not unify on its own.
-    const required = (
-      unavailable: CredentialsUnavailable,
-    ): Effect.Effect<never, E | CredentialsRequired> =>
-      Effect.fail(
-        new CredentialsRequired({
-          provider: unavailable.provider,
-          resources: [fqn],
-          reason: "runs against the real cloud",
-          message: unavailable.message,
-        }),
-      );
+    const required = (unavailable: CredentialsUnavailable) =>
+      new CredentialsRequired({
+        provider: unavailable.provider,
+        resources: [fqn],
+        reason: "runs against the real cloud",
+        message: unavailable.message,
+      });
     return yield* self.pipe(
-      // oxlint-disable-next-line effecttsgo/catch-conditional-refail-to-catch-if -- catchIf cannot narrow a generic E
-      Effect.catch((error) => (isUnavailable(error) ? required(error) : Effect.fail(error))),
-      Effect.catchDefect((defect) =>
-        isUnavailable(defect) ? required(defect) : Effect.die(defect),
+      Effect.catchCause((cause) =>
+        Effect.failCause(
+          cause.reasons.reduce<Cause.Cause<E | CredentialsRequired>>((combined, reason) => {
+            if (Cause.isFailReason(reason)) {
+              return Cause.combine(
+                combined,
+                Cause.fail(isUnavailable(reason.error) ? required(reason.error) : reason.error),
+              );
+            }
+            if (Cause.isDieReason(reason)) {
+              return Cause.combine(
+                combined,
+                isUnavailable(reason.defect)
+                  ? Cause.fail(required(reason.defect))
+                  : Cause.die(reason.defect),
+              );
+            }
+            return Cause.combine(combined, Cause.interrupt(reason.fiberId));
+          }, Cause.empty),
+        ),
       ),
     );
   });
