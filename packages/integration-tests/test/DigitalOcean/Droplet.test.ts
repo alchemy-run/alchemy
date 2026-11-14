@@ -7,6 +7,7 @@ import {
   deleteTag,
   dropletsDestroy,
   getDroplet,
+  getDropletBackupPolicy,
   getDropletAction,
   getTag,
   postDropletAction,
@@ -98,7 +99,8 @@ const planCases = (names: ReturnType<typeof namesFor>): ReadonlyArray<PlanCase> 
   { change: "size", props: { size: OTHER_SIZE }, expected: REPLACE },
   { change: "image", props: { image: OTHER_IMAGE }, expected: REPLACE },
   { change: "sshKeys", props: { sshKeys: [SSH_KEY_FINGERPRINT] }, expected: REPLACE },
-  { change: "backups", props: { backups: true }, expected: REPLACE },
+  { change: "backups", props: { backups: true }, expected: UPDATE },
+  { change: "backupPolicy", props: { backupPolicy: { plan: "daily", hour: 8 } }, expected: UPDATE },
   { change: "monitoring", props: { monitoring: true }, expected: REPLACE },
   { change: "userData", props: { userData: CLOUD_CONFIG }, expected: REPLACE },
   { change: "volumes", props: { volumes: [VOLUME_ID] }, expected: REPLACE },
@@ -261,6 +263,29 @@ test.provider.skipIf(skipSlow)(
       expect(plannedAction(yield* stack.plan(droplet({ ...UPDATED, ipv6: false })))).toEqual(
         REPLACE,
       );
+
+      // Backups turn on, change plan and turn off on the same droplet.
+      const backedUp = yield* stack.deploy(
+        droplet({ ...UPDATED, backupPolicy: { plan: "daily", hour: 8 } }),
+      );
+      expect(backedUp.dropletId).toEqual(created.dropletId);
+      const policyOf = getDropletBackupPolicy({ droplet_id: created.dropletId }).pipe(
+        Effect.map((r) => r.policy),
+      );
+      expect(yield* policyOf).toMatchObject({
+        backup_enabled: true,
+        backup_policy: { plan: "daily", hour: 8 },
+      });
+      yield* stack.deploy(
+        droplet({ ...UPDATED, backupPolicy: { plan: "weekly", weekday: "SUN", hour: 20 } }),
+      );
+      expect(yield* policyOf).toMatchObject({
+        backup_enabled: true,
+        backup_policy: { plan: "weekly", weekday: "SUN", hour: 20 },
+      });
+      const unbacked = yield* stack.deploy(droplet(UPDATED));
+      expect(unbacked.dropletId).toEqual(created.dropletId);
+      expect((yield* policyOf)?.backup_enabled).toBe(false);
 
       // A same-named droplet without this resource's tag belongs to someone else.
       const twinFailure = yield* stack

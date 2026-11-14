@@ -487,10 +487,47 @@ const SECTIONS: Section[] = [
   {
     heading: "DigitalOcean",
     intro:
-      "Linux VMs as Stack resources — droplets, SSH keys, and Cloud Firewalls. Name, tags and enabling IPv6 change in place; everything else replaces the host, so provision with cloud-init.",
+      "DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.",
     pages: {
-      slugs: ["digitalocean/index", "digitalocean/setup"],
+      slugs: [
+        "digitalocean/index",
+        "digitalocean/what-is-digitalocean",
+        "digitalocean/setup",
+        "digitalocean/teams-projects-and-tokens",
+      ],
     },
+  },
+  {
+    heading: "DigitalOcean — Tutorial",
+    pages: { directory: "digitalocean/tutorial" },
+  },
+  {
+    heading: "DigitalOcean — Security",
+    pages: { directory: "digitalocean/security" },
+  },
+  {
+    heading: "DigitalOcean — Compute",
+    pages: { directory: "digitalocean/compute" },
+  },
+  {
+    heading: "DigitalOcean — Data",
+    pages: { directory: "digitalocean/data" },
+  },
+  {
+    heading: "DigitalOcean — Networking",
+    pages: { directory: "digitalocean/networking" },
+  },
+  {
+    heading: "DigitalOcean — Observability",
+    pages: { directory: "digitalocean/observability" },
+  },
+  {
+    heading: "DigitalOcean — AI",
+    pages: { directory: "digitalocean/ai" },
+  },
+  {
+    heading: "DigitalOcean — Frontend",
+    pages: { directory: "digitalocean/frontend" },
   },
   {
     heading: "PlanetScale",
