@@ -307,7 +307,8 @@ export const SshKeyProvider = () =>
       if (key.fingerprint !== desired.fingerprint) {
         return yield* new SshKeyMaterialChanged({ sshKeyId: key.id });
       }
-      return toAttrs(yield* syncName(key, name));
+      const synced = yield* syncName(key, name);
+      return toAttrs(synced);
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* deleteUntilGone(output.sshKeyId);
