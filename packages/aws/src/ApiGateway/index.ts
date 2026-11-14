@@ -13,6 +13,7 @@ export {
   type DeploymentType,
 } from "./Deployment.ts";
 export { DomainName, DomainNameProvider, type DomainNameProps } from "./DomainName.ts";
+export { CustomDomain, type CustomDomainProps } from "./CustomDomain.ts";
 export {
   GatewayResponse,
   GatewayResponseProvider,
