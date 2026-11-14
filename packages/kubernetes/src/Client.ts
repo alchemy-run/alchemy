@@ -384,16 +384,22 @@ export const applyObject = Effect.fn(function* ({
   });
   const path = `${basePath}?fieldManager=${fieldManager}&force=true`;
 
-  // A freshly provisioned cluster's API server briefly 5xxes while warming
-  // up, and the creator's bootstrap access can propagate asynchronously
-  // (401/403 in the first minute).
   return yield* requestJson({
     transport,
     method: "PATCH",
     path,
     body: object,
     redactions,
-  }).pipe(
+  }).pipe(retryWhileClusterWarms);
+});
+
+/**
+ * Retry while a freshly provisioned cluster warms up: its API server briefly
+ * 5xxes, and the creator's bootstrap access can propagate asynchronously
+ * (401/403 in the first minute).
+ */
+export const retryWhileClusterWarms = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
     Effect.retry({
       while: (e): boolean =>
         e instanceof KubernetesApiError &&
@@ -404,7 +410,6 @@ export const applyObject = Effect.fn(function* ({
       schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(10)]),
     }),
   );
-});
 
 export const deleteObject = Effect.fn(function* ({
   transport,

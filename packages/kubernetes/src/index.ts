@@ -7,3 +7,4 @@ export * from "./Job.ts";
 export * from "./LocalCluster.ts";
 export * from "./Manifest.ts";
 export * from "./Providers.ts";
+export * from "./Secret.ts";
