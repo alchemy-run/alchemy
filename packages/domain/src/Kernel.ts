@@ -168,21 +168,27 @@ export interface Kernel {
     key: string,
     batch: ReadonlyArray<Accepted>,
   ) => Effect.Effect<ReadonlyArray<unknown>>;
-  /** The keys of a projection an aggregate's committed event is routed to (empty if it is not consumed). */
+  /**
+   * The keys of a projection an event of a source (an aggregate instance, or
+   * a view key with its encoded `state` after the event) is routed to: empty
+   * if the projection does not consume it.
+   */
   readonly projectionKeys: (
     projection: Projection.Any,
-    aggregate: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
+    state?: Json,
   ) => ReadonlyArray<string>;
-  /** The keys of a view that an aggregate instance's event reaches. */
+  /** The keys of a view an event of a source (as for `projectionKeys`) reaches. */
   readonly viewKeys: (
     view: View.Any,
-    aggregate: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
+    state?: Json,
   ) => ReadonlyArray<string>;
   /** Every view and projection in the model, by `CatchUp.targetId`: what catches up. */
   readonly targets: ReadonlyArray<string>;
@@ -1515,14 +1521,15 @@ const build = (
   const consumerKeys = (
     kind: "view" | "projection",
     name: string,
-    aggregate: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
+    state: Json | undefined,
   ): ReadonlyArray<string> => {
-    const entry = sources.get(aggregate);
-    if (entry?.kind !== "aggregate") return [];
-    const stream = `${aggregate}/${id}`;
+    const entry = sources.get(source);
+    if (entry === undefined) return [];
+    const stream = `${source}/${id}`;
     const envelope: Aggregate.Envelope = {
       id,
       stream,
@@ -1532,13 +1539,16 @@ const build = (
       correlationId: "",
     };
     const keys: Array<string> = [];
-    for (const subscriber of subscribers.get(aggregate)?.get(event._tag) ?? []) {
+    for (const subscriber of subscribers.get(source)?.get(event._tag) ?? []) {
       if (subscriber.kind !== kind || subscriber.name !== name) continue;
       const input = {
         event,
-        source: Aggregate.makeRef(entry.aggregate, id),
+        source:
+          entry.kind === "aggregate"
+            ? Aggregate.makeRef(entry.aggregate, id)
+            : Key.refOf(keyOfSource(entry), id),
         envelope,
-        state: undefined,
+        state: entry.kind === "aggregate" ? undefined : sourceState(entry, state ?? null),
         stream,
       };
       for (const { key } of subscriber.route(input)) keys.push(key);
@@ -1548,18 +1558,20 @@ const build = (
 
   const projectionKeys = (
     projection: Projection.Any,
-    aggregate: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
-  ) => consumerKeys("projection", projection.projectionName, aggregate, id, event, seq);
+    state?: Json,
+  ) => consumerKeys("projection", projection.projectionName, source, id, event, seq, state);
   const viewKeys = (
     view: View.Any,
-    aggregate: string,
+    source: string,
     id: string,
     event: { readonly _tag: string },
     seq: number,
-  ) => consumerKeys("view", view.viewName, aggregate, id, event, seq);
+    state?: Json,
+  ) => consumerKeys("view", view.viewName, source, id, event, seq, state);
 
   return {
     aggregateKit,
