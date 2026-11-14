@@ -1111,8 +1111,8 @@ const viewObject = (
           if (id === REGISTER_JOB)
             return registerJob(net, { source: kit.name, id: key }, sourceFor(key), runtime.jobs);
           if (id.startsWith("bf-merge:"))
-            // Listed before its first entry, as on the live path, but here in the key's
-            // own job: its sources' messages don't wait on the directory.
+            // Listed before the merge writes its first entry, in the key's own job: its
+            // sources' messages don't wait on the directory.
             return ensureRegistered(net, { source: kit.name, id: key }).pipe(
               Effect.andThen(consumerFor(key).merge(id.slice("bf-merge:".length))),
               Effect.catchCause(() => runtime.jobs.schedule(id, REGISTER_RETRY_MS)),

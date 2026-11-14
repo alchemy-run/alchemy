@@ -74,11 +74,6 @@ const makeStorage = (stats: Stats, data: Map<string, unknown>): DurableObjects.O
   return storage;
 };
 
-/**
- * Objects run in this process: one instance per name, built on its first
- * call, with storage that counts rows read and one alarm for its callbacks.
- * Calls cross a JSON boundary, as Workers RPC does.
- */
 /** What survives an object being evicted: its storage and its alarm. */
 interface Disk {
   readonly objects: Map<
@@ -93,6 +88,11 @@ type Intercept = (
   run: Effect.Effect<unknown, unknown>,
 ) => Effect.Effect<unknown, unknown>;
 
+/**
+ * Objects run in this process: one instance per name, built on its first
+ * call, with storage that counts rows read and one alarm for its callbacks.
+ * Calls cross a JSON boundary, as Workers RPC does.
+ */
 const simHost = (
   stats: Stats,
   options: { readonly disk?: Disk; readonly intercept?: Intercept } = {},
