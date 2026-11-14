@@ -1,6 +1,8 @@
+import { Retry as FlyRetry } from "@distilled.cloud/fly-io/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import { Random, RandomProvider } from "alchemy/Random";
 import {
@@ -145,6 +147,7 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(fromCredentials()),
+    Layer.provideMerge(Layer.succeed(FlyRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FlyAuth),
     Layer.provideMerge(ProfileStoreLive),
