@@ -4378,6 +4378,28 @@ importers:
         specifier: 4.1.4
         version: 4.1.4
 
+  examples/digitalocean-app:
+    dependencies:
+      '@alchemy.run/digitalocean':
+        specifier: workspace:*
+        version: link:../../packages/digitalocean
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+
   examples/docker-postgres:
     dependencies:
       '@alchemy.run/docker':
@@ -9465,22 +9487,49 @@ importers:
 
   packages/digitalocean:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
       '@distilled.cloud/digitalocean':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/digitalocean
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
+      rolldown:
+        specifier: 1.2.16
+        version: 1.2.16
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
       effect:
-        specifier: 4.1.0
-        version: 4.1.0
+        specifier: 4.1.4
+        version: 4.1.4
+      mysql2:
+        specifier: 3.24.5
+        version: 3.24.5(@types/node@26.6.5)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
@@ -10875,6 +10924,9 @@ importers:
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
@@ -40632,7 +40684,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 26.6.5
+      '@types/node': 24.13.3
 
   '@types/unist@2.0.11': {}
 

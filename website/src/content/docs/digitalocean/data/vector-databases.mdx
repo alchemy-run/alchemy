@@ -1,0 +1,82 @@
+---
+title: Vector Databases
+description: Run a managed Weaviate vector database on DigitalOcean and connect to it from a runtime with its endpoints and API key.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **vector database** stores embeddings, lists of numbers that stand for the meaning of a text or an image, and finds the stored ones nearest to a query. DigitalOcean's are Weaviate clusters it runs for you, each with an HTTP endpoint, a gRPC endpoint and an API key. Every vector database belongs to a **project**.
+
+<Tree
+  nodes={[
+    {
+      id: "project", label: "Shop", type: "project", icon: "folder", dashed: true, colGap: 8,
+      areas: ["api vectors"],
+      phoneAreas: ["api", "vectors"],
+    },
+    { id: "api", label: "Api", type: "App · your app", parent: "project", tone: "accent", icon: "server" },
+    {
+      id: "vectors", label: "Products", type: "vector database · tor1", parent: "project", icon: "database",
+      specs: [["engine", "Weaviate"], ["size", "small"]],
+    },
+  ]}
+  links={[{ from: "api", to: "vectors", label: "queries" }]}
+  caption="The App reads the database's endpoint and API key from its binding, and talks Weaviate's protocol to it."
+/>
+
+## Create a vector database
+
+```typescript
+const shop = yield* DigitalOcean.Project("Shop", { description: "The shop's resources" });
+const products = yield* DigitalOcean.VectorDB.Database("Products", {
+  projectId: shop.projectId,
+  size: "small",
+});
+```
+
+Names are at most 28 characters. A new database takes a few minutes, and deploy waits until it's active. `size` is `small`, `medium` or `large`, and resizes in place.
+
+## Connect from a runtime
+
+`Connect` gives a runtime the database's endpoints and API key as secrets. Use them with the Weaviate client:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+import weaviate from "weaviate-client";
+import { Products } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const conn = yield* DigitalOcean.VectorDB.Connect(Products);
+    return {
+      fetch: Effect.gen(function* () {
+        const url = yield* conn.httpEndpoint;
+        const key = yield* conn.apiKey;
+        const live = yield* Effect.tryPromise(async () => {
+          const client = await weaviate.connectToWeaviateCloud(url, {
+            authCredentials: new weaviate.ApiKey(Redacted.value(key)),
+          });
+          return client.isLive();
+        });
+        return HttpServerResponse.text(String(live));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.VectorDB.ConnectHttp)),
+) {}
+```
+
+`Products` here is the declaration from `src/resources.ts`, declared inside an `Effect.gen` that yields the project, as in the snippet above.
+
+## Embed your text
+
+DigitalOcean's [Serverless Inference](/digitalocean/ai/inference) creates embeddings with `CreateEmbedding`, so the same App can embed a query and search for it. For retrieval behind an agent, a [knowledge base](/digitalocean/ai/genai-agents#give-it-knowledge) builds and searches its own index for you.
+
+## Limits
+
+- A new name or region replaces the database, and with it its data.
+- Vector databases are offered in a few regions; `tor1` is the default.

@@ -23,6 +23,9 @@ const TOKEN_ENV_NAMES = [
   DIGITALOCEAN_API_KEY_ENV,
 ] as const;
 export const DIGITALOCEAN_API_BASE_URL_ENV = "DIGITALOCEAN_API_BASE_URL";
+// The names doctl and the Terraform provider read.
+export const SPACES_ACCESS_KEY_ID_ENV = "SPACES_ACCESS_KEY_ID";
+export const SPACES_SECRET_ACCESS_KEY_ENV = "SPACES_SECRET_ACCESS_KEY";
 
 export type DigitalOceanAuthConfig = StoredAuthConfig;
 
@@ -30,6 +33,9 @@ export type DigitalOceanResolvedCredentials = {
   type: "apiToken";
   apiToken: Redacted.Redacted<string>;
   apiBaseUrl: string;
+  /** Spaces access key for the S3-compatible API; minted per deploy when absent. */
+  spacesAccessKeyId?: Redacted.Redacted<string>;
+  spacesSecretAccessKey?: Redacted.Redacted<string>;
   source: { type: DigitalOceanAuthConfig["method"] | "env"; details?: string };
 };
 
@@ -46,10 +52,14 @@ const firstTokenInEnvironment = Effect.gen(function* () {
 const readEnvironment = Effect.gen(function* () {
   const token = yield* firstTokenInEnvironment;
   const apiBaseUrl = yield* getEnv(DIGITALOCEAN_API_BASE_URL_ENV);
+  const spacesAccessKeyId = yield* getEnvRedacted(SPACES_ACCESS_KEY_ID_ENV);
+  const spacesSecretAccessKey = yield* getEnvRedacted(SPACES_SECRET_ACCESS_KEY_ENV);
   return {
     type: "apiToken" as const,
     apiToken: token.apiToken,
     apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    spacesAccessKeyId,
+    spacesSecretAccessKey,
     source: {
       type: "env" as const,
       details: apiBaseUrl ? `${token.name}, ${DIGITALOCEAN_API_BASE_URL_ENV}` : token.name,
@@ -71,11 +81,26 @@ const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>
       optional: true,
       placeholder: DEFAULT_API_BASE_URL,
     },
+    {
+      name: "spacesAccessKeyId",
+      label: "Spaces access key id (optional; one is created per deploy when empty)",
+      optional: true,
+    },
+    {
+      name: "spacesSecretAccessKey",
+      label: "Spaces secret access key",
+      secret: true,
+      optional: true,
+    },
   ],
   toResolved: (values) => ({
     type: "apiToken",
     apiToken: storedSecret(values.apiToken) ?? Redacted.make(""),
     apiBaseUrl: storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL,
+    spacesAccessKeyId: storedValueText(values.spacesAccessKeyId)
+      ? Redacted.make(storedValueText(values.spacesAccessKeyId)!)
+      : undefined,
+    spacesSecretAccessKey: storedSecret(values.spacesSecretAccessKey),
     source: { type: "stored" },
   }),
   readEnvironment,
@@ -91,6 +116,17 @@ const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>
       name: DIGITALOCEAN_API_BASE_URL_ENV,
       required: false,
       description: "API base URL override.",
+    },
+    {
+      name: SPACES_ACCESS_KEY_ID_ENV,
+      required: false,
+      description: "Spaces access key id. Without one, a key is created for each deploy.",
+    },
+    {
+      name: SPACES_SECRET_ACCESS_KEY_ENV,
+      required: false,
+      secret: true,
+      description: "Spaces secret access key.",
     },
   ],
 });
