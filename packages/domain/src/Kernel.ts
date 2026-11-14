@@ -1525,7 +1525,7 @@ const build = (
     id: string,
     event: { readonly _tag: string },
     seq: number,
-    state: Json | undefined,
+    state?: Json,
   ): ReadonlyArray<string> => {
     const entry = sources.get(source);
     if (entry === undefined) return [];
