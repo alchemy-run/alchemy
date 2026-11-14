@@ -79,6 +79,17 @@ const zone = yield* AWS.Route53.HostedZone("Zone", { name: "example.com" });
 
 Then set the zone's `nameServers` as the domain's name servers at your registrar. From then on, Route 53 answers for the domain.
 
+This always creates a new zone, since Route 53 allows several zones with the same name. To manage a zone that already exists, pass its id:
+
+```typescript title="alchemy.run.ts"
+const zone = yield* AWS.Route53.HostedZone("Zone", {
+  name: "example.com",
+  hostedZoneId: "Z0123456789ABCDEFGHIJ",
+});
+```
+
+To only reference it, without managing it, use `AWS.Route53.HostedZone.lookup({ id })`.
+
 ## Build it from the pieces
 
 The `domain` prop is made of resources you can declare yourself. A certificate, validated in the zone:

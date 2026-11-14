@@ -1,0 +1,125 @@
+---
+title: Rivet
+description: Host a domain model on Rivet Durable Objects, on nodes in any cloud, and serve its Apis from any runtime.
+---
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Host your model on [Rivet](/rivet), and every aggregate instance, view key and policy runs as a Rivet actor with its own SQLite. The nodes run in the pool you give it, and your Api runs wherever you like.
+
+## Host the model
+
+Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` at the file whose default export the nodes load, and give it a pool.
+
+```typescript
+// packages/server/src/BankLive.ts
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import * as Layer from "effect/Layer";
+import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+
+const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+
+export default Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      DomainRivet.layerDurableObjects({
+        name: "Bank",
+        main: import.meta.url,
+        pool: Default,
+      }),
+      SiftFraudCheck,
+    ),
+  ),
+);
+```
+
+The pool decides where the nodes run. Swap `RivetDocker.SwarmPool` for `RivetAWS.EcsPool`, `RivetGCP.CloudRunPool` or another pool to run them elsewhere. See [Pools](/rivet/pools).
+
+## Serve the Api from anywhere
+
+Provide `BankLive` wherever you serve the Api: a Cloudflare Worker, a Lambda, a container.
+
+```typescript
+// packages/server/src/BankWorker.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as Effect from "effect/Effect";
+import BankLive from "./BankLive.ts";
+
+export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+  "BankWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* CustomerApi;
+    return { fetch: api.fetch };
+  }).pipe(Effect.provide(BankLive)),
+) {}
+```
+
+In the Worker, the Layer reaches the actors through the control plane's gateway, so the Worker needs no RivetKit and no route to the nodes. On the nodes, the same Layer runs the model: its policies and sagas run there.
+
+## Deploy it
+
+The Worker provides `BankLive`, so deploying the Worker deploys the model's class, its pool and its control plane:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+import BankWorker from "@bank/server/BankWorker";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "RivetDomainExample",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Docker.providers(), Rivet.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const bank = yield* BankWorker;
+    return { url: bank.url.as<string>() };
+  }),
+);
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Know what runs where
+
+Every object of the model is an actor of the `Bank` class, named after what it holds:
+
+| Your model | On Rivet |
+| --- | --- |
+| An aggregate instance, like account `a-1` | The actor `Bank.AccountAggregate/a-1` |
+| A view key, like the summary of `a-1` | The actor `Bank.AccountSummaryView/a-1` |
+| A policy | One actor per policy and key |
+| A projection key | One actor per projection and key, with the key's input log |
+| A stream key | One actor per stream and key |
+| A saga run, like transfer `t-1` | The actor `Bank.ExecuteTransferWorkflow/t-1`, with its steps' results |
+
+Sagas run on the same Durable Object workflow engine as on Cloudflare, with each run's journal in its actor's SQLite.
+
+## Count on these guarantees
+
+Commands to one aggregate instance run one at a time. Its events, new state and reply commit together in the actor's SQLite, or not at all.
+
+Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a node restarts in between. Scheduled commands fire on the actor's alarm when they're due.
+
+## Watch without polling
+
+Give the client `Domain.protocolWebSocket` (see [Api](/domain/api#choose-a-protocol)). Each `watch` or `events` read opens a WebSocket, which the Api carries through the control plane's gateway to the actor that owns the key. The actor pushes every commit down it as it happens.
+
+The runtime that serves the Api holds the caller's side of the socket: a Worker hands it straight through, and a container (Bun or Node) copies frames between the two. A dropped socket reconnects and resumes from the last value it delivered. Over `Domain.protocolHttp`, live reads are streamed responses that poll the actor instead.
+
+## Add consumers to a running Domain
+
+A deploy that adds a view or a projection, or bumps a version, doesn't wait for its history. The first call after the deploy starts the backfill, and the new consumer fills from its sources' events. See [History at scale](/domain/backfill).
+
+:::note
+The same model runs [in memory](/domain/in-memory) for tests, and on [Cloudflare](/domain/cloudflare) or [Effect Cluster](/domain/effect-cluster) with no change to its definitions.
+:::

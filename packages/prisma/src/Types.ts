@@ -302,7 +302,8 @@ export interface DeploymentLogsRequest {
    * Headers to pass to a WebSocket client that supports custom headers.
    */
   headers: {
-    Authorization: Redacted.Redacted<string>;
+    /** Absent when the environment has no service token. */
+    Authorization?: Redacted.Redacted<string>;
   };
 }
 
@@ -323,7 +324,8 @@ export interface BuildLogsRequest {
   url: string;
   /** Headers required by the Management API build-log endpoint. */
   headers: {
-    Authorization: Redacted.Redacted<string>;
+    /** Absent when the environment has no service token. */
+    Authorization?: Redacted.Redacted<string>;
     Accept: "application/x-ndjson";
   };
 }

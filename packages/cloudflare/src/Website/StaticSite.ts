@@ -407,6 +407,7 @@ const serializeEnv = Effect.fn(function* (
       continue;
     } else if (isYieldableEffectLike(v)) {
       const resolved = serializeEnvValue(
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- env values are untyped declaration Effects; any failure dies
         yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(Effect.orDie),
       );
       if (resolved === undefined) continue;

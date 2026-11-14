@@ -8,6 +8,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
@@ -72,6 +73,10 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Hetzner.Server.lookup({ name: created.name }), created, {
+        // Only the deploy that created the server holds its SSH key.
+        ignore: ["privateKey", "deploySshKeyId"],
+      });
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.serverId).toEqual(created.id);

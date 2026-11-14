@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetShippingRates,
   GetShippingRate,
@@ -162,8 +161,18 @@ export type ShippingRate = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  ShippingRateLookup
 >;
+
+/**
+ * Props for {@link ShippingRate.lookup}: find a shipping rate this stack
+ * doesn't manage by its id.
+ */
+export interface ShippingRateLookup {
+  /** Stripe shipping rate id, e.g. `"shr_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Shipping Rate — the price of shipping presented to customers
@@ -219,6 +228,16 @@ export type ShippingRate = Resource<
  *   amount: 500,
  *   currency: "usd",
  * });
+ * ```
+ *
+ * ### Looking up an existing shipping rate
+ * `ShippingRate.lookup` references a shipping rate Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing shipping rate
+ * ```typescript
+ * const ref = Stripe.ShippingRate.lookup({ id: "shr_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -434,6 +453,11 @@ export const ShippingRateProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -499,11 +523,8 @@ export const ShippingRateProvider = () =>
             : {}),
           ...(news.taxBehavior !== undefined ? { tax_behavior: news.taxBehavior } : {}),
           ...(news.taxCode !== undefined ? { tax_code: news.taxCode } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-shipping-rate-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-shipping-rate-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   location,
   logLevel,
@@ -71,6 +72,20 @@ test.provider.skipIf(!runBlueprintLifecycle)(
           });
           return { product, kind, release, rolloutKind, rollout };
         }),
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.Rollout.lookup({
+          rolloutId: created.rollout.rolloutId,
+          location: created.rollout.location,
+        }),
+        created.rollout,
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.RolloutKind.lookup({
+          rolloutKindId: created.rolloutKind.rolloutKindId,
+          location: created.rolloutKind.location,
+        }),
+        created.rolloutKind,
       );
 
       expect(created.rollout.name).toContain("/rollouts/");

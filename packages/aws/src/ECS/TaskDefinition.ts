@@ -95,8 +95,8 @@ export interface TaskDefinitionProps {
          */
         group?: string;
         /**
-         * awslogs stream prefix.
-         * @default the task family
+         * awslogs stream prefix, at most 200 characters.
+         * @default the task family's first 200 characters
          */
         streamPrefix?: string;
       };
@@ -149,6 +149,18 @@ export interface TaskDefinitionProps {
    * @default false
    */
   enableFaultInjection?: boolean;
+
+  /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
+   * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
+   * needs an `attestationPolicy`.
+   *
+   * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
+   * Instances capacity provider with `nitroEnclavesEnabled`.
+   * @default { isolationMode: "SHARED" }
+   */
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
 
   /**
    * User-defined tags applied to each registered revision.
@@ -425,8 +437,10 @@ export const TaskDefinitionProvider = () =>
         const fargate = requiresCompatibilities.includes("FARGATE");
         const networkMode = props.networkMode ?? (fargate ? "awsvpc" : undefined);
         const logGroupName = logGroupNameOf(family, props);
+        // ECS caps the prefix at 200 characters; a generated family can be 255.
         const streamPrefix =
-          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ?? family;
+          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ??
+          family.slice(0, 200);
         const containerDefinitions = props.containerDefinitions.map((cd) =>
           logGroupName !== undefined && cd.logConfiguration === undefined
             ? {
@@ -460,6 +474,7 @@ export const TaskDefinitionProvider = () =>
           ephemeralStorage: props.ephemeralStorage,
           runtimePlatform: props.runtimePlatform,
           enableFaultInjection: props.enableFaultInjection,
+          trustedExecutionConfiguration: props.trustedExecutionConfiguration,
         };
       };
 
@@ -496,6 +511,7 @@ export const TaskDefinitionProvider = () =>
             ephemeralStorage: observed.ephemeralStorage,
             runtimePlatform: observed.runtimePlatform,
             enableFaultInjection: observed.enableFaultInjection,
+            trustedExecutionConfiguration: observed.trustedExecutionConfiguration,
           }),
         );
 

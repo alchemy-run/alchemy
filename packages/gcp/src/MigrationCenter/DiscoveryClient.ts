@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -115,8 +116,33 @@ export type DiscoveryClient = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DiscoveryClientLookup
 >;
+
+/**
+ * Props for {@link DiscoveryClient.lookup}: find a discovery client this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DiscoveryClientLookup {
+  /**
+   * Discovery client id (the `{discoveryClient}` segment of
+   * `projects/{proje
+   * ct}/locations/{location}/discoveryClients/{discoveryClient}`).
+   */
+  discoveryClientId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Migration Center discovery client that reports on-prem asset frames
@@ -136,6 +162,19 @@ export type DiscoveryClient = Resource<
  *   source: source.name,
  *   serviceAccount: "scanner@my-project.iam.gserviceaccount.com",
  *   displayName: "on-prem-agent",
+ * });
+ * ```
+ *
+ * ### Looking up an existing discovery client
+ * `DiscoveryClient.lookup` references a discovery client Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * discovery client.
+ *
+ * **Example:** Reference an existing discovery client
+ * ```typescript
+ * const discoveryClient = GCP.MigrationCenter.DiscoveryClient.lookup({
+ *   discoveryClientId: "my-discovery-client",
  * });
  * ```
  *
@@ -233,6 +272,15 @@ export const DiscoveryClientProvider = () =>
         extra: sourceChanged,
       });
     }),
+
+    lookup: Effect.fn(function* ({ discoveryClientId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, discoveryClientId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -155,6 +155,22 @@ export default Backfill.make(
 );
 ```
 
+## Choose a container runtime
+
+`runtimeClassName` runs the Job's pod under a RuntimeClass the
+cluster defines. On EKS Auto Mode, `isolated-sandbox` runs it in its
+own Nitro Sandbox, a good fit for code you didn't write:
+
+```typescript
+yield* Kubernetes.Job("RunGeneratedCode", {
+  cluster,
+  image: "ghcr.io/acme/runner:1",
+  runtimeClassName: "isolated-sandbox",
+});
+```
+
+See [EKS: Run each pod in its own VM](/aws/compute/eks#run-each-pod-in-its-own-vm).
+
 ## When a Job runs
 
 Kubernetes starts a Job as soon as it's created. Alchemy creates a

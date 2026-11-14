@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,6 +74,13 @@ test.provider.skipIf(!!process.env.FAST)(
             loadBalancingScheme: "INTERNAL_MANAGED",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.AuthzExtension.lookup({
+          authzExtensionId: created.authzExtensionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/authzExtensions/");

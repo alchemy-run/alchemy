@@ -6,6 +6,7 @@ import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -129,6 +130,14 @@ test.provider.skipIf(!runLifecycle || !process.env.GCP_TEST_WORKLOADMANAGER_DEPL
             deployment: deploymentName!,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.WorkloadManager.DeploymentsActuation.lookup({
+          actuationId: created.actuationId,
+          location: created.location,
+          deployment: created.deployment,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/actuations/");

@@ -44,8 +44,24 @@ export type Folder = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderLookup
 >;
+
+/**
+ * Props for {@link Folder.lookup}: find a folder this stack doesn't manage
+ * by its identifiers.
+ */
+export interface FolderLookup {
+  /**
+   * Folder path.
+   */
+  folderName: string;
+  /**
+   * Name of the hierarchical-namespace bucket that contains this folder.
+   */
+  bucketName: string;
+}
 
 /**
  * A Cloud Storage folder in a hierarchical-namespace bucket.
@@ -74,6 +90,19 @@ export type Folder = Resource<
  * const folder = yield* GCP.Storage.Folder("uploads", {
  *   bucketName: bucket.bucketName,
  *   folderName: "uploads/incoming/",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder
+ * `Folder.lookup` references a folder Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared folder.
+ *
+ * **Example:** Reference an existing folder
+ * ```typescript
+ * const folder = GCP.Storage.Folder.lookup({
+ *   folderName: "my-folder",
+ *   bucketName: "my-bucket",
  * });
  * ```
  *
@@ -147,6 +176,13 @@ export const FolderProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ folderName, bucketName }) {
+      if (!bucketName) return undefined;
+      const existing = yield* getByName(bucketName, folderName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, bucketName);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

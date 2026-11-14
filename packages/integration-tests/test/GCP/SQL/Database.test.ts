@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const testOptions = {
   providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
@@ -103,6 +104,10 @@ test.provider.skipIf(!runLifecycle)(
             instance,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.SQL.Database.lookup({ databaseName: created.databaseName, instance: created.instance }),
+        created,
       );
 
       expect(created.databaseName).toEqual(expect.any(String));

@@ -179,7 +179,13 @@ export const DBProxyEndpointProvider = () =>
             DBProxyName: dbProxyName,
             DBProxyEndpointName: dbProxyEndpointName,
           })
-          .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.undefined));
+          // An endpoint whose proxy is gone is gone too.
+          .pipe(
+            Effect.catchTag(
+              ["DBProxyEndpointNotFoundFault", "DBProxyNotFoundFault"],
+              () => Effect.undefined,
+            ),
+          );
         return response?.DBProxyEndpoints?.[0];
       });
 

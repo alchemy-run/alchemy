@@ -16,7 +16,7 @@
  * Every building block is `Domain.<Noun>(...)`, and its types live on the
  * same name: `Domain.Event.Any`, `Domain.Aggregate.StateOf<typeof Account>`.
  * Stories (given / when / then specifications) are in `@alchemy.run/domain/Story`;
- * the Cloudflare platform is in `@alchemy.run/cloudflare/Domain`.
+ * the Cloudflare platform is in `@alchemy.run/domain/Cloudflare`.
  */
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
@@ -246,6 +246,10 @@ export declare namespace Api {
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
   export type QueryClient<Q extends QueryModule.Any> = ApiModule.QueryClient<Q>;
+  /** A paged query's `pages` and `entries` Streams. */
+  export type PagedQueryClient<Q extends QueryModule.Any> = ApiModule.PagedQueryClient<Q>;
+  /** How a client asks a query: `atLeast`, `after`, `take` and the call's headers. */
+  export type QueryOptions = ApiModule.QueryOptions;
   /** Everything a query can fail with. */
   export type QueryError<Q extends QueryModule.Any> = ApiModule.QueryError<Q>;
   /** Everything a read can fail with. */

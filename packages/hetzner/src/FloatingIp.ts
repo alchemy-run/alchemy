@@ -117,8 +117,18 @@ export type FloatingIp = Resource<
     serverId: number | null;
   },
   never,
-  Providers
+  Providers,
+  FloatingIpLookup
 >;
+
+/**
+ * Props for {@link FloatingIp.lookup}: find a Floating IP this stack
+ * doesn't manage by its name.
+ */
+export interface FloatingIpLookup {
+  /** Floating IP name (unique in the project). */
+  name: string;
+}
 
 /**
  * An unassigned Hetzner Cloud Floating IP. Provide `type` and a
@@ -160,6 +170,16 @@ export type FloatingIp = Resource<
  *   description: "production frontend",
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing Floating IP
+ * `FloatingIp.lookup` references a Floating IP Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Floating IP
+ * ```typescript
+ * const ip = Hetzner.FloatingIp.lookup({ name: "ingress" });
  * ```
  *
  * @resource
@@ -298,6 +318,11 @@ export const FloatingIpProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;

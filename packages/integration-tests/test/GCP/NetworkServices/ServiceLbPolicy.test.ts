@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,6 +61,13 @@ test.provider(
             autoCapacityDrain: { enable: true },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.ServiceLbPolicy.lookup({
+          serviceLbPolicyId: created.serviceLbPolicyId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/serviceLbPolicies/");

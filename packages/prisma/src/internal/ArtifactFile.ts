@@ -27,8 +27,6 @@ export interface ArtifactFile extends VerifiedFile {
   readonly cleanup: Effect.Effect<void>;
 }
 
-const toError = (message: string, cause: unknown) => new Error(message, { cause });
-
 export class ArtifactFileError extends Data.TaggedError("ArtifactFileError")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -189,8 +187,9 @@ export const inspectArtifactFile = (
   });
 
 export const artifactFileStream = (artifact: ArtifactFile) =>
-  Stream.fromAsyncIterable(readVerifiedChunks(artifact), (cause) =>
-    cause instanceof Error ? cause : toError("Failed to stream Prisma deployment artifact.", cause),
+  Stream.fromAsyncIterable(
+    readVerifiedChunks(artifact),
+    toArtifactFileError("Failed to stream Prisma deployment artifact."),
   );
 
 export const verifiedFileChunks = (file: VerifiedFile) => readVerifiedChunks(file);

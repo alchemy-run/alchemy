@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe } from "@alchemy.run/test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
 import type { Status } from "alchemy/Workflows";
@@ -91,4 +91,36 @@ describe.concurrent.each([
     timeout: 90_000,
     unsupported: engine === "native" ? { raceAll: "aren't supported on Cloudflare Workflows" } : {},
   });
+
+  if (engine === "native") {
+    test(
+      "withStepConfig bounds an activity's step.do",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = url.replace(/\/+$/, "");
+        const id = `step-timeout-${crypto.randomUUID().slice(0, 8)}`;
+        const { executionId } = JSON.parse(
+          yield* fetchText(`${base}/step-timeout/${id}`, "POST"),
+        ) as { executionId: string };
+        // The activity sleeps 15 seconds under a 2-second step timeout and no
+        // retries: the run dies on the timeout instead of finishing.
+        const status = yield* Effect.gen(function* () {
+          const status = JSON.parse(
+            yield* fetchText(`${base}/step-timeout/${id}?executionId=${executionId}`),
+          ) as Status<unknown, unknown>;
+          if (status._tag === "Running" || status._tag === "NotStarted") {
+            return yield* new NotReady({ message: JSON.stringify(status) });
+          }
+          return status;
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 40 }));
+        expect(status._tag).toBe("Died");
+        // One attempt: `retries.limit: 0` reached `step.do` too.
+        expect(JSON.parse(yield* fetchText(`${base}/journal/${id}`))).toEqual(["slow"]);
+      }),
+      {
+        tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"],
+        timeout: 90_000,
+      },
+    );
+  }
 });

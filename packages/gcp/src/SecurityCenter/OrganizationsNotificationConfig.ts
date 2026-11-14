@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -81,8 +82,32 @@ export type OrganizationsNotificationConfig = Resource<
     serviceAccount: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsNotificationConfigLookup
 >;
+
+/**
+ * Props for {@link OrganizationsNotificationConfig.lookup}: find an
+ * organizations notification config this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface OrganizationsNotificationConfigLookup {
+  /**
+   * Config id (the `{config}` segment of
+   * `organizations/{organization}/notificationConfigs/{config}`). Letters,
+   * digits, and hyphens; must start with a letter; max 63 characters.
+   */
+  configId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Security Command Center notification config that
@@ -118,6 +143,19 @@ export type OrganizationsNotificationConfig = Resource<
  *     streamingConfig: { filter: 'severity="HIGH"' },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations notification config
+ * `OrganizationsNotificationConfig.lookup` references an organizations
+ * notification config Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared organizations notification config.
+ *
+ * **Example:** Reference an existing organizations notification config
+ * ```typescript
+ * const organizationsNotificationConfig = GCP.SecurityCenter.OrganizationsNotificationConfig.lookup({
+ *   configId: "my-config",
+ * });
  * ```
  *
  * @resource
@@ -177,6 +215,15 @@ export const OrganizationsNotificationConfigProvider = () =>
         )
       );
     }),
+
+    lookup: Effect.fn(function* ({ configId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const name = resourceName(organization, configId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,30 @@ export type GoldengateConnectionAssignment = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GoldengateConnectionAssignmentLookup
 >;
+
+/**
+ * Props for {@link GoldengateConnectionAssignment.lookup}: find a
+ * goldengate connection assignment this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface GoldengateConnectionAssignmentLookup {
+  /**
+   * Assignment id.
+   */
+  goldengateConnectionAssignmentId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle GoldenGate connection assignment on Google Cloud.
@@ -128,6 +151,19 @@ export type GoldengateConnectionAssignment = Resource<
  *     displayName: "assign",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing goldengate connection assignment
+ * `GoldengateConnectionAssignment.lookup` references a goldengate
+ * connection assignment Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared goldengate connection assignment.
+ *
+ * **Example:** Reference an existing goldengate connection assignment
+ * ```typescript
+ * const goldengateConnectionAssignment = GCP.OracleDatabase.GoldengateConnectionAssignment.lookup({
+ *   goldengateConnectionAssignmentId: "my-goldengate-connection-assignment",
+ * });
  * ```
  *
  * @resource
@@ -246,6 +282,20 @@ export const GoldengateConnectionAssignmentProvider = () =>
         extra: nextConn !== previousConn || nextDep !== previousDep,
       });
     }),
+
+    lookup: Effect.fn(function* ({ goldengateConnectionAssignmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(
+        env.project,
+        location,
+        COLLECTION,
+        goldengateConnectionAssignmentId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -13,6 +13,7 @@ import {
   markCreating,
   patchStateAttr,
 } from "./fixtures/Live.ts";
+import { expectFound } from "./lookup.ts";
 
 const live = Test.make({ providers: Prisma.providers() });
 
@@ -48,6 +49,22 @@ live.test.provider(
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(appStack());
+    yield* expectFound(Prisma.App.lookup({ appId: initial.app.appId }), initial.app);
+    yield* expectFound(
+      Prisma.Project.lookup({ projectId: initial.project.projectId }),
+      initial.project,
+      // Prisma returns connection strings only from a create.
+      {
+        ignore: [
+          "directConnectionString",
+          "pooledConnectionString",
+          "accelerateConnectionString",
+          "host",
+          "user",
+          "password",
+        ],
+      },
+    );
     expect(initial.app.logicalId).toBe("Web");
     const created = yield* observeApp(initial.app.appId);
     expect(created.projectId).toBe(initial.project.projectId);

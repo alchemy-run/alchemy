@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -85,8 +86,33 @@ export type PreferenceSet = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PreferenceSetLookup
 >;
+
+/**
+ * Props for {@link PreferenceSet.lookup}: find a preference set this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PreferenceSetLookup {
+  /**
+   * Preference set id (the `{preferenceSet}` segment of
+   * `projects/{project}/
+   * locations/{location}/preferenceSets/{preferenceSet}`).
+   */
+  preferenceSetId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 // Report input rather than the preference set's own location; kept fixed so a
 // stack-region change doesn't rewrite existing preference sets.
@@ -123,6 +149,19 @@ const DEFAULT_VM: VirtualMachinePreferences = {
  *     sizingOptimizationStrategy: "SIZING_OPTIMIZATION_STRATEGY_MODERATE",
  *     commitmentPlan: "COMMITMENT_PLAN_THREE_YEARS",
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing preference set
+ * `PreferenceSet.lookup` references a preference set Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * preference set.
+ *
+ * **Example:** Reference an existing preference set
+ * ```typescript
+ * const preferenceSet = GCP.MigrationCenter.PreferenceSet.lookup({
+ *   preferenceSetId: "my-preference-set",
  * });
  * ```
  *
@@ -202,6 +241,15 @@ export const PreferenceSetProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ preferenceSetId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, preferenceSetId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

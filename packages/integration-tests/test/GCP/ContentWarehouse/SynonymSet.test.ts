@@ -6,6 +6,7 @@ import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,13 @@ test.provider.skipIf(!runLifecycle)(
             synonyms: [{ words: ["sale", "invoice", "bill"] }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContentWarehouse.SynonymSet.lookup({
+          context: created.context,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.context).toEqual(expect.any(String));

@@ -6,6 +6,7 @@ import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -71,6 +72,14 @@ test.provider.skipIf(!runLifecycle)(
           return { store, engine };
         }),
       );
+      yield* expectFound(
+        GCP.DiscoveryEngine.CollectionsEngine.lookup({
+          engineId: parent.engine.engineId,
+          location: parent.engine.location,
+          collectionId: parent.engine.collectionId,
+        }),
+        parent.engine,
+      );
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
@@ -96,6 +105,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { store, engine, control };
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.CollectionsDataStoresControl.lookup({
+          controlId: created.control.controlId,
+          dataStore: created.control.dataStore,
+        }),
+        created.control,
       );
 
       expect(created.control.name).toContain("/controls/");

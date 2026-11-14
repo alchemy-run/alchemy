@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -197,6 +198,13 @@ test.provider(
           });
           return { subnet, nat, rule, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.ServiceAttachment.lookup({
+          serviceAttachmentName: created.attachment.serviceAttachmentName,
+          region: created.attachment.region,
+        }),
+        created.attachment,
       );
 
       expect(created.attachment.serviceAttachmentName).toEqual(expect.any(String));

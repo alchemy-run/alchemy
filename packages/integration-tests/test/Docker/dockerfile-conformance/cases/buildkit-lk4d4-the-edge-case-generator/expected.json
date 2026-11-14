@@ -1,0 +1,233 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "busybox:buildroot-2014.02",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 3,
+          "flags": []
+        },
+        {
+          "tag": "ONBUILD",
+          "line": 5,
+          "flags": []
+        },
+        {
+          "tag": "ONBUILD",
+          "line": 6,
+          "flags": []
+        },
+        {
+          "tag": "ONBUILD",
+          "line": 7,
+          "flags": []
+        },
+        {
+          "tag": "RUN",
+          "line": 12,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "ls",
+              "-la"
+            ]
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 13,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "echo",
+              "'1234'"
+            ]
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 14,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo \"1234\""
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 15,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo 1234"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 16,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo '1234' \u0026\u0026     echo \"456\" \u0026\u0026     echo 789"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 19,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "sh -c 'echo root:testpass         \u003e /tmp/passwd'"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 21,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "mkdir -p /test /test2 /test3/test"
+          }
+        },
+        {
+          "tag": "ENV",
+          "line": 24,
+          "flags": [],
+          "vars": [
+            [
+              "SCUBA",
+              "1 DUBA 3"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 25,
+          "flags": [],
+          "vars": [
+            [
+              "SCUBA",
+              "1 DUBA 3"
+            ]
+          ]
+        },
+        {
+          "tag": "CMD",
+          "line": 28,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "echo",
+              "test"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 29,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo test"
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 30,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo \"test\""
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 31,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo 'test'"
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 32,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo 'test' | wc -"
+          }
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 35,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 36,
+          "flags": []
+        },
+        {
+          "tag": "USER",
+          "line": 38,
+          "flags": [],
+          "value": "docker"
+        },
+        {
+          "tag": "USER",
+          "line": 39,
+          "flags": [],
+          "value": "docker:root"
+        },
+        {
+          "tag": "VOLUME",
+          "line": 41,
+          "flags": []
+        },
+        {
+          "tag": "VOLUME",
+          "line": 42,
+          "flags": []
+        },
+        {
+          "tag": "VOLUME",
+          "line": 43,
+          "flags": []
+        },
+        {
+          "tag": "WORKDIR",
+          "line": 45,
+          "flags": [],
+          "value": "/test"
+        },
+        {
+          "tag": "ADD",
+          "line": 47,
+          "flags": [],
+          "sources": [
+            "."
+          ],
+          "destination": "/"
+        },
+        {
+          "tag": "COPY",
+          "line": 48,
+          "flags": [],
+          "sources": [
+            "."
+          ],
+          "destination": "copy"
+        }
+      ]
+    }
+  ]
+}

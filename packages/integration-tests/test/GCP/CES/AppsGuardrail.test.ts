@@ -6,6 +6,7 @@ import * as ces from "@distilled.cloud/gcp/ces_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -65,6 +66,14 @@ test.provider(
           });
           return { app, guardrail };
         }),
+      );
+      yield* expectFound(
+        GCP.CES.AppsGuardrail.lookup({
+          guardrailId: created.guardrail.guardrailId,
+          location: created.guardrail.location,
+          app: created.guardrail.app,
+        }),
+        created.guardrail,
       );
 
       expect(created.guardrail.name).toContain("/guardrails/");

@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   entityNameOf,
@@ -59,8 +60,33 @@ export type ConnectionsEntityTypesEntity = Resource<
     fields: EntityFields;
   },
   never,
-  Providers
+  Providers,
+  ConnectionsEntityTypesEntityLookup
 >;
+
+/**
+ * Props for {@link ConnectionsEntityTypesEntity.lookup}: find a connections
+ * entity types entity this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ConnectionsEntityTypesEntityLookup {
+  /**
+   * Parent entity type resource name
+   * `projects/{project}/locations/{location
+   * }/connections/{connection}/entityTypes/{type}`.
+   */
+  parent: string;
+  /**
+   * External-system entity id (the `{id}` segment of
+   * `.../entityTypes/{type}/entities/{id}`).
+   */
+  entityId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A row in a connected system, reached through Integration Connectors.
@@ -99,6 +125,19 @@ export type ConnectionsEntityTypesEntity = Resource<
  *     fields: { Name: "Acme Corp" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing connections entity types entity
+ * `ConnectionsEntityTypesEntity.lookup` references a connections entity
+ * types entity Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared connections entity types entity.
+ *
+ * **Example:** Reference an existing connections entity types entity
+ * ```typescript
+ * const connectionsEntityTypesEntity = GCP.Connectors.ConnectionsEntityTypesEntity.lookup({
+ *   parent: "my-parent",
+ * });
  * ```
  *
  * @resource
@@ -145,6 +184,16 @@ export const ConnectionsEntityTypesEntityProvider = () =>
 
     // Rows carry no ownership marker; only a known name (from state or an
     // explicit `entityId`) identifies ours.
+    lookup: Effect.fn(function* ({ parent: lookupParent, entityId }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = lookupParent ?? "";
+      const name =
+        entityId !== undefined && parent.length > 0 ? entityNameOf(parent, entityId) : "";
+      const existing = yield* getEntity(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, parent);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.parent ?? output?.parent ?? "";

@@ -6,6 +6,7 @@ import * as vpcaccess from "@distilled.cloud/gcp/vpcaccess_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -80,6 +81,13 @@ test.provider.skipIf(!runLifecycle)(
             maxInstances: 3,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.VpcAccess.Connector.lookup({
+          connectorId: created.connectorId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.connectorId).toEqual(expect.any(String));

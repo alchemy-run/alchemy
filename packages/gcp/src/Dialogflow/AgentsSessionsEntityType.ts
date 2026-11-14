@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -99,8 +100,39 @@ export type AgentsSessionsEntityType = Resource<
     entities: AgentsSessionsEntity[];
   },
   never,
-  Providers
+  Providers,
+  AgentsSessionsEntityTypeLookup
 >;
+
+/**
+ * Props for {@link AgentsSessionsEntityType.lookup}: find an agents
+ * sessions entity type this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface AgentsSessionsEntityTypeLookup {
+  /**
+   * Location used when `agent` is an id rather than a resource name.
+   */
+  location?: string;
+  /**
+   * Session id. Dialogflow sessions are created implicitly.
+   */
+  sessionId?: string;
+  /**
+   * Entity type id (`sys.color` or a custom entity type id).
+   */
+  entityTypeId?: string;
+  /**
+   * Parent agent resource name
+   * `projects/{project}/locations/{location}/agents/{agent}`.
+   */
+  agent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dialogflow CX session entity type (per-session entity overlay).
@@ -118,6 +150,19 @@ export type AgentsSessionsEntityType = Resource<
  *   agent: agentName,
  *   entityTypeId: "sys.color",
  *   entities: [{ value: "cerulean", synonyms: ["cerulean", "blue-green"] }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing agents sessions entity type
+ * `AgentsSessionsEntityType.lookup` references an agents sessions entity
+ * type Alchemy doesn't manage (created in the console or by another stack).
+ * It is read during plan/deploy, never created, updated or deleted, and
+ * binds like a declared agents sessions entity type.
+ *
+ * **Example:** Reference an existing agents sessions entity type
+ * ```typescript
+ * const agentsSessionsEntityType = GCP.Dialogflow.AgentsSessionsEntityType.lookup({
+ *   agent: "my-agent",
  * });
  * ```
  *
@@ -229,6 +274,23 @@ export const AgentsSessionsEntityTypeProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({
+      location: lookupLocation,
+      sessionId: lookupSessionId,
+      entityTypeId: lookupEntityTypeId,
+      agent: lookupAgent,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const agent = lookupAgent ? expandAgent(lookupAgent, env.project, location) : undefined;
+      const sessionId = lookupSessionId ?? DEFAULT_SESSION;
+      const entityTypeId = lookupEntityTypeId ?? DEFAULT_ENTITY_TYPE;
+      const name = agent !== undefined ? resourceName(agent, sessionId, entityTypeId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, agent);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

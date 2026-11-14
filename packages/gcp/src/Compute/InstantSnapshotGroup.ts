@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -67,8 +68,30 @@ export type InstantSnapshotGroup = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstantSnapshotGroupLookup
 >;
+
+/**
+ * Props for {@link InstantSnapshotGroup.lookup}: find an instant snapshot
+ * group this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InstantSnapshotGroupLookup {
+  /**
+   * Instant snapshot group name (RFC1035, 1-63 chars).
+   */
+  instantSnapshotGroupName: string;
+  /**
+   * Zone of the group (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine instant snapshot group.
@@ -86,6 +109,19 @@ export type InstantSnapshotGroup = Resource<
  * const group = yield* GCP.Compute.InstantSnapshotGroup("checkpoint", {
  *   zone: "us-central1-a",
  *   sourceConsistencyGroup: policy.selfLink,
+ * });
+ * ```
+ *
+ * ### Looking up an existing instant snapshot group
+ * `InstantSnapshotGroup.lookup` references an instant snapshot group
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared instant snapshot group.
+ *
+ * **Example:** Reference an existing instant snapshot group
+ * ```typescript
+ * const instantSnapshotGroup = GCP.Compute.InstantSnapshotGroup.lookup({
+ *   instantSnapshotGroupName: "my-instant-snapshot-group",
  * });
  * ```
  *
@@ -297,6 +333,14 @@ export const InstantSnapshotGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ instantSnapshotGroupName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = zoneOf(lookupZone);
+      const existing = yield* getByName(env.project, zone, instantSnapshotGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

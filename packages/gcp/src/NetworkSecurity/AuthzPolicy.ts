@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -196,8 +197,31 @@ export type AuthzPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthzPolicyLookup
 >;
+
+/**
+ * Props for {@link AuthzPolicy.lookup}: find an authz policy this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AuthzPolicyLookup {
+  /**
+   * Authz policy id.
+   */
+  authzPolicyId: string;
+  /**
+   * Location (`us-central1`, `global`, …). Must match the targeted
+   * forwarding rules.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security AuthzPolicy for Application Load Balancers, Secure
@@ -227,6 +251,19 @@ export type AuthzPolicy = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing authz policy
+ * `AuthzPolicy.lookup` references an authz policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * authz policy.
+ *
+ * **Example:** Reference an existing authz policy
+ * ```typescript
+ * const authzPolicy = GCP.NetworkSecurity.AuthzPolicy.lookup({
+ *   authzPolicyId: "my-authz-policy",
  * });
  * ```
  *
@@ -337,6 +374,15 @@ export const AuthzPolicyProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ authzPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = locationOf(lookupLocation, env.region);
+      const name = resourceName(env.project, location, authzPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

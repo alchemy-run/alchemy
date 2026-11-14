@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
@@ -167,9 +168,10 @@ export interface JobDefinitionProps extends PlatformProps {
    * Bundler configuration for the Effect-native entrypoint. Unused
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
    * marked pure so unused parts prune more aggressively. List extra
-   * packages with `pure.packages`, or disable with `pure: false`.
+   * packages with `pure.packages`, or disable with `pure: false`. `cache`
+   * configures the image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Docker image build for the Effect-native form: optional full
    * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
@@ -270,7 +272,7 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
     // generated container entrypoint) instead of booting an HTTP server.
     serve: ((_handler, options) => {
       const run = (options?.shape as { run?: unknown } | undefined)?.run;
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped impl shape; runner is a host-provided Effect
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- untyped impl shape; runner is a host-provided Effect
       return Effect.isEffect(run) ? base.run(run as Effect.Effect<void, never, any>) : Effect.void;
     }) as HostRuntimeContext["serve"],
   } as JobDefinitionRuntimeContext;
@@ -569,7 +571,9 @@ export const JobDefinitionProvider = () =>
       const createRepositoryName = (id: string) =>
         createPhysicalName({
           id: `${id}-repo`,
-          maxLength: 180,
+          // ECS caps an image reference at 255 characters: the registry host,
+          // this name and a 64-character tag must all fit.
+          maxLength: 128,
           lowercase: true,
         });
 
@@ -956,6 +960,7 @@ await bootstrap(entrypoint);
           imageUri,
           context: contextDir,
           platform: "linux/amd64",
+          cache: props.build?.cache,
         });
       });
 

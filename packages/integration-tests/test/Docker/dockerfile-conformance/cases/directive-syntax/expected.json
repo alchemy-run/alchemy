@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "directives": {
+    "syntax": "docker/dockerfile:1"
+  },
+  "stages": [
+    {
+      "line": 2,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": []
+    }
+  ]
+}

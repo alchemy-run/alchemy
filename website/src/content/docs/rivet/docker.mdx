@@ -1,0 +1,83 @@
+---
+title: Docker
+description: Run a Rivet control plane and pools of nodes on a Docker swarm, on your machine or a server.
+---
+
+Host your Durable Objects on a Docker swarm, and the control plane and every pool run as swarm services on your machine, or on any server with Docker. It's where the [tutorial](/rivet/tutorial/part-1) starts, because it needs no cloud account.
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/docker`, and turn swarm mode on with `docker swarm init`.
+
+## The control plane
+
+One engine runs as a swarm service on `localhost:6420`, with its data on a Docker volume.
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: 16420 });
+```
+
+Change `port` if 6420 is taken. One engine keeps its data on one disk, so use Docker for development, not production.
+
+## The pool
+
+```typescript title="src/cluster.ts"
+export const Default = RivetDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Cluster));
+```
+
+Each deploy builds a node image with every class on the pool.
+
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a swarm service on the control plane's network, with no published ports:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetDocker.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+## Call it from a container
+
+Callers reach the control plane on its Docker network. Join it from a `Docker.Service`:
+
+```typescript title="src/api.ts"
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Rivet.Cluster;
+    return {
+      main: import.meta.url,
+      port: 3000,
+      ports: [{ external: 3000, internal: 3000 }],
+      networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
+    };
+  }).pipe(Effect.provide(Cluster)),
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const visitors = yield* rooms.getByName("lobby").join();
+        return yield* HttpServerResponse.json({ visitors });
+      }),
+    };
+  }),
+) {}
+```
+
+The [tutorial](/rivet/tutorial/part-1) builds this.
+
+## Use another Docker engine
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { context: "my-server" });
+```
+
+`context` takes a Docker context name. See [Docker](/docker).
+
+Every option, with its default, is in the reference: [SwarmControlPlane](/providers/rivet/docker#swarmcontrolplane), [SwarmPool](/providers/rivet/docker#swarmpool) and [ServicesPool](/providers/rivet/docker#servicespool).

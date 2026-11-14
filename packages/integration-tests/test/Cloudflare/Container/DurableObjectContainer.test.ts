@@ -119,9 +119,12 @@ const waitUntilReady = (url: string) =>
  * Probes start, restart, and write to containers, so they are never retried.
  * Query flags: `seed` writes the marker file and storage, `restart` destroys
  * the running container first, `image=<name>` picks the image to start.
+ *
+ * Starting a container locally is a `docker run`, which a daemon busy with
+ * other suites' builds took more than 25s to answer on 2026-11-11.
  */
 const probe = (url: string, query = "") =>
-  getJson<Probe>(url, `/probe${query}`).pipe(within(`/probe${query}`, "25 seconds"));
+  getJson<Probe>(url, `/probe${query}`).pipe(within(`/probe${query}`, "60 seconds"));
 
 const readMetadata = (url: string, query = "") =>
   getJson<Metadata>(url, `/metadata${query}`).pipe(within(`/metadata${query}`, "10 seconds"));

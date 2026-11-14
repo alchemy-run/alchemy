@@ -1,0 +1,170 @@
+---
+title: What is Boat?
+description: The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, credential profiles and the AI credentials proxy, ports and webhooks — and how @alchemy.run/boat models each of them.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Boat runs sandboxes: Linux machines for agents, untrusted code and dev boxes. A **sandbox** starts in under a second, with Ubuntu, Docker, Node.js, Bun and Python, and `sudo` that needs no password. It runs until its **auto-stop** timer, then Boat stops it and saves its disk, and it picks up where it left off when you resume it. Everything belongs to your **account**, or to an organization you bill to: its sandboxes, snapshots, environments, credential profiles, webhooks and API keys.
+
+Take one small app: a `MyProfile` credential profile holding an Anthropic key, a `MyEnv` environment that holds an npm token and names the profile, and a `Golden` snapshot of a sandbox with the project's dependencies installed. For each task, a Cloudflare Worker creates a sandbox from `Golden` on the `MyEnv` environment, runs the agent's commands there, and calls the dev server it starts on port 3000.
+
+<Tree
+  nodes={[
+    {
+      id: "account", label: "acme", type: "account", icon: "brand:boat",
+      areas: ["hook profile", "golden env", "task task"],
+      phoneAreas: ["task task", "golden env", "hook profile"],
+    },
+    { id: "golden", label: "Golden", type: "snapshot", parent: "account", icon: "camera" },
+    { id: "env", label: "MyEnv", type: "environment", parent: "account", icon: "file-key", specs: [["NPM_TOKEN", "secret"]] },
+    { id: "profile", label: "MyProfile", type: "credential profile", parent: "account", icon: "key-round", specs: [["anthropic", "secret"]] },
+    { id: "hook", label: "events", type: "webhook", parent: "account", icon: "webhook" },
+    { id: "task", label: "task-42", type: "sandbox · running", parent: "account", tone: "accent", icon: "box", specs: [[":3000", "task-42-3000.on.boat.dev"]] },
+    { id: "worker", label: "Api", type: "Cloudflare Worker", icon: "square-function", specs: [["key", "its own, scoped"]] },
+  ]}
+  areas={["worker account"]}
+  phoneAreas={["worker", "account"]}
+  colGap={3.5}
+  links={[
+    { from: "golden", to: "task", label: "disk" },
+    { from: "env", to: "task", label: "secrets" },
+    { from: "profile", to: "env", label: "AI keys" },
+    { from: "worker", to: "task", label: "creates" },
+    { from: "hook", to: "worker", dashed: true },
+  ]}
+  caption="Everything belongs to the account acme, which can bill an organization instead. For each task, the Api Worker creates a sandbox like task-42 with a key of its own: it starts from Golden's disk with MyEnv's secrets and the AI keys of the profile MyEnv names, and serves port 3000 at its own URL. Boat sends each sandbox's events to the account's webhook, which calls the Worker."
+/>
+
+## Accounts: where everything lives
+
+Your **account** owns what you create on Boat: its sandboxes, snapshots, environments, credential profiles, webhooks and API keys. An organization's members can bill sandboxes to it instead, and each sandbox stays private to the person who created it. Your profile signs you in to it:
+
+<PackageManagers run="alchemy profile edit --add Boat" />
+
+See [Account & API keys](/boat/account-and-keys).
+
+## API keys: only the actions a caller needs
+
+An **API key** carries a list of **actions** (create sandboxes, run commands, read files, host a port, …) and can be limited to some sandboxes or environments, and to a lifetime. A key can never do more, or live longer, than the key that created it.
+
+```typescript
+export const Ci = Boat.ApiKey("Ci", { preset: "ci" });
+```
+
+See [Account & API keys](/boat/account-and-keys#narrow-a-key-to-what-it-needs).
+
+## Sandboxes: machines that stop and resume
+
+A **sandbox** is one machine, in one of four sizes. You run commands in it, read and write its files, and call its ports. It runs for its `autoStop` (an hour unless you say otherwise), then Boat stops it and saves its disk for 14 days. A stopped sandbox resumes with its files. **Labels** tag a sandbox when it's created, so you can find it again.
+
+```typescript
+const sandbox = yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { task } });
+const result = yield* sandbox.exec("npm test");
+```
+
+See [Sandboxes](/boat/sandboxes/sandboxes).
+
+## Programs: your server in a sandbox
+
+A sandbox can run your own **program**: an Effect HTTP server that Alchemy bundles, uploads and starts with Node.js, served at the sandbox's URL. A code change restarts it in place, in the same sandbox.
+
+```typescript
+export default class Api extends Boat.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, type: "small" },
+  Effect.gen(function* () {
+    return { fetch: HttpServerResponse.json({ ok: true }) };
+  }),
+) {}
+```
+
+See [Programs](/boat/sandboxes/programs).
+
+## Snapshots: a disk to start from
+
+A **snapshot** saves a sandbox's disk under a name. New sandboxes start from it, with a repository cloned and dependencies installed. A **fork** copies one sandbox from its last snapshot, which Boat takes whenever a sandbox stops.
+
+```typescript
+export const Golden = Boat.Snapshot("Golden", { run: ["npm ci"] });
+```
+
+See [Snapshots & forks](/boat/sandboxes/snapshots).
+
+## Environments: what a sandbox starts with
+
+An **environment** holds environment variables and secret files, and decides which of your credentials a sandbox gets: a GitHub token, a Boat key of its own, and the AI keys of a credential profile. A sandbox names one environment when it's created, and can add variables of its own on top. Every change makes a new version; a running sandbox keeps the version it started on.
+
+```typescript
+export const MyEnv = Boat.Environment("MyEnv", { env: { NODE_ENV: "production" } });
+```
+
+See [Environments & secrets](/boat/security/environments).
+
+## Credential profiles: the AI keys a sandbox gets
+
+A **credential profile** holds AI credentials, which Boat stores encrypted and never returns: API keys for Anthropic, OpenAI and other providers, secrets for any other HTTPS API, and the Claude or ChatGPT sign-ins you make on the dashboard. An environment names a profile, and its sandboxes start with the profile's keys as environment variables.
+
+```typescript
+export const MyProfile = Boat.CredentialProfile("MyProfile", {
+  anthropic: Config.Redacted("ANTHROPIC_API_KEY"),
+});
+
+export const MyEnv = Boat.Environment("MyEnv", { credentialProfile: MyProfile });
+```
+
+See [Credential profiles](/boat/security/credential-profiles).
+
+## AI credentials proxy: placeholders, not real keys
+
+A sandbox normally holds a profile's real keys, and anyone with a shell in it can copy them. The **AI credentials proxy** is one switch for a whole account or organization. With it on, a sandbox gets a placeholder for each key and sends its requests through the proxy, which swaps the real key in on the way to the provider. Boat bills the proxy for each day it's on and for each request.
+
+```typescript
+export const Proxy = Boat.AiProxy("Proxy");
+```
+
+See [Credential profiles](/boat/security/credential-profiles#keep-real-keys-out-of-the-sandbox).
+
+## Ports: a URL for each server
+
+A server that listens on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev`. Each port needs a token unless you make it public, and a port's `fetch` sends it for you:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+See [Ports & URLs](/boat/sandboxes/ports).
+
+## Webhooks: Boat calls you when a sandbox changes
+
+Boat reports what happens to each sandbox (ready, stopped, failed, restored) to a **webhook**: a URL you register for the account, called with each event, signed with a secret. A Worker receives them with `consumeSandboxEvents`, which checks the signature and hands it only your stack's sandboxes.
+
+```typescript
+yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
+  Effect.log(`${event.data.sandbox.id} stopped`),
+);
+```
+
+See [Lifecycle events](/boat/sandboxes/lifecycle-events).
+
+## State: where Alchemy keeps its record
+
+Boat has no storage for Alchemy's own record of what each Stack created. Keep it on disk, or share it with your team and CI through another cloud's state store:
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+## How @alchemy.run/boat models these concepts
+
+Your profile signs you in, and `Boat.providers()` deploys into your account. What an app shares for its whole life (an environment, a credential profile, a snapshot, a long-lived dev box, a webhook, a key for CI) are resources in the Stack. An environment you declare passes its own variables and secret files, and none of your account's credentials until a prop asks for them. Sandboxes made per user or task come from bindings your Worker or Function uses while it runs (`CreateSandbox`, `ConnectSandbox`). They aren't deleted when the Stack is destroyed, but they carry their stack, stage and host as labels (`alchemy.stack`, `alchemy.stage`, `alchemy.id`), so you can find them again. Each binding gets an API key of its own, created at deploy with only the actions it needs, never yours.
+
+Next, build one: the [tutorial](/boat/tutorial/part-1) puts these ideas to work, one step at a time.

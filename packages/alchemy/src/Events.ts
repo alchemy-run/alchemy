@@ -1,8 +1,10 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
 import * as Logger from "effect/Logger";
 import type * as LogLevel from "effect/LogLevel";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import { CurrentLogAnnotations, MinimumLogLevel } from "effect/References";
 import * as Schema from "effect/Schema";
@@ -203,6 +205,38 @@ export type Event = typeof Event.Type;
 const knownEventTypes: ReadonlySet<string> = new Set(
   Event.members.map((member) => member.fields.type.literal),
 );
+
+/**
+ * First human-readable line of a lifecycle failure, for the per-resource
+ * `fail` status event. The full cause is still aggregated and raised when
+ * the whole run settles — this exists so a failed row explains itself the
+ * moment it fails instead of only after every sibling has finished.
+ * `undefined` for interrupt-only causes (nothing failed, the run was
+ * cancelled).
+ */
+export const failureMessage = (cause: Cause.Cause<unknown>): string | undefined => {
+  for (const reason of cause.reasons) {
+    const error = Cause.isFailReason(reason)
+      ? reason.error
+      : Cause.isDieReason(reason)
+        ? reason.defect
+        : undefined;
+    if (error === undefined) continue;
+    const tag =
+      Predicate.hasProperty(error, "_tag") && typeof error._tag === "string"
+        ? error._tag
+        : undefined;
+    const message =
+      Predicate.hasProperty(error, "message") && typeof error.message === "string"
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : Formatter.format(error);
+    const line = message.split("\n", 1)[0]!;
+    return tag !== undefined && !line.includes(tag) ? `${tag}: ${line}` : line;
+  }
+  return undefined;
+};
 
 /** Whether `type` names an event this version knows. */
 export const isKnownEventType = (type: string): boolean => knownEventTypes.has(type);

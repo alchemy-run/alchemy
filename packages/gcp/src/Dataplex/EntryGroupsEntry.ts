@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -139,8 +140,38 @@ export type EntryGroupsEntry = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EntryGroupsEntryLookup
 >;
+
+/**
+ * Props for {@link EntryGroupsEntry.lookup}: find an entry groups entry
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface EntryGroupsEntryLookup {
+  /**
+   * Entry id (the `{entry}` segment of
+   * `.../entryGroups/{entryGroup}/entries/{entry}`). May contain slashes
+   * (up to 4000 characters).
+   */
+  entryId: string;
+  /**
+   * Parent Entry Group. Full name
+   * `projects/{project}/locations/{location}/entryGroups/{entryGroup}` or
+   * the entry-group id (combined with `location`).
+   */
+  entryGroup: string;
+  /**
+   * Region used when `entryGroup` is a bare id.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex Universal Catalog Entry — a metadata record for a data
@@ -172,6 +203,20 @@ export type EntryGroupsEntry = Resource<
  *     "projects/dataplex-types/locations/global/entryTypes/generic",
  *   fullyQualifiedName: "app.orders",
  *   labels: { env: "prod", team: "data" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing entry groups entry
+ * `EntryGroupsEntry.lookup` references an entry groups entry Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared entry groups entry.
+ *
+ * **Example:** Reference an existing entry groups entry
+ * ```typescript
+ * const entryGroupsEntry = GCP.Dataplex.EntryGroupsEntry.lookup({
+ *   entryId: "my-entry",
+ *   entryGroup: "my-entry-group",
  * });
  * ```
  *
@@ -317,6 +362,15 @@ export const EntryGroupsEntryProvider = () =>
         extra: nextType !== previousType || nextParentEntry !== previousParentEntry,
       });
     }),
+
+    lookup: Effect.fn(function* ({ entryId, entryGroup, location }) {
+      const env = yield* GcpEnvironment.current;
+      const resolved = resolveParent(env.project, entryGroup ?? "", location, env.region);
+      const name = resourceName(resolved.parent, entryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

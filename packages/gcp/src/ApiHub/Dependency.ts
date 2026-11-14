@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -104,8 +105,31 @@ export type Dependency = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DependencyLookup
 >;
+
+/**
+ * Props for {@link Dependency.lookup}: find a dependency this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DependencyLookup {
+  /**
+   * Dependency id (the `{dependency}` segment of
+   * `projects/{project}/locations/{location}/dependencies/{dependency}`).
+   */
+  dependencyId: string;
+  /**
+   * Location (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A directed dependency in API Hub from a consumer operation (or external
@@ -122,6 +146,19 @@ export type Dependency = Resource<
  *   consumer: { operationResourceName: listPets.name },
  *   supplier: { operationResourceName: getPet.name },
  *   description: "listPets calls getPet",
+ * });
+ * ```
+ *
+ * ### Looking up an existing dependency
+ * `Dependency.lookup` references a dependency Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * dependency.
+ *
+ * **Example:** Reference an existing dependency
+ * ```typescript
+ * const dependency = GCP.ApiHub.Dependency.lookup({
+ *   dependencyId: "my-dependency",
  * });
  * ```
  *
@@ -202,6 +239,15 @@ export const DependencyProvider = () =>
           !sameJson(news.supplier ?? olds?.supplier, olds?.supplier ?? output?.supplier),
       });
     }),
+
+    lookup: Effect.fn(function* ({ dependencyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, dependencyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

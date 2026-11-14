@@ -215,8 +215,25 @@ export interface Repository extends Resource<
     updatedAt: string;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  RepositoryLookup
 > {}
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this
+ * stack doesn't manage by its owner and name.
+ */
+export interface RepositoryLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  name: string;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub repository.
@@ -365,6 +382,17 @@ export interface Repository extends Resource<
  * }).pipe(destroy());
  * ```
  *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const repo = GitHub.Repository.lookup({ owner: "alchemy-run", name: "alchemy" });
+ * const cloneUrl = repo.cloneUrl;
+ * ```
+ *
  * @resource
  * @product Repository
  */
@@ -393,6 +421,16 @@ export const RepositoryProvider = () =>
         return { action: "replace" };
       }
     }),
+
+    lookup: Effect.fn(
+      function* ({ owner, name }) {
+        return yield* Repos.get({ owner, repo: name }).pipe(
+          Effect.map(attrsOf),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
 
     reconcile: Effect.fn(
       function* ({ news, olds }) {

@@ -1,0 +1,2 @@
+# escape=x
+FROM alpine

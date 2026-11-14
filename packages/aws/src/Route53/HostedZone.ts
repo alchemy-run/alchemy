@@ -3,12 +3,21 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
 export interface HostedZoneProps {
+  /**
+   * ID of an existing hosted zone to adopt, with or without the
+   * `/hostedzone/` prefix. Without it, a new zone is always created: zone
+   * names are not unique, so an existing zone is never found by name.
+   * The adopted zone's name must equal `name`. Pointing at a different zone
+   * later forces replacement.
+   */
+  hostedZoneId?: string;
   /**
    * Fully qualified domain name for the zone (e.g. `"example.com"`). A trailing
    * dot is added automatically. Changing the name forces replacement.
@@ -114,6 +123,20 @@ export type HostedZoneLookup =
  * });
  * ```
  *
+ * ### Adopting an existing hosted zone
+ * Zone names are not unique (one private zone per VPC with the same name is
+ * normal), so `HostedZone` never adopts a zone by name. Pass `hostedZoneId` to
+ * take over an existing zone; without it a new zone is created. An adopted zone
+ * is managed like any other, and deleted on destroy.
+ *
+ * **Example:** Adopt a zone by id
+ * ```typescript
+ * const zone = yield* HostedZone("MyZone", {
+ *   hostedZoneId: "Z0123456789ABCDEFGHIJ",
+ *   name: "example.com",
+ * });
+ * ```
+ *
  * ### Looking up an existing hosted zone
  * `HostedZone.lookup` references a hosted zone Alchemy doesn't manage (created in the
  * console or by another stack), found by `id` or its domain `name`. It is read during
@@ -135,6 +158,22 @@ export type HostedZoneLookup =
  * @resource
  */
 export const HostedZone = Resource<HostedZone>("AWS.Route53.HostedZone");
+
+/** The zone named by `hostedZoneId` does not exist. */
+export class AdoptedHostedZoneNotFound extends Data.TaggedError("AdoptedHostedZoneNotFound")<{
+  readonly message: string;
+  readonly hostedZoneId: string;
+}> {}
+
+/** The zone named by `hostedZoneId` has a different name than `name`. */
+export class AdoptedHostedZoneNameMismatch extends Data.TaggedError(
+  "AdoptedHostedZoneNameMismatch",
+)<{
+  readonly message: string;
+  readonly hostedZoneId: string;
+  readonly expected: string;
+  readonly actual: string;
+}> {}
 
 const normalizeId = (id: string) => id.replace(/^\/hostedzone\//, "");
 
@@ -167,6 +206,29 @@ export const HostedZoneProvider = () =>
           MaxItems: 1,
         });
         return (response.HostedZones ?? []).find((zone) => zone.Name === normalizeName(name));
+      });
+
+      // Every zone in the account named exactly `name`. Zone names are NOT
+      // unique: one private zone per VPC with the same name is normal, and
+      // public zones can repeat too. Results are sorted by name, so stop at
+      // the first page that runs past it.
+      const listAllByName = Effect.fn(function* (name: string) {
+        const target = normalizeName(name);
+        const matches: route53.HostedZone[] = [];
+        let request: route53.ListHostedZonesByNameRequest = { DNSName: target, MaxItems: 100 };
+        while (true) {
+          const response = yield* route53.listHostedZonesByName(request);
+          const page = response.HostedZones ?? [];
+          matches.push(...page.filter((zone) => zone.Name === target));
+          if (!response.IsTruncated || page.some((zone) => zone.Name !== target)) {
+            return matches;
+          }
+          request = {
+            DNSName: response.NextDNSName,
+            HostedZoneId: response.NextHostedZoneId,
+            MaxItems: 100,
+          };
+        }
       });
 
       const observe = Effect.fn(function* (id: string) {
@@ -276,8 +338,15 @@ export const HostedZoneProvider = () =>
               ),
             ),
           ),
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
+          // Adopting a different zone than the one tracked → replace.
+          if (
+            news.hostedZoneId !== undefined &&
+            normalizeId(news.hostedZoneId) !== normalizeId(output?.id ?? olds.hostedZoneId ?? "")
+          ) {
+            return { action: "replace" } as const;
+          }
           // Name change → replace, but only when the old name is known — a
           // half-created state row can't round-trip an Output-valued `name`
           // (it deserializes as `undefined`), and an unknown old name must
@@ -304,14 +373,12 @@ export const HostedZoneProvider = () =>
           };
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          // Resolve the zone id: prefer the stored output, else look up by name
-          // (adoption / state-loss recovery). The persisted `name` may be
-          // `undefined` when a `creating` row was written before upstream
-          // Outputs resolved — report "not found" and let the engine
-          // re-drive the create.
-          const zoneId =
-            output?.id ??
-            (olds?.name !== undefined ? (yield* findByName(olds.name))?.Id : undefined);
+          // Only a zone this resource tracks, or one named explicitly by
+          // `hostedZoneId`. Never search by name: zone names are not unique,
+          // so a name match can be another stack's or another VPC's zone.
+          // State-loss recovery of a zone we created goes through reconcile's
+          // CallerReference match instead.
+          const zoneId = output?.id ?? olds?.hostedZoneId;
           if (zoneId === undefined) {
             return undefined;
           }
@@ -328,7 +395,27 @@ export const HostedZoneProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
           // Observe.
-          let zone = output?.id ? yield* observe(output.id) : undefined;
+          const trackedId = output?.id ?? news.hostedZoneId;
+          let zone = trackedId ? yield* observe(trackedId) : undefined;
+
+          // An adopted zone is never recreated: a missing or misnamed zone
+          // is the user's error, not something to paper over with a new one.
+          if (news.hostedZoneId !== undefined) {
+            if (!zone) {
+              return yield* new AdoptedHostedZoneNotFound({
+                message: `Hosted zone '${news.hostedZoneId}' does not exist.`,
+                hostedZoneId: news.hostedZoneId,
+              });
+            }
+            if (normalizeName(zone.HostedZone.Name) !== normalizeName(news.name)) {
+              return yield* new AdoptedHostedZoneNameMismatch({
+                message: `Hosted zone '${news.hostedZoneId}' is named '${zone.HostedZone.Name}', not '${normalizeName(news.name)}'.`,
+                hostedZoneId: news.hostedZoneId,
+                expected: normalizeName(news.name),
+                actual: zone.HostedZone.Name,
+              });
+            }
+          }
 
           // Ensure.
           if (!zone) {
@@ -354,9 +441,14 @@ export const HostedZoneProvider = () =>
                   DelegationSet: response.DelegationSet,
                 })),
                 // Re-running with the same CallerReference races; re-observe.
+                // Match on that CallerReference, not just the name: another
+                // zone with the same name (another VPC's private zone, or a
+                // duplicate public zone) is not the one we created.
                 Effect.catchTag("HostedZoneAlreadyExists", () =>
                   Effect.gen(function* () {
-                    const existing = yield* findByName(news.name);
+                    const existing = (yield* listAllByName(news.name)).find(
+                      (zone) => zone.CallerReference === instanceId,
+                    );
                     if (!existing) {
                       return yield* Effect.die(
                         new Error("hosted zone not found after HostedZoneAlreadyExists"),

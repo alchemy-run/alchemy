@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -97,8 +98,36 @@ export type SourcesUtilizationReport = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SourcesUtilizationReportLookup
 >;
+
+/**
+ * Props for {@link SourcesUtilizationReport.lookup}: find a sources
+ * utilization report this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SourcesUtilizationReportLookup {
+  /**
+   * Utilization report id.
+   */
+  utilizationReportId: string;
+  /**
+   * Region used when `source` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent source. Full name
+   * `projects/{project}/locations/{location}/sources/{source}` or the
+   * source id (combined with `location`).
+   */
+  source: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration utilization report for selected VMs in a source
@@ -116,6 +145,20 @@ export type SourcesUtilizationReport = Resource<
  *   source: source.name,
  *   timeFrame: "WEEK",
  *   vms: [{ vmId: "vm-123" }, { vmId: "vm-456" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing sources utilization report
+ * `SourcesUtilizationReport.lookup` references a sources utilization report
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared sources utilization report.
+ *
+ * **Example:** Reference an existing sources utilization report
+ * ```typescript
+ * const sourcesUtilizationReport = GCP.VMMigration.SourcesUtilizationReport.lookup({
+ *   utilizationReportId: "my-utilization-report",
+ *   source: "my-source",
  * });
  * ```
  *
@@ -196,6 +239,21 @@ export const SourcesUtilizationReportProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      utilizationReportId,
+      location: lookupLocation,
+      source: lookupSource,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const source =
+        lookupSource !== undefined ? sourceOf(lookupSource, env.project, location) : "";
+      const name = source.length > 0 ? resourceName(source, utilizationReportId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

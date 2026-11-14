@@ -1,0 +1,90 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 3,
+      "image": "hello-world",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENV",
+          "line": 5,
+          "flags": [],
+          "vars": [
+            [
+              "A",
+              "path"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 6,
+          "flags": [],
+          "vars": [
+            [
+              "B",
+              "another\\path"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 7,
+          "flags": [],
+          "vars": [
+            [
+              "C",
+              "trailing\\backslash\\"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 8,
+          "flags": [],
+          "vars": [
+            [
+              "D",
+              "This should not be appended to C"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 9,
+          "flags": [],
+          "vars": [
+            [
+              "E",
+              "helloworld"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 12,
+          "flags": [],
+          "vars": [
+            [
+              "F",
+              "hello world"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 15,
+          "flags": [],
+          "vars": [
+            [
+              "G",
+              "hello world"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -56,8 +56,28 @@ export type EnvironmentsKeystore = Resource<
     aliases: string[];
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsKeystoreLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsKeystore.lookup}: find an environments
+ * keystore this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsKeystoreLookup {
+  /**
+   * Keystore id (last path segment). Must match `[\w[:space:].-]{1,255}`.
+   */
+  keystoreId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
 
 /**
  * An Apigee environment keystore or truststore for TLS certificates.
@@ -81,6 +101,20 @@ export type EnvironmentsKeystore = Resource<
  * const keystore = yield* GCP.Apigee.EnvironmentsKeystore("Tls", {
  *   environment: "eval",
  *   keystoreId: "app-tls",
+ * });
+ * ```
+ *
+ * ### Looking up an existing environments keystore
+ * `EnvironmentsKeystore.lookup` references an environments keystore Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared environments keystore.
+ *
+ * **Example:** Reference an existing environments keystore
+ * ```typescript
+ * const environmentsKeystore = GCP.Apigee.EnvironmentsKeystore.lookup({
+ *   keystoreId: "my-keystore",
+ *   environment: "my-environment",
  * });
  * ```
  *
@@ -145,6 +179,16 @@ export const EnvironmentsKeystoreProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ keystoreId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, keystoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

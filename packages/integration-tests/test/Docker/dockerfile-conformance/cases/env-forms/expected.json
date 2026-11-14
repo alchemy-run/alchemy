@@ -1,0 +1,69 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENV",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "A",
+              "1"
+            ],
+            [
+              "B",
+              "two words"
+            ],
+            [
+              "C",
+              "three words"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 3,
+          "flags": [],
+          "vars": [
+            [
+              "LEGACY",
+              "value with  spaces"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 4,
+          "flags": [],
+          "vars": [
+            [
+              "EMPTY",
+              ""
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 5,
+          "flags": [],
+          "vars": [
+            [
+              "D",
+              "$HOME/bin"
+            ],
+            [
+              "E",
+              "${PATH}:/x"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

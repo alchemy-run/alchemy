@@ -6,6 +6,7 @@ import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,6 +65,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { bus, source };
         }),
+      );
+      yield* expectFound(
+        GCP.Eventarc.GoogleApiSource.lookup({
+          googleApiSourceId: created.source.googleApiSourceId,
+          location: created.source.location,
+        }),
+        created.source,
       );
 
       expect(created.source.name).toContain("/googleApiSources/");

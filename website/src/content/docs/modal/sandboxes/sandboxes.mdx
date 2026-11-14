@@ -1,0 +1,134 @@
+---
+title: Sandboxes
+description: Create, find, run commands in, and stop Modal sandboxes from any runtime.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A Modal **Sandbox** is a container your code creates while it runs, to execute code it doesn't trust: an agent's commands, a user's script. It starts from an image, belongs to an App, and runs until something stops it.
+
+## A sandbox runs until a timeout stops it
+
+A sandbox stops at its `timeout` (five minutes unless you set it, at most 24 hours), when it's been idle for its `idleTimeout`, or when your code terminates it. Stopping its App terminates it too:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "req", label: "request", type: "terminate()" },
+    { id: "sess", label: "session-sam", type: "idleTimeout" },
+    { id: "job", label: "job", type: "timeout" },
+  ]}
+  bars={[
+    { lane: "req", start: 0, end: 2, label: "exec", tone: "accent" },
+    { lane: "sess", start: 1, end: 3, label: "exec", tone: "accent" },
+    { lane: "sess", start: 3, end: 4, label: "exec", tone: "accent" },
+    { lane: "sess", start: 4, end: 7, label: "idle", tone: "muted" },
+    { lane: "job", start: 0, end: 9, label: "pnpm test", tone: "accent" },
+  ]}
+  marks={[{ at: 7, label: "idleTimeout" }, { at: 9, label: "timeout" }]}
+  caption="The request's sandbox ends when the request's scope terminates it. session-sam stops once it's been idle for its idleTimeout. The job runs until its timeout. Each is gone once it stops: keep files that must outlive it on a Volume, or snapshot it."
+/>
+
+## Bind sandboxes in a runtime
+
+`Modal.CreateSandbox` takes an image (sandboxes boot from it by default) or an app:
+
+```typescript
+const sandboxes = yield* Modal.CreateSandbox(Warm);
+```
+
+Provide `Modal.CreateSandboxHttp`. It gives the Worker its own Modal service user, a `contributor` in the App's environment.
+
+## Create one per request
+
+```typescript
+const sandbox = yield* Effect.acquireRelease(
+  sandboxes.create({ timeout: "10 minutes" }),
+  (sandbox) => Effect.ignore(sandbox.terminate()),
+);
+```
+
+The sandbox stops when the request's scope closes.
+
+## Keep one per session by name
+
+```typescript
+const sandbox =
+  (yield* sandboxes.fromName(`session-${user}`)) ??
+  (yield* sandboxes.create({ name: `session-${user}`, idleTimeout: "10 minutes" }));
+```
+
+A name is unique among an app's running sandboxes. `idleTimeout` stops it once nobody uses it.
+
+## Run a command
+
+```typescript
+const result = yield* sandbox.exec(["pnpm", "test"], { cwd: "/work" });
+```
+
+`result` has `exitCode`, `stdout` and `stderr`; a non-zero exit is returned, not failed. A string runs with `sh -c`:
+
+```typescript
+const result = yield* sandbox.exec("pnpm install && pnpm test", { cwd: "/work" });
+```
+
+## Follow a running command
+
+```typescript
+const process = yield* sandbox.start("pnpm dev", { cwd: "/work" });
+yield* Stream.runForEach(process.output, (chunk) => Console.log(chunk.fd, chunk.data));
+```
+
+`output` streams as the command runs. `write` feeds its stdin, `kill` signals it, and `wait` returns its exit code. Closing the scope detaches; the command keeps running.
+
+## Open a terminal
+
+```typescript
+const terminal = yield* sandbox.pty.open({ cols: 120, rows: 40 });
+yield* terminal.write("ls -la\n");
+```
+
+Modal can't resize a running terminal, so `resize` fails with `Modal.SandboxPtyResizeUnsupported`.
+
+## Read and write files
+
+```typescript
+yield* sandbox.files.write("/tmp/task.json", JSON.stringify(task));
+const report = yield* sandbox.files.readText("/tmp/report.json");
+```
+
+`files` also has `read` (bytes), `list`, `stat`, `remove` and `makeDir`.
+
+## Call a port through its tunnel
+
+```typescript
+const sandbox = yield* sandboxes.create({ encryptedPorts: [3000] });
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+`port.url` is the tunnel's public URL. A Worker in front of the sandbox can forward the request it received:
+
+```typescript
+return yield* port.fetch(yield* HttpServerRequest.HttpServerRequest);
+```
+
+`port.connect()` opens a TCP socket through the tunnel instead: TLS for `encryptedPorts`, plain TCP for `unencryptedPorts`.
+
+For a browser that shouldn't hold Modal credentials, use `sandbox.connectToken({ port: 3000 })`.
+
+## Size it with CPUs, memory and GPUs
+
+```typescript
+const sandbox = yield* sandboxes.create({ cpu: 2, memory: 4096, gpu: "A10G" });
+```
+
+## Find what your app created
+
+Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. List them by those tags to clean them up:
+
+```typescript
+const mine = yield* sandboxes.list({ tags: { "alchemy::stack": "my-app", "alchemy::stage": "prod" } });
+```
+
+Your own `tags` merge under the three. Stopping the App still terminates every sandbox in it.

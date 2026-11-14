@@ -5,6 +5,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -37,6 +38,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.AddressGroup.lookup({
+          addressGroupId: created.addressGroupId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/addressGroups/");

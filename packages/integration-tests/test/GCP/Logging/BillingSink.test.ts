@@ -5,6 +5,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,6 +65,13 @@ test.provider.skipIf(!billingAccountId)(
             description: "application errors",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Logging.BillingSink.lookup({
+          sinkId: created.sinkId,
+          billingAccountId: created.billingAccountId,
+        }),
+        created,
       );
 
       expect(created.sinkId).toEqual(expect.any(String));

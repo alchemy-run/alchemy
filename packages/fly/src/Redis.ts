@@ -112,8 +112,18 @@ export type Redis = Resource<
     url: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  RedisLookup
 >;
+
+/**
+ * Props for {@link Redis.lookup}: find an Upstash Redis this stack
+ * doesn't manage by its name.
+ */
+export interface RedisLookup {
+  /** Upstash Redis name. */
+  name: string;
+}
 
 /**
  * Managed Upstash Redis in a Fly org. Bind {@link ReadRedis},
@@ -222,6 +232,17 @@ export type Redis = Resource<
  * Fixed plans are billed monthly. Prefer omitting `plan` unless you
  * need a specific size.
  * :::
+ *
+ * ### Looking up an existing Redis
+ * `Redis.lookup` references a Redis Alchemy doesn't manage (created with
+ * `fly redis create` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted. Bind it like a declared Redis.
+ *
+ * **Example:** Read an existing Redis
+ * ```typescript
+ * const cache = Fly.Redis.lookup({ name: "my-cache" });
+ * const redis = yield* Fly.ReadRedis(cache);
+ * ```
  *
  * @resource
  * @product Redis
@@ -656,6 +677,23 @@ export const RedisProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findRedisAddOn({ name });
+      if (found === undefined) return undefined;
+      let url = unwrapSensitive(found.publicUrl);
+      if ((url === undefined || url.length === 0) && found.id !== undefined) {
+        const detail = yield* addons
+          .addOn({ id: found.id })
+          .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
+        url = unwrapSensitive(detail?.publicUrl);
+      }
+      return toAttrs(found, {
+        name,
+        primaryRegion: DEFAULT_REDIS_REGION,
+        url: url === undefined || url.length === 0 ? undefined : Redacted.make(url),
+      });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

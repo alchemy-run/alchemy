@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
 import * as Drizzle from "@alchemy.run/drizzle";
+import { eq, sql as fragment } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -25,6 +26,20 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
     const d1 = yield* Cloudflare.D1.QueryDatabase(database);
     const db = yield* Drizzle.D1(d1, { relations });
     const sql = yield* SQL.D1(d1);
+
+    // A CTE built here, before any request: its columns are used inside a
+    // `sql` fragment and a join (alchemy-run/alchemy#2001).
+    const written = db.$with("written").as(db.select().from(Posts));
+    const postCounts = db
+      .with(written)
+      .select({
+        id: Users.id,
+        posts: fragment<number>`count(${written.id})`.mapWith(Number),
+      })
+      .from(Users)
+      .leftJoin(written, eq(written.userId, Users.id))
+      .groupBy(Users.id)
+      .orderBy(Users.id);
 
     return {
       fetch: Effect.gen(function* () {
@@ -58,6 +73,14 @@ export default class D1DrizzleWorker extends Cloudflare.Worker<D1DrizzleWorker>(
         if (request.method === "GET" && request.url === "/users") {
           const users = yield* db.select().from(Users);
           return yield* HttpServerResponse.json({ users });
+        }
+
+        // GET /users/post-counts — the CTE query built at Construction phase.
+        if (request.method === "GET" && request.url === "/users/post-counts") {
+          return yield* HttpServerResponse.json({
+            sql: postCounts.toSQL().sql,
+            counts: yield* postCounts,
+          });
         }
 
         // GET /users/:id — relational query (RQB v2) joining posts.

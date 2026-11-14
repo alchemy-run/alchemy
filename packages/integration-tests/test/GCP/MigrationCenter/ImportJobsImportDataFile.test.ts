@@ -6,6 +6,7 @@ import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -70,6 +71,14 @@ test.provider(
           });
           return { source, job, file };
         }),
+      );
+      yield* expectFound(
+        GCP.MigrationCenter.ImportJobsImportDataFile.lookup({
+          importDataFileId: created.file.importDataFileId,
+          location: created.file.location,
+          importJob: created.file.importJob,
+        }),
+        created.file,
       );
 
       expect(created.file.importDataFileId).toEqual(expect.any(String));

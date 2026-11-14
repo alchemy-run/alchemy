@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -94,8 +95,32 @@ export type WorkflowTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkflowTemplateLookup
 >;
+
+/**
+ * Props for {@link WorkflowTemplate.lookup}: find a workflow template this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface WorkflowTemplateLookup {
+  /**
+   * Template id (the `{template}` segment of
+   * `projects/{project}/locations/{location}/workflowTemplates/{template}`).
+   */
+  templateId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc workflow template (locations API).
@@ -125,6 +150,19 @@ export type WorkflowTemplate = Resource<
  *       jarFileUris: ["file:///usr/lib/spark/examples/jars/spark-examples.jar"],
  *     },
  *   }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing workflow template
+ * `WorkflowTemplate.lookup` references a workflow template Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * workflow template.
+ *
+ * **Example:** Reference an existing workflow template
+ * ```typescript
+ * const workflowTemplate = GCP.Dataproc.WorkflowTemplate.lookup({
+ *   templateId: "my-template",
  * });
  * ```
  *
@@ -235,6 +273,15 @@ export const WorkflowTemplateProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ templateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

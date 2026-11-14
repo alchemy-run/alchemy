@@ -258,8 +258,7 @@ export const bindService = <Shape, Req = never>(
         return yield* http.execute(HttpClientRequest.setUrl(request, withBase(base, request.url)));
       });
     return makeFetchRpcStub<ServiceClient<Shape>>({
-      fetch: (request) =>
-        send(request) as Effect.Effect<HttpClientResponse.HttpClientResponse, unknown>,
+      fetch: send,
       base: { fetch: send },
     });
   });

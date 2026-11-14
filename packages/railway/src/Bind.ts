@@ -98,6 +98,7 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
               (value as { _tag?: unknown })._tag === RPC_ERROR_TAG &&
               "error" in value
             ) {
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- forwards the remote service's error as it arrived over RPC
               return yield* Effect.fail((value as { error: unknown }).error);
             }
             return value;

@@ -1,0 +1,162 @@
+---
+title: Volumes
+description: Keep files on Modal volumes and read or write them without a sandbox.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A **Volume** is a filesystem in an environment that Functions, Servers and Sandboxes mount at a path. Containers come and go; the Volume keeps their files, and a Worker can read and write them without any container at all.
+
+## The files outlive every container
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "vol", label: "home-sam", type: "Volume" },
+    { id: "s1", label: "session 1", type: "Sandbox" },
+    { id: "s2", label: "session 2", type: "Sandbox" },
+  ]}
+  bars={[
+    { lane: "vol", start: 0, end: 10, label: "/home/user", tone: "accent" },
+    { lane: "s1", start: 1, end: 4, label: "writes notes.md" },
+    { lane: "s2", start: 6, end: 9, label: "reads notes.md" },
+  ]}
+  caption="Session 1 writes a file to the Volume and stops. Session 2 mounts the same Volume later and finds it there."
+/>
+
+## Declare a Volume
+
+```typescript
+// src/Storage.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Models = Modal.Volume("Models", {});
+```
+
+## Mount it into a Function, Server or program
+
+A `mounts` entry is a volume and a path. Every container the program runs in sees the volume there.
+
+```typescript
+// src/Embed.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Backend, Models } from "./Storage.ts";
+
+export default class Embed extends Modal.Function<Embed>()(
+  "Embed",
+  { main: import.meta.url, app: Backend, mounts: [{ volume: Models, path: "/models", readOnly: true }] },
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json(yield* fs.readDirectory("/models"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`Modal.MountVolume(Models, { path: "/models" })` does the same from the program itself, next to its other bindings.
+
+## Mount it into a sandbox you create
+
+In a Worker or Lambda, `Modal.MountVolume` returns the entry for `sandboxes.create`:
+
+```typescript
+// construction phase
+const models = yield* Modal.MountVolume(Models, { path: "/models", readOnly: true });
+const sandboxes = yield* Modal.CreateSandbox(Coder);
+
+// per request
+const sandbox = yield* sandboxes.create({ mounts: [models] });
+```
+
+A volume created at runtime mounts the same way: `{ volume: home, path: "/home/user" }`.
+
+## Mount a cloud bucket
+
+A `bucket` entry mounts an S3, R2 or GCS bucket. Pass a bucket name, or a bucket resource of another provider; a Cloudflare R2 bucket's account endpoint is filled in. `secret` is a `Modal.Secret` holding the bucket's keys.
+
+```typescript
+// src/MySandbox.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Coder, R2Keys } from "./Storage.ts";
+
+export const Uploads = Cloudflare.R2.Bucket("Uploads", {});
+
+export default class MySandbox extends Modal.Sandbox<MySandbox>()(
+  "MySandbox",
+  { main: import.meta.url, app: Coder, mounts: [{ bucket: Uploads, path: "/uploads", secret: R2Keys }] },
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json(yield* fs.readDirectory("/uploads"));
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`Modal.MountBucket(Uploads, { path: "/uploads", secret: R2Keys })` is the binding form.
+
+## Read and write from a Worker
+
+Bind `ReadVolume`, `WriteVolume` or `ReadWriteVolume`:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Models } from "./Storage.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const models = yield* Modal.ReadWriteVolume(Models);
+    return {
+      fetch: Effect.gen(function* () {
+        yield* models.writeFile("/hello.txt", "hello");
+        const text = yield* models.readFileString("/hello.txt");
+        return HttpServerResponse.text(text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Modal.ReadWriteVolumeHttp)),
+) {}
+```
+
+## List, copy and remove files
+
+```typescript
+const files = yield* models.listFiles("/", { recursive: true });
+yield* models.copyFiles(["/hello.txt"], "/backup/hello.txt");
+yield* models.removeFile("/backup", { recursive: true });
+```
+
+## One volume per user
+
+```typescript
+const volumes = yield* Modal.CreateVolume(MyEnv);
+const home = yield* volumes.getOrCreate(`home-${user}`);
+yield* home.writeFile("/notes.md", notes);
+```
+
+Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. A volume has only a name, so the tags become its name prefix. Find them by that prefix to clean them up:
+
+```typescript
+const prefix = Modal.runtimePrefix({ stack: "my-app", stage: "prod", id: "Api" });
+```
+
+```sh
+modal volume list --env "$ENV" | grep "$PREFIX"
+```
