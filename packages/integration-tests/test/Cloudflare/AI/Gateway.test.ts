@@ -183,6 +183,46 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
+// Workers AI billing mode is applied on create, switched in place, and left
+// alone when the prop is dropped.
+test.provider(
+  "create, update workers ai billing mode, delete ai gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployBilling = (workersAiBillingMode?: "postpaid" | "unified") =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AI.Gateway("BillingGateway", {
+              id: "alchemy-test-ai-gateway-billing",
+              ...(workersAiBillingMode ? { workersAiBillingMode } : {}),
+            });
+          }),
+        );
+
+      const gateway = yield* deployBilling("postpaid");
+      expect(gateway.workersAiBillingMode).toEqual("postpaid");
+      const live = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
+      expect(live.workersAiBillingMode).toEqual("postpaid");
+
+      const updated = yield* deployBilling("unified");
+      expect(updated.workersAiBillingMode).toEqual("unified");
+      const liveUpdated = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
+      expect(liveUpdated.workersAiBillingMode).toEqual("unified");
+
+      yield* deployBilling();
+      const liveUnmanaged = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
+      expect(liveUnmanaged.workersAiBillingMode).toEqual("unified");
+
+      yield* stack.destroy();
+      yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
+);
+
 test.provider(
   "list enumerates the deployed ai gateway",
   (stack) =>
