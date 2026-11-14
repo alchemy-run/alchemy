@@ -145,12 +145,6 @@ export type ConfiguredStack<Output, Req> = Effect.Effect<CompiledStack<Output>, 
   ConfiguredStackMeta<Req>;
 
 export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output">> & {
-  make<A, Req>(
-    stack: {
-      Shape: A;
-    },
-    effect: Effect.Effect<NoInfer<A extends object ? InputProps<A> : Input<A>>, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError>;
   <Self>(): {
     <A, Req>(
       stackName: string,
@@ -168,10 +162,14 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       readonly stackName: string;
-      make: <A, Req>(
+      make: <Req>(
         options: StackProps<NoInfer<Req>>,
-        effect: Effect.Effect<A, ConfigError, Req>,
-      ) => ConfiguredStack<A, NoInfer<Req>>;
+        effect: Effect.Effect<
+          NoInfer<Shape extends object ? InputProps<Shape> : Input<Shape>>,
+          ConfigError,
+          Req
+        >,
+      ) => ConfiguredStack<Shape, NoInfer<Req>>;
       stage: {
         readonly [S in Stages]: Effect.Effect<Self>;
       };
