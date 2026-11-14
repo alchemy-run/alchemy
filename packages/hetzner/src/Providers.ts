@@ -1,7 +1,9 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
+import { Retry as HetznerRetry } from "@distilled.cloud/hetzner/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import {
   Server as WebsiteServer,
@@ -124,6 +126,7 @@ export const providers = () =>
     Layer.provideMerge(SshLive),
     Layer.provideMerge(MountVolumeLive),
     Layer.provideMerge(fromCredentials()),
+    Layer.provideMerge(Layer.succeed(HetznerRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(HetznerAuth),
     Layer.provideMerge(ProfileStoreLive),

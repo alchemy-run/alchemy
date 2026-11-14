@@ -65,7 +65,7 @@ export const findZoneByName = ({
   Credentials | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
-    // Distilled `listZones` rides `Retry.makeDefault` (5xx / throttling).
+    // Distilled `listZones` rides the deploy policy (5xx / throttling).
     // The previous raw `fetch` failed the first time Cloudflare answered
     // `{ success: false, errors: [{ message: "unhandled server error" }] }`.
     const page = yield* zones.listZones({

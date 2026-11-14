@@ -1,5 +1,7 @@
+import { Retry as AxiomRetry } from "@distilled.cloud/axiom/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -51,6 +53,7 @@ export const providers = () =>
         VirtualFieldProvider(),
       ),
     ),
+    Layer.provideMerge(Layer.succeed(AxiomRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(AxiomAuth),

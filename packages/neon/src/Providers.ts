@@ -1,6 +1,8 @@
+import { Retry as NeonRetry } from "@distilled.cloud/neon/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import { Server, ServerProvider } from "alchemy/Website/Server";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -120,6 +122,7 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(Command.providers()),
+    Layer.provideMerge(Layer.succeed(NeonRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(NeonAuth),
     Layer.provideMerge(ProfileStoreLive),

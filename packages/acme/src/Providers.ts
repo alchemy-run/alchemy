@@ -1,3 +1,5 @@
+import { Retry as AcmeRetry } from "@distilled.cloud/acme/Retry";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -33,6 +35,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(Providers, Provider.collection([Account, Certificate])).pipe(
     Layer.provide(Layer.mergeAll(AccountProvider(), CertificateProvider())),
+    Layer.provideMerge(Layer.succeed(AcmeRetry, DeployRetry.policy)),
     Layer.provideMerge(IssueCertificateHttp),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.orDie,

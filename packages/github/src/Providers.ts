@@ -1,6 +1,8 @@
 import { GraphQLLive } from "@distilled.cloud/github/GraphQL";
+import { Retry as GitHubRetry } from "@distilled.cloud/github/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
@@ -91,6 +93,7 @@ export const providers = (options?: ProvidersOptions) =>
       ),
     ),
     Layer.provideMerge(GraphQLLive),
+    Layer.provideMerge(Layer.succeed(GitHubRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
     Layer.provideMerge(makeGitHubAuth(options)),
     Layer.provideMerge(ProfileStoreLive),
