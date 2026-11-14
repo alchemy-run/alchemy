@@ -7,7 +7,6 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
@@ -23,6 +22,7 @@ import {
   payloadCodec,
 } from "../WorkflowEncoding.ts";
 import { StorageName } from "../Workflows.ts";
+import { retryInTransit } from "./Transit.ts";
 import type { DurableObjectStorage } from "./Workerd/DurableObjectStorage.ts";
 
 /** What a provider supplies to host the engine's Durable Objects. */
@@ -564,15 +564,13 @@ const reportDefects = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 /**
  * Call an execution's Durable Object. Every method is idempotent, so a call
  * that fails in transit (an instance resetting, or still running the previous
- * script during a deploy) is retried for about a minute.
+ * script during a deploy) is retried for about a minute. An overloaded object
+ * is not called again: see {@link retryInTransit}.
  */
 const call = <A = void>(effect: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
   effect.pipe(
     Effect.catchDefect((defect) => Effect.fail(defect)),
-    Effect.retry({
-      schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
-      times: 35,
-    }),
+    retryInTransit,
     Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value

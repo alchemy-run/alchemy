@@ -19,6 +19,7 @@ import {
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
+import { retryInTransit } from "alchemy/Workers/Transit";
 import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -49,7 +50,6 @@ import {
   type Stub,
   runClass,
   SUBSCRIPTION_HEADER,
-  TRANSIT_RETRY,
   unwrapDefects,
 } from "../DurableObjects.ts";
 import { type Platform, type Subscription } from "../Platform.ts";
@@ -186,7 +186,7 @@ const connectTo = (namespace: Namespace, key: string, subscription: Subscription
           (response) => response.status === 101,
           (response) => new Error(`Live read upgrade answered ${response.status}`),
         ),
-        Effect.retry(TRANSIT_RETRY),
+        retryInTransit,
         Effect.orDie,
       );
     // A fetched Response's headers are immutable; re-wrap the socket so
