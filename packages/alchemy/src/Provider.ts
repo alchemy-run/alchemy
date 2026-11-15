@@ -19,6 +19,7 @@ import type {
   ResourceLike,
 } from "./Resource.ts";
 import type { ResourceContext } from "./ResourceContext.ts";
+import type { ResourceStatus } from "./State/ResourceState.ts";
 import type { State } from "./State/State.ts";
 
 export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.Effect<
@@ -327,6 +328,12 @@ export interface ProviderService<
     oldBindings: BindingData<Res>;
     newBindings: Input<BindingData<Res>>;
     output: Res["Attributes"] | undefined;
+    /**
+     * Persisted lifecycle status when a previous resource row exists.
+     * Distinguishes an interrupted create (no attributes yet) from a
+     * completed resource whose attributes were lost or corrupted.
+     */
+    previousStatus?: ResourceStatus;
   }): Effect.Effect<Diff | void, ProviderError, DiffReq>;
   // dev?:() => Effect.Effect<void, any, DevReq>;
   /**

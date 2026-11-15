@@ -252,13 +252,13 @@ type AttrOutput<A> = [A] extends [
     ? Output.ObjectExpr<A, never>
     : Output.Output<A, never>;
 
-export interface ResourceOptions {
+export interface ResourceOptions<Props = unknown> {
   /**
    * Synchronously normalize registration props before the planner resolves
    * Config and Output inputs. Applied to both plain and Effect-valued props,
    * including constructors obtained with `yield* ResourceClass`.
    */
-  normalizeProps?: (props: unknown) => unknown;
+  normalizeProps?: (props: Props) => unknown;
   /**
    * Default removal policy for this resource type when the caller has not
    * explicitly provided one via `RemovalPolicy` / `destroy()` / `retain()`.
@@ -460,7 +460,7 @@ export const missingImplementation = (type: string, id: string) =>
  */
 export function Resource<R extends ResourceLike>(
   type: R["Type"],
-  options?: ResourceOptions,
+  options?: ResourceOptions<Input<R["Props"]> | undefined>,
 ): ResourceClass<R> {
   const defaultRemovalPolicy = options?.defaultRemovalPolicy ?? "destroy";
   type Props = Input<R["Props"]>;

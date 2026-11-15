@@ -2,9 +2,12 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
+import { isResourceState } from "@/State/State.ts";
 import { initialCwd } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices";
 
@@ -43,6 +46,66 @@ const statePath = (...segments: string[]) =>
   });
 
 describe("makeLocalState", { tags: ["unit", "local"] }, () => {
+  it.effect(
+    "persists Redacted Random state across real filesystem store instances with private permissions",
+    () =>
+      Effect.gen(function* () {
+        const stack = "local-state-random-secure-restart";
+        const stage = "test";
+        const fqn = "RandomImportedKey";
+        const path = yield* Path.Path;
+        const stateDir = yield* statePath();
+        const fs = yield* FileSystem.FileSystem;
+        const resourceFile = yield* statePath(stack, stage, `${fqn}.json`);
+        const outputFile = yield* statePath(stack, stage, "__stack_output__.json");
+        const secret = "LOCAL_RANDOM_RESTART_SENTINEL_NEVER_LOG";
+        const value = resource(fqn, { text: Redacted.make(secret) });
+        const isPosix = yield* Effect.sync(() => process.platform !== "win32");
+
+        // Force a permissive pre-existing stage to exercise hardening rather
+        // than relying on the host's umask (which may already be 077).
+        if (isPosix) {
+          const stageDir = path.join(stateDir, stack, stage);
+          yield* fs.makeDirectory(stageDir, { recursive: true });
+          yield* fs.chmod(path.join(stateDir, stack), 0o755);
+          yield* fs.chmod(stageDir, 0o755);
+        }
+
+        const writer = yield* makeLocalState();
+        yield* writer.set({ stack, stage, fqn, value });
+        yield* writer.setOutput({ stack, stage, value: { text: Redacted.make(secret) } });
+
+        const stored = yield* fs.readFileString(resourceFile);
+        expect(stored).toContain('"__redacted__"');
+        expect(stored.split(secret).length - 1).toBe(1);
+
+        // Read through a new production store instance, not the in-memory
+        // Effect test state or a JSON codec substitute.
+        const restarted = yield* makeLocalState();
+        const revived = yield* restarted.get({ stack, stage, fqn });
+        const output = yield* restarted.getOutput({ stack, stage });
+        if (!isResourceState(revived)) return yield* Effect.die("Missing Random resource state");
+        expect(Redacted.isRedacted(revived.attr?.text)).toBe(true);
+        expect(Redacted.value(revived.attr?.text)).toBe(secret);
+        expect(Redacted.value((output as { text: Redacted.Redacted<string> }).text)).toBe(secret);
+
+        if (isPosix) {
+          for (const dir of [
+            stateDir,
+            path.join(stateDir, stack),
+            path.join(stateDir, stack, stage),
+          ]) {
+            expect((yield* fs.stat(dir)).mode & 0o077).toBe(0);
+          }
+          for (const file of [resourceFile, outputFile]) {
+            expect((yield* fs.stat(file)).mode & 0o077).toBe(0);
+          }
+        }
+
+        yield* restarted.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("reads of absent state recover to empty results", () =>
     Effect.gen(function* () {
       const state = yield* makeLocalState();
@@ -128,7 +191,7 @@ describe("makeLocalState", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("get treats a zero-length state file as absent", () =>
+  it.effect("get and getOutput reject empty or malformed persisted state", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const state = yield* makeLocalState();
@@ -137,9 +200,21 @@ describe("makeLocalState", { tags: ["unit", "local"] }, () => {
       const dir = yield* statePath(stack, stage);
       yield* fs.makeDirectory(dir, { recursive: true });
       const path = yield* Path.Path;
-      yield* fs.writeFileString(path.join(dir, "resource-a.json"), "");
-
-      expect(yield* state.get({ stack, stage, fqn: "resource-a" })).toBeUndefined();
+      for (const invalid of ["", "{not-json"]) {
+        yield* fs.writeFileString(path.join(dir, "resource-a.json"), invalid);
+        yield* fs.writeFileString(path.join(dir, "__stack_output__.json"), invalid);
+        for (const operation of [
+          state.get({ stack, stage, fqn: "resource-a" }),
+          state.getOutput({ stack, stage }),
+        ]) {
+          const result = yield* Effect.result(operation);
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("StateStoreError");
+            expect(result.failure.message).not.toContain(invalid || "SECRET");
+          }
+        }
+      }
 
       yield* state.deleteStack({ stack });
     }).pipe(Effect.provide(PlatformServices)),

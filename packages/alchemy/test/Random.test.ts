@@ -2,18 +2,29 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import { formatYamlLines } from "@/Cli/PropertyDiff.ts";
 import * as Provider from "@/Provider";
 import { makeRandom, Random, RandomProvider } from "@/Random";
-import { inMemoryState } from "@/State";
+import { Stack } from "@/Stack";
+import { inMemoryState, isResourceState, type ResourceState, State } from "@/State";
 import { encodeState, reviveState } from "@/State/StateEncoding.ts";
 
 const { test } = Test.make({
   providers: RandomProvider(),
   state: inMemoryState(),
+});
+
+const savedRandom = Effect.fn(function* (fqn: string) {
+  const state = yield* yield* State;
+  const stack = yield* Stack;
+  return (yield* state.get({ stack: stack.name, stage: stack.stage, fqn })) as
+    | ResourceState
+    | undefined;
 });
 
 describe("Alchemy.Random", { tags: ["unit", "local"] }, () => {
@@ -76,6 +87,257 @@ describe("Alchemy.Random", { tags: ["unit", "local"] }, () => {
 
       yield* stack.destroy();
     }),
+  );
+
+  test.provider("accepts a one-time Effect initial and never executes it again", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      let evaluations = 0;
+      const first = yield* stack.deploy(
+        Random("effect-seed-once", {
+          initial: Effect.sync(() => {
+            evaluations++;
+            return Redacted.make("imported-from-effect");
+          }),
+        }),
+      );
+      expect(Redacted.value(first.text)).toBe("imported-from-effect");
+      expect(evaluations).toBe(1);
+
+      const next = yield* stack.deploy(
+        Random("effect-seed-once", {
+          initial: Effect.sync(() => {
+            evaluations++;
+            return Redacted.make("must-never-rotate");
+          }),
+        }),
+      );
+      expect(Redacted.value(next.text)).toBe("imported-from-effect");
+      expect(evaluations).toBe(1);
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("evaluates a deferred seed using the caller's Effect service", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const MigrationKey = Context.Service<Redacted.Redacted<string>>(
+        "Alchemy.Random.Test.MigrationKey",
+      );
+      const seed = Effect.gen(function* () {
+        return yield* MigrationKey;
+      });
+      const first = yield* stack
+        .deploy(Random("service-seeded", { initial: seed }))
+        .pipe(Effect.provideService(MigrationKey, Redacted.make("service-seeded-secret")));
+      expect(Redacted.value(first.text)).toBe("service-seeded-secret");
+
+      const next = yield* stack.deploy(Random("service-seeded", { initial: seed }));
+      expect(Redacted.value(next.text)).toBe("service-seeded-secret");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "persists a migrated secret only as output, not a redundant initial prop",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const secret = "ONE_SHOT_SECRET_NOT_DUPLICATED_IN_STATE";
+        const created = yield* stack.deploy(
+          Random("one-shot-state-secret", { initial: Redacted.make(secret) }),
+        );
+        expect(Redacted.value(created.text)).toBe(secret);
+
+        const row = yield* savedRandom("one-shot-state-secret");
+        expect(row?.status).toBe("created");
+        expect(row?.props?.initial).toBeUndefined();
+        const serialized = JSON.stringify(encodeState(row));
+        expect(serialized.split(secret).length - 1).toBe(1);
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("imports a secret from another Random resource output", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const existing = yield* Random("upstream-seed", {
+          initial: Redacted.make("existing-upstream-secret"),
+        });
+        return yield* Random("downstream-secret", { initial: existing.text });
+      });
+      const output = yield* stack.deploy(program);
+      expect(Redacted.value(output.text)).toBe("existing-upstream-secret");
+      const row = yield* savedRandom("downstream-secret");
+      expect(row?.props?.initial).toBeUndefined();
+      expect(JSON.stringify(encodeState(row)).split("existing-upstream-secret").length - 1).toBe(1);
+      const plan = yield* stack.plan(program);
+      expect(plan.resources["downstream-secret"]?.action).toBe("noop");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("restores a migrated secret from a full encoded state row", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const first = yield* stack
+        .deploy(
+          Random("persisted-migrated-config", {
+            initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({ env: { MIGRATED_RANDOM_SECRET: "permanent-encryption-key" } }),
+          ),
+        );
+      expect(Redacted.value(first.text)).toBe("permanent-encryption-key");
+
+      const original = yield* savedRandom("persisted-migrated-config");
+      expect(original?.status).toBe("created");
+      const encoded = JSON.stringify(encodeState(original));
+      expect(encoded.split("permanent-encryption-key").length - 1).toBe(1);
+      const revived = JSON.parse(encoded, reviveState) as ResourceState;
+      const state = yield* yield* State;
+      const active = yield* Stack;
+      yield* state.set({
+        stack: active.name,
+        stage: active.stage,
+        fqn: "persisted-migrated-config",
+        value: revived,
+      });
+
+      const plan = yield* stack
+        .plan(
+          Random("persisted-migrated-config", {
+            initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+          }),
+        )
+        .pipe(
+          Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env: {} })),
+        );
+      expect(plan.resources["persisted-migrated-config"]?.action).toBe("noop");
+      const recovered = yield* stack
+        .deploy(
+          Random("persisted-migrated-config", {
+            initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+          }),
+        )
+        .pipe(
+          Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env: {} })),
+        );
+      expect(Redacted.value(recovered.text)).toBe("permanent-encryption-key");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "rejects a corrupted persisted Random output instead of accepting or rotating it",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const id = "corrupt-existing-random";
+        const first = yield* stack.deploy(
+          Random(id, { initial: Redacted.make("original-secret") }),
+        );
+        expect(Redacted.value(first.text)).toBe("original-secret");
+
+        const state = yield* yield* State;
+        const active = yield* Stack;
+        const row = yield* savedRandom(id);
+        if (row?.status !== "created") return yield* Effect.die("Random state missing");
+        yield* state.set({
+          stack: active.name,
+          stage: active.stage,
+          fqn: id,
+          value: { ...row, attr: { text: "corrupted-redaction" } },
+        });
+
+        const attempted = yield* Effect.result(
+          stack.deploy(Random(id, { initial: Redacted.make("attacker-replacement") })),
+        );
+        expect(Result.isFailure(attempted)).toBe(true);
+        const unchanged = yield* savedRandom(id);
+        expect(unchanged?.attr?.text).toBe("corrupted-redaction");
+
+        // Explicitly remove the bad record before cleanup; a corrupt secret
+        // must never be used as authority to generate a replacement.
+        yield* state.delete({ stack: active.name, stage: active.stage, fqn: id });
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("does not replace a key when a deferred seed Effect fails", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const importAttempt = yield* Effect.result(
+        stack.deploy(
+          Random("failing-seed", {
+            initial: Effect.fail({ _tag: "SeedUnavailable" as const, message: "seed unavailable" }),
+          }),
+        ),
+      );
+      expect(Result.isFailure(importAttempt)).toBe(true);
+      if (Result.isFailure(importAttempt)) {
+        expect(importAttempt.failure._tag).toBe("SeedUnavailable");
+      }
+
+      const recovered = yield* stack.deploy(
+        Random("failing-seed", { initial: Redacted.make("recovered-original-key") }),
+      );
+      expect(Redacted.value(recovered.text)).toBe("recovered-original-key");
+      const noop = yield* stack.plan(Random("failing-seed"));
+      expect(noop.resources["failing-seed"]?.action).toBe("noop");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "does not rotate a persisted key when a forced update runs without its seed",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const input = Random("forced-migrated-key", {
+          initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+        });
+        const original = yield* stack
+          .deploy(input)
+          .pipe(
+            Effect.provideService(
+              ConfigProvider.ConfigProvider,
+              ConfigProvider.fromEnv({ env: { MIGRATED_RANDOM_SECRET: "persistent-forced-key" } }),
+            ),
+          );
+        const missing = ConfigProvider.fromEnv({ env: {} });
+
+        const forcedPlan = yield* stack
+          .plan(input, { force: true })
+          .pipe(Effect.provideService(ConfigProvider.ConfigProvider, missing));
+        expect(forcedPlan.resources["forced-migrated-key"]?.action).toBe("update");
+
+        const forced = yield* stack
+          .deploy(input, { force: true })
+          .pipe(Effect.provideService(ConfigProvider.ConfigProvider, missing));
+        expect(Redacted.value(original.text)).toBe("persistent-forced-key");
+        expect(Redacted.value(forced.text)).toBe("persistent-forced-key");
+
+        yield* stack.destroy();
+      }),
   );
 
   test.provider("supports an optional Config.Redacted seed that can disappear", (stack) =>
@@ -361,6 +623,59 @@ describe("Alchemy.Random", { tags: ["unit", "local"] }, () => {
         );
       expect(Redacted.value(imported)).toBe("make-random-existing");
 
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("fails closed on malformed persisted secrets instead of rotating", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fqn = "corrupted-saved-secret";
+      const original = yield* stack.deploy(
+        Random(fqn, { initial: Redacted.make("irreplaceable-data-key") }),
+      );
+      expect(Redacted.value(original.text)).toBe("irreplaceable-data-key");
+
+      const state = yield* yield* State;
+      const context = yield* Stack;
+      const saved = yield* state.get({
+        stack: context.name,
+        stage: context.stage,
+        fqn,
+      });
+      expect(saved?.status).toBe("created");
+      if (!isResourceState(saved)) return yield* Effect.die("No original resource state row");
+
+      for (const attr of [{ text: "not-redacted" }, { text: Redacted.make(42) }, {}, undefined]) {
+        const corrupted = { ...saved, attr: attr ?? {} };
+        // Simulate a physically damaged persisted row: the runtime record
+        // may omit a property the typed CreatedResourceState contract requires.
+        if (attr === undefined) Reflect.deleteProperty(corrupted, "attr");
+        yield* state.set({
+          stack: context.name,
+          stage: context.stage,
+          fqn,
+          value: corrupted,
+        });
+        const result = yield* Effect.result(
+          stack.plan(Random(fqn, { initial: Redacted.make("must-not-replace") })),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("InvalidRandomState");
+          expect(JSON.stringify(result.failure)).not.toContain("irreplaceable-data-key");
+        }
+      }
+
+      yield* state.set({
+        stack: context.name,
+        stage: context.stage,
+        fqn,
+        value: saved,
+      });
+      const stable = yield* stack.deploy(Random(fqn));
+      expect(Redacted.value(stable.text)).toBe("irreplaceable-data-key");
       yield* stack.destroy();
     }),
   );

@@ -1,10 +1,11 @@
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { PropsInput } from "./Input.ts";
+import * as Output from "./Output.ts";
 import * as Provider from "./Provider.ts";
 import { Resource } from "./Resource.ts";
+import { isEffectOf } from "./Util/effect.ts";
 
 export interface RandomProps {
   /**
@@ -18,8 +19,9 @@ export interface RandomProps {
    * or is removed. A required `Config.Redacted("EXISTING_KEY")` is evaluated
    * only when initially creating the resource; after that the variable may
    * be removed. Use `Config.option` to allow generation when it was never set.
-   * Like generated secrets, imported values are persisted in the state backend.
-   * Protect access to that backend.
+   * Effect-valued and resource Output inputs are also supported. The bootstrap
+   * input is not stored as a second copy in resource props; only the generated
+   * or imported secret is persisted in the state backend. Protect that state.
    *
    * @example
    * initial: Config.Redacted("EXISTING_KEY")
@@ -45,30 +47,55 @@ export const makeRandom = (id: string, props?: PropsInput<RandomProps>) =>
  * subsequent deploys keep the same secret unless the resource is replaced.
  */
 export const Random = Resource<Random>("Alchemy.Random", {
-  // Config would be eagerly resolved by the planner even when a secret is
-  // already stored. Option is an opaque leaf and defers resolution to create.
-  normalizeProps: (props) =>
-    props !== null &&
-    typeof props === "object" &&
-    "initial" in props &&
-    Config.isConfig(props.initial)
-      ? { ...props, initial: Option.some(props.initial) }
-      : props,
+  // One-shot inputs must not be retained alongside the secret in state.
+  // Preserve Output dependencies by boxing their resolved value with map;
+  // other inputs are opaque Option leaves and resolve only on first create.
+  normalizeProps: (props) => {
+    if (props === null || typeof props !== "object" || !("initial" in props)) return props;
+    const initial = props.initial;
+    if (initial === undefined) return props;
+    return {
+      ...props,
+      initial: Output.isOutput(initial) ? Output.map(initial, Option.some) : Option.some(initial),
+    };
+  },
+});
+
+const isValidSecret = (value: unknown): value is Redacted.Redacted<string> =>
+  Redacted.isRedacted(value) && typeof Redacted.value(value) === "string";
+
+const missingSavedSecret = () => ({
+  _tag: "InvalidRandomState" as const,
+  message:
+    "Persisted Alchemy.Random secret is missing or invalid. Restore its original state; refusing to rotate or accept a corrupted key.",
 });
 
 export const RandomProvider = () =>
   Provider.succeed(Random, {
     // A generated or imported secret is immutable for this resource instance.
     // Changing initial/bytes after creation must not produce a phantom update.
-    diff: ({ output }) => Effect.succeed(output?.text ? { action: "noop" as const } : undefined),
+    diff: ({ output, previousStatus }) =>
+      output === undefined
+        ? previousStatus === "created" ||
+          previousStatus === "updated" ||
+          previousStatus === "replaced"
+          ? Effect.fail(missingSavedSecret())
+          : Effect.succeed(undefined)
+        : isValidSecret(output?.text)
+          ? Effect.succeed({ action: "noop" as const })
+          : Effect.fail(missingSavedSecret()),
     reconcile: ({ news = {}, output }) =>
       Effect.gen(function* () {
         // Observe — there is no remote state. The cached `output.text` is
         // the authoritative current value; once minted it is preserved
         // across reconciles to keep the secret stable.
-        if (output?.text) {
+        if (output !== undefined) {
+          if (!isValidSecret(output.text)) return yield* Effect.fail(missingSavedSecret());
           return output;
         }
+        // A failed first create can leave a "creating" checkpoint with old
+        // props but no output. The planner re-drives create in that case.
+        // Detect corrupt completed rows in diff; don't block this recovery.
 
         // Ensure — no observed value: import the caller's existing secret
         // when provided, or mint a fresh one. Neither a changed seed nor an
@@ -76,16 +103,16 @@ export const RandomProvider = () =>
         const deferred = Option.isOption(news.initial)
           ? Option.getOrUndefined(news.initial)
           : news.initial;
-        const initial: unknown = Config.isConfig(deferred) ? yield* deferred : deferred;
+        const initial: unknown = isEffectOf(deferred) ? yield* deferred : deferred;
         const value = Option.isOption(initial) ? Option.getOrUndefined(initial) : initial;
         if (value !== undefined) {
-          if (!Redacted.isRedacted(value) || typeof Redacted.value(value) !== "string") {
+          if (!isValidSecret(value)) {
             return yield* Effect.fail({
               _tag: "InvalidRandomInitial",
               message: "Random.initial must resolve to a Redacted<string>",
             });
           }
-          return { text: value as Redacted.Redacted<string> };
+          return { text: value };
         }
 
         const byteLength = news.bytes ?? 32;
@@ -100,7 +127,10 @@ export const RandomProvider = () =>
         };
       }),
     delete: () => Effect.void,
-    read: ({ output }) => Effect.succeed(output),
+    read: ({ output }) =>
+      output === undefined || isValidSecret(output.text)
+        ? Effect.succeed(output)
+        : Effect.fail(missingSavedSecret()),
     // Non-listable: the value is generated client-side with
     // `crypto.getRandomValues` and lives only in alchemy state. There is no
     // remote service to enumerate, so listing yields nothing.

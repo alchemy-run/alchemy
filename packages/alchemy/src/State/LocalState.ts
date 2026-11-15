@@ -97,23 +97,44 @@ export const makeLocalState = () =>
     // test reading shared `.alchemy/state`) never observes a truncated,
     // mid-write file — which would otherwise surface as `JSON.parse("")` →
     // "Unexpected end of JSON input".
-    const writeAtomic = (file: string, contents: string) => writeFileAtomic(fs, file, contents);
+    const writeAtomic = (file: string, contents: string) =>
+      writeFileAtomic(fs, file, contents, 0o600);
 
-    // Parse a state file, tolerating an empty read. A zero-length file can
-    // linger from a write that was interrupted before this atomic-write change
-    // (or any non-atomic external writer); treat it as "absent" rather than
-    // throwing a JSON parse error that would abort the whole operation.
+    // Only a genuinely missing file represents absent state. A zero-length
+    // or malformed file is corrupted persisted state, not a greenfield
+    // resource: treating it as absent could silently rotate a saved key.
+    // Never include file contents in the error (they may hold Redacted secrets).
     const parseState = (contents: string) =>
-      contents.trim().length === 0 ? undefined : JSON.parse(contents, reviveState);
+      Effect.try({
+        try: () => {
+          if (contents.trim().length === 0) throw new Error("Empty persisted state");
+          return JSON.parse(contents, reviveState);
+        },
+        catch: () =>
+          new StateStoreError({
+            message:
+              "Stored state is empty or malformed. Refusing to treat an existing record as absent; restore it from a trusted backup.",
+          }),
+      });
 
     const created = new Set<string>();
 
     const ensure = (dir: string) =>
       created.has(dir)
         ? Effect.void
-        : fs
-            .makeDirectory(dir, { recursive: true })
-            .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
+        : Effect.gen(function* () {
+            // Create private from the outset, before writing any state data;
+            // chmod below additionally repairs older, permissive directories.
+            yield* fs.makeDirectory(dir, { recursive: true, mode: 0o700 });
+            // The file's mode alone is not sufficient: a historical stack or
+            // stage directory may have been created with 0755. Restrict all
+            // state ancestors even when they already exist. Do not chmod the
+            // shared .alchemy directory (it also contains public artifacts).
+            for (const ancestor of [stateDir, path.dirname(dir), dir]) {
+              yield* fs.chmod(ancestor, 0o700);
+            }
+            created.add(dir);
+          });
 
     const state: StateService = {
       id: "local",
@@ -130,8 +151,10 @@ export const makeLocalState = () =>
         ),
       get: (request) =>
         fs.readFile(resource(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
           recover,
+          Effect.flatMap((file) =>
+            file === undefined ? Effect.undefined : parseState(file.toString()),
+          ),
         ),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
@@ -208,8 +231,10 @@ export const makeLocalState = () =>
         ),
       getOutput: (request) =>
         fs.readFile(outputFile(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
           recover,
+          Effect.flatMap((file) =>
+            file === undefined ? Effect.undefined : parseState(file.toString()),
+          ),
         ),
       setOutput: (request) =>
         ensure(stageDir(request)).pipe(
