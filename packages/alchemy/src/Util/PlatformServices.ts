@@ -93,19 +93,68 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
 });
 
 /**
+ * Wait for a writable process stream to finish (or close before finishing).
+ * A stream that was already ended must not be ended again, and a destroyed
+ * stream must not keep a process with open provider handles alive forever.
+ */
+const finishOutput = (stream: NodeJS.WriteStream, done: (flushed: boolean) => void): void => {
+  if (stream.writableFinished) return done(true);
+  if (stream.destroyed) return done(false);
+
+  const finish = (flushed: boolean) => {
+    stream.off("finish", onFinish);
+    stream.off("close", onClose);
+    stream.off("error", onError);
+    done(flushed);
+  };
+  const onFinish = () => finish(true);
+  const onClose = () => finish(stream.writableFinished);
+  const onError = () => finish(false);
+
+  stream.once("finish", onFinish);
+  stream.once("close", onClose);
+  stream.once("error", onError);
+  if (!stream.writableEnded) stream.end();
+};
+
+/**
  * ALWAYS exit once the main effect completes. The platform `runMain` default
  * only force-exits on failure or signal interruption — a *successful*
  * `alchemy deploy`/`destroy` otherwise lingers for ~100 seconds after "Done"
  * while keep-alive sockets (Cloudflare API agents, provider sidecar handles)
- * pin the event loop until the remote side closes them. All Effect finalizers
- * have already run by the time teardown is invoked; the macrotask hop lets
- * any buffered stdout drain before the process exits.
+ * pin the event loop until the remote side closes them. Effect finalizers
+ * have completed by teardown time. Finish both output streams before forcing
+ * exit, so piped JSON and error logs cannot be truncated.
  */
 const exitingTeardown: Teardown = (exit, onExit) => {
   defaultTeardown(exit, (code) => {
     const finalCode = code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
-    setTimeout(() => process.exit(finalCode), 0);
-    onExit(finalCode);
+    let stdoutFlushed: boolean | undefined;
+    let stderrFlushed: boolean | undefined;
+    let finished = false;
+
+    const complete = (timedOut = false) => {
+      if (finished || (!timedOut && (stdoutFlushed === undefined || stderrFlushed === undefined))) {
+        return;
+      }
+      finished = true;
+      clearTimeout(timeout);
+      const exitCode =
+        stdoutFlushed === true && stderrFlushed === true ? finalCode : finalCode || 1;
+      onExit(exitCode);
+      process.exit(exitCode);
+    };
+    // If a pipe is broken or a stream never finishes, do not hang on a
+    // provider keep-alive handle or falsely claim a successful command.
+    const timeout = setTimeout(() => complete(true), 30_000);
+    finishOutput(process.stdout, (flushed) => {
+      stdoutFlushed = flushed;
+      complete();
+    });
+    finishOutput(process.stderr, (flushed) => {
+      stderrFlushed = flushed;
+      complete();
+    });
   });
 };
 
