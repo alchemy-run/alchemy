@@ -1732,6 +1732,12 @@ export const makePlatform = <R>(
               ref.source,
               ref.generation ?? viewGenerations.get(ref.source) ?? 0,
             );
+            // A view this code hosts, or one named by its generation, is never an
+            // aggregate. Ask for its class first: a host whose `lookup` reaches any
+            // class name (one class multiplexing them all) can't tell them apart.
+            if (ref.generation !== undefined || viewGenerations.has(ref.source)) {
+              return sources.get(view) ?? bound(view);
+            }
             return (
               sources.get(`${ref.source}Aggregate`) ??
               bound(`${ref.source}Aggregate`) ??

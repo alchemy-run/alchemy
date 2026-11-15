@@ -1,8 +1,8 @@
 /**
  * The model every Domain platform runs for the conformance suite: an
- * aggregate that rejects, a view, a policy that starts a saga, a saga that
- * writes to another aggregate, and a policy that schedules and cancels a
- * command. Between them the platform hosts every kind of object and runs
+ * aggregate that rejects, a view, a projection fed by that view, a policy
+ * that starts a saga, a saga that writes to another aggregate, and a policy
+ * that schedules and cancels a command. Between them the platform hosts every kind of object and runs
  * its workflow engine and its durable timers.
  */
 import * as Domain from "@alchemy.run/domain";
@@ -73,6 +73,37 @@ export class CounterTotal extends Domain.View("CounterTotal", {
     }),
   },
 }) {}
+
+export class TotalRecorded extends Domain.Event("TotalRecorded", { total: Schema.Int }) {}
+
+/** Each counter's totals, as its projection recorded them. */
+export class Recorded extends Domain.Stream("Recorded", {
+  key: Counter,
+  entries: [TotalRecorded],
+}) {}
+
+/** Records each counter's total from the view, not the aggregate. */
+export class TotalWriter extends Domain.Projection("TotalWriter", {
+  from: [CounterTotal],
+  key: Counter,
+  on: [Incremented],
+  writes: [Recorded],
+}) {}
+
+/** How long the projection takes over each batch, as a write to a real store does. */
+export const RECORD_DELAY = "1 second";
+
+const TotalWriterLive = TotalWriter.toLayer(
+  Effect.gen(function* () {
+    const recorded = yield* Recorded;
+    return Effect.fn(function* (batch) {
+      yield* Effect.sleep(RECORD_DELAY);
+      for (const input of batch) {
+        yield* recorded.append(input, new TotalRecorded({ total: input.state?.total ?? 0 }));
+      }
+    });
+  }),
+);
 
 /** Mirrors a counter's first increment onto its Echo; one run per counter. */
 export class MirrorFirst extends Domain.Saga("MirrorFirst", {
@@ -174,6 +205,8 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold],
   views: [CounterTotal],
+  projections: [TotalWriter],
+  streams: [Recorded],
   policies: [StartMirror, HoldDeadline],
   sagas: [MirrorFirst],
 }) {}
@@ -187,5 +220,5 @@ export class ConformanceApi extends Domain.Api("ConformanceApi", {
 
 /** The model's Layer, given the platform it runs on. */
 export const ConformanceLive = Conformance.layer(
-  Layer.mergeAll(StartMirrorLive, MirrorFirstLive, HoldDeadlineLive),
+  Layer.mergeAll(StartMirrorLive, MirrorFirstLive, HoldDeadlineLive, TotalWriterLive),
 );
