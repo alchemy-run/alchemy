@@ -43,6 +43,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "ClickHouse Cloud", link: "/clickhouse-cloud" },
       { label: "E2B", link: "/e2b" },
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
@@ -1501,6 +1502,16 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Turso"),
+          ],
+        },
+        {
+          label: "ClickHouse Cloud",
+          items: [
+            { label: "Overview", link: "/clickhouse-cloud" },
+            { label: "Setup", link: "/clickhouse-cloud/setup" },
+            { label: "Tutorial", link: "/clickhouse-cloud/tutorial" },
+            { label: "Credentials & bindings", link: "/clickhouse-cloud/credentials" },
+            providerResourcesEntry("ClickHouseCloud"),
           ],
         },
         {

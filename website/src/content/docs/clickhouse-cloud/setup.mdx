@@ -1,0 +1,64 @@
+---
+title: Setup
+description: Give Alchemy a ClickHouse Cloud API key.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Sign up at [clickhouse.cloud](https://clickhouse.cloud), then create an API key in the console under **Organization > API keys**. Give it the **Admin** role so Alchemy can create services, keys and roles.
+
+ClickHouse shows the key secret once. Copy the key ID and the secret.
+
+## Add the provider
+
+Install `@alchemy.run/clickhouse-cloud`:
+
+<PackageManagers add="@alchemy.run/clickhouse-cloud" />
+
+Then add `ClickHouseCloud.providers()` next to your cloud's providers:
+
+```typescript
+// alchemy.run.ts
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+
+providers: Layer.mergeAll(Cloudflare.providers(), ClickHouseCloud.providers()),
+```
+
+## Store the key in a profile
+
+```sh
+alchemy profile edit --add ClickHouseCloud
+```
+
+Paste the key ID and the secret when asked. You can leave the organization ID blank: a key belongs to one organization, and Alchemy looks it up.
+
+See [Profiles](/environments/profiles) to learn how profiles work.
+
+## Use environment variables in CI
+
+Set `CLICKHOUSE_CLOUD_API_KEY_ID` and `CLICKHOUSE_CLOUD_API_KEY_SECRET`, and Alchemy uses them instead of your profile:
+
+```sh
+CLICKHOUSE_CLOUD_API_KEY_ID=... CLICKHOUSE_CLOUD_API_KEY_SECRET=... alchemy deploy
+```
+
+`CLICKHOUSE_CLOUD_API_KEY` and `CLICKHOUSE_CLOUD_API_SECRET`, the names the Terraform provider reads, work too. Set `CLICKHOUSE_CLOUD_ORGANIZATION_ID` to skip the organization lookup.
+
+## Pass a key in code
+
+Use a key you already have, for example in tests:
+
+```typescript
+Effect.provide(
+  ClickHouseCloud.fromApiKey({
+    keyId: "...",
+    keySecret: Redacted.make("..."),
+  }),
+)
+```
+
+`keySecret` can be a string or a `Redacted` value.
+
+## Rate limits
+
+ClickHouse Cloud allows each key 10 requests every 10 seconds. Alchemy retries a `429` with backoff and waits on services every 15 seconds, so a large stack deploys more slowly than the number of resources suggests.

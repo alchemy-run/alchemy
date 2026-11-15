@@ -69,6 +69,8 @@ const examples = [
   "./examples/e2b-program-async",
   "./examples/boat-agent-sandbox",
   "./examples/boat-program",
+  "./examples/clickhouse-cloud-query-api",
+  "./examples/clickhouse-cloud-usage",
   "./examples/cloudflare-modal-sandbox",
   "./examples/modal-functions",
   "./examples/aws-dev",

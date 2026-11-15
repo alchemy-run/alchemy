@@ -8,6 +8,7 @@
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/clickhouse-cloud": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/daytona": "workspace:*",
     "@alchemy.run/e2b": "workspace:*",
