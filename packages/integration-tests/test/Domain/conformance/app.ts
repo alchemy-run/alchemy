@@ -7,6 +7,7 @@
  * - `/again/:id?by=n` sends `Increment` twice under one command id
  * - `/counter/:id`, `/echo/:id`, `/total/:id` read the counter, what the saga wrote, the view
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
+ * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  */
@@ -19,6 +20,7 @@ import {
   Counter,
   CounterTotal,
   Echo,
+  HiddenTotal,
   Hold,
   Increment,
   PlaceHold,
@@ -31,6 +33,7 @@ export const app = Effect.gen(function* () {
   const echoes = yield* Echo;
   const totals = yield* CounterTotal;
   const holds = yield* Hold;
+  const hidden = yield* HiddenTotal;
   const api = yield* ConformanceApi;
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
@@ -78,6 +81,13 @@ export const app = Effect.gen(function* () {
           totals: page.entries.map((entry) => entry.state?.total ?? null),
           cursor: page.cursor,
         });
+      }
+      case "hidden": {
+        const version = Number(url.searchParams.get("version") ?? "1");
+        const total = yield* hidden
+          .get(Counter.ref(id), { atLeast: { stream: `Counter/${id}`, version } })
+          .pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(Option.getOrElse(total, () => ({ total: 0 })));
       }
       case "place":
         yield* holds.send(id, new PlaceHold());

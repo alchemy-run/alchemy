@@ -140,6 +140,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const has = fresh("hidden");
       const none = fresh("never");
       yield* call(`/increment/${has}?by=1`);
+      yield* call(`/hidden/${has}?version=1`);
       const base = yield* url;
       const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
       for (const key of [has, none]) {
@@ -165,6 +166,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const has = fresh("hidden");
       const none = fresh("never");
       for (const by of [1, 2]) yield* call(`/increment/${has}?by=${by}`);
+      yield* call(`/hidden/${has}?version=2`);
       const api = `${yield* url}/api`;
       for (const read of [
         { tag: "HiddenTotal.watch" },

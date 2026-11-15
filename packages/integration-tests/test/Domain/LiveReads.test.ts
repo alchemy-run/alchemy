@@ -155,11 +155,17 @@ const settled = (api: Client, version: number) =>
     api.Bumps.peek("c-1", { atLeast: { stream: "Counter/c-1", version } }),
   ]);
 
-/** Three increments of c-1, folded by the view and appended to the stream. */
+/** Three increments of c-1, folded by the views and appended to the streams. */
 const seed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
   for (const by of [1, 2, 3]) yield* api.Increment("c-1", { by });
   yield* settled(api, 3);
+  // The hidden ones too, read server-side: no client may read them.
+  const atLeast = { stream: "Counter/c-1", version: 3 };
+  const hiddenTotals = yield* HiddenTotals;
+  const hiddenBumps = yield* HiddenBumps;
+  yield* hiddenTotals.get(Counter.ref("c-1"), { atLeast });
+  yield* hiddenBumps.peek(Counter.ref("c-1"), { atLeast });
   return api;
 });
 
