@@ -555,7 +555,7 @@ const pause = (failures: number) =>
  * a Durable Object to new code when it is evicted after sitting idle: calls at a
  * short, fixed pace would keep one on older code, so the gaps grow until it can.
  */
-const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
+export const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
   const key = (id: string) => `bf:retry:${id}`;
   return {
     later: (id: string, slowMillis: number) =>
@@ -574,7 +574,7 @@ const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
       }),
   };
 };
-type Retry = ReturnType<typeof makeRetry>;
+export type Retry = ReturnType<typeof makeRetry>;
 
 /** A call that counts as lost if it hasn't answered in time: a hung call would stall its caller. */
 const bounded = <A, E>(call: Effect.Effect<A, E>) => call.pipe(Effect.timeout("20 seconds"));

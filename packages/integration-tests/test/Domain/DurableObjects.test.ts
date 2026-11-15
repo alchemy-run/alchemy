@@ -530,6 +530,37 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
   );
 
   it.live(
+    "a listing that keeps failing backs off between tries",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const directory = watchDirectory();
+      directory.state.failing = true;
+      const sim = simHost(stats, { intercept: directory.intercept });
+      return Effect.gen(function* () {
+        yield* sendOne;
+        yield* eventually(() => directory.state.attempts > 0);
+        const first = directory.state.attempts;
+        // Calls every 2 seconds would make 7 tries here, each called several times in
+        // transit: the stored job calls once per try, and waits longer each time.
+        yield* Effect.sleep("14 seconds");
+        expect(directory.state.attempts - first).toBeLessThanOrEqual(8);
+        // Once the directory answers, the next try lists the instance.
+        directory.state.failing = false;
+        yield* eventually(() => directory.listed.includes("main"), "40 seconds");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          BooksBefore.layer(Layer.empty).pipe(
+            Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    },
+    { timeout: 90_000 },
+  );
+
+  it.live(
     "a projection deployed after a commit, before the instance is listed, gets that commit's history",
     () => {
       const stats: Stats = { rowsRead: 0 };

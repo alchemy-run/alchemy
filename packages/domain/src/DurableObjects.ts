@@ -747,7 +747,11 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
   bfRunProgress: (target: string) => reportDefects(run().progress(target)),
 });
 
-/** How long before a key that couldn't list itself in the directory tries again. */
+/**
+ * The slow pace of a listing that failed: it tries again soon, then backs off,
+ * up to four times this (see `Backfill.makeRetry`), so a directory that is down
+ * for a while isn't called by every unlisted instance every few seconds.
+ */
 const REGISTER_RETRY_MS = 2_000;
 
 /** The id an instance was listed under, saved so jobs that fire later find it. */
@@ -808,16 +812,19 @@ const listAfterCommit = (jobs: Backfill.Jobs, id: string) =>
 /**
  * The register job: list the instance in the directory, then ask for a reader
  * for each consumer it is behind (one deployed between its commit and now, that
- * the run which listed the directory didn't find it for). A failure tries again.
+ * the run which listed the directory didn't find it for). A failure tries again,
+ * backing off.
  */
 const registerJob = (
   net: Backfill.Network,
   ref: Backfill.SourceRef,
   source: Backfill.Source,
   jobs: Backfill.Jobs,
+  retry: Backfill.Retry,
 ) =>
   listAndCatchUp(net, ref, source, jobs).pipe(
-    Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
+    Effect.andThen(retry.clear(REGISTER_JOB)),
+    Effect.catchCause(() => retry.later(REGISTER_JOB, REGISTER_RETRY_MS)),
   );
 
 const aggregateObject = (
@@ -853,11 +860,13 @@ const aggregateObject = (
                       { source: kit.name, id: stored },
                       sourceFor(stored),
                       runtime.jobs,
+                      retry,
                     )
                   : sourceFor(stored).flush,
             )
           : Effect.void,
     );
+    const retry = Backfill.makeRetry(runtime.storage, runtime.jobs, Backfill.defaultLimits);
     const sourceFor = (id: string): Backfill.Source =>
       (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
         ref: { source: kit.name, id },
@@ -1145,7 +1154,13 @@ const viewObject = (
           if (key === undefined) return Effect.void;
           if (id === "bf-flush") return sourceFor(key).flush;
           if (id === REGISTER_JOB)
-            return registerJob(net, { source: kit.name, id: key }, sourceFor(key), runtime.jobs);
+            return registerJob(
+              net,
+              { source: kit.name, id: key },
+              sourceFor(key),
+              runtime.jobs,
+              retry,
+            );
           if (id.startsWith("bf-merge:"))
             // Listed before the merge writes its first entry, in the key's own job: its
             // sources' messages don't wait on the directory.
@@ -1156,11 +1171,13 @@ const viewObject = (
               runtime.jobs,
             ).pipe(
               Effect.andThen(consumerFor(key).merge(id.slice("bf-merge:".length))),
-              Effect.catchCause(() => runtime.jobs.schedule(id, REGISTER_RETRY_MS)),
+              Effect.andThen(retry.clear(id)),
+              Effect.catchCause(() => retry.later(id, REGISTER_RETRY_MS)),
             );
           return Effect.void;
         }),
     );
+    const retry = Backfill.makeRetry(runtime.storage, runtime.jobs, Backfill.defaultLimits);
     const consumerFor = (key: string): Backfill.Consumer =>
       (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
         key,
@@ -1795,10 +1812,11 @@ export const makePlatform = <R>(
           const net: Backfill.Network = {
             revision: () => host.revision?.current(hosted),
             node: {
-              // Older directory code answers no marks.
+              // Older directory code answers no marks. Called once: every caller is a
+              // stored job that tries again itself, backing off (see `registerJob`).
               register: (path, ref) =>
                 Effect.map(
-                  unwrapDefects<ReadonlyArray<Backfill.Mark> | undefined>(
+                  callOnce<ReadonlyArray<Backfill.Mark> | undefined>(
                     nodeStub(path).register(path, ref),
                   ),
                   (marks) => marks ?? [],
