@@ -80,6 +80,13 @@ export class Bank extends Domain.Model("Bank", {
     NoTransferLeftPending: (bank) =>
       bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
   },
+  eventually: {
+    /** No transfer waits for ever: one nobody approves expires. */
+    EveryTransferEnds: (bank) =>
+      bank.Transfer.every(
+        (transfer) => transfer.state._tag === "Completed" || transfer.state._tag === "Failed",
+      ),
+  },
 }) {}
 
 /** Who may read each key: the `validate` of every guarded view and stream. */

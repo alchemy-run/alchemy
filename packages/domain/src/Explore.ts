@@ -289,7 +289,8 @@ export function check(
     Effect.flatMap((made): Effect.Effect<Report | ModelReport, InvariantBroken | Incomplete> => {
       if (
         made.invariants.some((invariant) => invariant.broken) ||
-        ("rules" in made && made.rules.some((rule) => rule.broken))
+        ("rules" in made &&
+          (made.rules.some((rule) => rule.broken) || made.eventually.some((rule) => rule.broken)))
       )
         return Effect.fail(new InvariantBroken({ message: `\n${render(made)}`, report: made }));
       const reasons = undone(made, options.allow ?? {});
@@ -365,6 +366,11 @@ const undone = (
       if (unruled.length > 0)
         out.push(
           `${unruled.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unruled.length === 1 ? "was" : "were"} not looked at: no sequence that changed a state came to rest`,
+        );
+      const unended = report.eventually.filter((rule) => rule.states === 0);
+      if (unended.length > 0)
+        out.push(
+          `${unended.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unended.length === 1 ? "was" : "were"} not looked at: no sequence that changed a state ran its course`,
         );
     }
   }
@@ -503,6 +509,20 @@ const renderModel = (report: ModelReport): string => {
       continue;
     }
     out.push(`✗ ${report.model}.${rule.name} breaks`, ...modelLines(rule.broken, "    "));
+  }
+  for (const rule of report.eventually) {
+    if (!rule.broken) {
+      out.push(
+        rule.states > 0
+          ? `✓ ${report.model}.${rule.name} holds in the end, in the ${count(rule.states)} sequences run until nothing was left to react or come due`
+          : `? ${report.model}.${rule.name} was not looked at: no sequence that changed a state ran its course`,
+      );
+      continue;
+    }
+    out.push(
+      `✗ ${report.model}.${rule.name} does not hold in the end: nothing is left to react or come due after`,
+      ...modelLines(rule.broken, "    "),
+    );
   }
   const ended = report.endings.filter((ending) => ending.story);
   const open = report.endings.filter((ending) => !ending.story);

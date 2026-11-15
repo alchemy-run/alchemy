@@ -109,6 +109,17 @@ export interface Members<
   readonly invariants?: {
     readonly [name: string]: (model: Instances<A> & Keys<V>) => boolean;
   };
+  /**
+   * Rules that hold once everything has run its course: nothing is left to
+   * react, and every scheduled command has come due and run. Where an
+   * invariant says what is never true along the way, one of these says where
+   * every sequence ends up. Each is named and given what an invariant is.
+   * `Explore.check` runs every sequence it finds to its end and looks for
+   * one that ends without it.
+   */
+  readonly eventually?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V>) => boolean;
+  };
 }
 
 /** Every key of a model's views that has a state, by view name: what a model invariant is given. */
@@ -159,6 +170,8 @@ export interface ModelClass<
   readonly queries: Parts["queries"];
   /** The model's own invariants, by name. */
   readonly invariants: { readonly [name: string]: (model: never) => boolean };
+  /** What holds once everything has run its course, by name. */
+  readonly eventually: { readonly [name: string]: (model: never) => boolean };
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -362,6 +375,9 @@ export const make = <
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
     static readonly invariants = (members.invariants ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
+    static readonly eventually = (members.eventually ?? {}) as {
       readonly [name: string]: (model: never) => boolean;
     };
     static readonly aggregates = definitions.aggregates;

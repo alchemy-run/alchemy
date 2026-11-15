@@ -224,6 +224,8 @@ export const checks = (
   state: V,
   taken?: Taken,
   proved?: ReadonlySet<string>,
+  /** The property the rules are under: a model also has `eventually`. */
+  key = "invariants",
 ): Eval<ReadonlyArray<Check>> =>
   Effect.gen(function* () {
     const site = siteOf(definition);
@@ -256,7 +258,7 @@ export const checks = (
         made.push({ name, condition: condition as Result.Result<string, Value.NotTranslated> });
       }
     });
-    yield* each("invariants", [state]);
+    yield* each(key, [state]);
     if (taken)
       yield* each("transitions", [
         Value.obj({
@@ -332,7 +334,8 @@ export const path = (
   );
 };
 
-const namesOf = (definition: Definition, key: string): ReadonlyArray<string> => {
+/** The names under one of the definition's objects of rules, e.g. `invariants`. */
+export const namesOf = (definition: Definition, key: string): ReadonlyArray<string> => {
   const node = property(definition, key);
   return node?.type === "ObjectExpression"
     ? (node.properties as ReadonlyArray<Node>).flatMap((p) =>

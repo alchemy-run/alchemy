@@ -104,6 +104,14 @@ it.effect(
       ).toEqual(["DebitTransfer", "CreditTransfer", "RefundTransfer", "FailTransfer"]);
       // Money moved by then, and none of it went missing.
       expect(report.rules.filter((rule) => rule.broken)).toEqual([]);
+      // A transfer that waits for approval is not ended, and ends once its deadline runs.
+      expect(report.eventually).toMatchObject([{ name: "EveryTransferEnds", broken: undefined }]);
+      expect(report.eventually[0]?.states).toBeGreaterThan(0);
+      // Nothing is left out: the view FraudReview reacts to is folded, and FraudCheck answers it.
+      expect(report.skipped).toEqual([]);
+      expect(report.views).toEqual(["DailyOutflow"]);
+      expect(report.followed).toContain("FraudReview");
+      expect(report.systems).toContain("FraudCheck");
       expect(report.failures).toEqual([]);
       expect(report.disagreements).toEqual([]);
       expect(report.unread).toEqual([]);

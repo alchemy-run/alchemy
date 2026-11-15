@@ -102,6 +102,17 @@ export interface Found {
     readonly states: number;
   }>;
   /**
+   * What the model says holds once everything has run its course, looked at
+   * whenever a sequence has nothing left to react and no command scheduled:
+   * `broken` is the shortest sequence found that ends without it, and
+   * `states` is how many sequences were run to their end.
+   */
+  readonly eventually: ReadonlyArray<{
+    readonly name: string;
+    readonly broken: Story | undefined;
+    readonly states: number;
+  }>;
+  /**
    * The commands no state the invariants allow accepts: they never record an
    * event, so nothing said here is about them.
    */
@@ -158,6 +169,7 @@ export interface ModelLike {
   };
   readonly sagas?: ReadonlyArray<unknown>;
   readonly invariants?: { readonly [name: string]: (model: never) => boolean };
+  readonly eventually?: { readonly [name: string]: (model: never) => boolean };
 }
 
 interface PolicyClass {
@@ -351,6 +363,8 @@ interface Sequence {
   };
   /** The model's invariants on what the sequence left, once nothing more reacts. */
   rules: ReadonlyArray<Paths.Check>;
+  /** What the model says holds in the end, on what the sequence left with nothing scheduled. */
+  later: ReadonlyArray<Paths.Check>;
 }
 
 /** The real code does something else than the explorer read. */
@@ -364,6 +378,9 @@ class PolicyUnread extends Data.TaggedError("PolicyUnread")<{
 
 /** What a saga's run stops with when it waits for a signal that has not come. */
 const SUSPENDED: V = { _tag: "Opaque", what: "a saga waiting for a signal" };
+
+/** The most schedules run one after another to bring a sequence to its end. */
+const MAX_SCHEDULES = 8;
 
 /** The most reactions followed after one command a caller sends. */
 const MAX_REACTIONS = 32;
@@ -606,7 +623,14 @@ export const locate = Effect.fn(function* (
     definition: declared,
     names: declared ? Paths.invariantNames(declared) : [],
     real: (model.invariants ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
+    later: declared ? Paths.namesOf(declared, "eventually") : [],
+    realLater: (model.eventually ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
   };
+  unread.push(
+    ...Object.keys(model.eventually ?? {})
+      .filter((name) => !rules.later.includes(name))
+      .map((name) => `${model.modelName}.${name}`),
+  );
   // Only a view something depends on is folded: a policy reacts to it, or an invariant reads it.
   const folded = views.filter(
     (view) => named.has(view.name) || policies.some((policy) => policy.from === view.cls),
@@ -704,6 +728,9 @@ export const search = Effect.fn(function* (
     const ruled = new Map<string, Story | undefined>(
       located.rules.names.map((name) => [name, undefined]),
     );
+    const ended = new Map<string, Story | undefined>(
+      located.rules.later.map((name) => [name, undefined]),
+    );
     const failures = new Map<string, { policy: string; tag: string; story: Story }>();
     const endings = new Map<string, { saga: string; ending: string; story: Story | undefined }>();
     for (const saga of sagas)
@@ -762,6 +789,7 @@ export const search = Effect.fn(function* (
       unsettled: false,
       ran: { policies: new Set(), sagas: new Set(), systems: new Set() },
       rules: [],
+      later: [],
     });
     const nothing: Open = {
       run: new Value.Run([]),
@@ -1673,8 +1701,11 @@ export const search = Effect.fn(function* (
           events: [],
         });
       const story: Array<Step> = [];
-      const breaks: Array<{ readonly name: string; readonly at: number; readonly rule?: true }> =
-        [];
+      const breaks: Array<{
+        readonly name: string;
+        readonly at: number;
+        readonly rule?: "invariant" | "eventually";
+      }> = [];
       /** Each view's real state, by view and instance. */
       const seen = new Map<string, unknown>();
       const asked: Array<Asked & { readonly at: number }> = [];
@@ -1830,7 +1861,7 @@ export const search = Effect.fn(function* (
             });
         }
       }
-      if (played.rules.length > 0) {
+      if (played.rules.length > 0 || played.later.length > 0) {
         // The same sequence on the real code, and the model's real invariants on what it left.
         const model = {
           ...Object.fromEntries(
@@ -1851,16 +1882,24 @@ export const search = Effect.fn(function* (
             ]),
           ),
         };
-        for (const name of located.rules.names) {
-          const holds = yield* Effect.try({
-            try: () => located.rules.real[name]?.(model),
-            catch: (cause) =>
-              new Disagreement({
-                reason: `the model's invariant ${name} fails on the real code: ${String(cause)}`,
-              }),
-          });
-          if (holds === false) breaks.push({ name, at: played.trail.length - 1, rule: true });
-        }
+        for (const [rule, names, real] of [
+          ["invariant", played.rules.length > 0 ? located.rules.names : [], located.rules.real],
+          [
+            "eventually",
+            played.later.length > 0 ? located.rules.later : [],
+            located.rules.realLater,
+          ],
+        ] as const)
+          for (const name of names) {
+            const holds = yield* Effect.try({
+              try: () => real[name]?.(model),
+              catch: (cause) =>
+                new Disagreement({
+                  reason: `the model's rule ${name} fails on the real code: ${String(cause)}`,
+                }),
+            });
+            if (holds === false) breaks.push({ name, at: played.trail.length - 1, rule });
+          }
       }
       return { story, breaks };
     });
@@ -2019,6 +2058,20 @@ export const search = Effect.fn(function* (
           open.push(check.condition.success);
         }
       }
+      for (const check of played.later) {
+        if (Result.isFailure(check.condition)) {
+          const error = check.condition.failure;
+          unread.set(`${error.file}:${error.line}`, error);
+          continue;
+        }
+        look(`~${check.name}`);
+        if (
+          check.condition.success !== "true" &&
+          shorter(ended.get(check.name), played.trail.length)
+        ) {
+          open.push(check.condition.success);
+        }
+      }
       if (open.length > 0) {
         const answer = yield* values(
           played,
@@ -2034,8 +2087,9 @@ export const search = Effect.fn(function* (
             );
           for (const found of replayed?.breaks ?? []) {
             if (found.rule) {
-              if (shorter(ruled.get(found.name), found.at + 1))
-                ruled.set(found.name, replayed!.story.slice(0, found.at + 1));
+              const kept = found.rule === "invariant" ? ruled : ended;
+              if (shorter(kept.get(found.name), found.at + 1))
+                kept.set(found.name, replayed!.story.slice(0, found.at + 1));
               continue;
             }
             const entry = broken.get(found.name);
@@ -2092,10 +2146,20 @@ export const search = Effect.fn(function* (
       });
 
     /** Every way one move can go from a sequence, with the reactions to it. */
-    const play = Effect.fn(function* (
+    const play: (
       from: Open,
       longer: Array<Open>,
       move: (run: Value.Run) => Eval<unknown>,
+      ending?: boolean,
+    ) => Effect.Effect<void, PolicyUnread | Smt.SolverError> = Effect.fn(function* (
+      from: Open,
+      longer: Array<Open>,
+      move: (run: Value.Run) => Eval<unknown>,
+      /**
+       * Running a sequence to its end, past the most commands a caller sends:
+       * only the schedules left in it come due.
+       */
+      ending = false,
     ) {
       let prefix: ReadonlyArray<number> | undefined = [];
       while (prefix) {
@@ -2137,13 +2201,32 @@ export const search = Effect.fn(function* (
                 Effect.result,
               )
             : Result.succeed([]);
+        // Nothing is scheduled either: the sequence has run its course.
+        const later =
+          !played.unsettled &&
+          played.timers.length === 0 &&
+          (changed || ending) &&
+          located.rules.definition &&
+          located.rules.later.length > 0
+            ? yield* Paths.checks(
+                interpreter,
+                located.rules.definition,
+                world(played),
+                undefined,
+                undefined,
+                "eventually",
+              ).pipe(Effect.result)
+            : Result.succeed([]);
         prefix = Value.nextPrefix(run.taken);
-        if (Result.isFailure(rules)) {
+        if (Result.isFailure(rules) || Result.isFailure(later)) {
           sequences++;
           continue;
         }
         played.rules = rules.success;
-        const canGoOn = changed && !played.unsettled && from.length + 1 < options.depth;
+        played.later = later.success;
+        const canGoOn = ending
+          ? !played.unsettled && played.timers.length > 0
+          : changed && !played.unsettled && from.length + 1 < options.depth;
         moving = from.length + 1;
         const feasible = yield* visit(run, played, from.trail.length, canGoOn);
         const fresh =
@@ -2156,18 +2239,55 @@ export const search = Effect.fn(function* (
           for (const name of played.ran.sagas) started.add(name);
           for (const name of played.ran.systems) called.add(name);
         }
-        if (feasible && canGoOn)
-          longer.push({
-            run,
-            trail: played.trail,
-            instances: played.instances,
-            views: played.views,
-            calls: played.calls,
-            sagas: played.sagas,
-            timers: played.timers,
-            length: from.length + 1,
-          });
+        const next: Open = {
+          run,
+          trail: played.trail,
+          instances: played.instances,
+          views: played.views,
+          calls: played.calls,
+          sagas: played.sagas,
+          timers: played.timers,
+          length: from.length + 1,
+        };
+        if (feasible && canGoOn) longer.push(next);
         else sequences++;
+        // What is still scheduled comes due, one after another, and the end is looked at.
+        if (
+          feasible &&
+          !ending &&
+          !played.unsettled &&
+          changed &&
+          played.timers.length > 0 &&
+          located.rules.later.length > 0
+        ) {
+          const before = moving;
+          let left: Array<Open> = [next];
+          let rounds = 0;
+          while (left.length > 0 && !truncated) {
+            // A schedule that keeps scheduling never runs its course.
+            if (++rounds > MAX_SCHEDULES) {
+              unsettled += left.length;
+              break;
+            }
+            const further: Array<Open> = [];
+            for (const one of left) {
+              const timer = one.timers[0]!;
+              yield* play(
+                one,
+                further,
+                () => {
+                  sequence.timers = sequence.timers.slice(1);
+                  const index = resolve(timer.agg, timer.address, textOf(timer.address)!);
+                  return apply(timer.agg, index, timer.cls, timer.command, timer);
+                },
+                true,
+              );
+              if (truncated) break;
+            }
+            left = further;
+          }
+          moving = before;
+        }
       }
     });
 
@@ -2249,6 +2369,11 @@ export const search = Effect.fn(function* (
         name,
         broken: story,
         states: looked.get(` ${name}`) ?? 0,
+      })),
+      eventually: [...ended].map(([name, story]) => ({
+        name,
+        broken: story,
+        states: looked.get(`~${name}`) ?? 0,
       })),
       outcomes: [...outcomes.values()],
       reached: [...reached.values()],
