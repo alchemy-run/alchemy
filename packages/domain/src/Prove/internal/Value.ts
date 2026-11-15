@@ -176,15 +176,19 @@ export class Run {
   label = "";
   private readonly decided = new Map<string, boolean>();
 
-  constructor(private readonly prefix: ReadonlyArray<number>) {}
+  constructor(
+    private readonly prefix: ReadonlyArray<number>,
+    /** Picks at a choice the prefix does not make: without it, the first option. */
+    private readonly pick?: (of: number) => number,
+  ) {}
 
   /**
    * A run that goes on from the end of this one: what holds here holds there,
    * and its choices start over. One command of a sequence is then read once,
    * however many sequences go on from it.
    */
-  fork(prefix: ReadonlyArray<number>): Run {
-    const next = new Run(prefix);
+  fork(prefix: ReadonlyArray<number>, pick?: (of: number) => number): Run {
+    const next = new Run(prefix, pick);
     for (const [name, declaration] of this.declarations) next.declarations.set(name, declaration);
     next.constants.push(...this.constants);
     next.conditions.push(...this.conditions);
@@ -197,7 +201,7 @@ export class Run {
 
   /** Pick one of `of` options. */
   choose(of: number): number {
-    const chosen = this.prefix[this.cursor] ?? 0;
+    const chosen = this.prefix[this.cursor] ?? this.pick?.(of) ?? 0;
     this.cursor++;
     this.taken.push({ chosen, of });
     return chosen;

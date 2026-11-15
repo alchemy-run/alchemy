@@ -222,7 +222,8 @@ it.effect(
 Rules of thumb:
 
 - A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
-- `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, reactions reordered, every answer an external system's schema allows). Raise `depth` with `faults` off when you need longer sequences.
+- `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, reactions reordered, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
+- Keep numbers that are added or multiplied whole (`Schema.Int`, money in cents). Arithmetic JavaScript rounds is reported as not read.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
 - An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.

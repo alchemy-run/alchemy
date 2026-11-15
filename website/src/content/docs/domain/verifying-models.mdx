@@ -160,7 +160,7 @@ console.log(Verify.render(report));
 ```
 
 ```text
-Bank: 48 outcomes, 6 policies, 1 saga, 1 view
+Bank: 48 outcomes, 6 policies, 1 saga, 1 view, 1 external system
 
 Proved: for every state and every input, after any number of commands
   ✓ Account.NeverOverdrawn
@@ -169,11 +169,14 @@ Proved: for every state and every input, after any number of commands
   ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
   ✓ Account.OnlyAnAgentChangesTheOwner
 
-Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait
-5,802 sequences, 3,929 states
+Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait, every answer FraudCheck can give
+14,017 sequences, 6,110 states
   ✓ Bank.TransfersLoseNoMoney
   ✓ Bank.NoTransferLeftPending
-  ✓ Bank.EveryTransferEnds  holds at the end of the 2,327 sequences that ran their course
+  ✓ Bank.EveryTransferEnds  holds at the end of the 3,459 sequences that ran their course
+
+Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
+  ✓ none breaks a rule
 
 Assumed
   - whole numbers are exact: they stay within ±2^53
@@ -186,6 +189,8 @@ Assumed
 **Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance.
 
 **Checked** means no sequence that was run breaks the rule. A model's rules are about many instances at once, which a solver can't decide in general, so they are searched: every sequence of a few commands, with everything that follows from each.
+
+**Sampled** reaches past that. A rule that takes five commands to break is out of reach of every sequence of two, so longer ones are run too: 200 walks of up to 12 commands, each command picked at random. The seed makes them the same on every run, so a failure repeats.
 
 **Assumed** is what a pass takes for granted. Read it once. It's where a rule that verifies can still be wrong in production.
 
@@ -290,7 +295,7 @@ it.effect(
 The report gains a section:
 
 ```text
-Run on the real model: 32 sequences the explorer found, as stories (2 more need an event delivered twice, which a story does not do)
+Run on the real model: 39 sequences the explorer found, as stories (3 more need an event delivered twice, which a story does not do)
   ✓ the model does what the explorer read in each
 ```
 
@@ -323,13 +328,22 @@ Scoring twice is harmless. Refunding a payment twice is not: pass the vendor an 
 
 `depth` is the most commands callers send in a sequence. What policies, sagas and schedules do in reaction doesn't count, so two commands reach a long way. The default is 2.
 
-Each fault multiplies the sequences. On the example bank, two commands with both faults is 5,802 sequences in 15 seconds. Three commands with neither is 40,158 in 75 seconds, and three with both is more than a test should wait for. Go deeper with the faults off:
+Each fault multiplies the sequences. On the example bank, the default run is 14,017 sequences, 200 walks and 39 stories, in about 30 seconds. Three commands with neither fault is 40,158 sequences in 75 seconds, and three with both is more than a test should wait for. Go deeper with the faults off:
 
 ```typescript title="packages/domain/test/Bank.verify.test.ts"
 Verify.model(Bank, {
   apis: [CustomerApi, SupportApi],
   depth: 3,
   faults: { redeliver: false, reorder: false },
+});
+```
+
+`walks` sets how many longer sequences are sampled, how long each is, and the seed. More of them cost seconds, not minutes, and a sequence a walk finds isn't the shortest one that breaks the rule.
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+Verify.model(Bank, {
+  apis: [CustomerApi, SupportApi],
+  walks: { count: 1000, length: 20, seed: 7 },
 });
 ```
 
@@ -389,7 +403,7 @@ An outcome no sequence reaches is worth a look. It's either out of reach in two 
 
 ## What a pass does not say
 
-A proof is about one aggregate. A rule across instances is checked in the sequences that were run, up to `depth` commands, and a longer sequence could still break it.
+A proof is about one aggregate. A rule across instances is checked in every sequence of up to `depth` commands and in the walks that were sampled. A longer sequence that no walk took could still break it.
 
 An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. This escrow reserves money before it captures it, and `Reserve` checks there is enough, so the balance never goes below zero:
 

@@ -140,6 +140,19 @@ export interface Found {
   /** The ways delivery went wrong that the sequences were run with. */
   readonly faults: { readonly redeliver: boolean; readonly reorder: boolean };
   /**
+   * The longer sequences run past the ones every sequence was run to: each a
+   * walk of commands picked at random, from a seed that picks the same again.
+   */
+  readonly walks: {
+    readonly seed: number;
+    /** The walks run. */
+    readonly count: number;
+    /** The commands callers sent in them, all together. */
+    readonly commands: number;
+    /** The most commands callers sent in one. */
+    readonly longest: number;
+  };
+  /**
    * The external calls a policy makes again when an event is delivered to it
    * again: each has to be safe to repeat, which the explorer cannot tell.
    */
@@ -176,6 +189,8 @@ export interface Options {
     /** Run the reactions waiting at the same time in other orders too. */
     readonly reorder: boolean;
   };
+  /** Longer sequences to run after every short one: how many, of how many commands, from which seed. */
+  readonly walks: { readonly count: number; readonly length: number; readonly seed: number };
 }
 
 /** A model, as far as the explorer reads it. */
@@ -447,6 +462,17 @@ class PolicyUnread extends Data.TaggedError("PolicyUnread")<{
 
 /** What a saga's run stops with when it waits for a signal that has not come. */
 const SUSPENDED: V = { _tag: "Opaque", what: "a saga waiting for a signal" };
+
+/** Numbers between 0 and 1 from a seed: the same seed gives the same numbers, on every machine. */
+const mulberry = (seed: number) => {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+};
 
 /** The most schedules run one after another to bring a sequence to its end. */
 const MAX_SCHEDULES = 8;
@@ -2336,6 +2362,7 @@ export const search = Effect.fn(function* (
       longer: Array<Open>,
       move: (run: Value.Run) => Eval<unknown>,
       ending?: boolean,
+      pick?: (of: number) => number,
     ) => Effect.Effect<void, PolicyUnread | Smt.SolverError> = Effect.fn(function* (
       from: Open,
       longer: Array<Open>,
@@ -2345,14 +2372,19 @@ export const search = Effect.fn(function* (
        * only the schedules left in it come due.
        */
       ending = false,
+      /**
+       * Walking: one way the move can go, picked at each choice, and no limit
+       * on how many commands came before.
+       */
+      pick?: (of: number) => number,
     ) {
       let prefix: ReadonlyArray<number> | undefined = [];
       while (prefix) {
-        if (sequences >= options.budget) {
+        if (!pick && sequences >= options.budget) {
           truncated = true;
           return;
         }
-        const run = from.run.fork(prefix);
+        const run = from.run.fork(prefix, pick);
         interpreter.current.run = run;
         interpreter.hooks.provided.clear();
         sequence = begin(from);
@@ -2410,9 +2442,11 @@ export const search = Effect.fn(function* (
         }
         played.rules = rules.success;
         played.later = later.success;
+        // A walk takes one way through its move, then goes on from wherever that left it.
+        if (pick) prefix = undefined;
         const canGoOn = ending
           ? !played.unsettled && played.timers.length > 0
-          : changed && !played.unsettled && from.length + 1 < options.depth;
+          : changed && !played.unsettled && (pick !== undefined || from.length + 1 < options.depth);
         moving = from.length + 1;
         const feasible = yield* visit(run, played, from.trail.length, canGoOn);
         const fresh =
@@ -2445,6 +2479,7 @@ export const search = Effect.fn(function* (
         if (
           feasible &&
           !ending &&
+          !pick &&
           !played.unsettled &&
           changed &&
           played.timers.length > 0 &&
@@ -2481,9 +2516,9 @@ export const search = Effect.fn(function* (
       }
     });
 
-    /** Every sequence one move longer than this one: a caller's command, or a schedule that comes due. */
-    const extend = Effect.fn(function* (from: Open, longer: Array<Open>) {
-      for (const { agg, command } of externals) {
+    /** Each move that can follow a sequence: a caller's command, or a schedule that comes due. */
+    const moves = (from: Open): ReadonlyArray<(run: Value.Run) => Eval<unknown>> => [
+      ...externals.flatMap(({ agg, command }) => {
         const existing = from.instances.flatMap((instance, index) =>
           instance.agg === agg ? [index] : [],
         );
@@ -2491,31 +2526,33 @@ export const search = Effect.fn(function* (
           ...existing,
           ...(existing.length < options.instances ? [undefined] : []),
         ];
-        for (const target of targets) {
-          yield* play(from, longer, (run) => {
-            let index = target;
-            if (index === undefined) {
-              // An instance nobody has addressed yet.
-              const id = run.constant(`${agg.name}#${existing.length + 1}.id`, "String");
-              const ast = Symbolic.typeOf(agg.cls.definition.id);
-              const value: V = { _tag: "Term", term: id };
-              if (ast) Symbolic.assumeFits(value, ast, run);
-              for (const at of existing)
-                run.assume(`(not (= ${id.text} ${textOf(from.instances[at]!.id)}))`);
-              sequence.instances.push({ agg, id: value, state: agg.initial, version: 0 });
-              index = sequence.instances.length - 1;
-            }
-            return apply(agg, index, command, undefined);
-          });
-          if (truncated) return;
-        }
-      }
-      for (const [at, timer] of from.timers.entries()) {
-        yield* play(from, longer, () => {
-          sequence.timers = sequence.timers.filter((_, index) => index !== at);
-          const index = resolve(timer.agg, timer.address, textOf(timer.address)!);
-          return apply(timer.agg, index, timer.cls, timer.command, timer);
+        return targets.map((target) => (run: Value.Run) => {
+          let index = target;
+          if (index === undefined) {
+            // An instance nobody has addressed yet.
+            const id = run.constant(`${agg.name}#${existing.length + 1}.id`, "String");
+            const ast = Symbolic.typeOf(agg.cls.definition.id);
+            const value: V = { _tag: "Term", term: id };
+            if (ast) Symbolic.assumeFits(value, ast, run);
+            for (const at of existing)
+              run.assume(`(not (= ${id.text} ${textOf(from.instances[at]!.id)}))`);
+            sequence.instances.push({ agg, id: value, state: agg.initial, version: 0 });
+            index = sequence.instances.length - 1;
+          }
+          return apply(agg, index, command, undefined);
         });
+      }),
+      ...from.timers.map((timer, at) => () => {
+        sequence.timers = sequence.timers.filter((_, index) => index !== at);
+        const index = resolve(timer.agg, timer.address, textOf(timer.address)!);
+        return apply(timer.agg, index, timer.cls, timer.command, timer);
+      }),
+    ];
+
+    /** Every sequence one move longer than this one. */
+    const extend = Effect.fn(function* (from: Open, longer: Array<Open>) {
+      for (const move of moves(from)) {
+        yield* play(from, longer, move);
         if (truncated) return;
       }
     });
@@ -2530,6 +2567,34 @@ export const search = Effect.fn(function* (
       }
       if (!truncated) complete++;
       open = longer;
+    }
+
+    // Past the sequences every one of which was run: walks, each a command picked at
+    // random after another, as far as `length`. A rule that takes many commands to
+    // break is out of reach of the search above, and within reach of these.
+    const random = mulberry(options.walks.seed);
+    const pick = (of: number) => Math.floor(random() * of);
+    const walks = { seed: options.walks.seed, count: 0, commands: 0, longest: 0 };
+    for (let walk = 0; walk < options.walks.count && !truncated; walk++) {
+      let at = nothing;
+      let sent = 0;
+      // A move that cannot happen, or that changes nothing, is not a step: another is tried.
+      for (
+        let tries = 0;
+        sent < options.walks.length && tries < options.walks.length * 4;
+        tries++
+      ) {
+        const possible = moves(at);
+        if (possible.length === 0) break;
+        const longer: Array<Open> = [];
+        yield* play(at, longer, possible[pick(possible.length)]!, false, pick);
+        if (longer.length === 0) continue;
+        at = longer[0]!;
+        sent++;
+      }
+      walks.count++;
+      walks.commands += sent;
+      walks.longest = Math.max(walks.longest, sent);
     }
 
     const found: Found = {
@@ -2572,6 +2637,7 @@ export const search = Effect.fn(function* (
       views: located.views.map((view) => view.name),
       systems: [...called],
       faults: options.faults,
+      walks,
       repeated: [...repeated],
       sagas: [...started],
       unstarted: sagas.flatMap((saga) => (started.has(saga.name) ? [] : [saga.name])),

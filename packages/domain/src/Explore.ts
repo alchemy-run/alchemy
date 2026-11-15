@@ -96,6 +96,24 @@ export interface ModelOptions {
      */
     readonly reorder?: boolean;
   };
+  /**
+   * Longer sequences to run after every short one: each a walk of commands
+   * picked at random, one after another. A rule that takes more commands to
+   * break than `depth` is out of reach of the search, and within reach of a
+   * walk. The same `seed` picks the same walks.
+   * @default none
+   */
+  readonly walks?: {
+    /** How many walks to run. */
+    readonly count: number;
+    /**
+     * The most commands callers send in one.
+     * @default 12
+     */
+    readonly length?: number;
+    /** @default 1 */
+    readonly seed?: number;
+  };
   /** What `check` passes with, though it leaves part of the search undone. */
   readonly allow?: {
     /** Pass when the search stops at its budget before every sequence is run. */
@@ -225,6 +243,11 @@ const reportModel = (
         faults: {
           redeliver: options.faults?.redeliver ?? true,
           reorder: options.faults?.reorder ?? true,
+        },
+        walks: {
+          count: options.walks?.count ?? 0,
+          length: options.walks?.length ?? 12,
+          seed: options.walks?.seed ?? 1,
         },
       },
     );
@@ -504,6 +527,10 @@ const renderModel = (report: ModelReport): string => {
     ...(report.faults.reorder ? ["each reaction also run behind the others that wait"] : []),
   ];
   if (faults.length > 0) out.push(`Delivery: ${faults.join(", ")}`);
+  if (report.walks.count > 0)
+    out.push(
+      `Then ${count(report.walks.count)} walks of commands picked at random, of up to ${report.walks.longest} commands each (seed ${report.walks.seed})`,
+    );
   if (report.systems.length > 0)
     out.push(
       `External systems, each answering whatever its schema allows: ${report.systems.join(", ")}`,

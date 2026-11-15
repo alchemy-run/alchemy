@@ -65,6 +65,12 @@ export interface Options {
   readonly instances?: number;
   /** The ways delivery goes wrong that every sequence is run with: both, unless turned off. */
   readonly faults?: Explore.ModelOptions["faults"];
+  /**
+   * Longer sequences to run after every short one, each a walk of commands
+   * picked at random: 200 of up to 12 commands, unless said otherwise. The
+   * same `seed` picks the same walks. `{ count: 0 }` runs none.
+   */
+  readonly walks?: Explore.ModelOptions["walks"];
   /** What a pass may leave undone. */
   readonly allow?: Explore.ModelOptions["allow"];
 }
@@ -294,6 +300,7 @@ export const report = (
       ...(options.budget === undefined ? {} : { budget: options.budget }),
       ...(options.instances === undefined ? {} : { instances: options.instances }),
       ...(options.faults === undefined ? {} : { faults: options.faults }),
+      walks: options.walks ?? { count: 200 },
     }).pipe(Effect.mapError((error) => new VerifyError({ message: error.message })));
     const runs: Array<Run> = [];
     let unrun = 0;
@@ -586,6 +593,13 @@ export const render = (report: Report | AggregateReport): string => {
     );
 
   const broken = report.rules.filter((rule) => rule.standing === "broken");
+  if (explored.walks.count > 0)
+    out.push(
+      `Sampled: ${count(explored.walks.count)} longer sequences, of up to ${explored.walks.longest} commands picked at random (seed ${explored.walks.seed})`,
+      ...(broken.length === 0 ? ["  ✓ none breaks a rule"] : []),
+      "",
+    );
+
   for (const rule of broken) {
     out.push(
       rule.kind === "eventually"
