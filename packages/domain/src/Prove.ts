@@ -70,6 +70,16 @@ export interface Report {
       readonly paths: number;
     }>;
   }>;
+  /** The aggregate's transitions: what each command may do in one step. */
+  readonly transitions: ReadonlyArray<{
+    readonly name: string;
+    readonly commands: ReadonlyArray<{
+      readonly command: string;
+      readonly verdict: Verdict;
+      /** The paths through the command that were checked. */
+      readonly paths: number;
+    }>;
+  }>;
   /** What the proof takes for granted. */
   readonly assumptions: ReadonlyArray<string>;
 }
@@ -134,6 +144,14 @@ export const report = (
           })),
         ),
       ),
+      transitions: Paths.transitionNames(definition).map((name) => ({
+        name,
+        commands: rows.map((row) => ({
+          command: row.command,
+          verdict: row.verdicts.get(name)!,
+          paths: row.paths,
+        })),
+      })),
       assumptions: ASSUMPTIONS,
     };
     return made;
@@ -159,6 +177,9 @@ export const proved = (report: Report): boolean =>
   report.invariants.every(
     (invariant) =>
       invariant.initial && invariant.commands.every((c) => c.verdict._tag === "Proved"),
+  ) &&
+  report.transitions.every((transition) =>
+    transition.commands.every((c) => c.verdict._tag === "Proved"),
   );
 
 /**
@@ -220,19 +241,23 @@ const LABEL = {
 /** A report as text, one invariant after another. */
 export const render = (report: Report): string => {
   const lines: Array<string> = [
-    `${report.aggregate}: ${report.invariants.length} invariants, ${report.commands.length} commands`,
+    `${report.aggregate}: ${report.invariants.length} invariants, ${
+      report.transitions.length > 0 ? `${report.transitions.length} transitions, ` : ""
+    }${report.commands.length} commands`,
     "",
   ];
   const section = (
     title: string,
-    initial: boolean,
+    /** `undefined` for a transition: it is about a step, and a new instance has taken none. */
+    initial: boolean | undefined,
     commands: ReadonlyArray<{ readonly command: string; readonly verdict: Verdict }>,
     notes: ReadonlyArray<string>,
   ) => {
     const failed = commands.filter((c) => c.verdict._tag !== "Proved");
-    const ok = initial && failed.length === 0 && notes.length === 0;
+    const ok = initial !== false && failed.length === 0 && notes.length === 0;
     lines.push(`${ok ? "✓" : "✗"} ${title}`);
-    lines.push(`    ${initial ? "✓ holds" : "✗ does not hold"} on the initial state`);
+    if (initial !== undefined)
+      lines.push(`    ${initial ? "✓ holds" : "✗ does not hold"} on the initial state`);
     const passed = commands.filter((c) => c.verdict._tag === "Proved");
     if (passed.length > 0)
       lines.push(`    ✓ proved for ${passed.map((c) => c.command).join(", ")}`);
@@ -259,6 +284,8 @@ export const render = (report: Report): string => {
       ];
   for (const invariant of report.invariants)
     section(invariant.name, invariant.initial, invariant.commands, open);
+  for (const transition of report.transitions)
+    section(transition.name, undefined, transition.commands, open);
   for (const c of report.commands.filter((c) => c.accepted === false))
     lines.push(
       `✗ ${c.command} is never accepted: no state the invariants allow lets it record an event`,

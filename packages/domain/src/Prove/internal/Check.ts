@@ -121,26 +121,66 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
 const attempt = <A>(what: string, evaluate: () => A): Effect.Effect<A, Verdict> =>
   Effect.try({ try: evaluate, catch: (cause) => unconfirmed(`${what}: ${String(cause)}`) });
 
-/** Something a command must keep true of the state it leaves. */
+/** One step the real code took: a command on a state, and what it left. */
+export interface Moved {
+  readonly before: unknown;
+  readonly after: unknown;
+  readonly command: unknown;
+  readonly events: ReadonlyArray<unknown>;
+  /** The request contexts the command ran with. */
+  readonly context: Context.Context<never>;
+}
+
+/** Something a command must keep true of the step it takes. */
 export interface Kept {
   /** How a sentence names it: an invariant's name, or `the state's schema`. */
   readonly what: string;
-  readonly holds: (state: unknown) => boolean;
+  readonly holds: (moved: Moved) => boolean;
 }
 
-/** The invariant of an aggregate with this name, as something a command must keep. */
+/**
+ * Every invariant and transition of an aggregate, by name, on a step the real
+ * code took. An invariant looks at the state the step left.
+ */
+export const rules = (aggregate: Aggregate.Any): Readonly<Record<string, Kept["holds"]>> => {
+  const invariants = (aggregate.definition.invariants ?? {}) as unknown as Record<
+    string,
+    (state: unknown) => boolean
+  >;
+  const transitions = (aggregate.definition.transitions ?? {}) as unknown as Record<
+    string,
+    (step: Omit<Moved, "context">) => boolean | Effect.Effect<boolean, never, never>
+  >;
+  return {
+    ...Object.fromEntries(
+      Object.entries(invariants).map(([name, holds]) => [
+        name,
+        (moved: Moved) => holds(moved.after),
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(transitions).map(([name, holds]) => [
+        name,
+        (moved: Moved) => {
+          const { context, ...step } = moved;
+          const made = holds(step);
+          return Effect.isEffect(made) ? Effect.runSync(Effect.provide(made, context)) : made;
+        },
+      ]),
+    ),
+  };
+};
+
+/** The invariant or transition of an aggregate with this name, as something a command must keep. */
 export const invariant = (aggregate: Aggregate.Any, name: string): Kept => ({
   what: name,
-  holds: (state) =>
-    (aggregate.definition.invariants as unknown as Record<string, (state: unknown) => boolean>)[
-      name
-    ]!(state),
+  holds: (moved) => rules(aggregate)[name]!(moved),
 });
 
 /** That the state is one the aggregate's schema allows, as something a command must keep. */
 export const schema = (aggregate: Aggregate.Any): Kept => ({
   what: "the state's schema",
-  holds: Schema.is(aggregate.definition.state),
+  holds: (moved) => Schema.is(aggregate.definition.state)(moved.after),
 });
 
 /** Build the counterexample as real values, and run the real `decide`, `evolve` and check on it. */
@@ -210,7 +250,15 @@ const replay = Effect.fn(function* (
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code fails on it: ${Cause.pretty(prediction.cause)}`,
     );
-  const holds = yield* attempt(`${kept.what} threw`, () => kept.holds(prediction.state));
+  const holds = yield* attempt(`${kept.what} threw`, () =>
+    kept.holds({
+      before: state,
+      after: prediction.state,
+      command,
+      events: prediction.events,
+      context: context as Context.Context<never>,
+    }),
+  );
   if (holds)
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code keeps ${kept.what} on it`,

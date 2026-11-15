@@ -53,6 +53,8 @@ export interface Found {
   readonly complete: number;
   readonly invariants: ReadonlyArray<{
     readonly name: string;
+    /** An invariant is about a state, a transition about one step. */
+    readonly kind: "invariant" | "transition";
     /** The shortest story found that breaks it: no commands when a new instance does. */
     readonly broken: Story | undefined;
     /**
@@ -174,8 +176,10 @@ export const search = Effect.fn(function* (
   const reached = new Map<string, Story | undefined>(
     stateTags(definition.state).map((tag) => [tag, undefined]),
   );
+  const transitions = new Set(Paths.transitionNames(definition));
+  const rules = Check.rules(aggregate);
   const broken = new Map<string, Story | undefined>(
-    Paths.invariantNames(definition).map((name) => [name, undefined]),
+    Paths.ruleNames(definition).map((name) => [name, undefined]),
   );
   const unread = new Map<string, Value.NotTranslated>();
   const disagreements = new Set<string>();
@@ -226,6 +230,7 @@ export const search = Effect.fn(function* (
     const id = (yield* build("id", trail[0]!.inputs.id)) as string;
     let state: unknown = aggregate.definition.initial;
     let version = 0;
+    let moved: Check.Moved | undefined;
     const story: Array<Move> = [];
     for (const [index, entry] of trail.entries()) {
       const { _tag: tag, ...fields } = (yield* build("command", entry.inputs.command)) as {
@@ -280,6 +285,13 @@ export const search = Effect.fn(function* (
           outcome: { _tag: "Rejected", rejection: prediction.rejection },
         });
       } else {
+        moved = {
+          before: state,
+          after: prediction.state,
+          command,
+          events: prediction.events,
+          context: context as Context.Context<never>,
+        };
         state = prediction.state;
         version += prediction.events.length;
         story.push({
@@ -290,7 +302,7 @@ export const search = Effect.fn(function* (
         });
       }
     }
-    return { story, state };
+    return { story, state, moved };
   });
 
   /**
@@ -407,8 +419,9 @@ export const search = Effect.fn(function* (
         if (answer._tag === "Sat") {
           const replayed = yield* attempt(trail, run, answer.model);
           if (replayed) {
-            const failed = Object.entries(real).filter(
-              ([, holds]) => holds(replayed.state) !== true,
+            const last = replayed.moved;
+            const failed = Object.entries(rules).filter(
+              ([, holds]) => last !== undefined && holds(last) !== true,
             );
             if (failed.length === 0)
               disagreements.add(
@@ -465,9 +478,17 @@ export const search = Effect.fn(function* (
         ).pipe(
           Effect.flatMap((step) =>
             step.applied._tag === "Changed"
-              ? Paths.checks(interpreter, definition, step.applied.state).pipe(
-                  Effect.map((checks) => ({ step, checks })),
-                )
+              ? Paths.checks(
+                  interpreter,
+                  definition,
+                  step.applied.state,
+                  {
+                    before: from.state,
+                    command: step.inputs.command,
+                    events: step.applied.events,
+                  },
+                  kept.get(command.tag),
+                ).pipe(Effect.map((checks) => ({ step, checks })))
               : Effect.succeed({ step, checks: [] as ReadonlyArray<Paths.Check> }),
           ),
           Effect.result,
@@ -518,6 +539,7 @@ export const search = Effect.fn(function* (
     complete,
     invariants: [...broken].map(([name, story]) => ({
       name,
+      kind: transitions.has(name) ? ("transition" as const) : ("invariant" as const),
       broken: story,
       proved: !story && commands.every((command) => kept.get(command.tag)?.has(name) === true),
       states: looked.get(name) ?? 0,

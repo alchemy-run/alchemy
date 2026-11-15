@@ -206,31 +206,66 @@ export interface Check {
   readonly condition: Result.Result<string, Value.NotTranslated>;
 }
 
-/** Every invariant on a state, as a formula. Each may split the path. */
+/** The step a command took, as a transition is given it. */
+export interface Taken {
+  readonly before: V;
+  readonly command: V;
+  readonly events: ReadonlyArray<V>;
+}
+
+/**
+ * Every invariant on a state, as a formula, and with the step that left the
+ * state, every transition on that step. Each may split the path. One named
+ * in `proved` is not read again: it is true.
+ */
 export const checks = (
   interpreter: Interpreter,
   definition: Definition,
   state: V,
+  taken?: Taken,
+  proved?: ReadonlySet<string>,
 ): Eval<ReadonlyArray<Check>> =>
   Effect.gen(function* () {
     const site = siteOf(definition);
-    const invariants = yield* handlers(interpreter, definition, "invariants");
-    const names = invariants._tag === "Obj" ? Object.keys(invariants.fields) : [];
     const made: Array<Check> = [];
-    for (const name of names) {
-      const condition = yield* strict(
-        interpreter.call(yield* interpreter.member(invariants, name, site), [state], site),
-        site,
-        name,
-      ).pipe(
-        Effect.flatMap((value) => interpreter.truth(value, site)),
-        Effect.map(formula),
-        Effect.result,
-      );
-      if (Result.isFailure(condition) && condition.failure._tag === "Infeasible")
-        return yield* new Value.Infeasible();
-      made.push({ name, condition: condition as Result.Result<string, Value.NotTranslated> });
-    }
+    const each = Effect.fnUntraced(function* (key: string, args: ReadonlyArray<V>) {
+      const rules = yield* handlers(interpreter, definition, key);
+      const names = rules._tag === "Obj" ? Object.keys(rules.fields) : [];
+      for (const name of names) {
+        if (proved?.has(name)) {
+          made.push({ name, condition: Result.succeed("true") });
+          continue;
+        }
+        const condition = yield* strict(
+          interpreter
+            .call(yield* interpreter.member(rules, name, site), args, site)
+            .pipe(
+              Effect.flatMap((value) =>
+                value._tag === "Effect" ? value.run : Effect.succeed(value),
+              ),
+            ),
+          site,
+          name,
+        ).pipe(
+          Effect.flatMap((value) => interpreter.truth(value, site)),
+          Effect.map(formula),
+          Effect.result,
+        );
+        if (Result.isFailure(condition) && condition.failure._tag === "Infeasible")
+          return yield* new Value.Infeasible();
+        made.push({ name, condition: condition as Result.Result<string, Value.NotTranslated> });
+      }
+    });
+    yield* each("invariants", [state]);
+    if (taken)
+      yield* each("transitions", [
+        Value.obj({
+          before: taken.before,
+          after: state,
+          command: taken.command,
+          events: { _tag: "Arr", items: [...taken.events] },
+        }),
+      ]);
     return made;
   });
 
@@ -278,7 +313,11 @@ export const path = (
     if (stepped.applied._tag !== "Changed") return { _tag: "Unchanged" } as const;
     return {
       _tag: "Changed",
-      checks: yield* checks(interpreter, definition, stepped.applied.state),
+      checks: yield* checks(interpreter, definition, stepped.applied.state, {
+        before: state,
+        command: stepped.inputs.command,
+        events: stepped.applied.events,
+      }),
       fits: Symbolic.fits(stepped.applied.state, stateAst),
     } as const;
   });
@@ -293,9 +332,8 @@ export const path = (
   );
 };
 
-/** The names of the invariants the definition declares. */
-export const invariantNames = (definition: Definition): ReadonlyArray<string> => {
-  const node = property(definition, "invariants");
+const namesOf = (definition: Definition, key: string): ReadonlyArray<string> => {
+  const node = property(definition, key);
   return node?.type === "ObjectExpression"
     ? (node.properties as ReadonlyArray<Node>).flatMap((p) =>
         p.type === "Property" && !p.computed ? [String(p.key.name ?? p.key.value)] : [],
@@ -303,13 +341,39 @@ export const invariantNames = (definition: Definition): ReadonlyArray<string> =>
     : [];
 };
 
-/** The invariants a class has that the definition read from its file does not declare. */
+/** The names of the invariants the definition declares. */
+export const invariantNames = (definition: Definition): ReadonlyArray<string> =>
+  namesOf(definition, "invariants");
+
+/** The names of the transitions the definition declares. */
+export const transitionNames = (definition: Definition): ReadonlyArray<string> =>
+  namesOf(definition, "transitions");
+
+/** The names of everything a command must keep: the invariants, then the transitions. */
+export const ruleNames = (definition: Definition): ReadonlyArray<string> => [
+  ...invariantNames(definition),
+  ...transitionNames(definition),
+];
+
+/**
+ * The invariants and transitions a class has that the definition read from
+ * its file does not declare, and the names both use.
+ */
 export const unread = (
   definition: Definition,
-  invariants: { readonly [name: string]: unknown } | undefined,
+  declared: {
+    readonly invariants?: { readonly [name: string]: unknown } | undefined;
+    readonly transitions?: { readonly [name: string]: unknown } | undefined;
+  },
 ): ReadonlyArray<string> => {
-  const read = new Set(invariantNames(definition));
-  return Object.keys(invariants ?? {}).filter((name) => !read.has(name));
+  const invariants = new Set(invariantNames(definition));
+  const transitions = new Set(transitionNames(definition));
+  return [
+    ...Object.keys(declared.invariants ?? {}).filter((name) => !invariants.has(name)),
+    ...Object.keys(declared.transitions ?? {}).filter(
+      (name) => !transitions.has(name) || invariants.has(name),
+    ),
+  ];
 };
 
 /**
@@ -388,11 +452,11 @@ export const load = (
       name: aggregate.aggregateName,
       state: aggregate.definition.state,
     };
-    const missed = unread(definition, aggregate.definition.invariants);
+    const missed = unread(definition, aggregate.definition);
     if (missed.length > 0)
       return yield* new Source.LoadError({
         file,
-        message: `${file} declares ${aggregate.aggregateName} without its invariants ${missed.join(", ")}: each must be written in its definition, as a property`,
+        message: `${file} declares ${aggregate.aggregateName} without its invariants ${missed.join(", ")}: each must be written in its definition, as a property, under a name of its own`,
       });
     return { loader, definition };
   });

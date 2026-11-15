@@ -371,12 +371,25 @@ const undone = (
   return out;
 };
 
-const held = (name: string, invariant: { readonly proved: boolean; readonly states: number }) =>
-  invariant.proved
-    ? `✓ ${name} holds in every state: no command can break it`
-    : invariant.states > 0
-      ? `✓ ${name} holds in the ${count(invariant.states)} states reached`
-      : `? ${name} was not looked at: no state was reached`;
+const held = (
+  name: string,
+  invariant: {
+    readonly proved: boolean;
+    readonly states: number;
+    readonly kind: "invariant" | "transition";
+  },
+) =>
+  invariant.kind === "transition"
+    ? invariant.proved
+      ? `✓ ${name} holds on every step: no command can break it`
+      : invariant.states > 0
+        ? `✓ ${name} holds on the ${count(invariant.states)} steps taken`
+        : `? ${name} was not looked at: no step was taken`
+    : invariant.proved
+      ? `✓ ${name} holds in every state: no command can break it`
+      : invariant.states > 0
+        ? `✓ ${name} holds in the ${count(invariant.states)} states reached`
+        : `? ${name} was not looked at: no state was reached`;
 
 const tagOf = (value: unknown): string => String((value as { readonly _tag?: unknown })._tag);
 

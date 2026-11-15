@@ -55,7 +55,7 @@ export const rows = Effect.fn(function* (
   aggregate: Aggregate.Any,
   definition: Paths.Definition,
 ) {
-  const names = Paths.invariantNames(definition);
+  const names = Paths.ruleNames(definition);
   const made: Array<Row> = [];
   for (const cls of aggregate.definition.commands) {
     const command = cls as unknown as Paths.CommandClass;

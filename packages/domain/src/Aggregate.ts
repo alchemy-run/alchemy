@@ -111,6 +111,17 @@ export type Decision<C extends Command.Any> =
       Command.ContextOf<C>
     >;
 
+/** One step of an aggregate: what a transition is given. */
+export interface Transition<State, Cmd, Ev> {
+  /** The state the command met. */
+  readonly before: State;
+  /** The state its events left. */
+  readonly after: State;
+  readonly command: Cmd;
+  /** The events the command recorded, in order. */
+  readonly events: ReadonlyArray<Ev>;
+}
+
 /** The event classes a set of commands may record. */
 export type EventsOf<C extends ReadonlyArray<Command.Any>> = C[number]["events"][number];
 
@@ -137,6 +148,20 @@ export interface Definition<
    * that no command can break one.
    */
   readonly invariants?: { readonly [name: string]: (state: S["Type"]) => boolean };
+  /**
+   * Rules that hold for every step the aggregate can take, each named and
+   * given the state before a command, the command, the events it recorded
+   * and the state after: `true` while the rule holds. Where an invariant
+   * says what no state may be, a transition says what no command may do. One
+   * may be an `Effect.fn` that reads the context its commands' middleware
+   * provides, as `decide` does. `Prove.invariants` proves that no command
+   * can break one.
+   */
+  readonly transitions?: {
+    readonly [name: string]: (
+      step: Transition<S["Type"], InstanceOf<C[number]>, InstanceOf<E>>,
+    ) => boolean | Effect.Effect<boolean, never, Command.ContextOf<C[number]>>;
+  };
   /** Every command this aggregate handles, each declaring the events it records. */
   readonly commands: C;
   /**
@@ -268,6 +293,7 @@ export interface AnyDefinition {
   readonly state: Schema.Top;
   readonly initial: unknown;
   readonly invariants?: AnyHandlers;
+  readonly transitions?: AnyHandlers;
   readonly commands: ReadonlyArray<Command.Any>;
   readonly events: ReadonlyArray<Event.Any>;
   readonly decide: AnyHandlers;

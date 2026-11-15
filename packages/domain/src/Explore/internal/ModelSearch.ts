@@ -70,6 +70,8 @@ export interface Found {
   readonly invariants: ReadonlyArray<{
     readonly aggregate: string;
     readonly name: string;
+    /** An invariant is about a state, a transition about one step. */
+    readonly kind: "invariant" | "transition";
     readonly broken: Story | undefined;
     readonly proved: boolean;
     /** The states reached in which it was looked at. */
@@ -155,8 +157,13 @@ interface Agg {
   readonly definition: Paths.Definition;
   readonly commands: ReadonlyArray<CommandClass>;
   readonly initial: V;
+  /** The names of its invariants, then of its transitions. */
   readonly invariants: ReadonlyArray<string>;
+  readonly transitions: ReadonlySet<string>;
+  /** The real invariants, on a state. */
   readonly real: Readonly<Record<string, (state: unknown) => boolean>>;
+  /** The real invariants and transitions, on a step. */
+  readonly rules: Readonly<Record<string, Check.Kept["holds"]>>;
 }
 
 interface PolicyImpl {
@@ -355,9 +362,7 @@ export const locate = Effect.fn(function* (
       state: cls.definition.state,
     };
     unread.push(
-      ...Paths.unread(definition, cls.definition.invariants).map(
-        (name) => `${cls.aggregateName}.${name}`,
-      ),
+      ...Paths.unread(definition, cls.definition).map((name) => `${cls.aggregateName}.${name}`),
     );
     aggregates.push({
       cls,
@@ -365,11 +370,13 @@ export const locate = Effect.fn(function* (
       definition,
       commands: cls.definition.commands as unknown as ReadonlyArray<CommandClass>,
       initial: lift(cls.definition.initial),
-      invariants: Paths.invariantNames(definition),
+      invariants: Paths.ruleNames(definition),
+      transitions: new Set(Paths.transitionNames(definition)),
       real: (cls.definition.invariants ?? {}) as unknown as Record<
         string,
         (state: unknown) => boolean
       >,
+      rules: Check.rules(cls),
     });
   }
 
@@ -451,10 +458,9 @@ export const locate = Effect.fn(function* (
     state: undefined,
   };
   unread.push(
-    ...(declared
-      ? Paths.unread(declared, model.invariants)
-      : Object.keys(model.invariants ?? {})
-    ).map((name) => `${model.modelName}.${name}`),
+    ...(declared ? Paths.unread(declared, model) : Object.keys(model.invariants ?? {})).map(
+      (name) => `${model.modelName}.${name}`,
+    ),
   );
   const rules = {
     definition: declared,
@@ -726,7 +732,17 @@ export const search = Effect.fn(function* (
         }
         const checks =
           agg.invariants.length > 0
-            ? yield* Paths.checks(interpreter, agg.definition, applied.state)
+            ? yield* Paths.checks(
+                interpreter,
+                agg.definition,
+                applied.state,
+                {
+                  before: instance.state,
+                  command: step.inputs.command,
+                  events: applied.events,
+                },
+                kept.get(`${agg.name}.${command.tag}`),
+              )
             : [];
         sequence.instances[index] = {
           ...instance,
@@ -1413,6 +1429,13 @@ export const search = Effect.fn(function* (
           });
           continue;
         }
+        const moved: Check.Moved = {
+          before: slot.state,
+          after: prediction.state,
+          command,
+          events: prediction.events,
+          context: context as Context.Context<never>,
+        };
         slot.state = prediction.state;
         slot.version += prediction.events.length;
         slot.events.push(...prediction.events);
@@ -1423,9 +1446,8 @@ export const search = Effect.fn(function* (
           now,
           outcome: { _tag: "Accepted", events: prediction.events, state: prediction.state },
         });
-        for (const [name, holds] of Object.entries(entry.agg.real))
-          if (holds(prediction.state) !== true)
-            breaks.push({ name: `${entry.agg.name}.${name}`, at });
+        for (const [name, holds] of Object.entries(entry.agg.rules))
+          if (holds(moved) !== true) breaks.push({ name: `${entry.agg.name}.${name}`, at });
       }
       if (played.rules.length > 0) {
         // The same sequence on the real code, and the model's real invariants on what it left.
@@ -1791,6 +1813,9 @@ export const search = Effect.fn(function* (
       invariants: [...broken.values()].map((entry) => ({
         aggregate: entry.aggregate,
         name: entry.name,
+        kind: aggs.find((agg) => agg.name === entry.aggregate)!.transitions.has(entry.name)
+          ? ("transition" as const)
+          : ("invariant" as const),
         broken: entry.story,
         proved:
           !entry.story &&
