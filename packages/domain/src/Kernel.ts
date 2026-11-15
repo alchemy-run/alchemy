@@ -40,6 +40,7 @@ import type {
   Accepted,
   AggregateKit,
   Delivery,
+  EmittedRange,
   EnvelopeJson,
   HandleResult,
   Json,
@@ -1323,6 +1324,8 @@ const build = (
           codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
         let { version, seq } = snapshot;
         const checkpoints: Record<string, number> = { ...snapshot.checkpoints };
+        // Written before this record existed: each source's fills in on its next delivery.
+        const emitted: Record<string, EmittedRange> = { ...snapshot.emitted };
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
@@ -1343,6 +1346,7 @@ const build = (
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
           checkpoints[delivery.source] = delivery.seq;
           changed = true;
+          const emittedBefore = seq;
           const origin = sources.get(delivery.origin)!;
           const event = (yield* decodeEvent(delivery.event)) as { readonly _tag: string };
           const envelope = decodeEnvelope(delivery.envelope);
@@ -1414,6 +1418,15 @@ const build = (
               );
             }
           }
+          // What this command's deliveries from the source have become, so far.
+          const commandId = delivery.envelope.commandId;
+          const last = emitted[delivery.source];
+          emitted[delivery.source] = {
+            commandId,
+            sourceSeq: delivery.seq,
+            after: last?.commandId === commandId ? last.after : emittedBefore,
+            through: seq,
+          };
         }
         const next: ViewSnapshot = {
           state: encodeState(current),
@@ -1421,6 +1434,7 @@ const build = (
           checkpoints,
           seq,
           ...(generation > 0 ? { generation } : {}),
+          emitted,
         };
         return { snapshot: next, changed, entries, downstream };
       }),

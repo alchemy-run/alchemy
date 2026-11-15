@@ -28,6 +28,7 @@ import {
   type Accepted,
   type AggregateStore,
   type Delivery,
+  type EmittedRange,
   type Json,
   type ListRange,
   type ModelHost,
@@ -38,6 +39,7 @@ import {
   type StreamEntry,
   type StreamMeta,
   type StreamStore,
+  type ViewEntry,
   type ViewSnapshot,
   type ViewStore,
 } from "./Platform.ts";
@@ -1179,6 +1181,16 @@ interface Reached {
   readonly state?: Json;
 }
 
+/** A view key once it has applied a command's events: see `applied` in {@link follow}. */
+interface AppliedKey {
+  readonly key: string;
+  /** The position it had to reach on each source stream. */
+  readonly streams: ReadonlyMap<string, number>;
+  readonly snapshot: ViewSnapshot;
+  /** Its cursor before it applied them; `undefined` if it had when first read. */
+  readonly before: number | undefined;
+}
+
 /**
  * Follow a command's events from its aggregate through every view between it
  * and a consumer, waiting for each view to apply them on the way. Every wait
@@ -1255,8 +1267,9 @@ const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input 
 
     /**
      * Wait until a view has applied every event in `reached` it consumes, and
-     * return, per key it reaches, its cursor once it has, and the cursor it had
-     * before them (`undefined` when it had applied them before we looked).
+     * return, per key it reaches: the positions it had to reach on each
+     * source, its snapshot once it had, and its cursor before them
+     * (`undefined` when it had applied them before we looked).
      */
     const applied = (view: View.Any, reached: ReadonlyArray<Reached>) =>
       Effect.gen(function* () {
@@ -1264,61 +1277,86 @@ const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input 
         const waits = positions(reached, (r) =>
           kernel.viewKeys(view, r.source, r.id, r.event, r.seq, r.state),
         );
-        const out = new Map<string, { readonly before: number | undefined; readonly at: number }>();
-        for (const [key, streams] of waits) {
-          const missing = (snapshot: ViewSnapshot) =>
-            [...streams].find(([stream, seq]) => (snapshot.checkpoints[stream] ?? 0) < seq);
-          const first = yield* viewStore.read(key);
-          if (missing(first) === undefined) {
-            out.set(key, { before: undefined, at: first.seq });
-            continue;
-          }
-          const [stream, version] = missing(first)!;
-          const last = yield* until(
-            viewStore
-              .read(key)
-              .pipe(
-                Effect.flatMap((snapshot) =>
-                  missing(snapshot) === undefined
-                    ? Effect.succeed(snapshot)
-                    : Effect.fail("stale" as const),
-                ),
-              ),
-            () => View.ConsistencyTimeout.make({ view: view.viewName, key, stream, version }),
-          );
-          out.set(key, { before: first.seq, at: last.seq });
-        }
-        return out;
+        return yield* Effect.forEach(
+          waits,
+          ([key, streams]) =>
+            Effect.gen(function* () {
+              const missing = (snapshot: ViewSnapshot) =>
+                [...streams].find(([stream, seq]) => (snapshot.checkpoints[stream] ?? 0) < seq);
+              const first = yield* viewStore.read(key);
+              const unapplied = missing(first);
+              if (unapplied === undefined) {
+                return { key, streams, snapshot: first, before: undefined } satisfies AppliedKey;
+              }
+              const [stream, version] = unapplied;
+              const snapshot = yield* until(
+                viewStore
+                  .read(key)
+                  .pipe(
+                    Effect.flatMap((snapshot) =>
+                      missing(snapshot) === undefined
+                        ? Effect.succeed(snapshot)
+                        : Effect.fail("stale" as const),
+                    ),
+                  ),
+                () => View.ConsistencyTimeout.make({ view: view.viewName, key, stream, version }),
+              );
+              return { key, streams, snapshot, before: first.seq } satisfies AppliedKey;
+            }),
+          { concurrency: "unbounded" },
+        );
       });
 
+    /** A view key's entry, as an event that reaches the view's consumers. */
+    const reachedFrom = (view: View.Any, key: string, entry: ViewEntry) =>
+      Effect.map(kernel.decodeEvent(entry.event), (event): Reached => ({
+        source: view.viewName,
+        id: key,
+        stream: `${view.viewName}/${key}`,
+        seq: entry.seq,
+        event: event as { readonly _tag: string },
+        state: entry.state,
+      }));
+
     /**
-     * What a view key emitted for the command, newest first: its entries up to
-     * `at` that carry the command's id, back to `before`. Without `before`,
-     * back to the first entry before the command's.
+     * What a view key emitted for the command. When the key's snapshot records
+     * the command as the last to reach it from each source, its entries are
+     * read by range. Otherwise (a later command reached it first, or the
+     * snapshot predates the record) they are found by the command's id,
+     * newest first, back to the key's cursor before the command (`before`)
+     * or, without it, to the first entry before the command's.
      */
-    const emitted = (
-      view: View.Any,
-      key: string,
-      { before, at }: { readonly before: number | undefined; readonly at: number },
-      commandId: string,
-    ) =>
+    const emitted = (view: View.Any, { key, streams, snapshot, before }: AppliedKey) =>
       Effect.gen(function* () {
         const viewStore = route.views.get(view.viewName)!;
+        const ranges = [...streams].map(([stream, seq]) => {
+          const range = snapshot.emitted?.[stream];
+          return range?.sourceSeq === seq ? range : undefined;
+        });
+        if (ranges.every((range) => range !== undefined)) {
+          const bySeq = new Map<number, ViewEntry>();
+          for (const range of ranges as ReadonlyArray<EmittedRange>) {
+            if (range.through <= range.after) continue;
+            const entries = yield* viewStore.list(key, {
+              after: range.after,
+              limit: range.through - range.after,
+            });
+            for (const entry of entries) {
+              if (entry.envelope.commandId === range.commandId) bySeq.set(entry.seq, entry);
+            }
+          }
+          return yield* Effect.forEach(bySeq.values(), (entry) => reachedFrom(view, key, entry));
+        }
+        const commandId = (yield* committed).at(-1)?.envelope.commandId;
+        if (commandId === undefined) return [];
         const out: Array<Reached> = [];
-        let after = at + 1;
+        let after = snapshot.seq + 1;
         for (let limit = 8; ; limit *= 4) {
           const page = yield* viewStore.list(key, { order: "desc", after, limit });
           for (const entry of page) {
             if (before !== undefined && entry.seq <= before) return out;
             if (entry.envelope.commandId === commandId) {
-              out.push({
-                source: view.viewName,
-                id: key,
-                stream: `${view.viewName}/${key}`,
-                seq: entry.seq,
-                event: (yield* kernel.decodeEvent(entry.event)) as { readonly _tag: string },
-                state: entry.state,
-              });
+              out.push(yield* reachedFrom(view, key, entry));
             } else if (before === undefined && out.length > 0) return out;
           }
           if (page.length < limit) return out;
@@ -1339,13 +1377,9 @@ const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input 
         const known = reachedOf.get(view.viewName);
         if (known) return known;
         const keys = yield* applied(view, yield* upstream(view));
-        const commandId = (yield* committed).at(-1)?.envelope.commandId;
-        const out: Array<Reached> = [];
-        if (commandId !== undefined) {
-          for (const [key, cursors] of keys) {
-            out.push(...(yield* emitted(view, key, cursors, commandId)));
-          }
-        }
+        const out = (yield* Effect.forEach(keys, (key) => emitted(view, key), {
+          concurrency: "unbounded",
+        })).flat();
         reachedOf.set(view.viewName, out);
         return out;
       });
@@ -1390,25 +1424,34 @@ const projectionProgress = (
       const waits = chain.positions(yield* chain.upstream(projection), (r) =>
         route.kernel.projectionKeys(projection, r.source, r.id, r.event, r.seq, r.state),
       );
-      for (const [key, streams] of waits) {
-        for (const [stream, seq] of streams) {
-          yield* chain.until(
+      // One read of a key's checkpoints covers every stream it waits on.
+      yield* Effect.forEach(
+        waits,
+        ([key, streams]) => {
+          let missing: readonly [string, number] = [...streams][0]!;
+          return chain.until(
             store()
               .checkpoints(key)
               .pipe(
-                Effect.flatMap((checkpoints) =>
-                  (checkpoints[stream] ?? 0) >= seq ? Effect.void : Effect.fail("stale" as const),
-                ),
+                Effect.flatMap((checkpoints) => {
+                  const behind = [...streams].find(
+                    ([stream, seq]) => (checkpoints[stream] ?? 0) < seq,
+                  );
+                  if (behind === undefined) return Effect.void;
+                  missing = behind;
+                  return Effect.fail("stale" as const);
+                }),
               ),
             () =>
               View.ConsistencyTimeout.make({
                 view: projection.projectionName,
                 key,
-                stream,
-                version: seq,
+                stream: missing[0],
+                version: missing[1],
               }),
           );
-        }
-      }
+        },
+        { concurrency: "unbounded", discard: true },
+      );
     }),
 });
