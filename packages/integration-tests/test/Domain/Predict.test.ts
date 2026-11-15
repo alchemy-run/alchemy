@@ -181,6 +181,35 @@ class Later extends Domain.Aggregate("Later", {
 
 class Strays extends Domain.Model("Strays", { aggregates: [Later] }) {}
 
+// A decide that builds its event and its rejection with `make` rather than `new`.
+// Both classes add a getter, so `make` must return the subclass, not the schema's data.
+class Shut extends Domain.Event("Shut", { by: Schema.String }) {
+  get who() {
+    return `shut by ${this.by}`;
+  }
+}
+class AlreadyShut extends Domain.Rejection("AlreadyShut", { by: Schema.String }) {
+  get who() {
+    return `already shut by ${this.by}`;
+  }
+}
+class Close extends Domain.Command("Close", {
+  target: Schema.String,
+  input: { by: Schema.String },
+  events: [Shut],
+  rejects: [AlreadyShut],
+}) {}
+class Door extends Domain.Aggregate("Door", {
+  id: Schema.String,
+  state: Schema.Struct({ shut: Schema.Boolean, by: Schema.String }),
+  initial: { shut: false, by: "" },
+  commands: [Close],
+  decide: {
+    Close: (door, { by }) => (door.shut ? AlreadyShut.make({ by: door.by }) : [Shut.make({ by })]),
+  },
+  evolve: { Shut: (_, { by }) => ({ shut: true, by }) },
+}) {}
+
 const NOW = 1_800_000_000_000;
 const Hosted = Bank.layer(Layer.empty).pipe(
   Layer.provide(Layer.suspend(() => InMemory.make({ now: () => NOW }).layer)),
@@ -233,6 +262,40 @@ describe("Domain Aggregate.predict", { tags: ["unit", "local"] }, () => {
       const typed: InsufficientFunds = local.rejection;
       expect(typed.requested).toBe(5);
     }).pipe(Effect.provide(Hosted)),
+  );
+
+  it.effect("events and rejections built with make", () =>
+    Effect.gen(function* () {
+      const open = Door.predict(Door.definition.initial, new Close({ by: "sam" }), {
+        id: "d-1",
+        now,
+      });
+      expect(open._tag).toBe("Accepted");
+      if (open._tag !== "Accepted") return;
+      expect(open.events[0]).toBeInstanceOf(Shut);
+      expect(open.events[0]?.who).toBe("shut by sam");
+
+      const shut = Door.predict({ shut: true, by: "sam" }, new Close({ by: "ana" }), {
+        id: "d-1",
+        now,
+      });
+      expect(shut._tag).toBe("Rejected");
+      if (shut._tag !== "Rejected") return;
+      expect(shut.rejection).toBeInstanceOf(AlreadyShut);
+
+      // `make` is typed as the class it is called on, getters included.
+      const event: Shut = Shut.make({ by: "sam" });
+      const made: AlreadyShut = AlreadyShut.make({ by: "sam" });
+      expect(event.who).toBe("shut by sam");
+      expect(made.who).toBe("already shut by sam");
+      // A rejection built with `make` is yieldable, like one built with `new`.
+      const failure = yield* Effect.flip(
+        Effect.gen(function* () {
+          return yield* made;
+        }),
+      );
+      expect(failure).toEqual(shut.rejection);
+    }),
   );
 
   it.effect("decide sees the id and time the caller gives", () =>
