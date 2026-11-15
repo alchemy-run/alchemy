@@ -734,4 +734,56 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
     },
     { timeout: 30_000 },
   );
+
+  it.live(
+    "a host that can reach its objects begins a deploy's new runs without waiting for a call",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      const calls: Array<{ readonly cls: string; readonly method: string }> = [];
+      const intercept: Intercept = ({ cls, method }, run) =>
+        Effect.andThen(
+          Effect.sync(() => calls.push({ cls, method })),
+          run,
+        );
+      const before = simHost(stats, { disk });
+      const after = simHost(stats, { disk, intercept });
+      // A runner that has joined its cluster: it begins the runs in the background.
+      const joined: DurableObjects.Host = {
+        ...after.host,
+        begin: (runs) => Effect.asVoid(Effect.forkDetach(Effect.ignore(runs))),
+      };
+      return Effect.gen(function* () {
+        // The old code commits, with no projection.
+        yield* sendOne.pipe(
+          Effect.provide(
+            BooksBefore.layer(Layer.empty).pipe(
+              Layer.provideMerge(DurableObjects.makePlatform(before.host)),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
+            ),
+          ),
+        );
+        yield* before.wake;
+        // The projection is deployed, and nothing calls the model.
+        yield* Effect.gen(function* () {
+          yield* after.wake;
+          // Its run begins, and the projection writes the earlier commit's line.
+          yield* eventually(() =>
+            calls.some(({ cls, method }) => cls.endsWith("Run") && method === "bfRunBegin"),
+          );
+          yield* eventually(() =>
+            calls.some(({ cls, method }) => cls.endsWith("LinesStream") && method === "append"),
+          );
+        }).pipe(
+          Effect.provide(
+            Books.layer(LinesWriterLive).pipe(
+              Layer.provideMerge(DurableObjects.makePlatform(joined)),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
+            ),
+          ),
+        );
+      }).pipe(Effect.scoped);
+    },
+    { timeout: 60_000 },
+  );
 });

@@ -24,7 +24,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
 import { decodeResult, encodeResult, payloadCodec } from "alchemy/WorkflowEncoding";
 import type * as Cause from "effect/Cause";
-import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
+import { ClusterSchema, DeliverAt, Entity as EffectEntity, Sharding } from "effect/cluster";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -43,6 +43,7 @@ import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
 import * as Ref from "effect/Ref";
 import { Rpc } from "effect/rpc";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
@@ -755,6 +756,9 @@ export const layerEntities = <PoolReq>(
             new HasNoPool({ message: `${name} did not finish its Construction phase.` }),
           );
         }
+        // The runner's Sharding, once it has joined the cluster: a call the model
+        // makes on its own (not inside an entity's handler) routes through it.
+        const joined = yield* Deferred.make<Sharding.Sharding["Service"]>();
         const registrations = yield* Ref.make<
           ReadonlyArray<
             readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
@@ -769,6 +773,7 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* clusterEngine.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
+            yield* Deferred.succeed(joined, yield* Sharding.Sharding);
           }).pipe(Layer.effectDiscard),
         );
         const deferredEngine = WorkflowEngine.WorkflowEngine.of({
@@ -813,6 +818,21 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
+          // A deploy's new runs begin once the runner has joined, not on the
+          // first call a caller makes: a model that nothing calls still catches up.
+          begin: (runs) =>
+            Deferred.await(joined).pipe(
+              Effect.flatMap((sharding) =>
+                runs.pipe(
+                  Effect.provideService(Sharding.Sharding, sharding),
+                  Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
+                ),
+              ),
+              // Still pending: the next call begins them.
+              Effect.ignore,
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            ),
           claimKey: Effect.succeed(claimOf(name)),
         };
         return Layer.merge(
