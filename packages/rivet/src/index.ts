@@ -13,6 +13,7 @@ export type {
   SqlCursor,
 } from "./DurableObjectState.ts";
 export * from "./Namespace.ts";
+export * as Node from "./Node.ts";
 export * from "./Pool.ts";
 export * from "./Providers.ts";
 export * from "./Services.ts";

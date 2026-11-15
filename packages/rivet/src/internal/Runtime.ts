@@ -61,6 +61,25 @@ type ActivationContext = ActorContextLike & {
   readonly request?: Request | undefined;
 };
 
+/**
+ * Where a node connects when its process wasn't given that in the
+ * environment, and how its registry runs.
+ */
+export interface NodeConnectionSettings {
+  readonly endpoint: string;
+  readonly token: string;
+  readonly namespace: string;
+  readonly pool: string;
+  /** Further RivetKit registry settings, such as message size limits. */
+  readonly registry?: Readonly<Record<string, unknown>>;
+  /** RivetKit actor options by actor name. */
+  readonly options?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** Registry shutdown settings; signal handling stays with the process. */
+  readonly shutdown?: { readonly gracePeriodMs?: number };
+  /** Runs once the node is registered with the control plane. */
+  readonly connected?: Effect.Effect<void>;
+}
+
 /** Read a RivetKit setting the pool put in the node's environment. */
 const env = (name: string): string | undefined => process.env[name];
 
@@ -214,18 +233,22 @@ const handleWebSocket = async (
 };
 
 /**
- * Host every Durable Object class as a RivetKit actor and connect this node
- * to the control plane. Runs for the life of the node.
+ * Each Durable Object class as the RivetKit actor that hosts it, by actor
+ * name, for a registry to run. `optionsOf` gives a class its RivetKit actor
+ * options.
  */
-export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObject>) =>
+const durableObjectActors = (
+  durableObjects: ReadonlyArray<HostedDurableObject>,
+  optionsOf: (name: string) => Readonly<Record<string, unknown>> | undefined,
+) =>
   Effect.gen(function* () {
-    if (durableObjects.length === 0) return yield* Effect.never;
-    const { actor, setup } = yield* Effect.promise(() => import("rivetkit"));
+    const { actor } = yield* Effect.promise(() => import("rivetkit"));
     const { db } = yield* Effect.promise(() => import("rivetkit/db"));
 
     const use: Record<string, unknown> = {};
     for (const hosted of durableObjects) {
       const name = hosted.name;
+      const options = optionsOf(name);
       const build: WorkerBuild<DurableObjectExport, unknown> = {
         // The services the class phase ran with.
         context: hosted.context as Context.Context<any>,
@@ -313,6 +336,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
             });
 
       use[name] = actor({
+        ...(options === undefined ? {} : { options }),
         db: db({ onMigrate: (database) => migrateStorage(database) }),
         createVars: (): ActivationVars => ({
           instance: undefined,
@@ -358,17 +382,41 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
         },
       } as never);
     }
+    return use;
+  });
+
+/**
+ * Host every Durable Object class as a RivetKit actor and connect this node
+ * to the control plane. Runs for the life of the node. A node Alchemy built
+ * reads its connection from the environment its pool set; any other process
+ * passes `connection`.
+ */
+export const runDurableObjects = (
+  durableObjects: ReadonlyArray<HostedDurableObject>,
+  connection?: NodeConnectionSettings,
+) =>
+  Effect.gen(function* () {
+    if (durableObjects.length === 0) return yield* Effect.never;
+    const { setup } = yield* Effect.promise(() => import("rivetkit"));
+    const use = yield* durableObjectActors(durableObjects, (name) => connection?.options?.[name]);
 
     const registry = setup({
+      ...connection?.registry,
       use,
-      endpoint: env("RIVET_ENDPOINT"),
-      token: env("RIVET_TOKEN"),
-      namespace: env("RIVET_NAMESPACE"),
-      node: { poolName: env("RIVET_POOL") },
+      endpoint: connection?.endpoint ?? env("RIVET_ENDPOINT"),
+      token: connection?.token ?? env("RIVET_TOKEN"),
+      namespace: connection?.namespace ?? env("RIVET_NAMESPACE"),
+      node: { poolName: connection?.pool ?? env("RIVET_POOL") },
+      // A process given its connection owns its signals, and stops the node
+      // by interrupting it.
+      ...(connection === undefined
+        ? {}
+        : { shutdown: { ...connection.shutdown, disableSignalHandlers: true } }),
       noWelcome: true,
     } as never) as { startAndWait(): Promise<void>; shutdown(): Promise<void> };
 
     yield* Effect.promise(() => registry.startAndWait());
+    if (connection?.connected !== undefined) yield* connection.connected;
     yield* Effect.logInfo(
       `Rivet node connected: ${durableObjects.map((hosted) => hosted.name).join(", ")}`,
     );

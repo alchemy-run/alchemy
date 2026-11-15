@@ -87,4 +87,26 @@ export const Default = RivetRailway.ServicePool("Default").pipe(Layer.provide(Cl
 
 Keep the two close when you can: every call to a room passes through the control plane.
 
+## Join it from your own process
+
+A process Alchemy didn't build, such as an existing server or a test, can join a pool as one of its nodes. `Node.serve` hosts classes in that process until it's interrupted, and `Node.connect` reaches any class's instances through the gateway:
+
+```typescript title="src/server.ts"
+import * as Rivet from "@alchemy.run/rivet";
+
+const connection: Rivet.Node.NodeConnection = {
+  endpoint: "https://rivet.example.com",
+  token: Redacted.make(process.env.RIVET_TOKEN!),
+  namespace: "default",
+  pool: "Default",
+};
+
+yield* Rivet.Node.serve([Room], connection).pipe(Effect.forkScoped);
+
+const rooms = Rivet.Node.connect(connection)(Room);
+yield* rooms.getByName("lobby").join();
+```
+
+Each class's outer Effect runs once, in `serve`, with the context it's given, so provide the services the classes yield. The third argument sets RivetKit's `registry` settings, actor `options` by class, the `shutdown` grace period, and a `connected` Effect that runs once the node has registered. The process owns its signals: interrupt `serve` to stop the node. `connect` takes `headers`, computed for each call, such as the caller's trace.
+
 Next, choose a platform: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner), [Railway](/rivet/railway) or [Rivet Cloud](/rivet/rivet-cloud).
