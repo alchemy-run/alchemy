@@ -11612,6 +11612,9 @@ importers:
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
     devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

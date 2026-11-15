@@ -9,7 +9,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import {
   EventSource,
   thinWebhookPath,
@@ -19,12 +18,8 @@ import {
   type EventSourceService,
 } from "./ConsumeEvents.ts";
 import { EventDestination } from "./EventDestination.ts";
-import {
-  isThinEventClass,
-  type StripeEventClass,
-  type StripeEventInstance,
-  type ThinEventObject,
-} from "./Events.ts";
+import { isThinEventClass, type StripeEventInstance } from "./Events.ts";
+import { decodeThinEvent } from "./internal/thin.ts";
 import { attachStripeToken, authorizeWith } from "./StripeHttp.ts";
 import { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
@@ -87,7 +82,7 @@ export const ConsumeEventsLive = Layer.effect(
       // Stripe only delivers to public URLs, and under `alchemy dev` the
       // host is on localhost: skip the endpoints rather than fail the whole
       // stack. Deliveries then answer 500 (no signing secret).
-      const provision = (path: string, create: Effect.Effect<void, never, any>) =>
+      const provision = <R>(path: string, create: Effect.Effect<void, never, R>) =>
         globalThis.__ALCHEMY_RUNTIME__
           ? Effect.void
           : Namespace.push(
@@ -168,29 +163,6 @@ export const ConsumeEventsLive = Layer.effect(
     }) as EventSourceService;
   }),
 );
-
-const ThinEventSchema = Schema.Struct({
-  id: Schema.String,
-  created: Schema.String,
-  livemode: Schema.Boolean,
-  related_object: Schema.optional(
-    Schema.NullOr(Schema.Struct({ id: Schema.String, type: Schema.String, url: Schema.String })),
-  ),
-  data: Schema.optional(Schema.Unknown),
-  context: Schema.optional(Schema.NullOr(Schema.String)),
-});
-
-const decodeThinEvent = (event: unknown): Effect.Effect<ThinEventObject, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(ThinEventSchema)(event).pipe(
-    Effect.map((decoded) => ({
-      id: decoded.id,
-      created: decoded.created,
-      livemode: decoded.livemode,
-      relatedObject: decoded.related_object ?? undefined,
-      data: decoded.data,
-      context: decoded.context ?? undefined,
-    })),
-  );
 
 const asWebhookSecret = (raw: unknown): Redacted.Redacted<string> | undefined => {
   if (raw === undefined || raw === null || raw === "") return undefined;
