@@ -436,6 +436,50 @@ describe("Domain backfill (simulated)", { tags: ["unit", "local"] }, () => {
   );
 
   scenario(
+    "an instance on older code that lists itself after a run read its leaf, and never commits again, is caught up",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 4, 16, 3)) yield* commit();
+        sim.holdListing = true;
+        yield* sim.deploy();
+        // A host still on the code from before the deploy creates an instance: its
+        // code doesn't know the new consumer.
+        sim.now += 1;
+        yield* sim.commit("A/late", ["k0"], sim.now + 60_000);
+        // The run reads the directory without it, and the instance lists itself after,
+        // still on its older code.
+        yield* sim.run([() => sim.list("A/late")]);
+        // It moves to the deployed code, and nothing calls it again.
+        sim.now += 61_000;
+        yield* sim.run();
+      }),
+  );
+
+  it.effect("a mark of a consumer removed since is not waited on", () =>
+    Effect.gen(function* () {
+      const sim = new Sim(1, TARGET);
+      for (const commit of history(sim, 4, 12, 3)) yield* commit();
+      yield* sim.deploy();
+      yield* sim.run();
+      // The run marked the directory it read.
+      expect(
+        [...sim.nodes.values()].some((node) =>
+          [...node.object.data.keys()].some((key) => key.startsWith("m:")),
+        ),
+      ).toBe(true);
+      // A deploy removes the consumer. A new instance on that code gets the run's mark,
+      // from older code: its consumer was removed since, and the instance doesn't wait.
+      sim.removed = true;
+      sim.now += 1;
+      yield* sim.commit("A/after", ["k0"]);
+      yield* sim.run();
+      const source = sim.sources.get("A/after")!;
+      expect(source.object.jobs.has("bf-register")).toBe(false);
+      expect(source.object.data.has("bf:marks")).toBe(false);
+    }),
+  );
+
+  scenario(
     "older code and faults together",
     (sim) =>
       Effect.gen(function* () {

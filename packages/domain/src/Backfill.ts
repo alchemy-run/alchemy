@@ -97,14 +97,30 @@ export const withGeneration = (ref: SourceRef, plan: Plan | undefined): SourceRe
   return generation === undefined || generation === 0 ? ref : { ...ref, generation };
 };
 
+/**
+ * A run read a directory node: the consumer it backfills, and the revision of
+ * the code it runs (see {@link Network.revision}). A node keeps its marks, and
+ * hands them to each instance it lists from then on: one that lists itself
+ * after a run read the node, and that the run so missed, asks that consumer for
+ * a reader, even when its own code doesn't know it yet.
+ */
+export interface Mark {
+  readonly target: string;
+  /** Absent on hosts that don't count revisions. */
+  readonly revision?: number;
+}
+
 export interface NodeRpc {
-  readonly register: (path: string, ref: SourceRef) => Effect.Effect<void>;
-  readonly child: (path: string, child: string) => Effect.Effect<void>;
+  /** List an instance; answers the marks of every run that read the node before. */
+  readonly register: (path: string, ref: SourceRef) => Effect.Effect<ReadonlyArray<Mark>>;
+  /** Link a child node; answers the marks of every run that read the node before. */
+  readonly child: (path: string, child: string) => Effect.Effect<ReadonlyArray<Mark>>;
   /**
    * A page of what a node lists: its own instances after `after`, and (on the
    * first page) its children. Any code answers it, whatever consumers it knows.
+   * A run passes its `mark` on the first page: the node keeps it.
    */
-  readonly list: (path: string, after: string | undefined) => Effect.Effect<Listing>;
+  readonly list: (path: string, after: string | undefined, mark?: Mark) => Effect.Effect<Listing>;
 }
 
 /** A page of a directory node's listing. */
@@ -344,6 +360,12 @@ export interface Progress {
 
 /** How the roles reach each other. */
 export interface Network {
+  /**
+   * The model revision this code is from: one more on each deploy that changes
+   * the model's consumers. A run marks the nodes it reads with it. Absent where
+   * the host doesn't count revisions.
+   */
+  readonly revision?: () => number | undefined;
   readonly node: NodeRpc;
   readonly source: SourceRpc;
   readonly consumer: ConsumerRpc;
@@ -402,6 +424,26 @@ export const defaultLimits: Limits = {
 // ---------------------------------------------------------------- keys
 
 const enc = encodeURIComponent;
+
+/** Where a source keeps the marks from code newer than its own, until it runs that code. */
+const MARKS_KEY = "bf:marks";
+
+/** The mark a run of `target` leaves on the nodes it reads, from this code. */
+const markOf = (net: Network, target: string): Mark => {
+  const revision = net.revision?.();
+  return revision === undefined ? { target } : { target, revision };
+};
+
+/** One mark per target: the newest revision wins. */
+export const mergeMarks = (marks: ReadonlyArray<Mark>): ReadonlyArray<Mark> => {
+  const byTarget = new Map<string, Mark>();
+  for (const mark of marks) {
+    const seen = byTarget.get(mark.target);
+    if (seen === undefined || (mark.revision ?? -1) > (seen.revision ?? -1))
+      byTarget.set(mark.target, mark);
+  }
+  return [...byTarget.values()];
+};
 const pad = (n: number, width: number) => String(Math.max(0, Math.floor(n))).padStart(width, "0");
 
 /** Log a protocol step at debug level (`backfill <step>` and a JSON body), to follow a backfill. */
@@ -640,6 +682,8 @@ export interface SourceHost {
   readonly ref: SourceRef;
   /** Every consumer in the model this instance's code runs: a target outside it is from newer code. */
   readonly model: () => ReadonlyArray<string>;
+  /** The model revision of the code this instance runs (see {@link Network.revision}). */
+  readonly revision?: () => number | undefined;
   /** The consumers this instance's events reach, in the code it runs now. */
   readonly targets: () => ReadonlyArray<string>;
   /** Whether `target`'s keys are keyed by their source: each reads its own source's log. */
@@ -727,22 +771,36 @@ export const makeSource = (
     onCommit,
 
     /**
-     * Ask for a reader for each target this instance is behind on. An instance
-     * lists itself in the directory after its first commit, so a consumer
-     * deployed in between may have listed the directory without it: the next
-     * commit would ask for a reader (see `onCommit`), and this does not wait
-     * for one. Call it once the instance is listed.
+     * Ask for a reader for each target this instance is behind on, once it is
+     * listed in the directory with the `marks` its node answered. An instance
+     * lists itself after its first commit, so a run may have read its node
+     * before: the node's mark says so. This instance asks a reader of each
+     * consumer its code knows; a mark from newer code than it runs (a consumer
+     * it may not know yet) is kept until it runs that code, so a consumer
+     * removed since, whose mark is from older code, is never waited on. `true`
+     * once no mark is kept: until then, call it again later, with no marks.
      */
-    catchUp: storage.exclusive(
-      Effect.gen(function* () {
-        const routed = yield* host.routed;
-        // No cursors: it predates catch-up, and every consumer is taken as caught up.
-        if (routed === undefined) return;
-        const version = yield* host.version;
-        for (const target of host.targets())
-          if ((routed[target] ?? 0) !== version) yield* onCommit(target);
-      }),
-    ),
+    catchUp: (marks: ReadonlyArray<Mark>) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          const kept = (yield* storage.get<ReadonlyArray<Mark>>(MARKS_KEY)) ?? [];
+          const own = host.revision?.();
+          // Read by a run on newer code: this code may not know its consumer yet.
+          const waiting = mergeMarks([...kept, ...marks]).filter(
+            (mark) => own !== undefined && mark.revision !== undefined && mark.revision > own,
+          );
+          const routed = yield* host.routed;
+          // No cursors: it predates catch-up, and every consumer is taken as caught up.
+          if (routed !== undefined) {
+            const version = yield* host.version;
+            for (const target of host.targets())
+              if ((routed[target] ?? 0) !== version) yield* onCommit(target);
+          }
+          if (waiting.length > 0) yield* storage.put({ [MARKS_KEY]: waiting });
+          else if (kept.length > 0) yield* storage.delete([MARKS_KEY]);
+          return waiting.length === 0;
+        }),
+      ),
 
     log: (after: number, limit: number) => host.log(after, limit),
 
@@ -1578,10 +1636,34 @@ export const makeNode = (
       if ((yield* storage.get<string>("path")) !== path) yield* storage.put({ path });
     });
 
+  /** The marks of the runs that read this node, or a node above it before it was linked. */
+  const marks = Effect.map(storage.list<Mark>({ prefix: "m:" }), (rows) =>
+    rows.map(([, mark]) => mark),
+  );
+
+  /** Keep `added`, the newest revision of each target. Call inside the exclusive section. */
+  const keepMarks = (added: ReadonlyArray<Mark>) =>
+    Effect.gen(function* () {
+      if (added.length === 0) return;
+      const kept = new Map((yield* marks).map((mark) => [mark.target, mark] as const));
+      const entries: Record<string, Mark> = {};
+      for (const mark of mergeMarks(added)) {
+        const seen = kept.get(mark.target);
+        if (seen === undefined || (mark.revision ?? -1) > (seen.revision ?? -1))
+          entries[`m:${enc(mark.target)}`] = mark;
+      }
+      yield* storage.put(entries);
+    });
+
+  /** This node's marks, once it is linked: read after any listing before it, in its own section. */
+  const marksNow = storage.exclusive(marks);
+
   /**
    * Link this node into its parent, and so on up to the root, before answering:
    * an instance's listing waits for it, so every instance that is listed can be
-   * reached from the root. Only a node's first registration pays for it.
+   * reached from the root. Only a node's first registration pays for it. A run
+   * that read the parent before the link didn't find this node: the parent's
+   * marks are kept here, with the link.
    */
   const ensureLinked = (path: string) =>
     Effect.gen(function* () {
@@ -1591,8 +1673,11 @@ export const makeNode = (
       yield* linking.withPermits(1)(
         Effect.gen(function* () {
           if (yield* storage.get("linked")) return;
-          yield* net.node.child(parentOf(path), path);
-          yield* storage.exclusive(storage.put({ linked: true, path }));
+          // Older directory code answers nothing.
+          const above = (yield* net.node.child(parentOf(path), path)) ?? [];
+          yield* storage.exclusive(
+            Effect.andThen(keepMarks(above), storage.put({ linked: true, path })),
+          );
         }),
       );
     });
@@ -1620,8 +1705,10 @@ export const makeNode = (
       Effect.gen(function* () {
         const forward = yield* storage.exclusive(
           Effect.gen(function* () {
-            // Split: its children list instances now.
-            if (yield* storage.get("split")) return childFor(path, ref);
+            // Split: its children list instances now. A run that read this node before
+            // the instance's child was linked may not read the child: answer its marks too.
+            if (yield* storage.get("split"))
+              return { path: childFor(path, ref), marks: yield* marks };
             const key = `i:${refKey(ref)}`;
             if ((yield* storage.get(key)) !== undefined) return undefined;
             const count = ((yield* storage.get<number>("count")) ?? 0) + 1;
@@ -1636,7 +1723,11 @@ export const makeNode = (
           }),
         );
         yield* ensureLinked(path);
-        if (forward !== undefined) yield* net.node.register(forward, ref);
+        // Read after the instance's row is in: a run that read this node since found it.
+        if (forward === undefined) return yield* marksNow;
+        // Older directory code answers nothing.
+        const below = (yield* net.node.register(forward.path, ref)) ?? [];
+        return mergeMarks([...forward.marks, ...below]);
       }),
 
     child: (path: string, child: string) =>
@@ -1649,11 +1740,15 @@ export const makeNode = (
           }),
         );
         yield* ensureLinked(path);
+        // Read after the link is in: a run that read this node since found the child.
+        return yield* marksNow;
       }),
 
-    list: (path: string, after: string | undefined) =>
+    list: (path: string, after: string | undefined, mark?: Mark) =>
       storage.exclusive(
         Effect.gen(function* () {
+          // Kept before the rows are read: an instance listed after this reads the mark.
+          if (mark !== undefined) yield* keepMarks([mark]);
           const rows = yield* storage.list<SourceRef>({
             prefix: "i:",
             ...(after === undefined ? {} : { startAfter: after }),
@@ -1809,7 +1904,8 @@ export const makeRelay = (net: Network) => {
       let after: string | undefined;
       while (true) {
         const page = yield* persist(
-          net.node.list(path, after),
+          // Marked on the first page, before any row is read: see `Mark`.
+          net.node.list(path, after, after === undefined ? markOf(net, run.target) : undefined),
           until,
           () => `list ${path}`,
           undefined,

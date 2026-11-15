@@ -2,6 +2,7 @@ import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
 import { Backfill, BackfillProvider } from "./Backfill.ts";
+import { Revision, RevisionProvider } from "./Revision.ts";
 
 /** Service tag bundling the providers of Domain models hosted on Cloudflare. */
 export class Providers extends Provider.ProviderCollection<Providers>()("Domain.Cloudflare") {}
@@ -11,7 +12,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 /**
  * The providers of Domain models hosted on Cloudflare Durable Objects: the
  * {@link Backfill} a deploy waits on while new views and projections receive
- * their history. Add it next to `Cloudflare.providers()` in any Stack that
+ * their history, and the {@link Revision} it counts their changes with. Add it next to `Cloudflare.providers()` in any Stack that
  * deploys a Worker built with `DomainCloudflare.layerDurableObjects()`.
  * Without it, the deploy fails: no provider handles `Cloudflare.Domain.Backfill`.
  *
@@ -38,8 +39,8 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Backfill])).pipe(
-    Layer.provide(BackfillProvider()),
+  Layer.effect(Providers, Provider.collection([Backfill, Revision])).pipe(
+    Layer.provide(Layer.mergeAll(BackfillProvider(), RevisionProvider())),
     Layer.provide(CloudflareApiLive()),
     Layer.orDie,
   );

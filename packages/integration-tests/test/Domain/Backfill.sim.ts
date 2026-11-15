@@ -35,6 +35,9 @@ export interface Faults {
   readonly crash: number;
 }
 
+/** A source's job that catches up again, as the real register job does. */
+const REGISTER_JOB = "bf-register";
+
 export const noFaults: Faults = { callBefore: 0, callAfter: 0, crash: 0 };
 
 /** What one object did: Durable Object requests (calls in, and alarms), and rows read and written. */
@@ -278,6 +281,14 @@ export class Sim {
 
   /** The target exists (the consumer is deployed). */
   deployed = false;
+
+  /** A later deploy removed the consumer: its code (revision 2) has no targets. */
+  removed = false;
+
+  /** The revision of the newest code: 0 before the deploy, 1 after it, 2 once the consumer is removed. */
+  get revision() {
+    return this.removed ? 2 : this.deployed ? 1 : 0;
+  }
   calls = 0;
   failures = 0;
 
@@ -483,6 +494,7 @@ export class Sim {
   }
 
   readonly net: Backfill.Network = {
+    revision: () => this.revision,
     node: {
       register: (path, ref) =>
         this.call(
@@ -492,9 +504,13 @@ export class Sim {
         ),
       child: (path, child) =>
         this.call(this.node(path).object, () => this.node(path).role.child(path, child), "child"),
-      list: (path, after) =>
+      list: (path, after, mark) =>
         Effect.andThen(this.interject?.(path) ?? Effect.void, () =>
-          this.call(this.node(path).object, () => this.node(path).role.list(path, after), "list"),
+          this.call(
+            this.node(path).object,
+            () => this.node(path).role.list(path, after, mark),
+            "list",
+          ),
         ),
     },
     source: {
@@ -717,7 +733,9 @@ export class Sim {
     const id = this.streamOf(ref);
     let source = this.sources.get(id);
     if (!source) {
-      const object = new SimObject(`source:${id}`, this, () => this.sources.get(id)!.role.flush);
+      const object = new SimObject(`source:${id}`, this, (job) =>
+        job === REGISTER_JOB ? this.catchUp(id, []) : this.sources.get(id)!.role.flush,
+      );
       const data: SourceData = {
         ref,
         object,
@@ -732,8 +750,9 @@ export class Sim {
         this.net,
         {
           ref,
-          model: () => (knows() ? this.targets : []),
-          targets: () => (knows() ? this.targets : []),
+          model: () => (knows() && !this.removed ? this.targets : []),
+          targets: () => (knows() && !this.removed ? this.targets : []),
+          revision: () => (knows() ? this.revision : 0),
           singleSource: () => this.singleSource,
           log: (after, limit) =>
             Effect.sync(() => data.events.filter((event) => event.seq > after).slice(0, limit)),
@@ -816,7 +835,7 @@ export class Sim {
     const source = this.source({ source: name, id });
     if (source.events.length === 0) source.staleUntil = staleUntil;
     this.busy(source);
-    const knows = this.deployed && this.now >= source.staleUntil;
+    const knows = this.deployed && !this.removed && this.now >= source.staleUntil;
     return Effect.succeed(undefined).pipe(
       Effect.andThen(
         source.object
@@ -883,10 +902,24 @@ export class Sim {
     const source = this.source({ source: name, id });
     return this.retry(
       this.net.node.register(Backfill.leafOf(source.ref, this.limits.depth), source.ref),
-    ).pipe(
-      // The instance's own job: no call crosses the network.
-      Effect.andThen(this.retry(Effect.suspend(() => this.busy(source).role.catchUp))),
-    );
+    ).pipe(Effect.flatMap((marks) => this.catchUp(this.streamOf(source.ref), marks)));
+  }
+
+  /**
+   * The instance's own catch-up (no call crosses the network): while a mark is
+   * from newer code than it runs, its job tries again later, as the real one does.
+   */
+  catchUp(sourceKey: string, marks: ReadonlyArray<Backfill.Mark>): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const source = this.sources.get(sourceKey)!;
+      return this.retry(Effect.suspend(() => this.busy(source).role.catchUp(marks))).pipe(
+        Effect.flatMap((done) =>
+          done
+            ? Effect.void
+            : source.object.jobsApi.schedule(REGISTER_JOB, this.limits.staleRetryMillis),
+        ),
+      );
+    });
   }
 
   /** Retry a call until it lands (a durable outbox would). */
