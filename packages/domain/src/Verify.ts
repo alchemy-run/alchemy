@@ -549,9 +549,23 @@ export const render = (report: Report): string => {
         ? `✗ ${rule.name} does not hold in the end`
         : `✗ ${rule.name} breaks`,
     );
-    if (rule.story && rule.story.length > 0)
-      out.push("", ...indent(Script.script(rule.story), "    "), "");
-    else out.push("    on a new instance", "");
+    if (!rule.story || rule.story.length === 0) {
+      out.push("    on a new instance", "");
+      continue;
+    }
+    out.push(Explore.describe(rule.story, "    "), "");
+    if (Script.redelivers(rule.story))
+      out.push(
+        "    It needs an event delivered to a policy twice, which a platform does and a story does not.",
+        "",
+      );
+    else
+      out.push(
+        "    As a story, to keep as a test:",
+        "",
+        ...indent(Script.script(rule.story), "    "),
+        "",
+      );
   }
 
   const unseen = report.rules.filter((rule) => rule.standing === "unseen");

@@ -1,0 +1,403 @@
+---
+title: Verifying a model
+description: Write down what must always be true of your model, and have it proved, or searched for a sequence of commands that breaks it.
+---
+
+A [story](/domain/story) checks one example: this history, this command, these events. Verification checks a rule. You write down what must always be true, and it looks for any state, any input and any sequence of commands that makes it false.
+
+It finds the values itself. Nobody writes an amount to withdraw or an order to send commands in.
+
+## Say what a state must never be
+
+An aggregate lists its invariants by name. Each is given the state and returns `true` while the rule holds.
+
+```diff lang="typescript" title="packages/domain/src/Account/Account.aggregate.ts"
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: AccountState,
+  initial: { _tag: "Unopened" },
++  invariants: {
++    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
++    WithinDailyLimit: (account) =>
++      account._tag !== "Open" || account.today.withdrawn <= DAILY_LIMIT,
++  },
+```
+
+An invariant is a claim about `decide` and `evolve`, not a guard. Nothing runs it when a command arrives. It says what those two must never let happen, and verification checks that they don't.
+
+## Say what a command must never do
+
+Some rules are about a change, not a state. A closed account stays closed. Only an agent changes who owns an account. A `transitions` entry is given the state before a command, the command, the events it recorded and the state after.
+
+```diff lang="typescript" title="packages/domain/src/Account/Account.aggregate.ts"
+export class Account extends Domain.Aggregate("Account", {
+  invariants: {
+    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+  },
++  transitions: {
++    AClosedAccountStaysClosed: ({ before, after }) =>
++      before._tag !== "Closed" || after._tag === "Closed",
++    MoneyLeavesOnlyByWithdrawalOrTransfer: ({ before, after, command }) =>
++      before._tag !== "Open" ||
++      after._tag !== "Open" ||
++      after.balance >= before.balance ||
++      command._tag === "WithdrawMoney" ||
++      command._tag === "DebitTransfer",
++  },
+```
+
+A transition can read who sent the command, the same way `decide` does. Write it as an `Effect.fn` and yield the request context:
+
+```diff lang="typescript" title="packages/domain/src/Account/Account.aggregate.ts"
+transitions: {
+  AClosedAccountStaysClosed: ({ before, after }) =>
+    before._tag !== "Closed" || after._tag === "Closed",
++  OnlyAnAgentChangesTheOwner: Effect.fn(function* ({ before, after }) {
++    if (before._tag !== "Open" || after._tag !== "Open") return true;
++    if (before.customerId === after.customerId) return true;
++    return (yield* CurrentActor)._tag === "Agent";
++  }),
+},
+```
+
+## Say what holds across the model
+
+A rule that spans instances goes on the model. It's given every instance of every aggregate, with its state and the events it recorded.
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Customer, UsernameClaim, Account, Transfer],
+  sagas: [ExecuteTransfer],
++  invariants: {
++    /** A transfer that may run has run: it completed or it failed. */
++    NoTransferLeftPending: (bank) =>
++      bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
++  },
+```
+
+A model's invariant isn't true at every instant. A transfer is `Pending` while its saga moves the money. It's checked whenever nothing is left to react: every policy has handled its events and every saga has finished or waits.
+
+It can read a view too. Each key of a view is listed under the view's name, with the id of the instance it follows and its state. Here a shop keeps what each order came to in a `Spend` view, and says the view never disagrees with the order:
+
+```typescript title="packages/domain/src/Shop.model.ts"
+export class Shop extends Domain.Model("Shop", {
+  aggregates: [Order],
+  views: [Spend],
+  policies: [Review],
+  invariants: {
+    SpendIsTheTotal: (shop) =>
+      shop.Spend.every((spend) =>
+        shop.Order.some(
+          (order) =>
+            order.id === spend.id &&
+            order.state._tag === "Placed" &&
+            order.state.total === spend.state.total,
+        ),
+      ),
+  },
+}) {}
+```
+
+## Say where everything ends up
+
+Some rules are false along the way and true in the end. A transfer waiting for approval hasn't ended, but it will: one nobody approves expires after a day. That goes under `eventually`.
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+export class Bank extends Domain.Model("Bank", {
+  invariants: {
+    NoTransferLeftPending: (bank) =>
+      bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
+  },
++  eventually: {
++    /** No transfer waits for ever: one nobody approves expires. */
++    EveryTransferEnds: (bank) =>
++      bank.Transfer.every(
++        (transfer) => transfer.state._tag === "Completed" || transfer.state._tag === "Failed",
++      ),
++  },
+```
+
+It's checked once a sequence has run its course: nothing is left to react, and every scheduled command has come due and run.
+
+## Verify the model
+
+One test verifies all of it. Pass the model and the Apis callers reach it through. Their commands are what a sequence is made of.
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Bank } from "../src/Bank.model.ts";
+import { CustomerApi } from "../src/CustomerApi.api.ts";
+import { SupportApi } from "../src/SupportApi.api.ts";
+
+it.effect(
+  "the bank keeps its promises",
+  () =>
+    Verify.model(Bank, { apis: [CustomerApi, SupportApi] }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  120_000,
+);
+```
+
+It reads the TypeScript of your model, so it has to find the file. It looks through what the test imports for the file that declares the model. Pass `source` when the model is declared somewhere the test doesn't import.
+
+It needs two optional peers, and runs under Node:
+
+```sh
+pnpm add -D z3-solver oxc-parser
+```
+
+## Read the report
+
+`Verify.render` prints what a pass means. The report says how far each rule is known to hold, because not every rule gets the same answer.
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+const report = yield* Verify.report(Bank, { apis: [CustomerApi, SupportApi] });
+console.log(Verify.render(report));
+```
+
+```text
+Bank: 48 outcomes, 6 policies, 1 saga, 1 view
+
+Proved: for every state and every input, after any number of commands
+  ✓ Account.NeverOverdrawn
+  ✓ Account.WithinDailyLimit
+  ✓ Account.AClosedAccountStaysClosed
+  ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
+  ✓ Account.OnlyAnAgentChangesTheOwner
+
+Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait
+5,802 sequences, 3,929 states
+  ✓ Bank.TransfersLoseNoMoney
+  ✓ Bank.NoTransferLeftPending
+  ✓ Bank.EveryTransferEnds  holds at the end of the 2,327 sequences that ran their course
+
+Assumed
+  - numbers are exact: integers stay within ±2^53
+  - an external system answers what its schema allows, and nothing else
+  - middleware lets every caller in: who sends a command is anyone its request context allows
+  - projections, streams and queries are not checked: they read what the model records, and send it nothing
+```
+
+**Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance.
+
+**Checked** means no sequence that was run breaks the rule. A model's rules are about many instances at once, which a solver can't decide in general, so they are searched: every sequence of a few commands, with everything that follows from each.
+
+**Assumed** is what a pass takes for granted. Read it once. It's where a rule that verifies can still be wrong in production.
+
+## Fix what breaks
+
+A broken rule fails the test with the shortest sequence that breaks it, written as a story. This shop issues a ticket for each booked seat, under a number an external system hands out:
+
+```typescript title="packages/domain/src/Tickets.model.ts"
+export const IssueLive = Issue.toLayer(
+  Effect.gen(function* () {
+    const numbers = yield* Numbers;
+    const tickets = yield* Ticket;
+    return Effect.fn(function* ({ source }) {
+      const { number } = yield* numbers.next();
+      yield* tickets.send(number, new IssueTicket({ seat: source.id }));
+    });
+  }),
+);
+
+export class Tickets extends Domain.Model("Tickets", {
+  aggregates: [Seat, Ticket],
+  policies: [Issue],
+  invariants: {
+    OneTicketPerSeat: (tickets) =>
+      tickets.Seat.every(
+        (seat) => tickets.Ticket.filter((ticket) => ticket.state.seat === seat.id).length <= 1,
+      ),
+  },
+}) {}
+```
+
+It reads fine, and every story about it passes. Verification fails:
+
+```text
+Tickets: 3 outcomes, 1 policy, 1 external system
+
+✗ Tickets.OneTicketPerSeat breaks
+    1. Seat "A" BookSeat  → SeatBooked
+       ↳ Issue asks Numbers.next  → { number: "C" }
+       ↳ Issue: Ticket "C" IssueTicket { seat: "A" }  → TicketIssued
+       ↳ Issue, handling its event again, asks Numbers.next  → { number: "E" }
+       ↳ Issue, handling its event again: Ticket "E" IssueTicket { seat: "A" }  → TicketIssued
+
+    It needs an event delivered to a policy twice, which a platform does and a story does not.
+```
+
+A platform delivers an event to a policy at least once. The second time, `Issue` asks for another number and sends its command to another ticket. The fix is an id that comes from the event, not from outside: `tickets.send(source.id, ...)`.
+
+When a story can run the sequence, the report also writes it as one. This shop holds an order the risk service calls risky, and a rule says no order is ever held:
+
+```text
+✗ Shop.NoOrderIsHeld breaks
+    1. Order "A" Place { total: 100 }  → OrderPlaced
+       ↳ Review asks Risk.score  → { risk: 1.5 }
+       ↳ Review: Order "A" Hold  → OrderHeld
+
+    As a story, to keep as a test:
+
+    story(
+      Story.when(Order.ref("A"), new Place({ total: 100 })),
+      Story.call(Risk.score, {}),
+      Story.succeed(Risk.score, { risk: 1.5 }),
+      Story.then(Order.ref("A"), new OrderPlaced({ total: 100 }), new OrderHeld({})),
+    )
+```
+
+Paste the steps into a test and import what they name. The sequence then stays in your suite as a regression test.
+
+## Run what it finds on the real model
+
+Verification reads your policies, sagas and views from their source. To know it read them right, give it the story runner your stories use. Every sequence it finds is then run on the real model in memory, and the test fails where the model does something else.
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+import { Story } from "@alchemy.run/domain/Story";
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { CustomerApi } from "../src/CustomerApi.api.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+import { SupportApi } from "../src/SupportApi.api.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck, Payments],
+});
+
+it.effect(
+  "the bank keeps its promises",
+  () =>
+    Verify.model(Bank, { apis: [CustomerApi, SupportApi], story }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  120_000,
+);
+```
+
+The report gains a section:
+
+```text
+Run on the real model: 32 sequences the explorer found, as stories (2 more need an event delivered twice, which a story does not do)
+  ✓ the model does what the explorer read in each
+```
+
+Put the external systems the model calls in `stub`. The run then gives each call the answer the solver picked.
+
+## External systems answer anything
+
+Nobody says what `FraudCheck.score` returns. Its answer is an input like a command's fields: the solver picks whatever the operation's `success` schema allows, and each `error` it declares is a path of its own. So a policy is checked against a risky score, a safe one, and the vendor being down.
+
+The sequence above shows the answer it needed: `Review asks Risk.score → { risk: 1.5 }`. A score of `1.5` is allowed because the schema says `Schema.Number`. If the vendor only answers between 0 and 1, say so in the schema, and the solver stops picking anything else.
+
+## Delivery goes wrong
+
+A model that is right when every event is handled once, in the order you wrote the policies, can be wrong on a real platform. Verification runs every sequence both ways.
+
+Each event is delivered to each policy twice. The commands a policy sends get ids from the event, so an instance that took one does nothing the second time. What can change is an external system's answer, and a command that was refused the first time and is decided again.
+
+Reactions that wait at the same time run in no set order. After each command, each reaction that could write the same aggregate as another is also tried behind the others.
+
+A policy that calls an external system calls it again on a second delivery. The model can't tell whether that's safe, so the report lists each such call:
+
+```text
+Called again when an event is delivered again: each has to be safe to repeat
+  FraudCheck.score, by FraudReview
+```
+
+Scoring twice is harmless. Refunding a payment twice is not: pass the vendor an idempotency key made from the event.
+
+## Search further, or faster
+
+`depth` is the most commands callers send in a sequence. What policies, sagas and schedules do in reaction doesn't count, so two commands reach a long way. The default is 2.
+
+Each fault multiplies the sequences. On the example bank, two commands with both faults is 5,802 sequences in 15 seconds. Three commands with neither is 40,158 in 75 seconds, and three with both is more than a test should wait for. Go deeper with the faults off:
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+Verify.model(Bank, {
+  apis: [CustomerApi, SupportApi],
+  depth: 3,
+  faults: { redeliver: false, reorder: false },
+});
+```
+
+A pass means the whole check was done. It fails when it couldn't read some code, left a policy out, stopped at its `budget` of sequences, or never reached a rule's aggregate. `allow` names what a pass may leave undone:
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+Verify.model(Bank, {
+  apis: [CustomerApi, SupportApi],
+  depth: 3,
+  allow: { truncated: true, skipped: ["Notify"] },
+});
+```
+
+## Verify one aggregate
+
+`Verify.aggregate` proves and searches a single aggregate, with no model around it. It's the fastest check, and the one to write first.
+
+```typescript title="packages/domain/test/Account.verify.test.ts"
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Account } from "../src/Account/Account.aggregate.ts";
+
+it.effect("an account keeps its rules", () =>
+  Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+);
+```
+
+A proof also covers two things you didn't write down. Every command leaves the state in its schema, since each proof starts from a state the schema allows. And every command can record an event from some state: one that never can is reported, because a rule is true of it only because it does nothing.
+
+## Use the parts on their own
+
+`Verify` is two tools in one call. `Prove` is the proof, for one aggregate. `Explore` is the search, for an aggregate or a model, and its report lists every event, rejection and saga ending with the shortest sequence that reaches it.
+
+```typescript title="packages/domain/test/Bank.explore.test.ts"
+import * as Explore from "@alchemy.run/domain/Explore";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Bank } from "../src/Bank.model.ts";
+import { CustomerApi } from "../src/CustomerApi.api.ts";
+import { SupportApi } from "../src/SupportApi.api.ts";
+
+it.effect("print what two commands can reach", () =>
+  Effect.gen(function* () {
+    const report = yield* Explore.report(Bank, {
+      source: new URL("../src/Bank.model.ts", import.meta.url),
+      apis: [CustomerApi, SupportApi],
+    });
+    console.log(Explore.render(report));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+```
+
+An outcome no sequence reaches is worth a look. It's either out of reach in two commands, or a rejection the model can never give.
+
+## What a pass does not say
+
+A proof is about one aggregate. A rule across instances is checked in the sequences that were run, up to `depth` commands, and a longer sequence could still break it.
+
+An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. When a proof fails on such a state, add the invariant that rules it out: the rule that was true all along but that nobody had written down.
+
+`eventually` is checked on the sequences that run their course, not proved for all of them.
+
+Projections, streams and queries aren't checked. They read what the model records and send it nothing, so they can't break a rule about aggregates or views. Test them with [stories](/domain/testing-models).
+
+Middleware isn't run. Who sends a command is anyone its request context's schema allows, so a rule is checked against every actor, including ones your middleware would turn away.
+
+## Where to go next
+
+Rules say what's always true, and [stories](/domain/story) say what happens in one case. Write both: a story for each outcome the business names, and a rule for each thing it says can never happen. For every check a story offers, see [Testing a model](/domain/testing-models).

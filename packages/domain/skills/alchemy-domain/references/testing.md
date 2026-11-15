@@ -167,6 +167,68 @@ Story.rejected(new NotOwner()),
 
 More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-models#check-every-outcome).
 
+## Rules: verify the model
+
+A story checks one example. A rule says what is always true, and `Verify` looks for any state, input or sequence of commands that breaks it. Write a rule for each thing the business says can never happen.
+
+Rules go on the declaration. An aggregate has `invariants` (what no state may be) and `transitions` (what no command may do); a model has `invariants` (true whenever nothing is left to react) and `eventually` (true once every reaction and scheduled command has run).
+
+```ts
+export class Account extends Domain.Aggregate("Account", {
+  // id, state, initial, commands, decide, evolve
+  invariants: {
+    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+  },
+  transitions: {
+    AClosedAccountStaysClosed: ({ before, after }) =>
+      before._tag !== "Closed" || after._tag === "Closed",
+  },
+}) {}
+
+export class Bank extends Domain.Model("Bank", {
+  // aggregates, views, policies, sagas
+  invariants: {
+    NoTransferLeftPending: (bank) =>
+      bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
+  },
+  eventually: {
+    EveryTransferEnds: (bank) =>
+      bank.Transfer.every(
+        (transfer) => transfer.state._tag === "Completed" || transfer.state._tag === "Failed",
+      ),
+  },
+}) {}
+```
+
+One test per model verifies them, and one per aggregate is the fast check to write first. Pass the story runner so every sequence found is also run on the real model. They need `z3-solver` and `oxc-parser` as dev dependencies, and run under Node (vitest), not Bun.
+
+```ts
+import * as Verify from "@alchemy.run/domain/Verify";
+
+it.effect("an account keeps its rules", () =>
+  Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect(
+  "the bank keeps its promises",
+  () =>
+    Verify.model(Bank, { apis: [CustomerApi, SupportApi], story }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  120_000,
+);
+```
+
+Rules of thumb:
+
+- A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
+- `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, reactions reordered, every answer an external system's schema allows). Raise `depth` with `faults` off when you need longer sequences.
+- Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
+- A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
+- An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.
+
+More: [Verifying a model](https://alchemy.run/domain/verifying-models).
+
 ## Api tests: the client's view
 
 In the server package, host the model in memory with the real middleware, and drive it through the Api client. This checks authentication, `validate`, and live reads.

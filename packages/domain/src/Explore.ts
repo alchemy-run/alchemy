@@ -633,6 +633,14 @@ const renderModel = (report: ModelReport): string => {
 };
 
 /**
+ * A story of a model's report as text, one command a line: each command a
+ * caller sends or a schedule that comes due, then what the policies and sagas
+ * asked and sent because of it.
+ */
+export const describe = (story: ModelSearch.Story, indent = ""): string =>
+  modelLines(story, indent).join("\n");
+
+/**
  * A story of a model's report as the steps of a `Story`, to paste into a
  * test: the sequence the explorer found then runs on the whole model in
  * memory, with its policies, sagas and views, and stays as a regression test.

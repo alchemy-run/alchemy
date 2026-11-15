@@ -28,6 +28,16 @@ To find the invariants, ask the business what must never happen. Then ask which 
 
 So an aggregate isn't a table or an entity with getters and setters. It's a rule, together with exactly the state the rule needs, and the commands that have to respect it. Find the rule first; the state and the commands follow.
 
+You can write the rule on the aggregate, and have it proved that no command breaks it:
+
+```typescript title="src/Account.aggregate.ts"
+invariants: {
+  NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+},
+```
+
+See [Verifying a model](/domain/verifying-models).
+
 ## Give it an identity
 
 An aggregate type has many instances, and each is addressed by an id. The account's id is an `AccountId`, the same schema its commands use as their `target`.

@@ -63,6 +63,8 @@ it.effect(
       });
       // The sequence that holds an order, with the score the solver picked for Risk.
       expect(failed.message).toContain("✗ Shop.NoOrderIsHeld breaks");
+      expect(failed.message).toContain("↳ Review asks Risk.score  → { risk:");
+      expect(failed.message).toContain("As a story, to keep as a test:");
       expect(failed.message).toContain('Story.when(Order.ref("A"), new Place({ total: 100 })),');
       expect(failed.message).toContain("Story.call(Risk.score, {}),");
       expect(failed.message).toMatch(/Story\.succeed\(Risk\.score, \{ risk: [\d.]+ \}\),/);

@@ -185,6 +185,9 @@ const headOf = (text: string): string | undefined => {
 /** A name no TypeScript value is given: the constant a value is read back through. */
 const READ = "$read.";
 
+/** The most work the solver does on one question, in its own units: a few seconds of it. */
+const RLIMIT = 40_000_000;
+
 /**
  * Z3, compiled to WebAssembly. One instance serves every query, each in a
  * solver of its own; it is torn down with the scope.
@@ -206,8 +209,14 @@ export const solver: Effect.Effect<Solver, SolverError, Scope.Scope> = Effect.ge
       catch: failed("z3-solver did not start (it runs under Node, not Bun)"),
     }).pipe(
       Effect.map((started) => {
+        // The same question gets the same answer on every machine: the solver stops
+        // after a fixed amount of work, not of time, and starts from fixed seeds. The
+        // timeout is only for a question that hangs.
+        started.Z3.global_param_set("smt.random_seed", "0");
+        started.Z3.global_param_set("sat.random_seed", "0");
         const config = started.Z3.mk_config();
-        started.Z3.set_param_value(config, "timeout", "5000");
+        started.Z3.set_param_value(config, "rlimit", String(RLIMIT));
+        started.Z3.set_param_value(config, "timeout", "60000");
         const context = started.Z3.mk_context(config);
         // Models print as `(define-fun name () Sort value)`, which `parse` reads.
         started.Z3.set_ast_print_mode(context, z3.Z3_ast_print_mode.Z3_PRINT_SMTLIB2_COMPLIANT);

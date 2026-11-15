@@ -1888,7 +1888,10 @@ export const search = Effect.fn(function* (
       /** Each view's real state, by view and instance. */
       const seen = new Map<string, unknown>();
       const asked: Array<Asked & { readonly at: number }> = [];
+      // A second delivery that sent nothing new changed nothing: what it asked is left out.
+      const resent = played.trail.some((entry) => entry.again);
       for (const call of played.calls) {
+        if (call.again && !resent) continue;
         const built = Symbolic.concretize(call.answer, model);
         asked.push({
           at: call.at,
