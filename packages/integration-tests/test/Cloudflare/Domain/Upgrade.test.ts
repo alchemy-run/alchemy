@@ -18,6 +18,7 @@ import { requestWorker } from "../Utils/WorkerRequest.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
 import SharedWorker from "./fixtures/shared-worker.ts";
+import TransferWorker from "./fixtures/transfer-worker.ts";
 import UpgradeNextWorker from "./fixtures/upgrade-next-worker.ts";
 import UpgradeNoneWorker from "./fixtures/upgrade-none-worker.ts";
 import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
@@ -170,6 +171,74 @@ test.provider(
       );
       yield* waitForVersion(url, 0);
       expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 600_000 },
+);
+
+/**
+ * Moving a model to another Worker (or renaming the Worker that hosts it)
+ * with `transferredFrom` moves every class to the new Worker with its
+ * objects: the namespaces stay the same, the accounts and view rows are
+ * still there, and a saga run started before the move finishes after it.
+ */
+test.provider(
+  "moving a model to another Worker with transferredFrom keeps its data",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeWorker };
+        }),
+      );
+      const oldUrl = before.worker.url!;
+      const oldScript = before.worker.workerName;
+      yield* waitForVersion(oldUrl, 0);
+      yield* call(oldUrl, "/Billing/open/a-1/sam", "POST");
+      yield* poll(oldUrl, "/Billing/owners/a-1", (body) => (body as any)?.owner === "sam");
+      // a run that waits for its approval across the move
+      yield* call(oldUrl, "/saga/s-1/kim", "POST");
+      yield* poll(oldUrl, "/saga/s-1", (body) => (body as any)._tag === "Running");
+      const hosted = yield* namespacesOf(oldScript);
+      expect(Object.keys(hosted).sort()).toEqual([
+        "Billing.AccountAggregate",
+        "Billing.ApproveWorkflow",
+        "Billing.DomainDirectory",
+        "Billing.OwnersView",
+        "Billing.OwnersViewRun",
+      ]);
+
+      // The new Worker replaces the old one in the stack.
+      const after = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* TransferWorker };
+        }),
+      );
+      const url = after.worker.url!;
+      const scriptName = after.worker.workerName;
+      expect(scriptName).not.toEqual(oldScript);
+      yield* waitForVersion(url, 0);
+
+      // the same namespaces, now on the new Worker
+      expect(yield* namespacesOf(scriptName)).toEqual(hosted);
+      expect(yield* namespacesOf(oldScript)).toEqual({});
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      // the run started on the old Worker finishes on the new one
+      yield* call(url, "/approve/s-1/lee", "POST");
+      yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
+      expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+
+      // Once moved, `transferredFrom` does nothing.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* TransferWorker };
+        }),
+      );
+      expect(yield* namespacesOf(scriptName)).toEqual(hosted);
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
 
       yield* stack.destroy();

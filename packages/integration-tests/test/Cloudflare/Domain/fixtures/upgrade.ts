@@ -60,13 +60,18 @@ export const upgradeWorker = ({
   version,
   audit,
   legacyData,
+  transferredFrom,
 }: {
   readonly version: number | undefined;
   readonly audit: boolean;
   readonly legacyData?: "Billing" | "Audit";
+  /** The Worker that hosted the models before this one. */
+  readonly transferredFrom?: string;
 }) =>
   Effect.gen(function* () {
-    const Platform = DomainCloudflare.layerDurableObjects();
+    const Platform = DomainCloudflare.layerDurableObjects(
+      transferredFrom === undefined ? {} : { transferredFrom },
+    );
     const billing = yield* Effect.all({ accounts: Account, owners: Owners, runs: Approve }).pipe(
       Effect.provide(
         Billing.layer(ApproveLive, legacyData === "Audit" ? { legacyData: false } : {}).pipe(
