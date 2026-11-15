@@ -33,6 +33,7 @@ import {
 } from "@/State/HttpStateApi.ts";
 import { makeHttpStateStore } from "@/State/HttpStateStore.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
+import { encodeState } from "@/State/StateEncoding.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const AUTH_TOKEN = "http-state-integration-test-token";
@@ -71,7 +72,9 @@ const stateRoutes = HttpApiBuilder.group(StateApi, "state", (handlers) =>
     .handle("listStages", ({ params }) => state("listStages", (s) => s.listStages(params.stack)))
     .handle("listResources", ({ params }) => state("listResources", (s) => s.list(params)))
     .handle("getState", ({ params }) =>
-      state("getState", (s) => s.get({ ...params, fqn: decodeURIComponent(params.fqn) })),
+      state("getState", (s) => s.get({ ...params, fqn: decodeURIComponent(params.fqn) })).pipe(
+        Effect.map((saved) => (saved === undefined ? undefined : encodeState(saved))),
+      ),
     )
     .handle("setState", ({ params, payload }) =>
       state("setState", (s) =>
@@ -89,9 +92,15 @@ const stateRoutes = HttpApiBuilder.group(StateApi, "state", (handlers) =>
       state("deleteStack", (s) => s.deleteStack({ stack: params.stack, ...query })),
     )
     .handle("getReplacedResources", ({ params }) =>
-      state("getReplacedResources", (s) => s.getReplacedResources(params)),
+      state("getReplacedResources", (s) => s.getReplacedResources(params)).pipe(
+        Effect.map((rows) => rows.map(encodeState)),
+      ),
     )
-    .handle("getStackOutput", ({ params }) => state("getStackOutput", (s) => s.getOutput(params)))
+    .handle("getStackOutput", ({ params }) =>
+      state("getStackOutput", (s) => s.getOutput(params)).pipe(
+        Effect.map((saved) => (saved === undefined ? undefined : encodeState(saved))),
+      ),
+    )
     .handle("setStackOutput", ({ params, payload }) =>
       state("setStackOutput", (s) => s.setOutput({ ...params, value: payload })),
     ),
@@ -106,6 +115,9 @@ const server = (
   outputs: Record<string, Record<string, unknown>>,
   physicalStore?: StateService,
 ) => {
+  const source: Layer.Layer<State> = physicalStore
+    ? Layer.succeed(State, State.of(Effect.succeed(physicalStore)))
+    : inMemoryState(persisted, outputs);
   // Assemble the API with all of its handler services before handing it to
   // HttpRouter.serve; deferred route requirements must not leak to callers.
   const api = HttpApiBuilder.layer(StateApi).pipe(
@@ -118,11 +130,7 @@ const server = (
           token === AUTH_TOKEN ? Effect.void : HttpApiError.Unauthorized.make({}),
       }),
     ),
-    Layer.provide(
-      physicalStore
-        ? Layer.succeed(State, State.of(Effect.succeed(physicalStore)))
-        : inMemoryState(persisted, outputs),
-    ),
+    Layer.provide(source),
   );
   return HttpRouter.serve(api, {
     disableListenLog: true,
