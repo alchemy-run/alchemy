@@ -1,5 +1,5 @@
 export * from "./AuthProvider.ts";
-export * from "./App.ts";
+export * from "./ComputeService.ts";
 export * from "./Branch.ts";
 export * from "./Bucket.ts";
 export * from "./BucketAccessKey.ts";
@@ -9,7 +9,7 @@ export * from "./Compute.ts";
 export * from "./ComputeArchive.ts";
 export * from "./ComputeBuild.ts";
 export * from "./ComputeLifecycle.ts";
-export * from "./Deployment.ts";
+export * from "./ComputeVersion.ts";
 export * from "./Connect.ts";
 export * from "./Connection.ts";
 export * from "./PostgresOrigin.ts";

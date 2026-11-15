@@ -9,13 +9,13 @@ import {
   type PrismaManagementClient,
 } from "@alchemy.run/prisma/Client";
 import {
-  Deployment as PrismaDeployment,
-  DeploymentProvider,
-  MAX_DEPLOYMENT_ARTIFACT_BYTES,
+  ComputeVersion as PrismaDeployment,
+  ComputeVersionProvider,
+  MAX_COMPUTE_VERSION_ARTIFACT_BYTES,
   readUploadArtifact,
   uploadArtifact,
-  validateDeploymentArtifactBytes,
-} from "@alchemy.run/prisma/Deployment";
+  validateComputeVersionArtifactBytes,
+} from "@alchemy.run/prisma/ComputeVersion";
 import { describe, expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";
@@ -64,7 +64,8 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
   adopt: false,
 });
 
-const deploymentProviderLive = () => DeploymentProvider().pipe(Layer.provide(liveProviderContext));
+const deploymentProviderLive = () =>
+  ComputeVersionProvider().pipe(Layer.provide(liveProviderContext));
 
 /**
  * Serve the Management API from the same hermetic client-shaped handlers this
@@ -114,7 +115,7 @@ const clientBackedApi = (client: any) =>
 
 describe(
   "Prisma Deployment",
-  { tags: ["unit", "provider:prisma", "provider:prisma:deployment", "local"] },
+  { tags: ["unit", "provider:prisma", "provider:prisma:computeversion", "local"] },
   () => {
     it.effect("redacts signed upload URLs from transport failures", () => {
       const secret = "SIGNED_QUERY_SECRET_SENTINEL";
@@ -138,7 +139,7 @@ describe(
 
     it.effect("rejects final artifacts above the upload byte limit", () =>
       Effect.gen(function* () {
-        const error = yield* validateDeploymentArtifactBytes(new Uint8Array(9), 8).pipe(
+        const error = yield* validateComputeVersionArtifactBytes(new Uint8Array(9), 8).pipe(
           Effect.flip,
         );
 
@@ -148,9 +149,9 @@ describe(
 
     it.effect("does not allow callers to raise the upload hard limit", () =>
       Effect.gen(function* () {
-        const error = yield* validateDeploymentArtifactBytes(
+        const error = yield* validateComputeVersionArtifactBytes(
           new Uint8Array(1),
-          MAX_DEPLOYMENT_ARTIFACT_BYTES + 1,
+          MAX_COMPUTE_VERSION_ARTIFACT_BYTES + 1,
         ).pipe(Effect.flip);
 
         expect(error.message).toContain("hard limit");
@@ -294,7 +295,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", artifactPath: fixtureArtifactPath },
+            news: { service: "service-1", artifactPath: fixtureArtifactPath },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -360,7 +361,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", artifactPath: fixtureArtifactPath },
+            news: { service: "service-1", artifactPath: fixtureArtifactPath },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -427,7 +428,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, start: true },
+            news: { service: "service-1", skipCodeUpload: true, start: true },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -506,7 +507,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, start: true },
+            news: { service: "service-1", skipCodeUpload: true, start: true },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -623,7 +624,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, promote: true },
+            news: { service: "service-1", skipCodeUpload: true, promote: true },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -710,14 +711,14 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          news: { app: "service-1", artifactPath },
+          news: { service: "service-1", artifactPath },
           olds: undefined,
           output: undefined,
           session: undefined as never,
           bindings: [],
         });
 
-        expect(output.deploymentId).toBe("version-1");
+        expect(output.versionId).toBe("version-1");
         expect(output.artifactHash).toBeDefined();
         expect(uploaded?.url).toBe("https://upload.prisma.test/version.tar.gz");
         expect(uploaded?.contentType).toBe("application/octet-stream");
@@ -770,20 +771,20 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1" },
+          olds: { service: "service-1" },
           output: {
-            deploymentId: "version-1",
-            appId: "service-1",
+            versionId: "version-1",
+            serviceId: "service-1",
             foundryVersionId: "foundry-1",
             status: "running",
             previewDomain: undefined,
             artifactHash: undefined,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         });
 
-        expect(output?.deploymentId).toBe("version-1");
+        expect(output?.versionId).toBe("version-1");
         expect(output?.status).toBe("stopped");
         expect(calls).toEqual([
           ["getDeployment", "version-1"],
@@ -809,7 +810,7 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "app-1" },
+          olds: { service: "app-1" },
           output: undefined,
         });
 
@@ -861,20 +862,20 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-from-olds" },
+          olds: { service: "service-from-olds" },
           output: {
-            deploymentId: "version-1",
-            appId: "service-from-output",
+            versionId: "version-1",
+            serviceId: "service-from-output",
             foundryVersionId: "foundry-1",
             status: "stopped",
             previewDomain: undefined,
             artifactHash: undefined,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         });
 
-        expect(output?.appId).toBe("service-from-output");
+        expect(output?.serviceId).toBe("service-from-output");
         expect(output?.status).toBe("running");
         expect(calls).toEqual([
           ["getDeployment", "version-1"],
@@ -932,21 +933,21 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-from-olds" },
+          olds: { service: "service-from-olds" },
           output: {
-            deploymentId: "version-old",
-            appId: "service-from-output",
+            versionId: "version-old",
+            serviceId: "service-from-output",
             foundryVersionId: "foundry-1",
             status: "stopped",
             previewDomain: undefined,
             artifactHash: undefined,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         });
 
-        expect(output?.deploymentId).toBe("version-new");
-        expect(output?.appId).toBe("service-from-output");
+        expect(output?.versionId).toBe("version-new");
+        expect(output?.serviceId).toBe("service-from-output");
         expect(calls).toEqual([
           ["getDeployment", "version-old"],
           [
@@ -1002,14 +1003,14 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "app-1" },
+          olds: { service: "app-1" },
           output: {
-            deploymentId: "deployment-missing",
-            appId: "app-1",
+            versionId: "deployment-missing",
+            serviceId: "app-1",
             foundryVersionId: "foundry-1",
             status: "new",
             previewDomain: null,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: undefined,
           },
         }).pipe(Effect.flip);
@@ -1038,18 +1039,18 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1", artifactPath },
-          news: { app: "service-1", artifactPath },
+          olds: { service: "service-1", artifactPath },
+          news: { service: "service-1", artifactPath },
           oldBindings: [],
           newBindings: [],
           output: {
-            deploymentId: "version-1",
-            appId: "service-1",
+            versionId: "version-1",
+            serviceId: "service-1",
             foundryVersionId: "foundry-1",
             status: "new",
             previewDomain: null,
             artifactHash: "old-hash",
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         } as never);
@@ -1080,18 +1081,18 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1", artifactPath },
-          news: { app: Output.asOutput("service-1"), artifactPath },
+          olds: { service: "service-1", artifactPath },
+          news: { service: Output.asOutput("service-1"), artifactPath },
           oldBindings: [],
           newBindings: [],
           output: {
-            deploymentId: "version-1",
-            appId: "service-1",
+            versionId: "version-1",
+            serviceId: "service-1",
             foundryVersionId: "foundry-1",
             status: "new",
             previewDomain: null,
             artifactHash: "old-hash",
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         } as never);
@@ -1119,18 +1120,18 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: Output.asOutput("app-old"), artifactPath: sameArtifactPath },
-          news: { app: "app-new", artifactPath: sameArtifactPath },
+          olds: { service: Output.asOutput("app-old"), artifactPath: sameArtifactPath },
+          news: { service: "app-new", artifactPath: sameArtifactPath },
           oldBindings: [],
           newBindings: [],
           output: {
-            deploymentId: "deployment-1",
-            appId: "app-old",
+            versionId: "deployment-1",
+            serviceId: "app-old",
             foundryVersionId: "foundry-1",
             status: "new",
             previewDomain: null,
             artifactHash,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         } as never);
@@ -1159,18 +1160,18 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1", artifactPath: sameArtifactPath },
-          news: { app: "service-1", artifactPath: sameArtifactPath },
+          olds: { service: "service-1", artifactPath: sameArtifactPath },
+          news: { service: "service-1", artifactPath: sameArtifactPath },
           oldBindings: [],
           newBindings: [],
           output: {
-            deploymentId: "version-1",
-            appId: "service-1",
+            versionId: "version-1",
+            serviceId: "service-1",
             foundryVersionId: "foundry-1",
             status: "new",
             previewDomain: null,
             artifactHash,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
         } as never);
@@ -1255,7 +1256,7 @@ describe(
           }),
       } as unknown as PrismaManagementClient;
 
-      const news = { app: "service-1", skipCodeUpload: true, promote: true };
+      const news = { service: "service-1", skipCodeUpload: true, promote: true };
 
       return Effect.gen(function* () {
         const provider = yield* PrismaDeployment.Provider;
@@ -1285,9 +1286,9 @@ describe(
           bindings: [],
         });
 
-        expect(first.deploymentId).toBe("version-1");
-        expect(second.deploymentId).toBe("version-1");
-        expect(second.appEndpointDomain).toBe("api.prisma.build");
+        expect(first.versionId).toBe("version-1");
+        expect(second.versionId).toBe("version-1");
+        expect(second.serviceEndpointDomain).toBe("api.prisma.build");
         expect(calls.filter(([name]) => name === "startDeployment")).toEqual([
           ["startDeployment", "version-1"],
           ["startDeployment", "version-1"],
@@ -1407,15 +1408,15 @@ describe(
             deployments.delete(id);
           }),
       } as unknown as PrismaManagementClient;
-      const news = { app: "service-1", skipCodeUpload: true, promote: true } as const;
+      const news = { service: "service-1", skipCodeUpload: true, promote: true } as const;
       const failedOutput: PrismaDeployment["Attributes"] = {
-        deploymentId: "version-failed",
-        appId: "service-1",
+        versionId: "version-failed",
+        serviceId: "service-1",
         foundryVersionId: "foundry-failed",
         status: "failed",
         previewDomain: "version-failed.preview.prisma.build",
         artifactHash: undefined,
-        appEndpointDomain: "api.prisma.build",
+        serviceEndpointDomain: "api.prisma.build",
         createdAt: "2026-01-01T00:00:00Z",
       };
 
@@ -1446,7 +1447,7 @@ describe(
           session: undefined as never,
           bindings: [],
         });
-        expect(replacement.deploymentId).toBe("version-replacement");
+        expect(replacement.versionId).toBe("version-replacement");
         expect(replacement.status).toBe("running");
         expect(deployments.has("version-failed")).toBe(true);
 
@@ -1530,16 +1531,16 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            olds: { app: "service-1", skipCodeUpload: true },
+            olds: { service: "service-1", skipCodeUpload: true },
             output: {
-              deploymentId: "version-old",
-              appId: "service-1",
+              versionId: "version-old",
+              serviceId: "service-1",
               foundryVersionId: "foundry-1",
               status: "running",
               previewDomain: undefined,
               artifactHash: undefined,
               triggersHash: undefined,
-              appEndpointDomain: undefined,
+              serviceEndpointDomain: undefined,
               createdAt: "2026-01-01T00:00:00Z",
             },
             session: undefined as never,
@@ -1574,7 +1575,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, start: false, promote: true },
+            news: { service: "service-1", skipCodeUpload: true, start: false, promote: true },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -1603,7 +1604,7 @@ describe(
               id: "Deployment",
               fqn: "Deployment",
               instanceId: "00000000000000000000000000000000",
-              news: { app: "app-1", skipCodeUpload: true, portMapping: { http } },
+              news: { service: "app-1", skipCodeUpload: true, portMapping: { http } },
               olds: undefined,
               output: undefined,
               session: undefined as never,
@@ -1655,14 +1656,14 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          news: { app: "app-1", skipCodeUpload: true, portMapping: { http: null } },
+          news: { service: "app-1", skipCodeUpload: true, portMapping: { http: null } },
           olds: undefined,
           output: undefined,
           session: undefined as never,
           bindings: [],
         });
 
-        expect(output.deploymentId).toBe("deployment-1");
+        expect(output.versionId).toBe("deployment-1");
         expect(calls).toEqual([
           [
             "createAppDeployment",
@@ -1689,24 +1690,24 @@ describe(
           oldBindings: [],
           newBindings: [],
           output: {
-            deploymentId: "deployment-1",
-            appId: "app-1",
+            versionId: "deployment-1",
+            serviceId: "app-1",
             foundryVersionId: "foundry-1",
             status: "running",
             previewDomain: null,
-            appEndpointDomain: undefined,
+            serviceEndpointDomain: undefined,
             createdAt: undefined,
           },
         };
         const start = yield* provider.diff!({
           ...base,
-          olds: { app: "app-1", skipCodeUpload: true, start: true },
-          news: { app: "app-1", skipCodeUpload: true, start: true },
+          olds: { service: "app-1", skipCodeUpload: true, start: true },
+          news: { service: "app-1", skipCodeUpload: true, start: true },
         } as never);
         const promote = yield* provider.diff!({
           ...base,
-          olds: { app: "app-1", skipCodeUpload: true, promote: true },
-          news: { app: "app-1", skipCodeUpload: true, promote: true },
+          olds: { service: "app-1", skipCodeUpload: true, promote: true },
+          news: { service: "app-1", skipCodeUpload: true, promote: true },
         } as never);
 
         expect(start).toEqual({ action: "update" });
@@ -1729,7 +1730,7 @@ describe(
             id: "Deployment",
             fqn: "Deployment",
             instanceId: "00000000000000000000000000000000",
-            news: { app: "app-1" },
+            news: { service: "app-1" },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -1787,7 +1788,7 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          news: { app: "service-1", skipCodeUpload: true, start: true },
+          news: { service: "service-1", skipCodeUpload: true, start: true },
           olds: undefined,
           output: undefined,
           session: undefined as never,
@@ -1851,14 +1852,14 @@ describe(
             id: "Deployment",
             fqn: "Deployment",
             instanceId: "00000000000000000000000000000000",
-            props: { app: "service-1" },
+            props: { service: "service-1" },
             output: {
-              deploymentId: "version-1",
-              appId: "service-1",
+              versionId: "version-1",
+              serviceId: "service-1",
               foundryVersionId: "foundry-1",
               status: "running",
               previewDomain: "version-1.preview.prisma.build",
-              appEndpointDomain: undefined,
+              serviceEndpointDomain: undefined,
               createdAt: "2026-01-01T00:00:00Z",
             },
           }).pipe(
@@ -1888,7 +1889,7 @@ describe(
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
           news: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
           },
@@ -1908,12 +1909,12 @@ describe(
         const unchanged = yield* provider.diff!({
           ...triggersDiffBase(output.triggersHash),
           olds: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
           },
           news: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
           },
@@ -1921,12 +1922,12 @@ describe(
         const changed = yield* provider.diff!({
           ...triggersDiffBase(output.triggersHash),
           olds: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
           },
           news: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
           },
@@ -1949,8 +1950,8 @@ describe(
         const provider = yield* PrismaDeployment.Provider;
         const diff = yield* provider.diff!({
           ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
-          olds: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "off" } },
-          news: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
+          olds: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "off" } },
+          news: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
         } as never);
 
         expect(diff).toEqual({ action: "replace" });
@@ -1969,8 +1970,8 @@ describe(
         const provider = yield* PrismaDeployment.Provider;
         const diff = yield* provider.diff!({
           ...triggersDiffBase(undefined),
-          olds: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
-          news: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
+          olds: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
+          news: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
         } as never);
 
         expect(diff).toBeUndefined();
@@ -1990,12 +1991,12 @@ describe(
         const recorded = yield* provider.diff!({
           ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
           olds: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: "postgres://old" },
           },
           news: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
           },
@@ -2003,12 +2004,12 @@ describe(
         const neverRecorded = yield* provider.diff!({
           ...triggersDiffBase(undefined),
           olds: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: "postgres://old" },
           },
           news: {
-            app: "app-1",
+            service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
           },
@@ -2055,14 +2056,14 @@ const triggersDiffBase = (triggersHash: Redacted.Redacted<string> | undefined) =
   oldBindings: [],
   newBindings: [],
   output: {
-    deploymentId: "deployment-1",
-    appId: "app-1",
+    versionId: "deployment-1",
+    serviceId: "app-1",
     foundryVersionId: "foundry-1",
     status: "new",
     previewDomain: null,
     artifactHash: undefined,
     triggersHash,
-    appEndpointDomain: undefined,
+    serviceEndpointDomain: undefined,
     createdAt: "2026-01-01T00:00:00Z",
   },
 });

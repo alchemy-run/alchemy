@@ -469,7 +469,7 @@ describe(
 
       return waitForDeploymentUrl("https://app.prisma.build", {
         project: "project-1",
-        appName: "api",
+        serviceName: "api",
         urlReadinessTimeoutSeconds: 0.05,
       }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
     });
@@ -489,7 +489,7 @@ describe(
       return Effect.gen(function* () {
         yield* waitForDeploymentUrl("https://app.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           healthCheck: { path: "/api/health" },
           pollIntervalMs: 1,
           // Wall-clock deadline (live clock). The mock succeeds on the second
@@ -510,12 +510,12 @@ describe(
       Effect.gen(function* () {
         const pathError = yield* waitForDeploymentUrl("https://app.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           healthCheck: { path: "//attacker.example/health" },
         }).pipe(Effect.flip);
         const statusError = yield* waitForDeploymentUrl("https://app.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           healthCheck: { path: "/health", statusCodes: [] },
         }).pipe(Effect.flip);
 
@@ -528,13 +528,13 @@ describe(
       Effect.gen(function* () {
         const props = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           healthCheck: { path: "/health" },
         } as const;
         const missingUrl = yield* waitForDeploymentUrl(undefined, props).pipe(Effect.flip);
         const missingRoutingUrl = yield* waitForDeploymentUrl(undefined, {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
         }).pipe(Effect.flip);
         const disabled = yield* waitForDeploymentUrl("https://app.prisma.build", {
           ...props,
@@ -566,14 +566,14 @@ describe(
       return Effect.gen(function* () {
         yield* waitForDeploymentUrl("https://app.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           healthCheck: { path: "/health", statusCodes: [302] },
           pollIntervalMs: 1,
           urlReadinessTimeoutSeconds: 0.05,
         });
         const defaultStatusError = yield* waitForDeploymentUrl("https://app.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           healthCheck: { path: "/health" },
           pollIntervalMs: 1,
           urlReadinessTimeoutSeconds: 0.01,
@@ -607,7 +607,7 @@ describe(
       );
       const props = {
         project: "project-1",
-        appName: "api",
+        serviceName: "api",
         pollIntervalMs: 1,
         urlReadinessTimeoutSeconds: 0.03,
       } as const;
@@ -642,7 +642,7 @@ describe(
       return Effect.gen(function* () {
         const error = yield* waitForDeploymentUrl("https://missing.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           pollIntervalMs: 1,
           urlReadinessTimeoutSeconds: 0.05,
         }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)), Effect.flip);
@@ -658,7 +658,7 @@ describe(
       return Effect.gen(function* () {
         const error = yield* waitForDeploymentUrl("https://app.prisma.build", {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           pollIntervalMs: 0,
         }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)), Effect.flip);
 
@@ -679,7 +679,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 skipPromote: true,
                 destroyOldDeployment: true,
               },
@@ -715,7 +715,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               start: false,
               skipPromote: true,
               healthCheck: { path: "/health" },
@@ -748,7 +748,7 @@ describe(
               id: "App",
               fqn: "App",
               instanceId: "00000000000000000000000000000000",
-              news: { project: "project-1", appName: "api", start: false },
+              news: { project: "project-1", serviceName: "api", start: false },
               olds: undefined,
               output: undefined,
               session: undefined as never,
@@ -781,7 +781,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 branchId: "branch-1",
                 branchGitName: "main",
               },
@@ -821,7 +821,7 @@ describe(
                 id: "App",
                 fqn: "App",
                 instanceId: "00000000000000000000000000000000",
-                news: { project: "project-1", appName: "api", ...props },
+                news: { project: "project-1", serviceName: "api", ...props },
                 olds: undefined,
                 output: undefined,
                 session: undefined as never,
@@ -854,7 +854,7 @@ describe(
                 instanceId: "00000000000000000000000000000000",
                 news: {
                   project: "project-1",
-                  appName: "api",
+                  serviceName: "api",
                   ...branchProps,
                 } as unknown as ComputeProps,
                 olds: undefined,
@@ -907,7 +907,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 branchId: "branch-main",
                 skipCodeUpload: true,
                 start: false,
@@ -915,14 +915,14 @@ describe(
               },
               olds: undefined,
               output: {
-                appId: "service-1",
-                deploymentId: undefined,
+                serviceId: "service-1",
+                versionId: undefined,
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: undefined,
-                deploymentUrl: undefined,
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: undefined,
+                versionUrl: undefined,
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: false,
                 previousDeploymentId: undefined,
@@ -959,7 +959,7 @@ describe(
               id: "App",
               fqn: "App",
               instanceId: "00000000000000000000000000000000",
-              news: { project: "project-1", appName: "api", exports: { default: "runtime" } },
+              news: { project: "project-1", serviceName: "api", exports: { default: "runtime" } },
               olds: undefined,
               output: undefined,
               session: undefined as never,
@@ -992,7 +992,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 main: "app.ts",
                 build: { command: "bun run build", outdir: "dist" },
               },
@@ -1028,7 +1028,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 main: "app.ts",
                 handler: "Api;console.log('nope')",
               },
@@ -1063,19 +1063,23 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api", regionId: "us-east-1" },
-            news: { project: Output.asOutput("project-1"), appName: "api", regionId: "us-west-2" },
+            olds: { project: "project-1", serviceName: "api", regionId: "us-east-1" },
+            news: {
+              project: Output.asOutput("project-1"),
+              serviceName: "api",
+              regionId: "us-west-2",
+            },
             oldBindings: [],
             newBindings: [],
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -1106,19 +1110,23 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api", regionId: "us-east-1" },
-            news: { project: "project-2", appName: "api", regionId: Output.asOutput("us-east-1") },
+            olds: { project: "project-1", serviceName: "api", regionId: "us-east-1" },
+            news: {
+              project: "project-2",
+              serviceName: "api",
+              regionId: Output.asOutput("us-east-1"),
+            },
             oldBindings: [],
             newBindings: [],
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -1151,14 +1159,14 @@ describe(
             instanceId: "00000000000000000000000000000000",
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
               path: ".",
               entrypoint: "server.ts",
             },
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
               path: ".",
               entrypoint: "server.ts",
@@ -1166,14 +1174,14 @@ describe(
             oldBindings: [],
             newBindings: [],
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -1203,7 +1211,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               skipPromote: true,
               destroyOldDeployment: true,
               dev: { url: "http://localhost:3000" },
@@ -1292,15 +1300,15 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api" },
+            olds: { project: "project-1", serviceName: "api" },
             output: undefined,
           });
 
-          expect(output?.appId).toBe("service-1");
-          expect(output?.deploymentId).toBe("version-live");
-          expect(output?.deploymentEndpointDomain).toBe("version-live.preview.prisma.build");
-          expect(output?.deploymentUrl).toBe("https://version-live.preview.prisma.build");
-          expect(output?.appEndpointDomain).toBe("api.prisma.build");
+          expect(output?.serviceId).toBe("service-1");
+          expect(output?.versionId).toBe("version-live");
+          expect(output?.versionEndpointDomain).toBe("version-live.preview.prisma.build");
+          expect(output?.versionUrl).toBe("https://version-live.preview.prisma.build");
+          expect(output?.serviceEndpointDomain).toBe("api.prisma.build");
           expect(output?.url).toBe("https://api.prisma.build");
           expect(output?.promoted).toBe(true);
           expect(Unowned.is(output!)).toBe(true);
@@ -1362,13 +1370,13 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api" },
+            olds: { project: "project-1", serviceName: "api" },
             output: undefined,
           });
 
-          expect(output?.deploymentId).toBe("version-live");
+          expect(output?.versionId).toBe("version-live");
           expect(output?.promoted).toBe(true);
-          expect(output?.deploymentUrl).toBe("https://version-live.preview.prisma.build");
+          expect(output?.versionUrl).toBe("https://version-live.preview.prisma.build");
           expect(calls).toEqual([
             ["listApps", { projectId: "project-1", query: { limit: "100" } }],
             ["getDeployment", "version-live"],
@@ -1436,16 +1444,16 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api" },
+            olds: { project: "project-1", serviceName: "api" },
             output: {
-              appId: "service-1",
-              deploymentId: "version-old",
+              serviceId: "service-1",
+              versionId: "version-old",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-old.preview.prisma.build",
+              versionUrl: "https://version-old.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -1455,9 +1463,9 @@ describe(
             },
           });
 
-          expect(output?.deploymentId).toBe("version-old");
+          expect(output?.versionId).toBe("version-old");
           expect(output?.promoted).toBe(false);
-          expect(output?.deploymentEndpointDomain).toBe("version-old.preview.prisma.build");
+          expect(output?.versionEndpointDomain).toBe("version-old.preview.prisma.build");
           expect(output?.url).toBe("https://version-old.preview.prisma.build");
           expect(calls).toEqual([
             ["getApp", "service-1"],
@@ -1535,7 +1543,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               skipPromote: true,
@@ -1543,14 +1551,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -1563,8 +1571,8 @@ describe(
           });
 
           expect(output.promoted).toBe(false);
-          expect(output.deploymentUrl).toBe("https://version-new.preview.prisma.build");
-          expect(output.appEndpointDomain).toBe("api.prisma.build");
+          expect(output.versionUrl).toBe("https://version-new.preview.prisma.build");
+          expect(output.serviceEndpointDomain).toBe("api.prisma.build");
           expect(output.url).toBe("https://version-new.preview.prisma.build");
           expect(calls).toEqual([
             ["getApp", "service-1"],
@@ -1661,7 +1669,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               artifactPath: fixtureArtifactPath,
               start: false,
@@ -1673,8 +1681,8 @@ describe(
             bindings: [],
           });
 
-          expect(output.appId).toBe("service-1");
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.serviceId).toBe("service-1");
+          expect(output.versionId).toBe("version-1");
           expect(calls).toContainEqual([
             "createApp",
             {
@@ -1768,7 +1776,7 @@ describe(
 
         const baseProps = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           branchId: "branch-main",
           skipCodeUpload: true,
           start: false,
@@ -1784,14 +1792,14 @@ describe(
             news: baseProps,
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: false,
               previousDeploymentId: undefined,
@@ -1814,8 +1822,8 @@ describe(
             bindings: [],
           });
 
-          expect(first.deploymentId).toBe("version-1");
-          expect(second.deploymentId).toBe("version-2");
+          expect(first.versionId).toBe("version-1");
+          expect(second.versionId).toBe("version-2");
           expect(second.artifactHash).not.toBe(first.artifactHash);
           expect(calls).toContainEqual([
             "updateApp",
@@ -1869,7 +1877,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: missingArtifact,
                 env: { TOKEN: "secret" },
               },
@@ -1908,7 +1916,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 path: root,
                 build: {
                   command: "mkdir -p dist; printf '123456789'",
@@ -1997,7 +2005,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 branchId: "branch-main",
                 start: false,
@@ -2005,14 +2013,14 @@ describe(
               },
               olds: undefined,
               output: {
-                appId: "service-1",
-                deploymentId: undefined,
+                serviceId: "service-1",
+                versionId: undefined,
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: undefined,
-                deploymentUrl: undefined,
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: undefined,
+                versionUrl: undefined,
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: false,
                 previousDeploymentId: undefined,
@@ -2071,7 +2079,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 branchId: "branch-main",
                 start: false,
@@ -2079,14 +2087,14 @@ describe(
               },
               olds: undefined,
               output: {
-                appId: "service-1",
-                deploymentId: undefined,
+                serviceId: "service-1",
+                versionId: undefined,
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: undefined,
-                deploymentUrl: undefined,
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: undefined,
+                versionUrl: undefined,
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: false,
                 previousDeploymentId: undefined,
@@ -2184,7 +2192,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 branchId: "branch-main",
                 start: false,
@@ -2273,7 +2281,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 branchId: "branch-main",
                 start: false,
@@ -2281,14 +2289,14 @@ describe(
               },
               olds: undefined,
               output: {
-                appId: "service-1",
-                deploymentId: undefined,
+                serviceId: "service-1",
+                versionId: undefined,
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: undefined,
-                deploymentUrl: undefined,
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: undefined,
+                versionUrl: undefined,
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: false,
                 previousDeploymentId: undefined,
@@ -2389,20 +2397,20 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 branchId: "branch-main",
               },
               olds: undefined,
               output: {
-                appId: "service-1",
-                deploymentId: undefined,
+                serviceId: "service-1",
+                versionId: undefined,
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: undefined,
-                deploymentUrl: undefined,
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: undefined,
+                versionUrl: undefined,
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: false,
                 previousDeploymentId: undefined,
@@ -2444,7 +2452,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV2Path,
                 branchId: "branch-main",
                 healthCheck: { path: "/health" },
@@ -2454,19 +2462,19 @@ describe(
               },
               olds: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 branchId: "branch-main",
               },
               output: {
-                appId: "service-1",
-                deploymentId: "version-old",
+                serviceId: "service-1",
+                versionId: "version-old",
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: "version-old.preview.prisma.build",
-                deploymentUrl: "https://version-old.preview.prisma.build",
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: "version-old.preview.prisma.build",
+                versionUrl: "https://version-old.preview.prisma.build",
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: true,
                 previousDeploymentId: undefined,
@@ -2512,7 +2520,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV2Path,
                 branchId: "branch-main",
                 healthCheck: { path: "/health" },
@@ -2522,19 +2530,19 @@ describe(
               },
               olds: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 branchId: "branch-main",
               },
               output: {
-                appId: "service-1",
-                deploymentId: "version-old",
+                serviceId: "service-1",
+                versionId: "version-old",
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: "version-old.preview.prisma.build",
-                deploymentUrl: "https://version-old.preview.prisma.build",
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: "version-old.preview.prisma.build",
+                versionUrl: "https://version-old.preview.prisma.build",
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: true,
                 previousDeploymentId: undefined,
@@ -2601,7 +2609,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV2Path,
                 branchId: "branch-main",
                 healthCheck: { path: "/health" },
@@ -2611,19 +2619,19 @@ describe(
               },
               olds: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 branchId: "branch-main",
               },
               output: {
-                appId: "service-1",
-                deploymentId: "version-old",
+                serviceId: "service-1",
+                versionId: "version-old",
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: "version-old.preview.prisma.build",
-                deploymentUrl: "https://version-old.preview.prisma.build",
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: "version-old.preview.prisma.build",
+                versionUrl: "https://version-old.preview.prisma.build",
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: true,
                 previousDeploymentId: undefined,
@@ -2681,7 +2689,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV2Path,
                 branchId: "branch-main",
                 healthCheck: { path: "/health" },
@@ -2691,19 +2699,19 @@ describe(
               },
               olds: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 branchId: "branch-main",
               },
               output: {
-                appId: "service-1",
-                deploymentId: "version-old",
+                serviceId: "service-1",
+                versionId: "version-old",
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: "version-old.preview.prisma.build",
-                deploymentUrl: "https://version-old.preview.prisma.build",
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: "version-old.preview.prisma.build",
+                versionUrl: "https://version-old.preview.prisma.build",
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: true,
                 previousDeploymentId: undefined,
@@ -2747,7 +2755,7 @@ describe(
         });
         const news = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           artifactPath: fixtureArtifactV1Path,
           branchId: "branch-main",
           healthCheck: { path: "/health" },
@@ -2765,14 +2773,14 @@ describe(
             news,
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: undefined,
               promoted: false,
               previousDeploymentId: undefined,
@@ -2808,7 +2816,7 @@ describe(
             ([operation, value]) => operation === "deleteDeployment" && value === "version-new",
           );
 
-          expect(recovered.deploymentId).toBe("version-new-2");
+          expect(recovered.versionId).toBe("version-new-2");
           expect(recovered.promoted).toBe(true);
           expect(recovered.readinessStatus).toBe("ready");
           expect(recovered.previousDeploymentId).toBe("version-new");
@@ -2848,7 +2856,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV2Path,
               branchId: "branch-main",
               healthCheck: { path: "/health" },
@@ -2858,19 +2866,19 @@ describe(
             },
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               branchId: "branch-main",
             },
             output: {
-              appId: "service-1",
-              deploymentId: "version-old",
+              serviceId: "service-1",
+              versionId: "version-old",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-old.preview.prisma.build",
+              versionUrl: "https://version-old.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -2890,7 +2898,7 @@ describe(
             ([operation, value]) => operation === "deleteDeployment" && value === "version-old",
           );
 
-          expect(output.deploymentId).toBe("version-new");
+          expect(output.versionId).toBe("version-new");
           expect(output.previousDeploymentId).toBe("version-old");
           expect(output.previousDeploymentAction).toBe("destroyed");
           expect(stableHealthIndex).toBeGreaterThanOrEqual(0);
@@ -2920,7 +2928,7 @@ describe(
         fixture.setDeploymentStatus("version-old", "failed");
         const news = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           artifactPath: fixtureArtifactV2Path,
           branchId: "branch-main",
           healthCheck: { path: "/health" },
@@ -2930,19 +2938,19 @@ describe(
         } as const;
         const olds = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           artifactPath: fixtureArtifactV1Path,
           branchId: "branch-main",
         } as const;
         const output = {
-          appId: "service-1",
-          deploymentId: "version-old",
+          serviceId: "service-1",
+          versionId: "version-old",
           projectId: "project-1",
-          appName: "api",
+          serviceName: "api",
           regionId: "us-east-1",
-          deploymentEndpointDomain: "version-old.preview.prisma.build",
-          deploymentUrl: "https://version-old.preview.prisma.build",
-          appEndpointDomain: "api.prisma.build",
+          versionEndpointDomain: "version-old.preview.prisma.build",
+          versionUrl: "https://version-old.preview.prisma.build",
+          serviceEndpointDomain: "api.prisma.build",
           url: "https://api.prisma.build",
           promoted: true,
           previousDeploymentId: undefined,
@@ -3024,7 +3032,7 @@ describe(
         });
         const news = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           artifactPath: fixtureArtifactV1Path,
           branchId: "branch-main",
           healthCheck: { path: "/health" },
@@ -3042,14 +3050,14 @@ describe(
             news,
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: undefined,
               promoted: false,
               previousDeploymentId: undefined,
@@ -3136,7 +3144,7 @@ describe(
         });
         const news = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           artifactPath: fixtureArtifactV2Path,
           branchId: "branch-main",
           healthCheck: { path: "/health" },
@@ -3146,19 +3154,19 @@ describe(
         } as const;
         const olds = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           artifactPath: fixtureArtifactV1Path,
           branchId: "branch-main",
         } as const;
         const output = {
-          appId: "service-1",
-          deploymentId: "version-old",
+          serviceId: "service-1",
+          versionId: "version-old",
           projectId: "project-1",
-          appName: "api",
+          serviceName: "api",
           regionId: "us-east-1",
-          deploymentEndpointDomain: "version-old.preview.prisma.build",
-          deploymentUrl: "https://version-old.preview.prisma.build",
-          appEndpointDomain: "api.prisma.build",
+          versionEndpointDomain: "version-old.preview.prisma.build",
+          versionUrl: "https://version-old.preview.prisma.build",
+          serviceEndpointDomain: "api.prisma.build",
           url: "https://api.prisma.build",
           promoted: true,
           previousDeploymentId: undefined,
@@ -3236,7 +3244,7 @@ describe(
             ([operation]) => operation === "createAppDeployment",
           );
 
-          expect(recovered.deploymentId).toBe("version-new-2");
+          expect(recovered.versionId).toBe("version-new-2");
           expect(recovered.promoted).toBe(true);
           expect(recovered.readinessStatus).toBe("ready");
           expect(rollbackIndex).toBeGreaterThanOrEqual(0);
@@ -3276,7 +3284,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV2Path,
               branchId: "branch-main",
               healthCheck: { path: "/ready", statusCodes: [302] },
@@ -3286,14 +3294,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: undefined,
               promoted: false,
               previousDeploymentId: undefined,
@@ -3305,7 +3313,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-new");
+          expect(output.versionId).toBe("version-new");
           expect(output.promoted).toBe(true);
           expect(output.readinessStatus).toBe("ready");
           expect(fixture.calls.filter(([operation]) => operation === "healthRequest")).toEqual([
@@ -3394,7 +3402,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath,
               branchId: "branch-main",
               start: false,
@@ -3402,14 +3410,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: false,
               previousDeploymentId: undefined,
@@ -3421,7 +3429,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           expect(uploaded?.url).toBe("https://upload.prisma.test/app.tar.gz");
           expect(uploaded?.contentType).toBe("application/gzip");
           expect(new TextDecoder().decode(uploaded?.bytes)).toBe("prebuilt-archive");
@@ -3516,7 +3524,7 @@ describe(
               '  "App",',
               "  {",
               '    project: "project-1",',
-              '    appName: "api",',
+              '    serviceName: "api",',
               "    main: import.meta.filename,",
               "    port: 4555,",
               "  },",
@@ -3537,7 +3545,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               main,
               port: 4555,
@@ -3550,7 +3558,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           expect(uploaded?.url).toBe("https://upload.prisma.test/effect.tar.gz");
           expect(uploaded?.contentType).toBe("application/gzip");
           const tar = yield* Effect.sync(() => gunzipSync(uploaded!.bytes));
@@ -3662,7 +3670,7 @@ describe(
               '  "App",',
               "  {",
               '    project: "project-1",',
-              '    appName: "api",',
+              '    serviceName: "api",',
               "    main: import.meta.filename,",
               '    handler: "Api",',
               "  },",
@@ -3683,7 +3691,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               main,
               handler: "Api",
@@ -3696,7 +3704,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           const tarText = new TextDecoder().decode(yield* Effect.sync(() => gunzipSync(uploaded!)));
           expect(tarText).toContain("compute.manifest.json");
           expect(tarText).toContain("named-handler-ok");
@@ -4010,7 +4018,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 branchId: "branch-main",
                 env: { FOREIGN: "new" },
@@ -4019,20 +4027,20 @@ describe(
               },
               olds: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 branchId: "branch-main",
                 env: { OLD: "old" },
               },
               output: {
-                appId: "service-1",
-                deploymentId: "version-old",
+                serviceId: "service-1",
+                versionId: "version-old",
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: "version-old.preview.prisma.build",
-                deploymentUrl: "https://version-old.preview.prisma.build",
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: "version-old.preview.prisma.build",
+                versionUrl: "https://version-old.preview.prisma.build",
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: true,
                 previousDeploymentId: undefined,
@@ -4147,7 +4155,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 env: { "bad-key": "secret" },
               },
@@ -4244,7 +4252,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               start: false,
@@ -4253,14 +4261,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: false,
               previousDeploymentId: undefined,
@@ -4282,7 +4290,7 @@ describe(
             ],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           expect(output.environmentKeys).toEqual(["DATABASE_URL", "SHARED_FLAG"]);
           expect(output.environmentClass).toBe("preview");
           expect(calls).toContainEqual([
@@ -4397,7 +4405,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               start: false,
@@ -4406,14 +4414,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: false,
               previousDeploymentId: undefined,
@@ -4580,7 +4588,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               start: false,
@@ -4588,14 +4596,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: false,
               previousDeploymentId: undefined,
@@ -4669,16 +4677,16 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api", env: { STALE_FLAG: null } },
+            olds: { project: "project-1", serviceName: "api", env: { STALE_FLAG: null } },
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: false,
               previousDeploymentId: undefined,
@@ -4783,7 +4791,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               start: false,
@@ -4792,14 +4800,14 @@ describe(
             },
             olds: undefined,
             output: {
-              appId: "service-1",
-              deploymentId: "version-old",
+              serviceId: "service-1",
+              versionId: "version-old",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-old.preview.prisma.build",
+              versionUrl: "https://version-old.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -4811,7 +4819,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-new");
+          expect(output.versionId).toBe("version-new");
           expect(Redacted.value(output.artifactHash!)).toMatch(/^[a-f0-9]{64}$/);
           expect(JSON.stringify(output)).not.toContain("super-secret");
           expect(calls).toContainEqual([
@@ -4947,7 +4955,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               path: root,
               port: 4567,
               verifyUrl: false,
@@ -4965,7 +4973,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           expect(uploaded?.url).toBe("https://upload.prisma.test/artifact.tar.gz");
           expect(uploaded?.contentType).toBe("application/gzip");
           const tarText = new TextDecoder().decode(
@@ -5077,7 +5085,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               path: root,
               build: "auto",
               start: false,
@@ -5089,7 +5097,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           expect(uploaded?.url).toBe("https://upload.prisma.test/auto.tar.gz");
           expect(uploaded?.contentType).toBe("application/gzip");
           const tarText = new TextDecoder().decode(
@@ -5197,7 +5205,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "web",
+              serviceName: "web",
               path: root,
               build: { type: "auto", framework: "nextjs" },
               start: false,
@@ -5209,7 +5217,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-1");
+          expect(output.versionId).toBe("version-1");
           expect(calls).toContainEqual([
             "createAppDeployment",
             {
@@ -5329,7 +5337,7 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactPath,
                 start: false,
                 skipPromote: true,
@@ -5519,7 +5527,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               port: 3000,
             },
@@ -5536,14 +5544,14 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               port: 3000,
               skipPromote: true,
             },
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               port: 3000,
             },
@@ -5552,7 +5560,7 @@ describe(
             bindings: [],
           });
           const skipCalls = calls.slice(callsBeforeSkip);
-          expect(firstWithSkip.deploymentId).toBe("version-1");
+          expect(firstWithSkip.versionId).toBe("version-1");
           expect(firstWithSkip.promoted).toBe(true);
           expect(firstWithSkip.url).toBe("https://api.prisma.build");
           expect(skipCalls.map(([operation]) => operation)).not.toContain("createAppDeployment");
@@ -5565,14 +5573,14 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV2Path,
               port: 3000,
               destroyOldDeployment: true,
             },
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               port: 3000,
               skipPromote: true,
@@ -5588,7 +5596,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV2Path,
               port: 3000,
             },
@@ -5597,9 +5605,9 @@ describe(
             bindings: [],
           });
 
-          expect(first.deploymentId).toBe("version-1");
+          expect(first.versionId).toBe("version-1");
           expect(first.promoted).toBe(true);
-          expect(second.deploymentId).toBe("version-2");
+          expect(second.versionId).toBe("version-2");
           expect(second.previousDeploymentId).toBe("version-1");
           expect(second.previousDeploymentAction).toBe("destroyed");
           expect(versions.size).toBe(0);
@@ -5736,7 +5744,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               start: false,
@@ -5745,7 +5753,7 @@ describe(
             },
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               branchId: "branch-main",
               skipCodeUpload: true,
               start: false,
@@ -5753,14 +5761,14 @@ describe(
               env: { FEATURE: "off" },
             },
             output: {
-              appId: "service-1",
-              deploymentId: "version-old",
+              serviceId: "service-1",
+              versionId: "version-old",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-old.preview.prisma.build",
+              versionUrl: "https://version-old.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -5773,7 +5781,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-new");
+          expect(output.versionId).toBe("version-new");
           expect(output.previousDeploymentId).toBe("version-old");
           expect(output.previousDeploymentAction).toBe("still-active");
           expect(calls).toEqual([
@@ -5869,7 +5877,7 @@ describe(
 
         const news = {
           project: "project-1",
-          appName: "api",
+          serviceName: "api",
           branchId: "branch-main",
           artifactPath: fixtureArtifactPath,
           verifyUrl: false,
@@ -5899,8 +5907,8 @@ describe(
             bindings: [],
           });
 
-          expect(first.deploymentId).toBe("version-1");
-          expect(second.deploymentId).toBe("version-1");
+          expect(first.versionId).toBe("version-1");
+          expect(second.versionId).toBe("version-1");
           expect(second.previousDeploymentId).toBeNull();
           expect(calls.filter(([name]) => name === "promoteApp")).toEqual([
             ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
@@ -6022,26 +6030,26 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV2Path,
               port: 3000,
               destroyOldDeployment: true,
             },
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               port: 3000,
             },
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -6053,7 +6061,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-2");
+          expect(output.versionId).toBe("version-2");
           expect(output.previousDeploymentAction).toBe("still-active");
           expect(output.pendingDeploymentCleanup).toEqual({
             deploymentId: "version-1",
@@ -6167,20 +6175,20 @@ describe(
               instanceId: "00000000000000000000000000000000",
               news: {
                 project: "project-1",
-                appName: "api",
+                serviceName: "api",
                 artifactPath: fixtureArtifactV1Path,
                 branchId: "branch-main",
               },
               olds: undefined,
               output: {
-                appId: "service-1",
-                deploymentId: undefined,
+                serviceId: "service-1",
+                versionId: undefined,
                 projectId: "project-1",
-                appName: "api",
+                serviceName: "api",
                 regionId: "us-east-1",
-                deploymentEndpointDomain: undefined,
-                deploymentUrl: undefined,
-                appEndpointDomain: "api.prisma.build",
+                versionEndpointDomain: undefined,
+                versionUrl: undefined,
+                serviceEndpointDomain: "api.prisma.build",
                 url: "https://api.prisma.build",
                 promoted: false,
                 previousDeploymentId: undefined,
@@ -6343,7 +6351,7 @@ describe(
             instanceId: "00000000000000000000000000000000",
             news: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV2Path,
               branchId: "branch-main",
               start: false,
@@ -6352,7 +6360,7 @@ describe(
             },
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               artifactPath: fixtureArtifactV1Path,
               branchId: "branch-main",
               start: false,
@@ -6360,14 +6368,14 @@ describe(
               env: { KEEP: "old-value", TOKEN: Redacted.make("secret"), ALREADY_ABSENT: null },
             },
             output: {
-              appId: "service-1",
-              deploymentId: "version-old",
+              serviceId: "service-1",
+              versionId: "version-old",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-old.preview.prisma.build",
-              deploymentUrl: "https://version-old.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-old.preview.prisma.build",
+              versionUrl: "https://version-old.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -6380,7 +6388,7 @@ describe(
             bindings: [],
           });
 
-          expect(output.deploymentId).toBe("version-new");
+          expect(output.versionId).toBe("version-new");
           expect(calls).toEqual([
             ["getApp", "service-1"],
             ["getDeployment", "version-old"],
@@ -6430,16 +6438,16 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            props: { project: "project-1", appName: "api" },
+            props: { project: "project-1", serviceName: "api" },
             output: {
-              appId: "service-1",
-              deploymentId: undefined,
+              serviceId: "service-1",
+              versionId: undefined,
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: undefined,
-              deploymentUrl: undefined,
-              appEndpointDomain: undefined,
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: undefined,
               url: undefined,
               promoted: false,
               previousDeploymentId: undefined,
@@ -6505,18 +6513,18 @@ describe(
             instanceId: "00000000000000000000000000000000",
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               env: { TOKEN: Redacted.make("secret"), ALREADY_ABSENT: null, SKIP_ME: undefined },
             },
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -6613,21 +6621,21 @@ describe(
             instanceId: "00000000000000000000000000000000",
             olds: {
               project: "project-1",
-              appName: "api",
+              serviceName: "api",
               env: {
                 TOKEN: Redacted.make("secret"),
                 PRISMA_INTERNAL_URL: Redacted.make("prisma-owned"),
               },
             },
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -6717,14 +6725,14 @@ describe(
             instanceId: "00000000000000000000000000000000",
             olds: undefined as never,
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -6791,16 +6799,20 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            olds: { project: "project-1", appName: "api", env: { TOKEN: Redacted.make("secret") } },
+            olds: {
+              project: "project-1",
+              serviceName: "api",
+              env: { TOKEN: Redacted.make("secret") },
+            },
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,
@@ -6864,16 +6876,16 @@ describe(
             id: "App",
             fqn: "App",
             instanceId: "00000000000000000000000000000000",
-            props: { project: "project-1", appName: "api" },
+            props: { project: "project-1", serviceName: "api" },
             output: {
-              appId: "service-1",
-              deploymentId: "version-1",
+              serviceId: "service-1",
+              versionId: "version-1",
               projectId: "project-1",
-              appName: "api",
+              serviceName: "api",
               regionId: "us-east-1",
-              deploymentEndpointDomain: "version-1.preview.prisma.build",
-              deploymentUrl: "https://version-1.preview.prisma.build",
-              appEndpointDomain: "api.prisma.build",
+              versionEndpointDomain: "version-1.preview.prisma.build",
+              versionUrl: "https://version-1.preview.prisma.build",
+              serviceEndpointDomain: "api.prisma.build",
               url: "https://api.prisma.build",
               promoted: true,
               previousDeploymentId: undefined,

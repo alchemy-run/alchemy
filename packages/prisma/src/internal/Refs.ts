@@ -2,8 +2,8 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { App } from "../App.ts";
 import type { Bucket } from "../Bucket.ts";
+import type { ComputeService } from "../ComputeService.ts";
 import type { Database } from "../Database.ts";
 import type { Project } from "../Project.ts";
 
@@ -56,8 +56,11 @@ export const unresolvedBucketIdOf = (bucket: string | Bucket | undefined) =>
 export const resolveBucketId = (bucket: string | Bucket) =>
   resolveId("bucket id", typeof bucket === "string" ? bucket : (bucket.bucketId as unknown));
 
-export const unresolvedAppIdOf = (app: string | App | undefined) =>
-  concreteIdOf(typeof app === "string" ? app : (app?.appId as unknown));
+export const unresolvedServiceIdOf = (service: string | ComputeService | undefined) =>
+  concreteIdOf(typeof service === "string" ? service : (service?.serviceId as unknown));
 
-export const resolveAppId = (app: string | App) =>
-  resolveId("app id", typeof app === "string" ? app : (app.appId as unknown));
+export const resolveServiceId = (service: string | ComputeService) =>
+  resolveId(
+    "Compute service id",
+    typeof service === "string" ? service : (service.serviceId as unknown),
+  );

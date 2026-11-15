@@ -21,29 +21,33 @@ export { isConflict } from "./Client.ts";
  * A wait exceeded its `timeoutSeconds` budget before the deployment reached
  * the requested status.
  */
-export class PrismaDeploymentWaitTimeout extends Data.TaggedError("PrismaDeploymentWaitTimeout")<{
+export class PrismaComputeVersionWaitTimeout extends Data.TaggedError(
+  "PrismaComputeVersionWaitTimeout",
+)<{
   message: string;
 }> {}
 
-/** `waitForDeploymentStatus` was called with a non-positive timeout or poll interval. */
-export class PrismaDeploymentWaitInvalidOptions extends Data.TaggedError(
-  "PrismaDeploymentWaitInvalidOptions",
+/** `waitForComputeVersionStatus` was called with a non-positive timeout or poll interval. */
+export class PrismaComputeVersionWaitInvalidOptions extends Data.TaggedError(
+  "PrismaComputeVersionWaitInvalidOptions",
 )<{
   message: string;
 }> {}
 
 /** The deployment reached the terminal `failed` status while being waited on. */
-export class PrismaDeploymentFailed extends Data.TaggedError("PrismaDeploymentFailed")<{
+export class PrismaComputeVersionFailed extends Data.TaggedError("PrismaComputeVersionFailed")<{
   message: string;
 }> {}
 
 /** Deleting a deployment failed; the message names the manual cleanup routes. */
-export class PrismaDeploymentDeleteFailed extends Data.TaggedError("PrismaDeploymentDeleteFailed")<{
+export class PrismaComputeVersionDeleteFailed extends Data.TaggedError(
+  "PrismaComputeVersionDeleteFailed",
+)<{
   message: string;
   cause?: unknown;
 }> {}
 
-export interface WaitForDeploymentStatusOptions {
+export interface WaitForComputeVersionStatusOptions {
   /**
    * Maximum time to wait for a deployment to reach the requested status.
    */
@@ -57,11 +61,11 @@ export interface WaitForDeploymentStatusOptions {
 /**
  * Result returned after attempting to stop and delete a Prisma deployment.
  */
-export interface DestroyDeploymentResult {
+export interface DestroyComputeVersionResult {
   /**
-   * Prisma deployment ID that was targeted.
+   * Compute version ID that was targeted.
    */
-  deploymentId: string;
+  versionId: string;
   /**
    * Status observed before cleanup started, or undefined if the deployment was gone.
    */
@@ -76,26 +80,26 @@ export interface DestroyDeploymentResult {
   deleted: boolean;
 }
 
-/** Result returned after deleting a Prisma App. */
-export interface DestroyAppResult {
-  /** Prisma App ID that was targeted. */
-  appId: string;
-  /** True when App deletion completed or the app was already gone. */
-  appDeleted: boolean;
+/** Result returned after deleting a Prisma Compute service. */
+export interface DestroyComputeServiceResult {
+  /** Compute service ID that was targeted. */
+  serviceId: string;
+  /** True when the service delete completed or the service was already gone. */
+  serviceDeleted: boolean;
 }
 
 /**
- * Result returned after deleting Apps under a Prisma project.
+ * Result returned after deleting the Compute services under a Prisma project.
  */
-export interface DestroyProjectAppsResult {
+export interface DestroyProjectComputeServicesResult {
   /**
    * Prisma project ID that was targeted.
    */
   projectId: string;
   /**
-   * App IDs deleted by this cleanup pass.
+   * Compute service IDs deleted by this cleanup pass.
    */
-  deletedAppIds: string[];
+  deletedServiceIds: string[];
   /**
    * True when the project delete call completed or the project vanished.
    */
@@ -117,7 +121,7 @@ const deploymentDeleteFailed = (
   const detail = format(error);
   const isKnownStoppedDeleteFailure =
     statusAtDelete === "stopped" && Category.hasCategory(error, "ServerError");
-  return new PrismaDeploymentDeleteFailed({
+  return new PrismaComputeVersionDeleteFailed({
     message: [
       `Failed to delete Prisma deployment '${deploymentId}' while it was in status '${statusAtDelete ?? "unknown"}'.`,
       detail,
@@ -138,24 +142,24 @@ const deploymentWaitTimedOut = (
   targetStatus: "running" | "stopped",
   lastStatus: string | undefined,
 ) =>
-  new PrismaDeploymentWaitTimeout({
+  new PrismaComputeVersionWaitTimeout({
     message: `Timed out waiting for Prisma deployment '${deploymentId}' to reach '${targetStatus}' (last status: '${lastStatus ?? "unknown"}')`,
   });
 
-export const waitForDeploymentStatus = Effect.fn(function* (
+export const waitForComputeVersionStatus = Effect.fn(function* (
   deploymentId: string,
   targetStatus: "running" | "stopped",
-  options: WaitForDeploymentStatusOptions = {},
+  options: WaitForComputeVersionStatusOptions = {},
 ) {
   const timeoutSeconds = options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
   const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* new PrismaDeploymentWaitInvalidOptions({
+    return yield* new PrismaComputeVersionWaitInvalidOptions({
       message: "timeoutSeconds must be a positive finite number.",
     });
   }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* new PrismaDeploymentWaitInvalidOptions({
+    return yield* new PrismaComputeVersionWaitInvalidOptions({
       message: "pollIntervalMs must be a positive finite number.",
     });
   }
@@ -181,7 +185,7 @@ export const waitForDeploymentStatus = Effect.fn(function* (
       return deployment satisfies ObservedDeployment;
     }
     if (deployment.status === "failed") {
-      return yield* new PrismaDeploymentFailed({
+      return yield* new PrismaComputeVersionFailed({
         message: `Prisma deployment '${deploymentId}' failed`,
       });
     }
@@ -201,22 +205,22 @@ export const waitForDeploymentStatus = Effect.fn(function* (
  * Uses the canonical deployment lifecycle routes. Errors include the observed
  * status and exact manual route for cleanup.
  */
-export const destroyDeployment = Effect.fn(function* (
-  deploymentId: string,
-  options: WaitForDeploymentStatusOptions = {},
+export const destroyComputeVersion = Effect.fn(function* (
+  versionId: string,
+  options: WaitForComputeVersionStatusOptions = {},
 ) {
-  const deployment = yield* observeDeployment(deploymentId).pipe(
+  const deployment = yield* observeDeployment(versionId).pipe(
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (!deployment) {
     return {
-      deploymentId,
+      versionId,
       previousStatus: undefined,
       stopped: false,
       // The postcondition is already satisfied. Report this consistently
       // with delete calls whose 404 is observed after cleanup starts.
       deleted: true,
-    } satisfies DestroyDeploymentResult;
+    } satisfies DestroyComputeVersionResult;
   }
 
   const previousStatus = deployment.status;
@@ -228,44 +232,44 @@ export const destroyDeployment = Effect.fn(function* (
     deployment.status === "stopping"
   ) {
     if (deployment.status !== "stopping") {
-      yield* stopDeploymentIdempotent(deploymentId).pipe(
+      yield* stopDeploymentIdempotent(versionId).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
       );
       stopped = true;
     }
     // Only a stopped deployment can be deleted.
-    const stoppedVersion = yield* waitForDeploymentStatus(deploymentId, "stopped", options).pipe(
+    const stoppedVersion = yield* waitForComputeVersionStatus(versionId, "stopped", options).pipe(
       Effect.catchTag("NotFound", () => Effect.undefined),
     );
     statusAtDelete = stoppedVersion?.status ?? "stopped";
   }
 
-  yield* deleteDeployment({ deploymentId }).pipe(
+  yield* deleteDeployment({ deploymentId: versionId }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
-    Effect.mapError((error) => deploymentDeleteFailed(deploymentId, statusAtDelete, error)),
+    Effect.mapError((error) => deploymentDeleteFailed(versionId, statusAtDelete, error)),
   );
 
   return {
-    deploymentId,
+    versionId,
     previousStatus,
     stopped,
     deleted: true,
-  } satisfies DestroyDeploymentResult;
+  } satisfies DestroyComputeVersionResult;
 });
 
 /**
- * Deletes an App. The canonical App delete endpoint cascades its deployments.
+ * Deletes a Compute service. The service delete endpoint also deletes its versions.
  */
-export const destroyApp = Effect.fn(function* (
-  appId: string,
-  options: WaitForDeploymentStatusOptions & {
-    keepApp?: boolean;
+export const destroyComputeService = Effect.fn(function* (
+  serviceId: string,
+  options: WaitForComputeVersionStatusOptions & {
+    keepService?: boolean;
   } = {},
 ) {
-  let appDeleted = false;
-  if (!options.keepApp) {
+  let serviceDeleted = false;
+  if (!options.keepService) {
     for (let attempt = 0; attempt < DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
-      const deleted = yield* deleteService({ serviceId: appId }).pipe(
+      const deleted = yield* deleteService({ serviceId }).pipe(
         Effect.as(true),
         Effect.catchTags({
           NotFound: () => Effect.succeed(true),
@@ -276,31 +280,31 @@ export const destroyApp = Effect.fn(function* (
         }),
       );
       if (deleted) {
-        appDeleted = true;
+        serviceDeleted = true;
         break;
       }
     }
   }
 
   return {
-    appId,
-    appDeleted,
-  } satisfies DestroyAppResult;
+    serviceId,
+    serviceDeleted,
+  } satisfies DestroyComputeServiceResult;
 });
 
 /**
- * Deletes every App under a project, then deletes the project.
+ * Deletes every Compute service under a project, then deletes the project.
  *
- * Callers can start from the project ID and let Alchemy discover the App IDs.
+ * Callers can start from the project ID and let Alchemy discover the service IDs.
  */
-export const destroyProjectApps = Effect.fn(function* (
+export const destroyProjectComputeServices = Effect.fn(function* (
   projectId: string,
-  options: WaitForDeploymentStatusOptions & {
+  options: WaitForComputeVersionStatusOptions & {
     keepProject?: boolean;
-    keepApp?: boolean;
+    keepService?: boolean;
   } = {},
 ) {
-  const deletedAppIds = new Set<string>();
+  const deletedServiceIds = new Set<string>();
 
   const cleanupApps = Effect.fn(function* () {
     // Distilled emits the cursor-paginated list operations as plain ops, so
@@ -328,8 +332,8 @@ export const destroyProjectApps = Effect.fn(function* (
     }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (!apps) return false;
     for (const app of apps) {
-      const result = yield* destroyApp(app.id, options);
-      if (result.appDeleted) deletedAppIds.add(app.id);
+      const result = yield* destroyComputeService(app.id, options);
+      if (result.serviceDeleted) deletedServiceIds.add(app.id);
     }
     return true;
   });
@@ -375,12 +379,12 @@ export const destroyProjectApps = Effect.fn(function* (
 
   return {
     projectId,
-    deletedAppIds: Array.from(deletedAppIds),
+    deletedServiceIds: Array.from(deletedServiceIds),
     projectDeleted,
-  } satisfies DestroyProjectAppsResult;
+  } satisfies DestroyProjectComputeServicesResult;
 });
 
-export const toDeploymentUrl = (domain: string | null | undefined) =>
+export const toComputeVersionUrl = (domain: string | null | undefined) =>
   domain
     ? domain.startsWith("http://") || domain.startsWith("https://")
       ? domain

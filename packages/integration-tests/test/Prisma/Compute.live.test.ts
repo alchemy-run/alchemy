@@ -36,11 +36,11 @@ test.provider.skipIf(!runCleanup)(
       const deploymentId = process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
 
       if (deploymentId) {
-        yield* Prisma.destroyDeployment(deploymentId, {
+        yield* Prisma.destroyComputeVersion(deploymentId, {
           timeoutSeconds: 240,
         });
       }
-      yield* Prisma.destroyProjectApps(projectId, {
+      yield* Prisma.destroyProjectComputeServices(projectId, {
         timeoutSeconds: 240,
       });
 
@@ -117,13 +117,13 @@ test.provider(
         );
 
         expect(output.project.projectId).toBeDefined();
-        expect(output.app.appId).toBeDefined();
-        expect(output.app.deploymentId).toBeDefined();
+        expect(output.app.serviceId).toBeDefined();
+        expect(output.app.versionId).toBeDefined();
         expect(output.app.url).toBeDefined();
         deployed = {
           projectId: output.project.projectId,
-          appId: output.app.appId,
-          deploymentId: output.app.deploymentId!,
+          appId: output.app.serviceId,
+          deploymentId: output.app.versionId!,
         };
 
         const text = yield* fetchText(`${output.app.url}/`);
@@ -272,12 +272,12 @@ test.provider(
       yield* Effect.gen(function* () {
         const output = yield* deploy("v1");
         expect(output.site.url).toBeDefined();
-        expect(output.site.deploymentId).toBeDefined();
+        expect(output.site.versionId).toBeDefined();
         expect((yield* getProject({ id: output.project.projectId })).data.id).toBe(
           output.project.projectId,
         );
-        expect((yield* getService({ serviceId: output.site.appId })).data.id).toBe(
-          output.site.appId,
+        expect((yield* getService({ serviceId: output.site.serviceId })).data.id).toBe(
+          output.site.serviceId,
         );
         yield* verifySite(output.site.url!, "v1").pipe(
           Effect.timeout("20 seconds"),
@@ -290,12 +290,12 @@ test.provider(
 
         const updated = yield* deploy("v2");
         expect(updated.project.projectId).toBe(output.project.projectId);
-        expect(updated.site.appId).toBe(output.site.appId);
+        expect(updated.site.serviceId).toBe(output.site.serviceId);
         expect(updated.site.url).toBe(output.site.url);
-        expect(updated.site.deploymentId).toBeDefined();
-        expect(updated.site.deploymentId).not.toBe(output.site.deploymentId);
-        expect((yield* getService({ serviceId: updated.site.appId })).data.id).toBe(
-          updated.site.appId,
+        expect(updated.site.versionId).toBeDefined();
+        expect(updated.site.versionId).not.toBe(output.site.versionId);
+        expect((yield* getService({ serviceId: updated.site.serviceId })).data.id).toBe(
+          updated.site.serviceId,
         );
         yield* verifySite(updated.site.url!, "v2").pipe(
           Effect.timeout("20 seconds"),
@@ -320,7 +320,7 @@ test.provider(
           Effect.timeout("10 seconds"),
         );
         const appGone = yield* getService({
-          serviceId: output.site.appId,
+          serviceId: output.site.serviceId,
         }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
@@ -392,18 +392,18 @@ test.provider(
           }),
         );
 
-        const appId = output.app.appId;
-        const deploymentId = output.app.deploymentId;
-        expect(appId).toBeDefined();
-        expect(deploymentId).toBeDefined();
+        const serviceId = output.app.serviceId;
+        const versionId = output.app.versionId;
+        expect(serviceId).toBeDefined();
+        expect(versionId).toBeDefined();
 
         // Roll the App back to its currently-live deployment. The control
         // plane accepts a roll to the live deployment (roll-forward / drift
         // heal) and returns the stable App endpoint plus the number of custom
         // domains reassigned (0 here, since none are attached). This drives
         // the canonical POST /v1/apps/{id}/rollback contract.
-        const result = yield* Prisma.rollbackApp(appId, {
-          deploymentId: deploymentId!,
+        const result = yield* Prisma.rollbackApp(serviceId, {
+          deploymentId: versionId!,
         });
         expect(typeof result.appEndpointDomain).toBe("string");
         expect(result.appEndpointDomain.length).toBeGreaterThan(0);
@@ -419,7 +419,7 @@ test.provider(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );
-        const appGone = yield* getService({ serviceId: appId }).pipe(
+        const appGone = yield* getService({ serviceId: serviceId }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );

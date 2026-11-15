@@ -93,8 +93,8 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
           Prisma.Bucket.Type,
           Prisma.BucketAccessKey.Type,
           Prisma.Compute.Type,
-          Prisma.App.Type,
-          Prisma.Deployment.Type,
+          Prisma.ComputeService.Type,
+          Prisma.ComputeVersion.Type,
           Prisma.CustomDomain.Type,
           Prisma.EnvironmentVariable.Type,
           Prisma.SourceRepository.Type,
@@ -116,9 +116,9 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
               "bucketName",
             ],
           ],
-          [Prisma.Compute.Type, ["appId"]],
-          [Prisma.App.Type, ["appId"]],
-          [Prisma.Deployment.Type, ["deploymentId"]],
+          [Prisma.Compute.Type, ["serviceId"]],
+          [Prisma.ComputeService.Type, ["serviceId"]],
+          [Prisma.ComputeVersion.Type, ["versionId"]],
           [Prisma.CustomDomain.Type, ["customDomainId"]],
           [Prisma.EnvironmentVariable.Type, ["environmentVariableId"]],
           [Prisma.SourceRepository.Type, ["sourceRepositoryId"]],
@@ -143,7 +143,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
       }).pipe(providePrismaDev),
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:bucket",
         "provider:prisma:bucketaccesskey",
@@ -151,7 +151,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -164,7 +164,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
     () =>
       Effect.gen(function* () {
         const projectProvider = yield* Provider.findProviderByType(Prisma.Project.Type as any);
-        const appProvider = yield* Provider.findProviderByType(Prisma.App.Type as any);
+        const appProvider = yield* Provider.findProviderByType(Prisma.ComputeService.Type as any);
         const envProvider = yield* Provider.findProviderByType(
           Prisma.EnvironmentVariable.Type as any,
         );
@@ -179,7 +179,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
         )) as Prisma.Project["Attributes"];
         const app = (yield* appProvider.reconcile(
           reconcileInput("App", { project, displayName: "api", regionId: "us-east-1" }),
-        )) as Prisma.App["Attributes"];
+        )) as Prisma.ComputeService["Attributes"];
         const env = (yield* envProvider.reconcile(
           reconcileInput("Environment", {
             project,
@@ -202,7 +202,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
 
         expect(project.projectId).toBe("dev:project:Project");
         expect(app.projectId).toBe(project.projectId);
-        expect(app.appId).toBe("dev:app:App");
+        expect(app.serviceId).toBe("dev:app:App");
         expect(env.projectId).toBe(project.projectId);
         expect(env.branchId).toBe("branch-preview");
         expect(Redacted.value(env.value)).toBe("secret");
@@ -216,7 +216,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
       }).pipe(providePrismaDev),
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:bucket",
         "provider:prisma:bucketaccesskey",
@@ -257,7 +257,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
     "tails deployment logs from a providers()-shaped stack context",
     () =>
       Effect.gen(function* () {
-        const provider = yield* Provider.findProviderByType(Prisma.Deployment.Type as any);
+        const provider = yield* Provider.findProviderByType(Prisma.ComputeVersion.Type as any);
 
         // The tail stream must resolve everything it needs from the context
         // `providers()` produces. Point it at a closed loopback port so the
@@ -288,6 +288,6 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
           ),
         ),
       ),
-    { tags: ["provider:prisma:deployment"], timeout: 30_000 },
+    { tags: ["provider:prisma:computeversion"], timeout: 30_000 },
   );
 });

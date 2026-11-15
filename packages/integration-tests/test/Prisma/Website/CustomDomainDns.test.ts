@@ -137,7 +137,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const domain = site.domain!;
       const projectId = typeof site.project === "string" ? site.project : site.project!.projectId;
       expect(domain.hostname).toBe(HOSTNAME);
-      expect(domain.appId).toBe(site.compute!.appId);
+      expect(domain.serviceId).toBe(site.compute!.serviceId);
       // The routing CNAME to the app's regional switchboard, published
       // before Prisma registered (and verified) the hostname.
       expect(
@@ -301,13 +301,13 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const domain = site.domain!;
 
       expect(branch.isDefault).toBe(false);
-      expect(domain.appId).toBe(site.compute!.appId);
+      expect(domain.serviceId).toBe(site.compute!.serviceId);
       expect(domain.hostname).toBe(hostname);
 
-      const app = yield* getService({ serviceId: site.compute!.appId });
+      const app = yield* getService({ serviceId: site.compute!.serviceId });
       expect(app.data.branchId).toBe(branch.branchId);
       const registered = yield* getDomain({ domainId: domain.customDomainId });
-      expect(registered.data.appId).toBe(site.compute!.appId);
+      expect(registered.data.appId).toBe(site.compute!.serviceId);
       expect(trimDot(registered.data.hostname)).toBe(hostname);
 
       yield* stack.destroy();

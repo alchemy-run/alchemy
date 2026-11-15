@@ -27,7 +27,7 @@ export type WebsiteProjectReference =
 /** Deployment controls that do not replace the framework build or artifact. */
 export type WebsiteComputeOptions = Pick<
   ComputeProps,
-  | "appName"
+  | "serviceName"
   | "port"
   | "envClass"
   | "start"
@@ -187,13 +187,13 @@ export const deployWebsite = Effect.fn(function* (
       ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
           name: domainName,
           target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
+            hostname: Output.map(compute.serviceEndpointDomain, switchboardTarget),
           },
         })
       : undefined;
   const domain = domainName
     ? yield* CustomDomain("Domain", {
-        app: compute,
+        service: compute,
         hostname:
           routing === undefined
             ? domainName

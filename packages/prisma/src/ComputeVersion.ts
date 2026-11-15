@@ -14,12 +14,12 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import type { App } from "./App.ts";
 import {
-  destroyDeployment,
-  PrismaDeploymentWaitTimeout,
-  waitForDeploymentStatus,
+  destroyComputeVersion,
+  PrismaComputeVersionWaitTimeout,
+  waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
+import type { ComputeService } from "./ComputeService.ts";
 import { promoteAppObserved } from "./internal/AppPromotion.ts";
 import {
   inspectArtifactFile,
@@ -38,48 +38,54 @@ import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
-  resolveAppId,
-  unresolvedAppIdOf,
+  resolveServiceId,
+  unresolvedServiceIdOf,
 } from "./internal/Refs.ts";
+import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Providers } from "./Providers.ts";
 
-export class DeploymentConflict extends Data.TaggedError("DeploymentConflict")<{
+export class ComputeVersionConflict extends Data.TaggedError("ComputeVersionConflict")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-export class DeploymentInvalidProps extends Data.TaggedError("DeploymentInvalidProps")<{
+export class ComputeVersionInvalidProps extends Data.TaggedError("ComputeVersionInvalidProps")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-export class DeploymentOperationFailed extends Data.TaggedError("DeploymentOperationFailed")<{
+export class ComputeVersionOperationFailed extends Data.TaggedError(
+  "ComputeVersionOperationFailed",
+)<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-export class DeploymentUnexpectedResponse extends Data.TaggedError("DeploymentUnexpectedResponse")<{
+export class ComputeVersionUnexpectedResponse extends Data.TaggedError(
+  "ComputeVersionUnexpectedResponse",
+)<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 768 * 1024 * 1024;
+export const MAX_COMPUTE_VERSION_ARTIFACT_BYTES = 768 * 1024 * 1024;
 
-export interface DeploymentProps {
+export interface ComputeVersionProps {
   /**
-   * App ID or Prisma.App resource that owns this deployment.
+   * Compute service ID or `Prisma.ComputeService` resource that owns this
+   * version.
    */
-  app: string | App;
+  service: string | ComputeService;
   /**
-   * Port mapping for the deployment. Set `http` to `null` to reset to
+   * Port mapping for the version. Set `http` to `null` to reset to
    * Foundry's default port (8080); non-null values must be integers from
    * 1 through 65535.
    */
   portMapping?: { http?: number | null };
   /**
-   * Create the deployment by reusing the App's currently promoted artifact
-   * instead of uploading code. Requires an existing promoted deployment.
+   * Create the version by reusing the service's currently promoted artifact
+   * instead of uploading code. Requires an existing promoted version.
    */
   skipCodeUpload?: boolean;
   /**
@@ -93,14 +99,14 @@ export interface DeploymentProps {
    */
   artifactContentType?: string;
   /**
-   * Start the deployment after it is created.
+   * Start the version after it is created.
    *
    * @default false
    */
   start?: boolean;
   /**
-   * Promote the deployment to the App's stable endpoint after start.
-   * If `start` is omitted, enabling promotion starts the deployment first.
+   * Promote the version to the service's stable endpoint after start.
+   * If `start` is omitted, enabling promotion starts the version first.
    *
    * @default false
    */
@@ -134,8 +140,8 @@ export interface DeploymentProps {
    *
    * @example
    * ```typescript
-   * const deployment = yield* Prisma.Deployment("web", {
-   *   app,
+   * const version = yield* Prisma.ComputeVersion("web", {
+   *   service,
    *   artifactPath: "./dist/app.tar.gz",
    *   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
    *   start: true,
@@ -146,18 +152,18 @@ export interface DeploymentProps {
   triggers?: Record<string, unknown>;
 }
 
-export interface Deployment extends Resource<
-  "Prisma.Deployment",
-  DeploymentProps,
+export interface ComputeVersion extends Resource<
+  "Prisma.ComputeVersion",
+  ComputeVersionProps,
   {
     /**
-     * Prisma deployment ID.
+     * Prisma Compute version ID. The Management API calls it a deployment ID.
      */
-    deploymentId: string;
+    versionId: string;
     /**
-     * App ID that owns the deployment.
+     * Compute service ID that owns the version.
      */
-    appId: string;
+    serviceId: string;
     /**
      * Foundry version ID returned by the Prisma Management API.
      */
@@ -182,9 +188,9 @@ export interface Deployment extends Resource<
      */
     triggersHash?: Redacted.Redacted<string>;
     /**
-     * Stable App endpoint domain after promotion.
+     * Stable endpoint domain of the service after promotion.
      */
-    appEndpointDomain: string | undefined;
+    serviceEndpointDomain: string | undefined;
     /**
      * ISO timestamp when the deployment was created, when observed.
      */
@@ -195,7 +201,8 @@ export interface Deployment extends Resource<
 > {}
 
 /**
- * A Prisma deployment owned by an App.
+ * A version of a Prisma Compute service: one uploaded or reused artifact. The
+ * Management API calls a version a deployment.
  *
  * This is the low-level resource: it can upload or reuse an artifact, start it,
  * and promote it, but it does not provide `Prisma.Compute`'s preview/stable
@@ -204,16 +211,19 @@ export interface Deployment extends Resource<
  *
  * Prisma's create-deployment API currently exposes neither an idempotency key
  * nor a caller-defined natural key. After a crash that loses state immediately
- * after creation, Alchemy deliberately does not adopt the App's latest
- * deployment: doing so could take ownership of an unrelated deployment. When
+ * after creation, Alchemy deliberately does not adopt the service's latest
+ * version: doing so could take ownership of an unrelated version. When
  * persisted state contains a Foundry version ID, refresh may safely recover the
- * matching deployment.
+ * matching version.
  *
- * ### Creating a Deployment
+ * This resource was named `Prisma.Deployment`. State saved under that type is
+ * still read, and is rewritten under the new type on the next deploy.
+ *
+ * ### Creating a Version
  * **Example:** Fork the currently promoted artifact
  * ```typescript
- * const deployment = yield* Prisma.Deployment("web-v2", {
- *   app: app.appId,
+ * const version = yield* Prisma.ComputeVersion("web-v2", {
+ *   service: service.serviceId,
  *   skipCodeUpload: true,
  *   start: true,
  *   promote: true,
@@ -222,8 +232,8 @@ export interface Deployment extends Resource<
  *
  * **Example:** Upload a prebuilt artifact
  * ```typescript
- * const deployment = yield* Prisma.Deployment("web-v3", {
- *   app: app.appId,
+ * const version = yield* Prisma.ComputeVersion("web-v3", {
+ *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
  *   artifactContentType: "application/gzip",
  *   start: true,
@@ -234,19 +244,55 @@ export interface Deployment extends Resource<
  * @resource
  * @product Compute
  */
-export const Deployment = Resource<Deployment>("Prisma.Deployment");
+export const ComputeVersion = Resource<ComputeVersion>("Prisma.ComputeVersion", {
+  aliases: ["Prisma.Deployment"],
+});
+
+/** Attributes as `Prisma.Deployment` wrote them, before the rename. */
+interface LegacyComputeVersionAttributes extends Omit<
+  ComputeVersion["Attributes"],
+  "versionId" | "serviceId" | "serviceEndpointDomain"
+> {
+  deploymentId: string;
+  appId: string;
+  appEndpointDomain: string | undefined;
+}
+
+type SavedAttributes = ComputeVersion["Attributes"] | LegacyComputeVersionAttributes;
+
+/** Read attributes saved before or after the rename under the current names. */
+function currentAttributes(saved: SavedAttributes): ComputeVersion["Attributes"] {
+  if ("versionId" in saved) return saved;
+  const { deploymentId, appId, appEndpointDomain, ...rest } = saved;
+  return {
+    ...rest,
+    versionId: deploymentId,
+    serviceId: appId,
+    serviceEndpointDomain: appEndpointDomain,
+  };
+}
+
+/** Props as `Prisma.Deployment` took them, before `app` became `service`. */
+type LegacyComputeVersionProps = Omit<ComputeVersionProps, "service"> & {
+  app: ComputeVersionProps["service"];
+};
+
+/** Read props saved before or after the rename under the current names. */
+const currentProps = (olds: ComputeVersionProps | LegacyComputeVersionProps) => {
+  if ("service" in olds) return olds;
+  const { app, ...rest } = olds;
+  return { ...rest, service: app };
+};
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-const listAppDeployments = (appId: string) =>
+const listAppDeployments = (serviceId: string) =>
   Effect.gen(function* () {
     const deployments: GetServiceDeploymentsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
       const page = yield* getServiceDeployments(
-        cursor === undefined
-          ? { serviceId: appId, limit: 100 }
-          : { serviceId: appId, limit: 100, cursor },
+        cursor === undefined ? { serviceId, limit: 100 } : { serviceId, limit: 100, cursor },
       );
       deployments.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
@@ -262,18 +308,18 @@ const listAppDeployments = (appId: string) =>
     return deployments;
   });
 
-const findDeployment = (appId: string, foundryVersionId: string | undefined) =>
+const findDeployment = (serviceId: string, foundryVersionId: string | undefined) =>
   foundryVersionId === undefined
     ? Effect.undefined
-    : listAppDeployments(appId).pipe(
+    : listAppDeployments(serviceId).pipe(
         Effect.flatMap((deployments) => {
           const matches = deployments.filter(
             (deployment) => deployment.foundryVersionId === foundryVersionId,
           );
           return matches.length > 1
             ? Effect.fail(
-                new DeploymentConflict({
-                  message: `Prisma returned multiple deployments with Foundry version ID '${foundryVersionId}' for App '${appId}'; refusing an ambiguous recovery match.`,
+                new ComputeVersionConflict({
+                  message: `Prisma returned multiple deployments with Foundry version ID '${foundryVersionId}' for Compute service '${serviceId}'; refusing an ambiguous recovery match.`,
                 }),
               )
             : Effect.succeed(matches[0]);
@@ -282,21 +328,21 @@ const findDeployment = (appId: string, foundryVersionId: string | undefined) =>
 
 const attrsFrom = (
   deployment: ObservedDeployment,
-  appId: string,
+  serviceId: string,
   extra?: {
     artifactHash?: string;
     triggersHash?: Redacted.Redacted<string>;
-    appEndpointDomain?: string;
+    serviceEndpointDomain?: string;
   },
-): Deployment["Attributes"] => ({
-  deploymentId: deployment.id,
-  appId,
+): ComputeVersion["Attributes"] => ({
+  versionId: deployment.id,
+  serviceId,
   foundryVersionId: deployment.foundryVersionId,
   status: deployment.status,
   previewDomain: deployment.previewDomain,
   artifactHash: extra?.artifactHash,
   triggersHash: extra?.triggersHash,
-  appEndpointDomain: extra?.appEndpointDomain,
+  serviceEndpointDomain: extra?.serviceEndpointDomain,
   createdAt: deployment.createdAt,
 });
 
@@ -330,19 +376,19 @@ export function readUploadArtifact(input: ReadUploadArtifactInput) {
 
 const readUploadArtifactInternal = Effect.fn(function* (input: ReadUploadArtifactInput) {
   if (input.artifact !== undefined && input.artifactPath !== undefined) {
-    return yield* new DeploymentInvalidProps({
+    return yield* new ComputeVersionInvalidProps({
       message: "artifact and artifactPath are mutually exclusive.",
     });
   }
   if (input.output === "file" && input.artifact !== undefined) {
-    return yield* new DeploymentInvalidProps({
+    return yield* new ComputeVersionInvalidProps({
       message: "File-backed artifact output requires artifactPath.",
     });
   }
   if (input.artifactPath !== undefined) {
     const path = yield* Path.Path;
     const resolved = path.resolve(input.artifactPath);
-    const artifact = yield* inspectArtifactFile(resolved, MAX_DEPLOYMENT_ARTIFACT_BYTES);
+    const artifact = yield* inspectArtifactFile(resolved, MAX_COMPUTE_VERSION_ARTIFACT_BYTES);
     if (input.output === "file") {
       return artifact;
     }
@@ -353,42 +399,42 @@ const readUploadArtifactInternal = Effect.fn(function* (input: ReadUploadArtifac
     const bytes = yield* Effect.sync(() =>
       typeof artifact === "string" ? new TextEncoder().encode(artifact) : artifact,
     );
-    return yield* validateDeploymentArtifactBytes(bytes);
+    return yield* validateComputeVersionArtifactBytes(bytes);
   }
   return undefined;
 });
 
-export const validateDeploymentArtifactBytes = (
+export const validateComputeVersionArtifactBytes = (
   artifact: Uint8Array,
-  maxBytes = MAX_DEPLOYMENT_ARTIFACT_BYTES,
+  maxBytes = MAX_COMPUTE_VERSION_ARTIFACT_BYTES,
 ) =>
   !Number.isSafeInteger(maxBytes) || maxBytes <= 0
     ? Effect.fail(
-        new DeploymentInvalidProps({
+        new ComputeVersionInvalidProps({
           message: "Artifact maxBytes must be a positive safe integer.",
         }),
       )
-    : maxBytes > MAX_DEPLOYMENT_ARTIFACT_BYTES
+    : maxBytes > MAX_COMPUTE_VERSION_ARTIFACT_BYTES
       ? Effect.fail(
-          new DeploymentInvalidProps({
-            message: `Artifact maxBytes must not exceed the hard limit of ${MAX_DEPLOYMENT_ARTIFACT_BYTES}.`,
+          new ComputeVersionInvalidProps({
+            message: `Artifact maxBytes must not exceed the hard limit of ${MAX_COMPUTE_VERSION_ARTIFACT_BYTES}.`,
           }),
         )
       : artifact.byteLength === 0
         ? Effect.fail(
-            new DeploymentInvalidProps({
+            new ComputeVersionInvalidProps({
               message: "Prisma deployment artifact must be non-empty.",
             }),
           )
         : artifact.byteLength > maxBytes
           ? Effect.fail(
-              new DeploymentInvalidProps({
+              new ComputeVersionInvalidProps({
                 message: `Prisma deployment artifact exceeds the ${maxBytes} byte upload safety limit.`,
               }),
             )
           : Effect.succeed(artifact);
 
-const artifactHashOf = Effect.fn(function* (props: DeploymentProps) {
+const artifactHashOf = Effect.fn(function* (props: ComputeVersionProps) {
   const artifact = yield* readUploadArtifact({
     artifactPath: props.artifactPath,
     output: "file",
@@ -457,10 +503,10 @@ export const uploadArtifact = (
 ) =>
   Effect.gen(function* () {
     if (artifact instanceof Uint8Array) {
-      yield* validateDeploymentArtifactBytes(artifact);
-    } else if (artifact.size <= 0 || artifact.size > MAX_DEPLOYMENT_ARTIFACT_BYTES) {
-      return yield* new DeploymentInvalidProps({
-        message: `Prisma deployment artifact exceeds the ${MAX_DEPLOYMENT_ARTIFACT_BYTES} byte upload safety limit.`,
+      yield* validateComputeVersionArtifactBytes(artifact);
+    } else if (artifact.size <= 0 || artifact.size > MAX_COMPUTE_VERSION_ARTIFACT_BYTES) {
+      return yield* new ComputeVersionInvalidProps({
+        message: `Prisma deployment artifact exceeds the ${MAX_COMPUTE_VERSION_ARTIFACT_BYTES} byte upload safety limit.`,
       });
     }
     yield* Effect.try({
@@ -485,102 +531,120 @@ export const uploadArtifact = (
 
 const ProviderLive = () =>
   Provider.effect(
-    Deployment,
+    ComputeVersion,
     Effect.gen(function* () {
       return {
-        stables: ["deploymentId"],
-        // App deletion cascades deployments. AppProvider is the single nuke
-        // enumerator so a deployment is never deleted twice during teardown.
+        stables: ["versionId"],
+        // Service deletion cascades versions. ComputeServiceProvider is the single nuke
+        // enumerator so a version is never deleted twice during teardown.
         list: () => Effect.succeed([]),
-        diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isInputObject(news)) return undefined;
-          if (isPrismaDevId(output?.deploymentId)) {
-            return { action: "update" } as const;
-          }
-          // `deploymentId` is stable and Foundry's failed status is terminal.
-          // Route drift recovery through the engine's create-before-delete
-          // replacement lifecycle instead of trying to restart the failed
-          // generation or changing a stable ID during an update.
-          if (output?.status === "failed") {
-            return { action: "replace" } as const;
-          }
-          // Checked before the resolved-content early return below: a
-          // deferred diff falls back to an update, which reuses the running
-          // deployment and would never apply the changed inputs.
-          if (yield* triggersChanged(news.triggers, output?.triggersHash)) {
-            return { action: "replace" } as const;
-          }
-          const replacementContent = {
-            portMapping: news.portMapping,
-            skipCodeUpload: news.skipCodeUpload,
-            artifactPath: news.artifactPath,
-            artifactContentType: news.artifactContentType,
-          };
-          if (!isResolved(replacementContent)) return undefined;
-          const resolvedReplacementContent = replacementContent as Pick<
-            DeploymentProps,
-            "portMapping" | "skipCodeUpload" | "artifactPath" | "artifactContentType"
-          >;
-          const oldAppId = output?.appId ?? unresolvedAppIdOf(olds.app);
-          const newAppId = isResolved(news.app) ? unresolvedAppIdOf(news.app) : undefined;
-          const oldArtifactHash = output?.artifactHash;
-          const newArtifactHash = yield* artifactHashOf({
-            app: olds.app,
-            ...resolvedReplacementContent,
-          });
-          const appChanged = concreteIdsChanged(oldAppId, newAppId);
-          if (
-            appChanged ||
-            !deepEqual(resolvedReplacementContent.portMapping ?? {}, olds.portMapping ?? {}) ||
-            (resolvedReplacementContent.skipCodeUpload ?? false) !==
-              (olds.skipCodeUpload ?? false) ||
-            resolvedReplacementContent.artifactPath !== olds.artifactPath ||
-            resolvedReplacementContent.artifactContentType !== olds.artifactContentType ||
-            (newArtifactHash !== undefined && newArtifactHash !== oldArtifactHash)
-          ) {
-            return { action: "replace" } as const;
-          }
-          const updateProps = {
-            start: news.start,
-            promote: news.promote,
-          };
-          if (!isResolved(updateProps)) return undefined;
-          const resolvedUpdateProps = updateProps as Pick<DeploymentProps, "start" | "promote">;
-          if ((resolvedUpdateProps.start ?? false) || (resolvedUpdateProps.promote ?? false)) {
-            // Reconcile asserted lifecycle state on every deploy so external
-            // stops and App routing drift are repaired.
-            return { action: "update" } as const;
-          }
-          if (
-            (resolvedUpdateProps.start ?? false) !== (olds.start ?? false) ||
-            (resolvedUpdateProps.promote ?? false) !== (olds.promote ?? false)
-          ) {
-            return { action: "update" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ output, olds }) {
-          if (isPrismaDevId(output?.deploymentId)) return undefined;
-          const appId =
-            output?.appId && !isPrismaDevId(output.appId)
-              ? output.appId
-              : yield* resolveAppId(olds.app);
-          const savedDeployment = output?.deploymentId
-            ? yield* observeDeployment(output.deploymentId).pipe(
+        diff: Effect.fn(
+          function* ({ olds: savedProps, news, output: saved }) {
+            if (!isInputObject(news)) return undefined;
+            const output = saved && currentAttributes(saved);
+            const olds = currentProps(savedProps);
+            if (isPrismaDevId(output?.versionId)) {
+              return { action: "update" } as const;
+            }
+            // `versionId` is stable and Foundry's failed status is terminal.
+            // Route drift recovery through the engine's create-before-delete
+            // replacement lifecycle instead of trying to restart the failed
+            // generation or changing a stable ID during an update.
+            if (output?.status === "failed") {
+              return { action: "replace" } as const;
+            }
+            // Checked before the resolved-content early return below: a
+            // deferred diff falls back to an update, which reuses the running
+            // deployment and would never apply the changed inputs.
+            if (yield* triggersChanged(news.triggers, output?.triggersHash)) {
+              return { action: "replace" } as const;
+            }
+            const replacementContent = {
+              portMapping: news.portMapping,
+              skipCodeUpload: news.skipCodeUpload,
+              artifactPath: news.artifactPath,
+              artifactContentType: news.artifactContentType,
+            };
+            if (!isResolved(replacementContent)) return undefined;
+            const resolvedReplacementContent = replacementContent as Pick<
+              ComputeVersionProps,
+              "portMapping" | "skipCodeUpload" | "artifactPath" | "artifactContentType"
+            >;
+            const oldServiceId = output?.serviceId ?? unresolvedServiceIdOf(olds.service);
+            const newServiceId = isResolved(news.service)
+              ? unresolvedServiceIdOf(news.service)
+              : undefined;
+            const oldArtifactHash = output?.artifactHash;
+            const newArtifactHash = yield* artifactHashOf({
+              service: olds.service,
+              ...resolvedReplacementContent,
+            });
+            const serviceChanged = concreteIdsChanged(oldServiceId, newServiceId);
+            if (
+              serviceChanged ||
+              !deepEqual(resolvedReplacementContent.portMapping ?? {}, olds.portMapping ?? {}) ||
+              (resolvedReplacementContent.skipCodeUpload ?? false) !==
+                (olds.skipCodeUpload ?? false) ||
+              resolvedReplacementContent.artifactPath !== olds.artifactPath ||
+              resolvedReplacementContent.artifactContentType !== olds.artifactContentType ||
+              (newArtifactHash !== undefined && newArtifactHash !== oldArtifactHash)
+            ) {
+              return { action: "replace" } as const;
+            }
+            const updateProps = {
+              start: news.start,
+              promote: news.promote,
+            };
+            if (!isResolved(updateProps)) return undefined;
+            const resolvedUpdateProps = updateProps as Pick<
+              ComputeVersionProps,
+              "start" | "promote"
+            >;
+            if ((resolvedUpdateProps.start ?? false) || (resolvedUpdateProps.promote ?? false)) {
+              // Reconcile asserted lifecycle state on every deploy so external
+              // stops and service routing drift are repaired.
+              return { action: "update" } as const;
+            }
+            if (
+              (resolvedUpdateProps.start ?? false) !== (olds.start ?? false) ||
+              (resolvedUpdateProps.promote ?? false) !== (olds.promote ?? false)
+            ) {
+              return { action: "update" } as const;
+            }
+            return undefined;
+          },
+          (effect, { output: saved }) =>
+            effect.pipe(
+              Effect.map((diff) =>
+                updateRowSavedBeforeRename(saved !== undefined && !("versionId" in saved), diff),
+              ),
+            ),
+        ),
+        read: Effect.fn(function* ({ output: saved, olds: savedProps }) {
+          const output = saved && currentAttributes(saved);
+          const olds = currentProps(savedProps);
+          if (isPrismaDevId(output?.versionId)) return undefined;
+          const serviceId =
+            output?.serviceId && !isPrismaDevId(output.serviceId)
+              ? output.serviceId
+              : yield* resolveServiceId(olds.service);
+          const savedDeployment = output?.versionId
+            ? yield* observeDeployment(output.versionId).pipe(
                 Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           const listed = savedDeployment
             ? undefined
-            : yield* findDeployment(appId, output?.foundryVersionId);
+            : yield* findDeployment(serviceId, output?.foundryVersionId);
           const deployment =
             savedDeployment ?? (listed ? yield* observeDeployment(listed.id) : undefined);
           if (savedDeployment) {
-            yield* ensureDeploymentMembership(appId, savedDeployment);
+            yield* ensureDeploymentMembership(serviceId, savedDeployment);
           }
-          return deployment ? attrsFrom(deployment, appId, output) : undefined;
+          return deployment ? attrsFrom(deployment, serviceId, output) : undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ news, output: saved }) {
+          const output = saved && currentAttributes(saved);
           if (
             news.portMapping?.http !== undefined &&
             news.portMapping.http !== null &&
@@ -588,22 +652,22 @@ const ProviderLive = () =>
               news.portMapping.http < 1 ||
               news.portMapping.http > 65_535)
           ) {
-            return yield* new DeploymentInvalidProps({
+            return yield* new ComputeVersionInvalidProps({
               message: "portMapping.http must be an integer between 1 and 65535.",
             });
           }
           if (!(news.skipCodeUpload ?? false) && news.artifactPath === undefined) {
-            return yield* new DeploymentInvalidProps({
-              message: "Prisma.Deployment requires artifactPath or skipCodeUpload: true.",
+            return yield* new ComputeVersionInvalidProps({
+              message: "Prisma.ComputeVersion requires artifactPath or skipCodeUpload: true.",
             });
           }
           if ((news.skipCodeUpload ?? false) && news.artifactPath !== undefined) {
-            return yield* new DeploymentInvalidProps({
+            return yield* new ComputeVersionInvalidProps({
               message: "skipCodeUpload cannot be combined with artifactPath.",
             });
           }
           if ((news.promote ?? false) && news.start === false) {
-            return yield* new DeploymentInvalidProps({
+            return yield* new ComputeVersionInvalidProps({
               message: "promote cannot be combined with start: false.",
             });
           }
@@ -622,27 +686,25 @@ const ProviderLive = () =>
             news.triggers === undefined
               ? undefined
               : Redacted.make(yield* triggersHashOf(news.triggers));
-          const appId = yield* resolveAppId(news.app);
-          const deploymentId = isPrismaDevId(output?.deploymentId)
-            ? undefined
-            : output?.deploymentId;
+          const serviceId = yield* resolveServiceId(news.service);
+          const deploymentId = isPrismaDevId(output?.versionId) ? undefined : output?.versionId;
           let deployment: ObservedDeployment | undefined = deploymentId
             ? yield* observeDeployment(deploymentId).pipe(
                 Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (deployment) {
-            yield* ensureDeploymentMembership(appId, deployment);
+            yield* ensureDeploymentMembership(serviceId, deployment);
             if (deployment.status === "failed") {
-              return yield* new DeploymentOperationFailed({
-                message: `Prisma deployment '${deployment.id}' is in terminal status 'failed' and must be replaced before reconcile; refusing to restart it or change the stable deploymentId during an update.`,
+              return yield* new ComputeVersionOperationFailed({
+                message: `Prisma deployment '${deployment.id}' is in terminal status 'failed' and must be replaced before reconcile; refusing to restart it or change the stable versionId during an update.`,
               });
             }
           }
           let createdDeploymentId: string | undefined;
           const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
             createdDeploymentId === failedDeploymentId
-              ? destroyDeployment(failedDeploymentId).pipe(
+              ? destroyComputeVersion(failedDeploymentId).pipe(
                   Effect.mapError((cleanupError) =>
                     aggregateCleanupFailure(
                       "deployment",
@@ -658,7 +720,7 @@ const ProviderLive = () =>
 
           if (!deployment) {
             const created = yield* createServiceDeployment({
-              serviceId: appId,
+              serviceId,
               ...(news.portMapping === undefined ? {} : { portMapping: news.portMapping }),
               ...(news.skipCodeUpload === undefined ? {} : { skipCodeUpload: news.skipCodeUpload }),
             }).pipe(
@@ -671,7 +733,7 @@ const ProviderLive = () =>
             if (artifact !== undefined && !created.uploadUrl) {
               return yield* cleanupCreatedDeploymentOnFailure(
                 created.id,
-                new DeploymentOperationFailed({
+                new ComputeVersionOperationFailed({
                   message: "Prisma deployment creation did not return an upload URL.",
                 }),
               );
@@ -697,12 +759,12 @@ const ProviderLive = () =>
             );
           }
           if (!deployment) {
-            return yield* new DeploymentUnexpectedResponse({
+            return yield* new ComputeVersionUnexpectedResponse({
               message: "Prisma deployment could not be resolved after creation.",
             });
           }
 
-          let appEndpointDomain = output?.appEndpointDomain;
+          let serviceEndpointDomain = output?.serviceEndpointDomain;
           const shouldStart = news.start ?? news.promote ?? false;
           if (shouldStart) {
             const currentDeployment = deployment;
@@ -714,7 +776,7 @@ const ProviderLive = () =>
               ) {
                 const started = yield* startDeploymentIdempotent(currentDeployment.id);
                 if (started) {
-                  return yield* waitForDeploymentStatus(currentDeployment.id, "running").pipe(
+                  return yield* waitForComputeVersionStatus(currentDeployment.id, "running").pipe(
                     Effect.map((running) => ({
                       ...running,
                       previewDomain: started.previewDomain,
@@ -722,7 +784,7 @@ const ProviderLive = () =>
                   );
                 }
               }
-              return yield* waitForDeploymentStatus(currentDeployment.id, "running");
+              return yield* waitForComputeVersionStatus(currentDeployment.id, "running");
             }).pipe(
               Effect.catch((error) =>
                 cleanupCreatedDeploymentOnFailure(currentDeploymentId, error),
@@ -733,27 +795,28 @@ const ProviderLive = () =>
             // Promotion is deliberately replayed even when the control-plane
             // record already names this deployment. The endpoint operation also
             // repairs provider routing and custom-domain assignment drift.
-            const promoted = yield* promoteAppObserved(appId, deployment.id);
-            appEndpointDomain = promoted.appEndpointDomain;
+            const promoted = yield* promoteAppObserved(serviceId, deployment.id);
+            serviceEndpointDomain = promoted.appEndpointDomain;
           }
 
-          return attrsFrom(deployment, appId, {
+          return attrsFrom(deployment, serviceId, {
             artifactHash,
             triggersHash,
-            appEndpointDomain,
+            serviceEndpointDomain,
           });
         }),
-        delete: Effect.fn(function* ({ output }) {
-          if (isPrismaDevId(output.deploymentId)) return;
-          const deployment = yield* observeDeployment(output.deploymentId).pipe(
+        delete: Effect.fn(function* ({ output: saved }) {
+          const output = saved && currentAttributes(saved);
+          if (isPrismaDevId(output.versionId)) return;
+          const deployment = yield* observeDeployment(output.versionId).pipe(
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!deployment) return;
-          yield* ensureDeploymentMembership(output.appId, deployment);
-          yield* destroyDeployment(output.deploymentId).pipe(
+          yield* ensureDeploymentMembership(output.serviceId, deployment);
+          yield* destroyComputeVersion(output.versionId).pipe(
             // The stop was requested; it finishes once open connections close.
             Effect.catchIf(
-              (error) => error instanceof PrismaDeploymentWaitTimeout,
+              (error) => error instanceof PrismaComputeVersionWaitTimeout,
               (error) =>
                 Effect.fail(
                   new Provider.DeleteInProgress({
@@ -763,27 +826,29 @@ const ProviderLive = () =>
             ),
           );
         }),
-        tail: ({ output }) =>
-          output.deploymentId ? tailDeploymentLogs(output.deploymentId) : Stream.empty,
+        tail: ({ output: saved }) => {
+          const { versionId } = currentAttributes(saved);
+          return versionId ? tailDeploymentLogs(versionId) : Stream.empty;
+        },
       };
     }),
   );
 
 const ProviderLocal = () =>
-  devProvider(Deployment, ["deploymentId"], ({ id, news }) => ({
-    deploymentId: devId("deployment", id),
-    appId: attrOrString(news.app, "appId"),
+  devProvider(ComputeVersion, ["versionId"], ({ id, news }) => ({
+    versionId: devId("deployment", id),
+    serviceId: attrOrString(news.service, "serviceId"),
     foundryVersionId: devId("foundry-version", id),
     status: "new",
     previewDomain: undefined,
     artifactHash: undefined,
     triggersHash: undefined,
-    appEndpointDomain: undefined,
+    serviceEndpointDomain: undefined,
     createdAt: DEV_TIMESTAMP,
   }));
 
-export const DeploymentProvider = () =>
-  ProviderLayer.dual(Deployment, {
+export const ComputeVersionProvider = () =>
+  ProviderLayer.dual(ComputeVersion, {
     local: () => ProviderLocal(),
     live: () => ProviderLive(),
   });

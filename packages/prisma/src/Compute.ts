@@ -61,12 +61,12 @@ import {
   type ComputeAutoBuildFramework,
 } from "./ComputeBuild.ts";
 import {
-  destroyApp,
-  destroyDeployment,
-  toDeploymentUrl,
-  waitForDeploymentStatus,
+  destroyComputeService,
+  destroyComputeVersion,
+  toComputeVersionUrl,
+  waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
-import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
+import { readUploadArtifact, uploadArtifact } from "./ComputeVersion.ts";
 import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
 import { promoteAppObserved, waitForAppDeploymentTarget } from "./internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./internal/BundlePaths.ts";
@@ -90,6 +90,7 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./internal/Refs.ts";
+import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -379,27 +380,28 @@ export interface ComputeHealthCheck {
 
 export interface ComputeProps extends PlatformProps {
   /**
-   * Project ID or `project.projectId` output that owns the App.
+   * Project ID or `project.projectId` output that owns the service.
    */
   project: string | Project;
   /**
-   * App display name. If omitted, Alchemy generates a stable physical name.
+   * Display name of the Compute service. If omitted, Alchemy generates a stable
+   * physical name.
    */
-  appName?: string;
+  serviceName?: string;
   /**
-   * Region where the App is placed.
+   * Region where the service is placed.
    *
    * @default The project's default region, falling back to "us-east-1"
    */
   regionId?: PrismaRegionId;
   /**
-   * Branch ID to attach the App to. Mutually exclusive with branchGitName.
+   * Branch ID to attach the service to. Mutually exclusive with branchGitName.
    * If both branch fields are omitted, Alchemy attaches to the project's
    * current default branch.
    */
   branchId?: string;
   /**
-   * Branch git name to attach the App to. Mutually exclusive with branchId.
+   * Branch git name to attach the service to. Mutually exclusive with branchId.
    *
    * @default The project's current default branch
    */
@@ -569,37 +571,38 @@ export interface Compute extends Resource<
   ComputeProps,
   {
     /**
-     * Prisma App ID.
+     * Prisma Compute service ID.
      */
-    appId: string;
+    serviceId: string;
     /**
-     * Prisma deployment ID created for the current deployment.
+     * ID of the Compute version created for the current deploy. The Management
+     * API calls a version a deployment.
      */
-    deploymentId: string | undefined;
+    versionId: string | undefined;
     /**
-     * Project ID that owns the app.
+     * Project ID that owns the service.
      */
     projectId: string;
     /**
-     * App display name.
+     * Service display name.
      */
-    appName: string;
+    serviceName: string;
     /**
-     * Region ID where the App is placed.
+     * Region ID where the service is placed.
      */
     regionId: string;
     /**
-     * Preview endpoint domain for the deployment.
+     * Preview endpoint domain of the current version.
      */
-    deploymentEndpointDomain: string | undefined;
+    versionEndpointDomain: string | undefined;
     /**
-     * HTTPS URL for the deployment endpoint.
+     * HTTPS URL of the current version's preview endpoint.
      */
-    deploymentUrl: string | undefined;
+    versionUrl: string | undefined;
     /**
-     * Stable App endpoint domain after promotion.
+     * Stable endpoint domain of the service after promotion.
      */
-    appEndpointDomain: string | undefined;
+    serviceEndpointDomain: string | undefined;
     /**
      * Preferred URL for the app, local in dev or stable/preview in deploys.
      */
@@ -671,6 +674,53 @@ export interface ComputeRuntimeContext extends ProcessContext {
 export const isCompute = (value: unknown): value is Compute =>
   typeof value === "object" && value !== null && "Type" in value && value.Type === ComputeTypeId;
 
+/** Attributes as `Prisma.Compute` wrote them before the Compute service and version renames. */
+interface LegacyComputeAttributes extends Omit<
+  Compute["Attributes"],
+  | "serviceId"
+  | "versionId"
+  | "serviceName"
+  | "versionEndpointDomain"
+  | "versionUrl"
+  | "serviceEndpointDomain"
+> {
+  appId: string;
+  deploymentId: string | undefined;
+  appName: string;
+  deploymentEndpointDomain: string | undefined;
+  deploymentUrl: string | undefined;
+  appEndpointDomain: string | undefined;
+}
+
+type SavedComputeAttributes = Compute["Attributes"] | LegacyComputeAttributes;
+
+/** Read attributes saved before or after the renames under the current names. */
+function currentComputeAttributes(saved: SavedComputeAttributes): Compute["Attributes"] {
+  if ("serviceId" in saved) return saved;
+  const {
+    appId,
+    deploymentId,
+    appName,
+    deploymentEndpointDomain,
+    deploymentUrl,
+    appEndpointDomain,
+    ...rest
+  } = saved;
+  return {
+    ...rest,
+    serviceId: appId,
+    versionId: deploymentId,
+    serviceName: appName,
+    versionEndpointDomain: deploymentEndpointDomain,
+    versionUrl: deploymentUrl,
+    serviceEndpointDomain: appEndpointDomain,
+  };
+}
+
+/** The service name from props saved before or after `appName` became `serviceName`. */
+const savedServiceName = (olds: ComputeProps & { appName?: string }) =>
+  olds.serviceName ?? olds.appName;
+
 const hasEffectNativeComputeInput = (props: ComputeProps) =>
   props.isExternal !== true && (props.main !== undefined || props.exports !== undefined);
 
@@ -704,7 +754,7 @@ const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInp
  *   "api",
  *   {
  *     project,
- *     appName: "api",
+ *     serviceName: "api",
  *     main: import.meta.filename,
  *     port: 8080,
  *   },
@@ -748,7 +798,7 @@ const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInp
  *   "api",
  *   {
  *     project,
- *     appName: "api",
+ *     serviceName: "api",
  *     main: import.meta.filename,
  *   },
  *   Effect.gen(function* () {
@@ -1057,22 +1107,22 @@ const desiredComputeBranchId = Effect.fn(function* (
   return branch ? { resolved: true as const, id: branch.id } : { resolved: false as const };
 });
 
-const createAppName = (id: string, appName: string | undefined) =>
-  appName === undefined ? createPhysicalName({ id }) : Effect.succeed(appName);
+const createServiceName = (id: string, serviceName: string | undefined) =>
+  serviceName === undefined ? createPhysicalName({ id }) : Effect.succeed(serviceName);
 
 const findApp = Effect.fn(function* (
   projectId: string,
-  appName: string,
+  serviceName: string,
   props: Pick<ComputeProps, "branchId" | "branchGitName">,
 ) {
-  const candidates = (yield* listApps(projectId)).filter((app) => app.name === appName);
+  const candidates = (yield* listApps(projectId)).filter((app) => app.name === serviceName);
   if (candidates.length === 0) return undefined;
   const branch = yield* desiredComputeBranchId(projectId, props);
   if (!branch.resolved) return undefined;
   const matches = candidates.filter((app) => app.branchId === branch.id);
   if (matches.length > 1) {
     return yield* new ComputeConflict({
-      message: `Prisma returned multiple Apps named '${appName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
+      message: `Prisma returned multiple Apps named '${serviceName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
     });
   }
   return matches[0];
@@ -1080,12 +1130,12 @@ const findApp = Effect.fn(function* (
 
 const createApp = (
   projectId: string,
-  props: ComputeProps & { appName: string },
+  props: ComputeProps & { serviceName: string },
   branchId: string,
 ) =>
   createService({
     projectId,
-    displayName: props.appName,
+    displayName: props.serviceName,
     branchId,
     ...(props.regionId === undefined ? {} : { regionId: props.regionId }),
   }).pipe(
@@ -1779,9 +1829,10 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
 });
 
 const findExistingApp = Effect.fn(function* (output: Compute["Attributes"] | undefined) {
-  const appId = output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
-  return appId
-    ? yield* getService({ serviceId: appId }).pipe(
+  const serviceId =
+    output?.serviceId && !isPrismaDevId(output.serviceId) ? output.serviceId : undefined;
+  return serviceId
+    ? yield* getService({ serviceId }).pipe(
         Effect.map((response) => response.data),
         Effect.catchTag("NotFound", () => Effect.undefined),
       )
@@ -1790,7 +1841,7 @@ const findExistingApp = Effect.fn(function* (output: Compute["Attributes"] | und
 
 const ensureApp = Effect.fn(function* (
   projectId: string,
-  props: ComputeProps & { appName: string },
+  props: ComputeProps & { serviceName: string },
   output: Compute["Attributes"] | undefined,
   observedApp?: ObservedApp,
 ) {
@@ -1800,8 +1851,8 @@ const ensureApp = Effect.fn(function* (
     return yield* new ComputeOperationFailed({
       message:
         props.branchGitName === undefined
-          ? `Prisma project '${projectId}' has no default branch to attach Compute App '${props.appName}'. Create or promote a default branch, or specify branchId/branchGitName.`
-          : `Prisma project '${projectId}' has no branch named '${props.branchGitName}' to attach Compute App '${props.appName}'.`,
+          ? `Prisma project '${projectId}' has no default branch to attach Compute App '${props.serviceName}'. Create or promote a default branch, or specify branchId/branchGitName.`
+          : `Prisma project '${projectId}' has no branch named '${props.branchGitName}' to attach Compute App '${props.serviceName}'.`,
     });
   }
 
@@ -1810,13 +1861,13 @@ const ensureApp = Effect.fn(function* (
     const result = yield* createApp(projectId, props, branch.id).pipe(
       Effect.map((app) => ({ app, created: true })),
       Effect.catchTag("Conflict", (conflict) =>
-        findApp(projectId, props.appName, props).pipe(
+        findApp(projectId, props.serviceName, props).pipe(
           Effect.flatMap((app) =>
-            app && output?.appId !== undefined && app.id === output.appId
+            app && output?.serviceId !== undefined && app.id === output.serviceId
               ? Effect.succeed({ app, created: false })
               : Effect.fail(
                   new ComputeConflict({
-                    message: `Prisma App '${props.appName}' already exists on the requested branch but is not owned by this Compute resource. Import it with explicit adoption or choose a different App name.`,
+                    message: `Prisma App '${props.serviceName}' already exists on the requested branch but is not owned by this Compute resource. Import it with explicit adoption or choose a different App name.`,
                     cause: conflict,
                   }),
                 ),
@@ -1833,10 +1884,10 @@ const ensureApp = Effect.fn(function* (
     projectId,
     props.regionId ?? output?.regionId ?? app.region.id,
   );
-  if (app.name !== props.appName || app.branchId !== branch.id) {
+  if (app.name !== props.serviceName || app.branchId !== branch.id) {
     app = yield* updateService({
       serviceId: app.id,
-      displayName: props.appName,
+      displayName: props.serviceName,
       branchId: branch.id,
     }).pipe(Effect.map((response) => response.data));
   }
@@ -2180,47 +2231,62 @@ const ProviderLive = () =>
     Compute,
     Effect.gen(function* () {
       return {
-        stables: ["appId"],
-        // Compute is a composite over App + Deployment. AppProvider owns nuke
+        stables: ["serviceId"],
+        // Compute is a composite over App + Deployment. ComputeServiceProvider owns nuke
         // enumeration to avoid deleting the same canonical App twice.
         list: () => Effect.succeed([]),
-        diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isInputObject(news)) return undefined;
-          if (output?.local || isPrismaDevId(output?.appId)) {
-            return { action: "update" } as const;
-          }
-          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
-          const newProjectId = isResolved(news.project)
-            ? unresolvedProjectIdOf(news.project)
-            : undefined;
-          if (concreteIdsChanged(oldProjectId, newProjectId)) {
-            // A different project is a distinct API uniqueness scope, so the
-            // old and replacement Apps can safely coexist.
-            return { action: "replace" } as const;
-          }
-          if (isResolved(news.regionId) && news.regionId !== undefined) {
-            const currentRegionId = output?.regionId ?? olds.regionId;
-            if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
-              return yield* new ComputeInvalidProps({
-                message: `Prisma Compute App region is immutable and cannot be changed atomically without deleting the live App first. Deploy a second Compute App under a different appName in the target region, cut traffic over, then remove the original.`,
-              });
+        diff: Effect.fn(
+          function* ({ olds, news, output: saved }) {
+            if (!isInputObject(news)) return undefined;
+            const output = saved && currentComputeAttributes(saved);
+            if (output?.local || isPrismaDevId(output?.serviceId)) {
+              return { action: "update" } as const;
             }
-          }
-          // Source files/build output can change with no prop change, so
-          // reconcile must rerun and decide from the computed artifact hash.
-          return { action: "update" } as const;
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
+            const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
+            const newProjectId = isResolved(news.project)
+              ? unresolvedProjectIdOf(news.project)
+              : undefined;
+            if (concreteIdsChanged(oldProjectId, newProjectId)) {
+              // A different project is a distinct API uniqueness scope, so the
+              // old and replacement Apps can safely coexist.
+              return { action: "replace" } as const;
+            }
+            if (isResolved(news.regionId) && news.regionId !== undefined) {
+              const currentRegionId = output?.regionId ?? olds.regionId;
+              if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
+                return yield* new ComputeInvalidProps({
+                  message: `Prisma Compute App region is immutable and cannot be changed atomically without deleting the live App first. Deploy a second Compute under a different serviceName in the target region, cut traffic over, then remove the original.`,
+                });
+              }
+            }
+            // Source files/build output can change with no prop change, so
+            // reconcile must rerun and decide from the computed artifact hash.
+            return { action: "update" } as const;
+          },
+          (effect, { output: saved }) =>
+            effect.pipe(
+              Effect.map((diff) =>
+                updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), diff),
+              ),
+            ),
+        ),
+        read: Effect.fn(function* ({ id, output: saved, olds }) {
+          const output = saved && currentComputeAttributes(saved);
           if (output?.local) return output;
-          const appId = output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
+          const serviceId =
+            output?.serviceId && !isPrismaDevId(output.serviceId) ? output.serviceId : undefined;
           const findAppInProject = Effect.gen(function* () {
             const projectId = unresolvedProjectIdOf(olds.project);
             return projectId
-              ? yield* findApp(projectId, yield* createAppName(id, olds.appName), olds)
+              ? yield* findApp(
+                  projectId,
+                  yield* createServiceName(id, savedServiceName(olds)),
+                  olds,
+                )
               : undefined;
           });
-          const app = appId
-            ? yield* getService({ serviceId: appId }).pipe(
+          const app = serviceId
+            ? yield* getService({ serviceId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.undefined),
               )
@@ -2228,8 +2294,8 @@ const ProviderLive = () =>
           if (!app) return undefined;
           const readDeployment = (id: string) =>
             observeDeployment(id).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
-          const outputDeployment = output?.deploymentId
-            ? yield* readDeployment(output.deploymentId)
+          const outputDeployment = output?.versionId
+            ? yield* readDeployment(output.versionId)
             : undefined;
           if (outputDeployment) {
             yield* ensureDeploymentMembership(app.id, outputDeployment, app.latestDeploymentId);
@@ -2239,20 +2305,20 @@ const ProviderLive = () =>
               ? yield* readDeployment(app.latestDeploymentId)
               : undefined;
           const deployment = outputDeployment ?? latestDeployment;
-          const deploymentUrl = toDeploymentUrl(deployment?.previewDomain ?? undefined);
-          const appUrl = toDeploymentUrl(app.appEndpointDomain);
+          const versionUrl = toComputeVersionUrl(deployment?.previewDomain ?? undefined);
+          const appUrl = toComputeVersionUrl(app.appEndpointDomain);
           const promoted =
             app.latestDeploymentId !== null && deployment?.id === app.latestDeploymentId;
           const attrs: Compute["Attributes"] = {
-            appId: app.id,
-            deploymentId: deployment?.id,
+            serviceId: app.id,
+            versionId: deployment?.id,
             projectId: app.projectId ?? output?.projectId,
-            appName: app.name,
+            serviceName: app.name,
             regionId: app.region.id,
-            deploymentEndpointDomain: deployment?.previewDomain ?? undefined,
-            deploymentUrl,
-            appEndpointDomain: app.appEndpointDomain ?? output?.appEndpointDomain,
-            url: promoted ? (appUrl ?? deploymentUrl) : deploymentUrl,
+            versionEndpointDomain: deployment?.previewDomain ?? undefined,
+            versionUrl,
+            serviceEndpointDomain: app.appEndpointDomain ?? output?.serviceEndpointDomain,
+            url: promoted ? (appUrl ?? versionUrl) : versionUrl,
             promoted,
             previousDeploymentId: output?.previousDeploymentId,
             previousDeploymentAction: output?.previousDeploymentAction,
@@ -2267,13 +2333,14 @@ const ProviderLive = () =>
             artifactHash: outputDeployment ? output?.artifactHash : undefined,
             local: false,
           };
-          return appId ? attrs : Unowned(attrs);
+          return serviceId ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ id, news, olds, output, bindings }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output: saved, bindings }) {
+          const output = saved && currentComputeAttributes(saved);
           const bindingEnv = activeBindingEnv(bindings);
           const effectiveNews = {
             ...news,
-            appName: yield* createAppName(id, news.appName),
+            serviceName: yield* createServiceName(id, news.serviceName),
             env: {
               ...bindingEnv,
               ...news.env,
@@ -2310,7 +2377,7 @@ const ProviderLive = () =>
           let preserveCreatedAppOnFailure = false;
           const cleanupCreatedAppOnFailure = <E>(error: E) =>
             ensuredApp.created && !preserveCreatedAppOnFailure
-              ? destroyApp(app.id).pipe(
+              ? destroyComputeService(app.id).pipe(
                   Effect.mapError((cleanupError) =>
                     aggregateCleanupFailure(
                       "App",
@@ -2344,8 +2411,8 @@ const ProviderLive = () =>
             const outputArtifactHash = persistedArtifactHashValue(
               output?.artifactHash as Redacted.Redacted<string> | string | undefined,
             );
-            const persistedDeployment = output?.deploymentId
-              ? yield* observeDeployment(output.deploymentId).pipe(
+            const persistedDeployment = output?.versionId
+              ? yield* observeDeployment(output.versionId).pipe(
                   Effect.catchTag("NotFound", () => Effect.undefined),
                 )
               : undefined;
@@ -2365,13 +2432,13 @@ const ProviderLive = () =>
               }
               yield* ensureDeploymentMembership(app.id, observed, app.latestDeploymentId);
               if (action === "destroy") {
-                yield* destroyDeployment(deploymentId, effectiveNews);
+                yield* destroyComputeVersion(deploymentId, effectiveNews);
                 return "destroyed" as const;
               }
               yield* stopDeploymentIdempotent(deploymentId).pipe(
                 Effect.catchTag("NotFound", () => Effect.void),
               );
-              yield* waitForDeploymentStatus(deploymentId, "stopped", effectiveNews).pipe(
+              yield* waitForComputeVersionStatus(deploymentId, "stopped", effectiveNews).pipe(
                 Effect.catchTag("NotFound", () => Effect.undefined),
               );
               return "stopped" as const;
@@ -2400,13 +2467,13 @@ const ProviderLive = () =>
             if (
               promotionRequested &&
               output?.promoted === true &&
-              output.deploymentId !== undefined &&
+              output.versionId !== undefined &&
               terminalFailedDeploymentId === undefined &&
               outputArtifactHash !== deploymentHash &&
               app.latestDeploymentId !== null &&
-              app.latestDeploymentId !== output.deploymentId
+              app.latestDeploymentId !== output.versionId
             ) {
-              const persistedDeploymentId = output.deploymentId;
+              const persistedDeploymentId = output.versionId;
               const displacedDeploymentId = app.latestDeploymentId;
               const rollback = yield* createServiceRollback({
                 serviceId: app.id,
@@ -2434,7 +2501,7 @@ const ProviderLive = () =>
               }
 
               app = observedAfterRollback.success;
-              yield* destroyDeployment(displacedDeploymentId, effectiveNews).pipe(
+              yield* destroyComputeVersion(displacedDeploymentId, effectiveNews).pipe(
                 Effect.mapError(
                   (cleanupError) =>
                     new ComputeDeploymentRecoveryFailed({
@@ -2450,7 +2517,7 @@ const ProviderLive = () =>
 
             if (output?.readinessStatus === "pending" && outputArtifactHash !== deploymentHash) {
               return yield* new ComputeNotReady({
-                message: `Prisma Compute deployment '${output.deploymentId ?? "unknown"}' still has pending stable-endpoint readiness. Reconcile the existing generation before changing code or environment inputs.`,
+                message: `Prisma Compute deployment '${output.versionId ?? "unknown"}' still has pending stable-endpoint readiness. Reconcile the existing generation before changing code or environment inputs.`,
               });
             }
             // Keep one cleanup candidate. A non-live older candidate is
@@ -2520,7 +2587,7 @@ const ProviderLive = () =>
             let createdDeploymentId: string | undefined;
             const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
               createdDeploymentId === failedDeploymentId
-                ? destroyDeployment(failedDeploymentId, effectiveNews).pipe(
+                ? destroyComputeVersion(failedDeploymentId, effectiveNews).pipe(
                     Effect.mapError((cleanupError) =>
                       aggregateCleanupFailure(
                         "deployment",
@@ -2599,12 +2666,15 @@ const ProviderLive = () =>
                 ) {
                   yield* startDeploymentIdempotent(currentDeployment.id);
                 }
-                const running = yield* waitForDeploymentStatus(
+                const running = yield* waitForComputeVersionStatus(
                   currentDeployment.id,
                   "running",
                   effectiveNews,
                 );
-                yield* waitForDeploymentUrl(toDeploymentUrl(running.previewDomain), effectiveNews);
+                yield* waitForDeploymentUrl(
+                  toComputeVersionUrl(running.previewDomain),
+                  effectiveNews,
+                );
                 return running;
               }).pipe(
                 Effect.catch((error) =>
@@ -2613,7 +2683,7 @@ const ProviderLive = () =>
               );
             }
 
-            let appEndpointDomain = app.appEndpointDomain;
+            let serviceEndpointDomain = app.appEndpointDomain;
             let previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null =
               previousDeploymentId ? "still-active" : null;
             let promoted = app.latestDeploymentId === deployment.id;
@@ -2622,13 +2692,14 @@ const ProviderLive = () =>
               // Promotion also repairs endpoint/custom-domain routing drift.
               preserveCreatedAppOnFailure = true;
               const promotedApp = yield* promoteAppObserved(app.id, deployment.id, effectiveNews);
-              appEndpointDomain = promotedApp.appEndpointDomain;
+              serviceEndpointDomain = promotedApp.appEndpointDomain;
               promoted = true;
             }
 
-            const deploymentUrl = toDeploymentUrl(deployment.previewDomain);
+            const versionUrl = toComputeVersionUrl(deployment.previewDomain);
             const appUrl =
-              toDeploymentUrl(appEndpointDomain) ?? toDeploymentUrl(deployment.previewDomain);
+              toComputeVersionUrl(serviceEndpointDomain) ??
+              toComputeVersionUrl(deployment.previewDomain);
             let readinessStatus: "ready" | "pending" | "skipped" = "skipped";
             if (promoted && effectiveNews.verifyUrl !== false) {
               const readiness = yield* waitForDeploymentUrl(appUrl, effectiveNews).pipe(
@@ -2720,15 +2791,15 @@ const ProviderLive = () =>
             }
 
             return {
-              appId: app.id,
-              deploymentId: deployment.id,
+              serviceId: app.id,
+              versionId: deployment.id,
               projectId,
-              appName: app.name,
+              serviceName: app.name,
               regionId: app.region.id,
-              deploymentEndpointDomain: deployment.previewDomain ?? undefined,
-              deploymentUrl,
-              appEndpointDomain,
-              url: promoted ? appUrl : deploymentUrl,
+              versionEndpointDomain: deployment.previewDomain ?? undefined,
+              versionUrl,
+              serviceEndpointDomain,
+              url: promoted ? appUrl : versionUrl,
               promoted,
               previousDeploymentId,
               previousDeploymentAction,
@@ -2751,9 +2822,10 @@ const ProviderLive = () =>
             Effect.ensuring(cleanupArtifact),
           );
         }),
-        delete: Effect.fn(function* ({ olds, output }) {
-          if (output.local || isPrismaDevId(output.appId)) {
-            yield* stopTrackedDevProcess(output.appId);
+        delete: Effect.fn(function* ({ olds, output: saved }) {
+          const output = saved && currentComputeAttributes(saved);
+          if (output.local || isPrismaDevId(output.serviceId)) {
+            yield* stopTrackedDevProcess(output.serviceId);
             return;
           }
           yield* destroyComputeEnvironment(
@@ -2764,10 +2836,12 @@ const ProviderLive = () =>
             ),
             output.environmentVariableIds,
           );
-          yield* destroyApp(output.appId);
+          yield* destroyComputeService(output.serviceId);
         }),
-        tail: ({ output }) =>
-          output.deploymentId ? tailDeploymentLogs(output.deploymentId) : Stream.empty,
+        tail: ({ output: saved }) => {
+          const { versionId } = currentComputeAttributes(saved);
+          return versionId ? tailDeploymentLogs(versionId) : Stream.empty;
+        },
       };
     }),
   );
@@ -2778,15 +2852,17 @@ export const ComputeDevProvider = () =>
     Effect.gen(function* () {
       const ctx = yield* AlchemyContext;
       return {
-        stables: ["appId"],
+        stables: ["serviceId"],
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* () {
           return { action: "update" } as const;
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ output: saved }) {
+          const output = saved && currentComputeAttributes(saved);
           return output?.local ? output : undefined;
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
+        reconcile: Effect.fn(function* ({ id, news, output: saved, bindings }) {
+          const output = saved && currentComputeAttributes(saved);
           const bindingEnv = activeBindingEnv(bindings);
           const effectiveNews = {
             ...news,
@@ -2804,14 +2880,14 @@ export const ComputeDevProvider = () =>
           }
           const localUrl = yield* startDev(id, effectiveNews);
           return {
-            appId: output?.appId ?? `dev:${id}`,
-            deploymentId: undefined,
+            serviceId: output?.serviceId ?? `dev:${id}`,
+            versionId: undefined,
             projectId,
-            appName: effectiveNews.appName ?? id,
+            serviceName: effectiveNews.serviceName ?? id,
             regionId: effectiveNews.regionId ?? "us-east-1",
-            deploymentEndpointDomain: localUrl,
-            deploymentUrl: localUrl,
-            appEndpointDomain: localUrl,
+            versionEndpointDomain: localUrl,
+            versionUrl: localUrl,
+            serviceEndpointDomain: localUrl,
             url: localUrl,
             promoted: false,
             previousDeploymentId: undefined,
@@ -2826,8 +2902,8 @@ export const ComputeDevProvider = () =>
             local: true,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* stopTrackedDevProcess(output.appId);
+        delete: Effect.fn(function* ({ output: saved }) {
+          yield* stopTrackedDevProcess(currentComputeAttributes(saved).serviceId);
         }),
       };
     }),
