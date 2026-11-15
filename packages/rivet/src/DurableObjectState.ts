@@ -29,6 +29,8 @@ export interface ActorContextLike {
   waitUntil(promise: Promise<unknown>): void;
   /** Keep the actor awake until `promise` settles. */
   keepAwake<T>(promise: Promise<T>): Promise<T>;
+  /** Ask RivetKit to destroy the actor and its storage. */
+  destroy(): void;
 }
 
 /** An actor's raw SQLite database, or a transaction on it. @internal */
@@ -133,6 +135,11 @@ export interface DurableObjectStateShape {
   readonly storage: DurableObjectStorage;
   /** Keep the instance awake until `effect` completes. */
   waitUntil<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, never, R>;
+  /**
+   * Destroy the instance and its storage once its calls finish. `onDestroy`
+   * runs first. The next call to the same name starts an empty instance.
+   */
+  destroy(): Effect.Effect<void>;
   /**
    * The open WebSockets this instance accepted with `Rivet.upgrade()`; with
    * `tag`, only those accepted with it.
@@ -498,6 +505,7 @@ export const makeDurableObjectState = (
   return {
     id: { name, toString: () => name },
     storage,
+    destroy: () => Effect.sync(() => c.destroy()),
     getWebSockets: (tag) => Effect.sync(() => sockets.all(tag)),
     // As on Cloudflare: the work runs with the caller's context and a scope
     // of its own, and the call's scope stays open until it settles.

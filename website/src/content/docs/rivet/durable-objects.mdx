@@ -105,7 +105,7 @@ return Effect.gen(function* () {
 
 ## Give it methods
 
-Every function the inner Effect returns, apart from `fetch`, `alarm` and the `webSocket*` handlers, is a method callers can run:
+Every function the inner Effect returns, apart from `fetch`, `alarm`, `onSleep`, `onDestroy` and the `webSocket*` handlers, is a method callers can run:
 
 ```typescript title="src/room.ts"
 return {
@@ -178,6 +178,20 @@ return {
 ```
 
 `alarm` isn't a method; callers can't run it. The room sets the alarm itself with `state.storage.setAlarm`. See [Storage](/rivet/storage#set-an-alarm).
+
+## Wind it down with onSleep and onDestroy
+
+An instance sleeps once it has been idle for a while, and wakes with its storage intact on its next call. Return `onSleep` to finish or hand off work in flight before it does, and `onDestroy` to release what the instance owns outside its storage before it is destroyed:
+
+```typescript title="src/room.ts"
+return {
+  close: () => state.destroy(),
+  onSleep: () => Effect.log("room going to sleep"),
+  onDestroy: () => Effect.log("room destroyed"),
+};
+```
+
+`state.destroy()` destroys the instance and its storage once its calls finish, and the next call to the same name starts an empty instance. Neither hook is a method, and neither runs for an instance that took no call since it last woke.
 
 ## Keep its code out of its callers
 

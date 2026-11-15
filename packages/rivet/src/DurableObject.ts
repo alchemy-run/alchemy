@@ -108,6 +108,19 @@ export interface DurableObject extends Resource<
 export interface DurableObjectShape {
   fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is about to sleep, within RivetKit's sleep grace
+   * period: finish or hand off work in flight. It does not run for an
+   * instance that took no call since it woke.
+   */
+  onSleep?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is destroyed, after `DurableObjectState.destroy`
+   * or a delete from the control plane, so it can release what it owns
+   * outside its storage. It does not run for an instance that took no call
+   * since it woke.
+   */
+  onDestroy?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
   /** A message on a WebSocket this instance accepted with `Rivet.upgrade()`. */
   webSocketMessage?: (
     socket: WebSocket,

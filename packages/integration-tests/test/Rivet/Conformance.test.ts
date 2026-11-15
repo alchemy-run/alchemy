@@ -308,6 +308,53 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 120_000 },
     );
 
+    describe("lifecycle hooks", () => {
+      // GET `/lifecycle/<name>/<step>`, retried while the stack settles.
+      const step = <T>(name: string, path: string) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/lifecycle/${name}/${path}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      type Hooks = { slept: number; destroyed: number };
+      // Polls the hook counts, which never wake the instance, until `done`.
+      const hooksUntil = (name: string, done: (hooks: Hooks) => boolean) =>
+        step<Hooks>(name, "hooks").pipe(
+          Effect.repeat({ schedule: Schedule.spaced("2 seconds"), until: done, times: 45 }),
+        );
+
+      test(
+        "destroy runs onDestroy and the next call starts with empty storage",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=7");
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: 7 });
+          yield* step(name, "destroy");
+          const hooks = yield* hooksUntil(name, (hooks) => hooks.destroyed > 0);
+          expect(hooks.destroyed).toBe(1);
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: null });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "an idle instance runs onSleep and keeps its storage",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=3");
+          // RivetKit sleeps an actor 30 seconds after its last call.
+          const hooks = yield* hooksUntil(name, (hooks) => hooks.slept > 0);
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: 3 });
+        }),
+        { timeout: 180_000 },
+      );
+    });
+
     describe("WebSockets", () => {
       /** A WebSocket to `path` on the front, read one JSON frame at a time. */
       const connect = (path: string) =>
