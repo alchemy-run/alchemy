@@ -1,0 +1,55 @@
+import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as galaxy from "@distilled.cloud/starburst-galaxy";
+import * as Effect from "effect/Effect";
+import { expectGone, freshStack, pinnedName } from "../helpers.ts";
+import { expectFound } from "../lookup.ts";
+
+const { test } = Test.make({ providers: StarburstGalaxy.providers() });
+
+const tagExists = (tagId: string) =>
+  galaxy.tag.getTag({ tagId }).pipe(
+    Effect.as(true),
+    Effect.catchTag("NotFound", () => Effect.succeed(false)),
+  );
+
+test.provider(
+  "create, recolor, rename, look up and delete a tag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* freshStack(stack);
+      const renamed = yield* pinnedName("tag");
+
+      const created = yield* stack.deploy(
+        StarburstGalaxy.Governance.Tag("Tag", { color: "#FF0000" }),
+      );
+      const tagId = created.tagId;
+      const live = yield* galaxy.tag.getTag({ tagId });
+      expect(live.name).toBe(created.name);
+      expect(live.color).toBe("#FF0000");
+
+      // Every prop converges in place, the name included.
+      const changed = yield* stack.deploy(
+        StarburstGalaxy.Governance.Tag("Tag", {
+          name: renamed,
+          color: "#00FF00",
+          description: "public",
+        }),
+      );
+      expect(changed.tagId).toBe(tagId);
+      const changedLive = yield* galaxy.tag.getTag({ tagId });
+      expect(changedLive.name).toBe(renamed);
+      expect(changedLive.color).toBe("#00FF00");
+      expect(changedLive.description).toBe("public");
+
+      yield* expectFound(StarburstGalaxy.Governance.Tag.lookup({ name: renamed }), changed);
+
+      yield* stack.destroy();
+      yield* expectGone(tagExists(tagId));
+    }).pipe(Effect.scoped),
+  {
+    tags: ["provider:starburst-galaxy", "provider:starburst-galaxy:tag", "live"],
+    timeout: 300_000,
+  },
+);

@@ -43,6 +43,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "Starburst Galaxy", link: "/starburst-galaxy" },
       { label: "E2B", link: "/e2b" },
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
@@ -2060,6 +2061,16 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Axiom"),
+          ],
+        },
+        {
+          label: "Starburst Galaxy",
+          items: [
+            { label: "Overview", link: "/starburst-galaxy" },
+            { label: "Setup", link: "/starburst-galaxy/setup" },
+            { label: "Tutorial", link: "/starburst-galaxy/tutorial" },
+            { label: "Credentials & bindings", link: "/starburst-galaxy/credentials" },
+            providerResourcesEntry("StarburstGalaxy"),
           ],
         },
         {
