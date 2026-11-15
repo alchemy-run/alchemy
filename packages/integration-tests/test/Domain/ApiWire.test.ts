@@ -19,13 +19,12 @@ import * as Stream from "effect/Stream";
 // their own command id, and the deposit's id as their correlation id.
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 /** A command whose handler dies with internals (an adapter's SQL error) in its defect. */
 class Audit extends Domain.Command("Audit", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [Deposited],
 }) {}
 const SECRET = "secret: SELECT * FROM wallets";
@@ -34,6 +33,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit, Audit],
+  target: { Deposit: (command) => command.id, Audit: (command) => command.id },
   decide: {
     Deposit: (_, { amount }) => [new Deposited({ amount })],
     Audit: () => Effect.die(new Error(SECRET)),
@@ -44,8 +44,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
 const BookedFields = { wallet: Schema.String, amount: Schema.Number, at: Schema.DateTimeUtc };
 class Booked extends Domain.Event("Booked", BookedFields) {}
 class Book extends Domain.Command("Book", {
-  target: Schema.String,
-  input: BookedFields,
+  input: { id: Schema.String, ...BookedFields },
   events: [Booked],
 }) {}
 class Ledger extends Domain.Aggregate("Ledger", {
@@ -53,6 +52,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Book],
+  target: { Book: (command) => command.id },
   decide: { Book: (_, { wallet, amount, at }) => [new Booked({ wallet, amount, at })] },
   evolve: { Booked: (s, e) => ({ total: s.total + e.amount }) },
 }) {}
@@ -63,8 +63,7 @@ const BookDepositsLive = BookDeposits.toLayer(
     const ledger = yield* Ledger;
     return Effect.fn(function* ({ source, event, envelope }) {
       yield* ledger.send(
-        "main",
-        new Book({ wallet: source.id, amount: event.amount, at: envelope.at }),
+        new Book({ id: "main", wallet: source.id, amount: event.amount, at: envelope.at }),
       );
     });
   }),
@@ -81,8 +80,7 @@ class Bookings extends Domain.View("Bookings", {
 // A parcel's input names the fields a call's target and command id use.
 class Shipped extends Domain.Event("Shipped", { to: Schema.String, ref: Schema.String }) {}
 class Ship extends Domain.Command("Ship", {
-  target: Schema.String,
-  input: { target: Schema.String, commandId: Schema.String },
+  input: { id: Schema.String, target: Schema.String, commandId: Schema.String },
   events: [Shipped],
   reply: { to: Schema.String, ref: Schema.String },
 }) {}
@@ -91,6 +89,7 @@ class Parcel extends Domain.Aggregate("Parcel", {
   state: Schema.Struct({ to: Schema.String, ref: Schema.String }),
   initial: { to: "", ref: "" },
   commands: [Ship],
+  target: { Ship: (command) => command.id },
   decide: {
     Ship: (_, { target, commandId }) => [new Shipped({ to: target, ref: commandId })],
   },
@@ -146,7 +145,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
     });
     return Effect.gen(function* () {
       const bank = yield* BankApi.client;
-      const exit = yield* bank.Audit("w-audit").pipe(Effect.exit);
+      const exit = yield* bank.Audit({ id: "w-audit" }).pipe(Effect.exit);
       if (!Exit.isFailure(exit)) return yield* Effect.die("Audit committed");
       expect(Cause.hasDies(exit.cause)).toBe(true);
       expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
@@ -167,8 +166,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
       const receipt = yield* bank.Ship(
-        "p-1",
-        { target: "Lisbon", commandId: "ref-7" },
+        { id: "p-1", target: "Lisbon", commandId: "ref-7" },
         { commandId: "ship-1" },
       );
       expect(receipt).toMatchObject({
@@ -189,7 +187,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
       const local = yield* BankApi.clientInProcess;
-      yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
+      yield* bank.Deposit({ id: "w-1", amount: 5 }, { commandId: "deposit-1" });
 
       const [wallet] = yield* bank.Deposits.events("w-1").pipe(
         Stream.filter(Domain.Read.isEvent),
@@ -224,7 +222,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
   it.live("a filter on a DateTime field works over the wire", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
-      yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
+      yield* bank.Deposit({ id: "w-1", amount: 5 }, { commandId: "deposit-1" });
       yield* bank.Bookings.events("main").pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(1),
@@ -242,7 +240,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
   it.live("a malformed filter is refused before it is evaluated", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
-      yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
+      yield* bank.Deposit({ id: "w-1", amount: 5 }, { commandId: "deposit-1" });
       yield* bank.Bookings.events("main").pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(1),

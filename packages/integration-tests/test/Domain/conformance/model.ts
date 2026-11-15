@@ -17,8 +17,7 @@ export class Incremented extends Domain.Event("Incremented", { by: Schema.Int })
 export class TooBig extends Domain.Rejection("TooBig", { max: Schema.Int }) {}
 
 export class Increment extends Domain.Command("Increment", {
-  target: Schema.String,
-  input: { by: Schema.Int },
+  input: { id: Schema.String, by: Schema.Int },
   events: [Incremented],
   rejects: [TooBig],
   reply: { total: Schema.Int },
@@ -38,7 +37,7 @@ export class Give extends Domain.Command("Give", {
 
 /** A command whose handler dies, with internals in the defect a client must never see. */
 export class Explode extends Domain.Command("Explode", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [Incremented],
 }) {}
 
@@ -50,6 +49,7 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment, Explode],
+  target: { Increment: (command) => command.id, Explode: (command) => command.id },
   events: [Taken, Received],
   decide: {
     Increment: (_, command) =>
@@ -78,8 +78,7 @@ export class Giving extends Domain.Decision(Give, {
 export class Mirrored extends Domain.Event("Mirrored", { by: Schema.Int }) {}
 
 export class Mirror extends Domain.Command("Mirror", {
-  target: Schema.String,
-  input: { by: Schema.Int },
+  input: { id: Schema.String, by: Schema.Int },
   events: [Mirrored],
 }) {}
 
@@ -89,6 +88,7 @@ export class Echo extends Domain.Aggregate("Echo", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Mirror],
+  target: { Mirror: (command) => command.id },
   decide: {
     Mirror: (_, command) => [new Mirrored({ by: command.by })],
   },
@@ -177,7 +177,7 @@ const MirrorFirstLive = MirrorFirst.toLayer(
     return Effect.fn(function* ({ key, by }) {
       yield* Activity.make({
         name: "mirror",
-        execute: echoes.send(key, new Mirror({ by })).pipe(Effect.orDie),
+        execute: echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie),
       });
     });
   }),
@@ -207,15 +207,15 @@ export class HoldReleased extends Domain.Event("HoldReleased") {}
 export class HoldExpired extends Domain.Event("HoldExpired") {}
 
 export class PlaceHold extends Domain.Command("PlaceHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldPlaced],
 }) {}
 export class ReleaseHold extends Domain.Command("ReleaseHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldReleased],
 }) {}
 export class ExpireHold extends Domain.Command("ExpireHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldExpired],
 }) {}
 
@@ -224,6 +224,11 @@ export class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
+  target: {
+    PlaceHold: (command) => command.id,
+    ReleaseHold: (command) => command.id,
+    ExpireHold: (command) => command.id,
+  },
   decide: {
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],
@@ -247,7 +252,10 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
-        yield* holds.schedule(source, new ExpireHold(), { after: HOLD_WINDOW, commandId: EXPIRY });
+        yield* holds.schedule(new ExpireHold({ id: source.id }), {
+          after: HOLD_WINDOW,
+          commandId: EXPIRY,
+        });
       } else {
         yield* holds
           .unschedule(source, EXPIRY)

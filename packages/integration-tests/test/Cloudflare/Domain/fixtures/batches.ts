@@ -14,8 +14,7 @@ export const GroupId = Schema.String.pipe(Schema.brand("GroupId"));
 export class Pinged extends Domain.Event("Pinged", { group: GroupId, slow: Schema.Boolean }) {}
 
 export class Ping extends Domain.Command("Ping", {
-  target: Schema.String,
-  input: { group: GroupId, slow: Schema.Boolean },
+  input: { id: Schema.String, group: GroupId, slow: Schema.Boolean },
   events: [Pinged],
 }) {}
 
@@ -24,6 +23,7 @@ export class Pinger extends Domain.Aggregate("Pinger", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Ping],
+  target: { Ping: (command) => command.id },
   decide: { Ping: (_, { group, slow }) => [new Pinged({ group, slow })] },
   evolve: { Pinged: (s) => s },
 }) {}

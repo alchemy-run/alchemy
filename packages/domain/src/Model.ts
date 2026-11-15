@@ -18,6 +18,7 @@ import type * as Decision from "./Decision.ts";
 import {
   DecisionsUnsupported,
   DefinitionError,
+  UnhandledCommand,
   ForeignAppend,
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
@@ -649,10 +650,11 @@ const build = <A, E, R>(
         random,
       );
       hosts = Context.add(hosts, decision, client);
-      // An Api and a story send every command the same way: this one ignores the target.
+      // An Api and a story send every command the same way.
       commands.set(decision.command.tag, {
-        send: (_target, command, options) =>
+        send: (command, options) =>
           Effect.map(client.send(command, options), (receipt) => ({
+            // The first stream it committed to: what a read takes as `atLeast`.
             stream: receipt.commits[0]?.stream ?? "",
             version: receipt.commits[0]?.version ?? 0,
             events: receipt.events,
@@ -894,9 +896,25 @@ const aggregateClient = (
       "domain.id": Aggregate.targetId(target),
     },
   });
+  /** The instance a command is for, from the aggregate's `target`. */
+  const targetFor = (command: { readonly _tag: string }): Effect.Effect<string> =>
+    Effect.suspend(() => {
+      const target = Aggregate.targetOf(aggregate, command);
+      return target === undefined
+        ? Effect.die(
+            new DefinitionError({
+              reason: new UnhandledCommand({
+                aggregate: aggregate.aggregateName,
+                command: command._tag,
+              }),
+            }),
+          )
+        : Effect.succeed(target);
+    });
   return {
-    send: (target, command, options) =>
+    send: (command, options) =>
       Effect.gen(function* () {
+        const target = yield* targetFor(command);
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
@@ -919,8 +937,9 @@ const aggregateClient = (
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
           : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);
       }),
-    schedule: (target, command, options) =>
+    schedule: (command, options) =>
       Effect.gen(function* () {
+        const target = yield* targetFor(command);
         // The command runs later, so its span links back here rather than continuing this trace.
         // `commandId` names the scheduled command; the arming gets its own id, derived like a
         // send's, so a policy or step that runs again arms nothing new, and a later trigger
@@ -938,10 +957,10 @@ const aggregateClient = (
         );
         return { commandId: name, at: DateTime.makeUnsafe(at) };
       }).pipe(
-        Effect.withSpan(
-          `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
-          spanOptions(target),
-        ),
+        Effect.withSpan(`Domain.schedule ${aggregate.aggregateName}.${command._tag}`, {
+          kind: "client",
+          attributes: { "domain.aggregate": aggregate.aggregateName },
+        }),
       ),
     unschedule: (target, commandId) =>
       store.unschedule(Aggregate.targetId(target), commandId).pipe(

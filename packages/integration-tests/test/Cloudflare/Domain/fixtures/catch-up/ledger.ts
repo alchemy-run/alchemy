@@ -3,8 +3,7 @@ import * as Schema from "effect/Schema";
 
 export class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 export class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 export class Account extends Domain.Aggregate("Account", {
@@ -12,6 +11,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
+  target: { Deposit: (command) => command.id },
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
@@ -64,8 +64,7 @@ export class Rebuilt extends Domain.Model("Ledger", {
 
 export class Noted extends Domain.Event("Noted", { note: Schema.String }) {}
 export class Note extends Domain.Command("Note", {
-  target: Schema.String,
-  input: { note: Schema.String },
+  input: { id: Schema.String, note: Schema.String },
   events: [Noted],
 }) {}
 /** A second aggregate, for a view that comes to read it too. */
@@ -74,6 +73,7 @@ export class Journal extends Domain.Aggregate("Journal", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Note],
+  target: { Note: (command) => command.id },
   decide: { Note: (_, cmd) => [new Noted({ note: cmd.note })] },
   evolve: { Noted: (s) => s },
 }) {}

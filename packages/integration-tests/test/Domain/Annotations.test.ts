@@ -22,8 +22,7 @@ class Deposited extends Domain.Event(
 class Deposit extends Domain.Command(
   "Deposit",
   {
-    target: WalletId,
-    input: { amount: Schema.Int },
+    input: { walletId: WalletId, amount: Schema.Int },
     events: [Deposited],
   },
   {
@@ -32,7 +31,7 @@ class Deposit extends Domain.Command(
   },
 ) {}
 
-class Close extends Domain.Command("Close", { target: WalletId }) {}
+class Close extends Domain.Command("Close", { input: { walletId: WalletId } }) {}
 
 class Wallet extends Domain.Aggregate(
   "Wallet",
@@ -41,6 +40,7 @@ class Wallet extends Domain.Aggregate(
     state: Schema.Struct({ balance: Schema.Int }),
     initial: { balance: 0 },
     commands: [Deposit, Close],
+    target: { Deposit: (command) => command.walletId, Close: (command) => command.walletId },
     decide: {
       Deposit: (wallet, cmd) => [
         new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),
@@ -184,7 +184,7 @@ describe("Domain annotations", { tags: ["unit"] }, () => {
     Effect.sync(() => {
       class Typo extends Domain.Command(
         "Typo",
-        { target: WalletId },
+        { input: { walletId: WalletId } },
         // @ts-expect-error `descripton` is not a key of Domain.Annotations
         { descripton: "misspelled" },
       ) {}

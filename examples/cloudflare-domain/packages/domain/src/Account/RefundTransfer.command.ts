@@ -17,7 +17,6 @@ export class RefundStranded extends Domain.Event("RefundStranded", {
 
 /** Reports a fact that already happened, so it never rejects. */
 export class RefundTransfer extends Domain.Command("RefundTransfer", {
-  target: AccountId,
-  input: { transferId: TransferId, amount: Cents },
+  input: { accountId: AccountId, transferId: TransferId, amount: Cents },
   events: [TransferRefunded, RefundStranded],
 }) {}

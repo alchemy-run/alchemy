@@ -12,8 +12,7 @@ import * as Schema from "effect/Schema";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 class Account extends Domain.Aggregate("Account", {
@@ -21,14 +20,14 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
+  target: { Deposit: (command) => command.id },
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 
 class Logged extends Domain.Event("Logged", { note: Schema.String }) {}
 class Log extends Domain.Command("Log", {
-  target: Schema.String,
-  input: { note: Schema.String },
+  input: { id: Schema.String, note: Schema.String },
   events: [Logged],
 }) {}
 class Journal extends Domain.Aggregate("Journal", {
@@ -36,6 +35,7 @@ class Journal extends Domain.Aggregate("Journal", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Log],
+  target: { Log: (command) => command.id },
   decide: { Log: (_, cmd) => [new Logged({ note: cmd.note })] },
   evolve: { Logged: (s) => s },
 }) {}
@@ -209,7 +209,7 @@ const platform = () => {
 const deposit = (id: string, amount: number) =>
   Effect.gen(function* () {
     const accounts = yield* Account;
-    yield* accounts.send(Account.ref(id), new Deposit({ amount }));
+    yield* accounts.send(new Deposit({ id: Account.ref(id).id, amount }));
   });
 
 const amounts = (id: string) =>
@@ -230,7 +230,7 @@ describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
           Effect.gen(function* () {
             yield* deposit("a-1", 10);
             const journals = yield* Journal;
-            yield* journals.send(Journal.ref("j-1"), new Log({ note: "opened" }));
+            yield* journals.send(new Log({ id: Journal.ref("j-1").id, note: "opened" }));
           }),
         );
         yield* bank.deploy(WithActivity, Layer.empty, bank.settle);
@@ -357,7 +357,7 @@ describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
         }).pipe(Effect.andThen(effect));
       const log = (id: string, note: string) =>
         Effect.gen(function* () {
-          yield* (yield* Journal).send(Journal.ref(id), new Log({ note }));
+          yield* (yield* Journal).send(new Log({ id: Journal.ref(id).id, note }));
         });
       yield* bank.deploy(
         Before,

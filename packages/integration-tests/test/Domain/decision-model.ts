@@ -35,8 +35,7 @@ export class CurrentActor extends Context.Service<CurrentActor, { readonly accou
 
 /** A command one aggregate implements, next to the ones decisions implement. */
 export class Deposit extends Domain.Command("Deposit", {
-  target: AccountId,
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [Deposited],
 }) {}
 
@@ -52,6 +51,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
+  target: { Deposit: (command) => command.accountId },
   events: [TransferSent, TransferReceived],
   decide: {
     Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })],

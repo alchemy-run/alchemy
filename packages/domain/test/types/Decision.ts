@@ -12,10 +12,9 @@ class Closed extends Domain.Event("Closed") {}
 class Painted extends Domain.Event("Painted", { color: Schema.String }) {}
 class Stuck extends Domain.Rejection("Stuck") {}
 
-class Open extends Domain.Command("Open", { target: Schema.String, events: [Opened] }) {}
+class Open extends Domain.Command("Open", { input: { id: Schema.String }, events: [Opened] }) {}
 class OpenGate extends Domain.Command("OpenGate", {
-  target: Schema.String.pipe(Schema.brand("GateId")),
-  input: { limit: Schema.Int },
+  input: { id: Schema.String.pipe(Schema.brand("GateId")), limit: Schema.Int },
   events: [Opened],
 }) {}
 class OpenBoth extends Domain.Command("OpenBoth", {
@@ -35,6 +34,7 @@ class Door extends Domain.Aggregate("Door", {
   state: Schema.Struct({ open: Schema.Boolean }),
   initial: { open: false },
   commands: [Open],
+  target: { Open: (command) => command.id },
   events: [Closed, Painted],
   decide: { Open: () => [Opened.make()] },
   evolve: {
@@ -74,22 +74,27 @@ class Shut extends Domain.Decision(CloseBoth, {
   }),
 }) {}
 
-// A command with a target belongs to an aggregate.
-// @ts-expect-error Open has a target: an aggregate implements it
-class Wrong extends Domain.Decision(Open, {
-  reads: () => ({}),
-  decide: () => [],
-}) {}
-
-// A command without a target belongs to a decision.
-class Shed extends Domain.Aggregate("Shed", {
+// An aggregate with a command says which instance each is for.
+// @ts-expect-error Property 'target' is missing
+class Untargeted extends Domain.Aggregate("Untargeted", {
   id: Schema.String,
   state: Schema.Struct({}),
   initial: {},
-  // @ts-expect-error CloseBoth has no target: implement it with a Domain.Decision
-  commands: [CloseBoth],
-  decide: { CloseBoth: () => [Closed.make()] },
-  evolve: { Closed: (shed) => shed },
+  commands: [Open],
+  decide: { Open: () => [Opened.make()] },
+  evolve: { Opened: (state) => state },
+}) {}
+
+// The instance is one of the command's own fields, of the aggregate's id type.
+class Shed extends Domain.Aggregate("Shed", {
+  id: Schema.String.pipe(Schema.brand("ShedId")),
+  state: Schema.Struct({}),
+  initial: {},
+  commands: [Open],
+  // @ts-expect-error a plain string is not a ShedId
+  target: { Open: (command) => command.id },
+  decide: { Open: () => [Opened.make()] },
+  evolve: { Opened: (shed) => shed },
 }) {}
 
 // An aggregate with a command decides it.
@@ -99,6 +104,7 @@ class Undecided extends Domain.Aggregate("Undecided", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Open],
+  target: { Open: (command) => command.id },
   evolve: { Opened: (state) => state },
 }) {}
 
@@ -108,6 +114,7 @@ class Gate extends Domain.Aggregate("Gate", {
   state: Schema.Struct({ opened: Schema.Int }),
   initial: { opened: 0 },
   commands: [OpenGate],
+  target: { OpenGate: (command) => command.id },
   events: [Painted],
   decide: {
     OpenGate: (gate, cmd) => (gate.opened > cmd.limit ? [] : [Opened.make()]),
@@ -137,12 +144,12 @@ export class Twice extends Domain.Model("Twice", {
 
 export const program = Effect.gen(function* () {
   const doors = yield* Door;
-  yield* doors.send("d-1", Open.make());
+  yield* doors.send(Open.make({ id: "d-1" }));
   const both = yield* Both;
   const receipt = yield* both.send(OpenBoth.make({ left: "d-1", right: "w-1" }));
   const open: number = receipt.reply.open;
   const shut = yield* Shut;
   // @ts-expect-error the command a decision implements, and no other
   yield* shut.send(OpenBoth.make({ left: "d-1", right: "w-1" }));
-  return [open, Wrong, Shed, Undecided, Gate] as const;
+  return [open, Untargeted, Shed, Undecided, Gate] as const;
 });

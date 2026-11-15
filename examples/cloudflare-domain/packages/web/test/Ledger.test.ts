@@ -21,7 +21,7 @@ it.live("reads the ledger through the AccountLedger query, after the app's own w
       Stream.runHead,
       Effect.timeout("10 seconds"),
     );
-    const receipt = yield* client.DepositMoney(accountId, { amount: 1_000 });
+    const receipt = yield* client.DepositMoney({ accountId, amount: 1_000 });
     const page = yield* BankClient.AccountLedger({
       input: { account: accountId },
       requestId: "page:0",

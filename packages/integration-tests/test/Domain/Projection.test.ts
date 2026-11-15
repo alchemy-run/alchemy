@@ -22,8 +22,7 @@ class Deposited extends Domain.Event("Deposited", {
   balance: Schema.Number,
 }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
   reply: { balance: Schema.Number },
 }) {}
@@ -32,6 +31,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
+  target: { Deposit: (command) => command.id },
   decide: {
     Deposit: (wallet, cmd) => [
       new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),
@@ -47,8 +47,7 @@ class Sent extends Domain.Event("Sent", {
   amount: Schema.Number,
 }) {}
 class Send extends Domain.Command("Send", {
-  target: Schema.String,
-  input: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+  input: { id: Schema.String, from: Schema.String, to: Schema.String, amount: Schema.Number },
   events: [Sent],
 }) {}
 class Payment extends Domain.Aggregate("Payment", {
@@ -56,6 +55,7 @@ class Payment extends Domain.Aggregate("Payment", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Send],
+  target: { Send: (command) => command.id },
   decide: { Send: (_, { from, to, amount }) => [new Sent({ from, to, amount })] },
   evolve: { Sent: (s) => s },
 }) {}
@@ -189,8 +189,7 @@ const WalletCardsLive = WalletCards.toLayer(
 
 class Flagged extends Domain.Event("Flagged", { reason: Schema.String }) {}
 class Flag extends Domain.Command("Flag", {
-  target: Schema.String,
-  input: { reason: Schema.String },
+  input: { id: Schema.String, reason: Schema.String },
   events: [Flagged],
 }) {}
 class Review extends Domain.Aggregate("Review", {
@@ -198,6 +197,7 @@ class Review extends Domain.Aggregate("Review", {
   state: Schema.Struct({ flags: Schema.Number }),
   initial: { flags: 0 },
   commands: [Flag],
+  target: { Flag: (command) => command.id },
   decide: { Flag: (_, cmd) => [new Flagged({ reason: cmd.reason })] },
   evolve: { Flagged: (s) => ({ flags: s.flags + 1 }) },
 }) {}
@@ -219,7 +219,9 @@ const LargeMovementsLive = LargeMovements.toLayer(
     const reviews = yield* Review;
     return Effect.fn(function* ({ key, route, event }) {
       if (event.amount < 100) return;
-      yield* reviews.send(key.id, new Flag({ reason: `${event._tag}${route ? `:${route}` : ""}` }));
+      yield* reviews.send(
+        new Flag({ id: key.id, reason: `${event._tag}${route ? `:${route}` : ""}` }),
+      );
     });
   }),
   { retry: Schedule.recurs(2) },
@@ -352,9 +354,9 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
   it.effect("routes inputs to keys and writes a store you own", () =>
     Effect.gen(function* () {
       yield* story(
-        Story.when(sam, new Deposit({ amount: 50 })),
+        Story.when(new Deposit({ id: sam.id, amount: 50 })),
         Story.then(sam, new Deposited({ amount: 50, balance: 50 })),
-        Story.when(p1, new Send({ from: "sam-1", to: "kim-1", amount: 20 })),
+        Story.when(new Send({ id: p1.id, from: "sam-1", to: "kim-1", amount: 20 })),
         Story.then(p1, new Sent({ from: "sam-1", to: "kim-1", amount: 20 })),
       );
       const ledger = yield* Ledger;
@@ -377,13 +379,13 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
 
   it.effect("appends to a stream, once per input", () =>
     story(
-      Story.when(sam, new Deposit({ amount: 50 })),
+      Story.when(new Deposit({ id: sam.id, amount: 50 })),
       Story.then(sam, new Deposited({ amount: 50, balance: 50 })),
       Story.streamed(WalletCard, sam, new BalanceChanged({ owner: "sam", balance: 50 })),
-      Story.when(sam, new Deposit({ amount: 25 })),
+      Story.when(new Deposit({ id: sam.id, amount: 25 })),
       Story.then(sam, new Deposited({ amount: 25, balance: 75 })),
       Story.streamed(WalletCard, sam, new BalanceChanged({ owner: "sam", balance: 75 })),
-      Story.when(kim, new Deposit({ amount: 1 })),
+      Story.when(new Deposit({ id: kim.id, amount: 1 })),
       Story.then(kim, new Deposited({ amount: 1, balance: 1 })),
       Story.streamed(WalletCard, sam),
     ).pipe(Effect.provide(Ledger.memory)),
@@ -391,10 +393,10 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
 
   it.effect("a keyed policy runs per route, over two sources", () =>
     story(
-      Story.when(sam, new Deposit({ amount: 150 })),
+      Story.when(new Deposit({ id: sam.id, amount: 150 })),
       Story.then(sam, new Deposited({ amount: 150, balance: 150 })),
       Story.then(Review.ref("sam-1"), new Flagged({ reason: "Deposited" })),
-      Story.when(p1, new Send({ from: "sam-1", to: "kim-1", amount: 120 })),
+      Story.when(new Send({ id: p1.id, from: "sam-1", to: "kim-1", amount: 120 })),
       Story.then(p1, new Sent({ from: "sam-1", to: "kim-1", amount: 120 })),
       Story.then(Review.ref("sam-1"), new Flagged({ reason: "Sent:out" })),
       Story.then(Review.ref("kim-1"), new Flagged({ reason: "Sent:in" })),
@@ -404,8 +406,8 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
   it.live("batches a key's inputs and reads your own write with caughtUp", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
-      for (const amount of [1, 2, 3]) yield* wallets.send(sam, new Deposit({ amount }));
-      const receipt = yield* wallets.send(sam, new Deposit({ amount: 4 }));
+      for (const amount of [1, 2, 3]) yield* wallets.send(new Deposit({ id: sam.id, amount }));
+      const receipt = yield* wallets.send(new Deposit({ id: sam.id, amount: 4 }));
       yield* WalletLedger.caughtUp(receipt);
       const ledger = yield* Ledger;
       expect((yield* ledger.rows).map((r) => r.amount).sort()).toEqual([1, 2, 3, 4]);
@@ -424,7 +426,7 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
   it.live("serves a stream through an Api, judged by validate", () =>
     Effect.gen(function* () {
       const wallets = yield* Wallet;
-      const receipt = yield* wallets.send(sam, new Deposit({ amount: 40 }));
+      const receipt = yield* wallets.send(new Deposit({ id: sam.id, amount: 40 }));
       const api = yield* WalletApi.clientInProcess;
       const asSam = { headers: { "x-viewer": "sam" } };
       const latest = yield* api.WalletCard.peek("sam-1", {
@@ -441,7 +443,7 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
         Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
       );
       expect(anonymous).toBe("Unauthenticated");
-      yield* wallets.send(sam, new Deposit({ amount: 2 }));
+      yield* wallets.send(new Deposit({ id: sam.id, amount: 2 }));
       const all = yield* api.WalletCard.events("sam-1", asSam).pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
@@ -464,7 +466,7 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       const api = yield* WalletApi.clientInProcess;
-      const receipt = yield* wallets.send(kim, new Deposit({ amount: 70 }));
+      const receipt = yield* wallets.send(new Deposit({ id: kim.id, amount: 70 }));
       expect(yield* api.LatestBalance({ wallet: "kim-1" }, { atLeast: receipt })).toBe(70);
     }).pipe(
       Effect.scoped,
@@ -480,13 +482,13 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       const tables = yield* Tables;
-      const first = yield* wallets.send(sam, new Deposit({ amount: 23 }));
+      const first = yield* wallets.send(new Deposit({ id: sam.id, amount: 23 }));
       yield* BalanceRows.caughtUp(first);
       expect(yield* tables.get("balance", "sam-1")).toBe(23);
       yield* DepositRows.caughtUp(first);
       expect(yield* tables.get("deposits", "sam-1")).toBe(1);
       // A client's receipt carries no events: they are read from the aggregate.
-      const second = yield* wallets.send(sam, new Deposit({ amount: 7 }));
+      const second = yield* wallets.send(new Deposit({ id: sam.id, amount: 7 }));
       yield* DepositRows.caughtUp({ stream: second.stream, version: second.version });
       expect(yield* tables.get("deposits", "sam-1")).toBe(2);
       yield* BalanceRows.caughtUp({ stream: second.stream, version: second.version });
@@ -509,7 +511,7 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
     return Effect.gen(function* () {
       const wallets = yield* Wallet;
       const tables = yield* Tables;
-      const receipt = yield* wallets.send(sam, new Deposit({ amount: 23 }));
+      const receipt = yield* wallets.send(new Deposit({ id: sam.id, amount: 23 }));
       // Nothing is delivered until the platform drains: the view hasn't applied it.
       const early = yield* BalanceRows.caughtUp(receipt, { timeout: "200 millis" }).pipe(
         Effect.flip,

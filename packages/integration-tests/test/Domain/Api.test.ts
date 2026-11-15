@@ -33,24 +33,27 @@ class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
 class AccountClosed extends Domain.Rejection("AccountClosed") {}
 
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
   rejects: [AccountClosed],
 }) {}
 class Withdraw extends Domain.Command("Withdraw", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Withdrawn],
   rejects: [InsufficientFunds, AccountClosed],
 }) {}
-class Close extends Domain.Command("Close", { target: Schema.String, events: [Closed] }) {}
+class Close extends Domain.Command("Close", { input: { id: Schema.String }, events: [Closed] }) {}
 
 class Account extends Domain.Aggregate("Account", {
   id: Schema.String,
   state: Schema.Struct({ balance: Schema.Number, closed: Schema.Boolean }),
   initial: { balance: 0, closed: false },
   commands: [Deposit, Withdraw, Close],
+  target: {
+    Deposit: (command) => command.id,
+    Withdraw: (command) => command.id,
+    Close: (command) => command.id,
+  },
   decide: {
     Deposit: (account, { amount }) =>
       account.closed ? new AccountClosed() : [new Deposited({ amount })],
@@ -138,7 +141,7 @@ describe("Domain Api", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const bank: Domain.Api.ClientOf<typeof BankApi> = yield* BankApi.Client;
       const isRejection = Schema.is(BankApi.rejections);
-      const refused = yield* bank.Withdraw("a-1", { amount: 5 }).pipe(Effect.flip);
+      const refused = yield* bank.Withdraw({ id: "a-1", amount: 5 }).pipe(Effect.flip);
       expect(isRejection(refused)).toBe(true);
       expect(refused).toBeInstanceOf(InsufficientFunds);
     }).pipe(
@@ -215,8 +218,7 @@ class NotOwner extends Domain.Rejection(
 
 class Stored extends Domain.Event("Stored", { item: Schema.String }) {}
 class Store extends Domain.Command("Store", {
-  target: Schema.String,
-  input: { item: Schema.String },
+  input: { id: Schema.String, item: Schema.String },
   events: [Stored],
   // Any tagged error class can be a rejection, Effect's own HttpApiError included.
   rejects: [Frozen, NotOwner, HttpApiError.Forbidden],
@@ -226,6 +228,7 @@ class Vault extends Domain.Aggregate("Vault", {
   state: Schema.Struct({ items: Schema.Array(Schema.String) }),
   initial: { items: [] },
   commands: [Store],
+  target: { Store: (command) => command.id },
   decide: {
     Store: (_, { item }) =>
       item === "ice"
@@ -245,15 +248,15 @@ describe("Domain Rejection", { tags: ["unit", "local"] }, () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
     Effect.gen(function* () {
       const vaults = yield* VaultApi.clientInProcess;
-      const frozen = yield* vaults.Store("v-1", { item: "ice" }).pipe(Effect.flip);
+      const frozen = yield* vaults.Store({ id: "v-1", item: "ice" }).pipe(Effect.flip);
       expect(frozen).toBeInstanceOf(Frozen);
       expect(frozen).toMatchObject({ until: "spring" });
-      const forbidden = yield* vaults.Store("v-1", { item: "gold" }).pipe(Effect.flip);
+      const forbidden = yield* vaults.Store({ id: "v-1", item: "gold" }).pipe(Effect.flip);
       expect(forbidden).toBeInstanceOf(HttpApiError.Forbidden);
-      expect((yield* vaults.Store("v-1", { item: "keys" }).pipe(Effect.flip))._tag).toBe(
+      expect((yield* vaults.Store({ id: "v-1", item: "keys" }).pipe(Effect.flip))._tag).toBe(
         "NotOwner",
       );
-      const { reply } = yield* vaults.Store("v-1", { item: "coat" });
+      const { reply } = yield* vaults.Store({ id: "v-1", item: "coat" });
       expect(reply).toBeUndefined();
       // The Api's rejections decode every one of them.
       expect(Schema.decodeUnknownSync(VaultApi.rejections)({ _tag: "Forbidden" })).toBeInstanceOf(
@@ -308,9 +311,8 @@ const trustedAuthor = (name: string) =>
 
 class Written extends Domain.Event("Written", { text: Schema.String, by: Schema.String }) {}
 class Write extends Domain.Command("Write", {
-  target: Schema.String,
   middleware: [AuthorSession],
-  input: { text: Schema.String },
+  input: { id: Schema.String, text: Schema.String },
   events: [Written],
   reply: { by: Schema.String },
 }) {}
@@ -319,6 +321,7 @@ class Note extends Domain.Aggregate("Note", {
   state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
   initial: { text: "", by: null },
   commands: [Write],
+  target: { Write: (command) => command.id },
   decide: {
     Write: Effect.fn(function* (_, cmd) {
       return [new Written({ text: cmd.text, by: yield* Author })];
@@ -362,10 +365,10 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
       const notes = yield* NotesApi.clientInProcess;
       const asSam = { headers: { "x-author": "sam" } };
 
-      const refused = yield* notes.Write("n-1", { text: "hi" }).pipe(Effect.flip);
+      const refused = yield* notes.Write({ id: "n-1", text: "hi" }).pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
 
-      const receipt = yield* notes.Write("n-1", { text: "hi" }, asSam);
+      const receipt = yield* notes.Write({ id: "n-1", text: "hi" }, asSam);
       expect(receipt.reply).toEqual({ by: "sam" });
       expect(yield* notes.NoteView.get("n-1", { ...asSam, atLeast: receipt })).toEqual({
         text: "hi",
@@ -384,7 +387,7 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       // The served Api keeps checking headers; only this client trusts its caller.
       const asKim = yield* NotesApi.clientInProcess.pipe(Effect.provide(trustedAuthor("kim")));
-      const { reply } = yield* asKim.Write("n-2", { text: "from a webhook" });
+      const { reply } = yield* asKim.Write({ id: "n-2", text: "from a webhook" });
       expect(reply).toEqual({ by: "kim" });
 
       const anonymous = yield* NotesApi.clientInProcess;
@@ -398,8 +401,7 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
     const writeAs = Effect.fn(function* (author: string) {
       const notes = yield* NotesApi.Client;
       return yield* notes.Write(
-        "n-3",
-        { text: "shared code" },
+        { id: "n-3", text: "shared code" },
         { headers: { "x-author": author } },
       );
     });
@@ -417,7 +419,7 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const notes = yield* NotesApi.client;
       const asSam = { headers: { "x-author": "sam" } };
-      const receipt = yield* notes.Write("n-4", { text: "over a protocol" }, asSam);
+      const receipt = yield* notes.Write({ id: "n-4", text: "over a protocol" }, asSam);
       expect(receipt.reply).toEqual({ by: "sam" });
       expect(yield* notes.NoteView.get("n-4", { ...asSam, atLeast: receipt })).toEqual({
         text: "over a protocol",
@@ -480,7 +482,7 @@ describe("Domain Api defects", { tags: ["unit", "local"] }, () => {
   it.live("a middleware's defect reaches an in-process client as a generic error", () =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.clientInProcess;
-      expectGenericDefect(yield* notes.Write("d-1", { text: "hi" }).pipe(Effect.exit));
+      expectGenericDefect(yield* notes.Write({ id: "d-1", text: "hi" }).pipe(Effect.exit));
       expectGenericDefect(yield* notes.NoteView.get("d-1").pipe(Effect.exit));
     }).pipe(Effect.scoped, Effect.provide(CrashingWorld)),
   );
@@ -488,7 +490,7 @@ describe("Domain Api defects", { tags: ["unit", "local"] }, () => {
   it.live("a middleware's defect reaches a client over HTTP as a generic error", () =>
     Effect.gen(function* () {
       const notes = yield* clientOver("http");
-      expectGenericDefect(yield* notes.Write("d-2", { text: "hi" }).pipe(Effect.exit));
+      expectGenericDefect(yield* notes.Write({ id: "d-2", text: "hi" }).pipe(Effect.exit));
       expectGenericDefect(yield* notes.NoteView.get("d-2").pipe(Effect.exit));
       expectGenericDefect(yield* notes.NoteView.events("d-2").pipe(Stream.runHead, Effect.exit));
     }).pipe(Effect.scoped, Effect.provide(Served)),
@@ -533,9 +535,8 @@ const BanCheckLive = Layer.succeed(BanCheck, (effect) =>
 
 class Posted extends Domain.Event("Posted", { text: Schema.String, by: Schema.String }) {}
 class Post extends Domain.Command("Post", {
-  target: Schema.String,
   middleware: [AuthorSession, BanCheck],
-  input: { text: Schema.String },
+  input: { id: Schema.String, text: Schema.String },
   events: [Posted],
 }) {}
 class Board extends Domain.Aggregate("Board", {
@@ -543,6 +544,7 @@ class Board extends Domain.Aggregate("Board", {
   state: Schema.Struct({ text: Schema.String }),
   initial: { text: "" },
   commands: [Post],
+  target: { Post: (command) => command.id },
   decide: {
     Post: Effect.fn(function* (_, cmd) {
       return [new Posted({ text: cmd.text, by: yield* Author })];
@@ -586,18 +588,18 @@ describe("Domain middleware order", { tags: ["unit", "local"] }, () => {
       const asMallory = { headers: { "x-author": "mallory" } };
 
       // AuthorSession runs first, so an anonymous caller is refused by it, not BanCheck.
-      expect((yield* boards.Post("b-1", { text: "hi" }).pipe(Effect.flip))._tag).toBe(
+      expect((yield* boards.Post({ id: "b-1", text: "hi" }).pipe(Effect.flip))._tag).toBe(
         "Unauthenticated",
       );
       expect((yield* boards.BoardView.get("b-1").pipe(Effect.flip))._tag).toBe("Unauthenticated");
 
       // BanCheck runs second and reads the Author that AuthorSession provided.
-      expect((yield* boards.Post("b-1", { text: "hi" }, asMallory).pipe(Effect.flip))._tag).toBe(
-        "Banned",
-      );
+      expect(
+        (yield* boards.Post({ id: "b-1", text: "hi" }, asMallory).pipe(Effect.flip))._tag,
+      ).toBe("Banned");
       expect((yield* boards.BoardView.get("b-1", asMallory).pipe(Effect.flip))._tag).toBe("Banned");
 
-      const receipt = yield* boards.Post("b-1", { text: "hi" }, asSam);
+      const receipt = yield* boards.Post({ id: "b-1", text: "hi" }, asSam);
       expect(yield* boards.BoardView.get("b-1", { ...asSam, atLeast: receipt })).toEqual({
         text: "hi",
       });
@@ -655,8 +657,8 @@ describe("Domain View validate on its Layer", { tags: ["unit", "local"] }, () =>
       const texts = yield* TextsApi.clientInProcess;
       const asSam = { headers: { "x-author": "sam" } };
       const asKim = { headers: { "x-author": "kim" } };
-      const fromSam = yield* texts.Write("t-1", { text: "hi" }, asSam);
-      const fromKim = yield* texts.Write("t-2", { text: "spam" }, asKim);
+      const fromSam = yield* texts.Write({ id: "t-1", text: "hi" }, asSam);
+      const fromKim = yield* texts.Write({ id: "t-2", text: "spam" }, asKim);
 
       expect(
         yield* texts.NoteText.get("t-1", { ...asKim, atLeast: fromSam }).pipe(

@@ -53,8 +53,7 @@ export const transfer = Effect.fn(function* (
 ) {
   const transferId = TransferId.make(request.transferId);
   yield* client.RequestTransfer(
-    transferId,
-    { from: request.from, to: request.to, amount: request.amount },
+    { transferId, from: request.from, to: request.to, amount: request.amount },
     mfa,
   );
   const settled = yield* client.TransferStatus.watch(transferId).pipe(

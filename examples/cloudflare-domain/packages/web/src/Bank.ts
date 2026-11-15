@@ -122,8 +122,8 @@ const deliver = (accountId: AccountId, intent: Intent) => {
   const { commandId, amount } = intent;
   const send: Command.Command<typeof BankClient.Message.Type, never, Bank> =
     intent.kind === "deposit"
-      ? BankClient.DepositMoney({ target: accountId, input: { amount }, commandId })
-      : BankClient.WithdrawMoney({ target: accountId, input: { amount }, commandId });
+      ? BankClient.DepositMoney({ input: { accountId, amount }, commandId })
+      : BankClient.WithdrawMoney({ input: { accountId, amount }, commandId });
   return send.effect.pipe(
     Effect.flatMap((result) =>
       Match.value(result).pipe(

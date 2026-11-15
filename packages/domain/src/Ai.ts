@@ -170,7 +170,7 @@ const toolOf = (api: string) => (op: Operation) => {
 type Client = Record<string, unknown>;
 
 /**
- * Send one call through the Api's client: a command takes its target, input
+ * Send one call through the Api's client: a command takes its input
  * and command id; a query its input and options; a read its key and options.
  */
 const invoke = (client: Client, op: Operation, payload: unknown, headers?: Headers.Input) => {

@@ -10,8 +10,7 @@ import * as Stream from "effect/Stream";
 
 class Incremented extends Domain.Event("Incremented", { by: Schema.Number }) {}
 class Increment extends Domain.Command("Increment", {
-  target: Schema.String,
-  input: { by: Schema.Number },
+  input: { id: Schema.String, by: Schema.Number },
   events: [Incremented],
 }) {}
 class Counter extends Domain.Aggregate("Counter", {
@@ -19,6 +18,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment],
+  target: { Increment: (command) => command.id },
   decide: { Increment: (_, { by }) => [new Incremented({ by })] },
   evolve: { Incremented: (s, e) => ({ total: s.total + e.by }) },
 }) {}
@@ -56,7 +56,7 @@ const Wire = CounterApi.layerClient.pipe(
 /** Each read that takes `atLeast`, waiting for a version the view never reaches. */
 const neverCaughtUp = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
-  const receipt = yield* api.Increment("c-3", { by: 1 });
+  const receipt = yield* api.Increment({ id: "c-3", by: 1 });
   const atLeast = { stream: receipt.stream, version: receipt.version + 1 };
   return yield* Effect.all(
     [
@@ -71,13 +71,13 @@ const neverCaughtUp = Effect.gen(function* () {
 /** A snapshot, two writes, then a feed that resumes after the snapshot's cursor. */
 const snapshotThenFeed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
-  const first = yield* api.Increment("c-1", { by: 1 });
+  const first = yield* api.Increment({ id: "c-1", by: 1 });
   const snapshot = yield* api.Totals.snapshot("c-1", {
     atLeast: { stream: first.stream, version: first.version },
   });
   // Written after the snapshot, before the feed starts.
-  yield* api.Increment("c-1", { by: 2 });
-  const last = yield* api.Increment("c-1", { by: 3 });
+  yield* api.Increment({ id: "c-1", by: 2 });
+  const last = yield* api.Increment({ id: "c-1", by: 3 });
   const entries = yield* api.Totals.events("c-1", { after: snapshot.cursor }).pipe(
     Stream.filter(Domain.Read.isEvent),
     Stream.take(2),
@@ -94,7 +94,7 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;
       expect(yield* api.Totals.snapshot("c-0")).toEqual({ state: null, cursor: 0 });
-      const receipt = yield* api.Increment("c-1", { by: 4 });
+      const receipt = yield* api.Increment({ id: "c-1", by: 4 });
       const snapshot = yield* api.Totals.snapshot("c-1", {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
@@ -128,7 +128,7 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
   it.live("list waits for a write with atLeast, like get", () =>
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;
-      const receipt = yield* api.Increment("c-2", { by: 5 });
+      const receipt = yield* api.Increment({ id: "c-2", by: 5 });
       const page = yield* api.Totals.list("c-2", {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });

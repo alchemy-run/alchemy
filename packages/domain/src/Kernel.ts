@@ -1967,6 +1967,7 @@ const build = (
       return Effect.map(Effect.forEach(json.events, decodeEvent), (events) => ({
         stream: json.stream,
         version: json.version,
+        commits: [{ stream: json.stream, version: json.version }],
         events,
         reply: reply && json.reply !== null ? reply.decode(json.reply) : undefined,
       })) as Effect.Effect<Aggregate.Receipt>;

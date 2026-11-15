@@ -250,16 +250,12 @@ export interface CommandOptions extends CallOptions {
   readonly commandId?: string;
 }
 
-/** The input and options after a command's target. The input may be left out when it has no required field. */
+/** A command's input and options. The input may be left out when it has no required field. */
 type CommandArgs<Input> = {} extends Input
   ? [input?: Input, options?: CommandOptions]
   : [input: Input, options?: CommandOptions];
 
-/**
- * The typed client of a command exposed in an Api:
- * `bank.WithdrawMoney(target, input, options)`, or `bank.TransferMoney(input, options)`
- * for a command a `Domain.Decision` implements, which has no target.
- */
+/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(input, options)`. */
 export type CommandClient<C extends Command.Any> =
   C["rpc"] extends Rpc.Rpc<
     infer _Tag,
@@ -271,9 +267,7 @@ export type CommandClient<C extends Command.Any> =
   >
     ? Payload["Type"] extends { readonly input: infer Input }
       ? (
-          ...args: Payload["Type"] extends { readonly target: infer Target }
-            ? [target: Target, ...args: CommandArgs<Input>]
-            : CommandArgs<Input>
+          ...args: CommandArgs<Input>
         ) => Effect.Effect<
           Success["Type"],
           | Error["Type"]
@@ -549,9 +543,8 @@ const redactMiddleware = (
   return redacted;
 };
 
-/** The wire payload of a command: its target (if it has one), an optional command id, and its input. */
+/** The wire payload of a command: an optional command id, and its input. */
 interface CommandPayload {
-  readonly target?: string;
   readonly commandId?: string;
   readonly input: object;
 }
@@ -678,16 +671,16 @@ const handlersOf = (
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
-        handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
+        handlers[entry.tag] = ({ commandId, input }: CommandPayload) =>
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
-            aggregate.send(target, new entry(input), { commandId }).pipe(
-              Effect.map((receipt) =>
-                // A command a decision implements commits to every stream it read.
-                entry.target === undefined
-                  ? { reply: receipt.reply, commits: receipt.commits ?? [] }
-                  : { reply: receipt.reply, stream: receipt.stream, version: receipt.version },
-              ),
+            aggregate.send(new entry(input), { commandId }).pipe(
+              Effect.map((receipt) => ({
+                reply: receipt.reply,
+                stream: receipt.stream,
+                version: receipt.version,
+                commits: receipt.commits,
+              })),
             ),
           );
         continue;
@@ -1021,12 +1014,8 @@ const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
-      client[entry.tag] =
-        entry.target === undefined
-          ? (input: object = {}, { commandId, ...options }: CommandOptions = {}) =>
-              send({ commandId, input }, options)
-          : (target: unknown, input: object = {}, { commandId, ...options }: CommandOptions = {}) =>
-              send({ target, commandId, input }, options);
+      client[entry.tag] = (input: object = {}, { commandId, ...options }: CommandOptions = {}) =>
+        send({ commandId, input }, options);
       continue;
     }
     if (entry.kind === "Query") {

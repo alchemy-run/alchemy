@@ -201,11 +201,6 @@ export interface DecisionClass<C extends Command.Any> extends Context.ServiceCla
   readonly definition: AnyDefinition;
 }
 
-/** A command a decision may implement: one with no `target`. */
-type Targetless<C extends Command.Any> = C["target"] extends undefined
-  ? C
-  : `${C["tag"]} has a target: an aggregate implements it`;
-
 /**
  * A command decided against several aggregate instances at once. It reads
  * the instances the command names, decides against all of their states
@@ -217,8 +212,7 @@ type Targetless<C extends Command.Any> = C["target"] extends undefined
  * events like any other.
  *
  * ### Deciding across aggregates
- * A command a decision implements has no `target`: its input names the
- * instances.
+ * The command's input names every instance it involves.
  *
  * **Example:** A transfer between two accounts
  * ```typescript
@@ -294,7 +288,7 @@ type Targetless<C extends Command.Any> = C["target"] extends undefined
  * @primitive
  */
 export const make = <C extends Command.Any, const R extends Reads>(
-  command: C & Targetless<C>,
+  command: C,
   definition: Definition<C, R>,
   annotations: Annotations = {},
 ): DecisionClass<C> => {

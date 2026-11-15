@@ -248,8 +248,7 @@ export const evolveView = (
 };
 
 /**
- * Call a command's client with a decoded wire payload: its target first,
- * when it has one.
+ * Call a command's client with a decoded wire payload.
  *
  * @internal
  */
@@ -259,9 +258,6 @@ export const sendPayload = (
   options: object,
 ): Effect.Effect<unknown, unknown> => {
   const { input, commandId } = payload as { readonly input: unknown; readonly commandId?: string };
-  const args = [input, { ...options, ...(commandId === undefined ? {} : { commandId }) }];
-  const call = send as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
-  return typeof payload === "object" && payload !== null && "target" in payload
-    ? call(payload.target, ...args)
-    : call(...args);
+  const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
+  return call(input, { ...options, ...(commandId === undefined ? {} : { commandId }) });
 };

@@ -15,8 +15,7 @@ import { liveFrame } from "./conformance/conformance.ts";
 
 class Incremented extends Domain.Event("Incremented", { by: Schema.Number }) {}
 class Increment extends Domain.Command("Increment", {
-  target: Schema.String,
-  input: { by: Schema.Number },
+  input: { id: Schema.String, by: Schema.Number },
   events: [Incremented],
 }) {}
 class Counter extends Domain.Aggregate("Counter", {
@@ -24,6 +23,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment],
+  target: { Increment: (command) => command.id },
   decide: { Increment: (_, { by }) => [new Incremented({ by })] },
   evolve: { Incremented: (s, e) => ({ total: s.total + e.by }) },
 }) {}
@@ -158,7 +158,7 @@ const settled = (api: Client, version: number) =>
 /** Three increments of c-1, folded by the views and appended to the streams. */
 const seed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
-  for (const by of [1, 2, 3]) yield* api.Increment("c-1", { by });
+  for (const by of [1, 2, 3]) yield* api.Increment({ id: "c-1", by });
   yield* settled(api, 3);
   // The hidden ones too, read server-side: no client may read them.
   const atLeast = { stream: "Counter/c-1", version: 3 };
@@ -216,7 +216,7 @@ for (const [transport, layer] of [
             .events("c-1")
             .pipe(Stream.take(5), Stream.runCollect, Effect.forkChild);
           yield* Effect.sleep("30 millis");
-          yield* api.Increment("c-1", { by: 4 });
+          yield* api.Increment({ id: "c-1", by: 4 });
           yield* settled(api, 4);
           expect(frames(yield* Fiber.join(feed))).toEqual([1, 2, 3, "caught up at 3", 4]);
 
@@ -237,7 +237,7 @@ for (const [transport, layer] of [
             .watch("c-1")
             .pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
           yield* Effect.sleep("30 millis");
-          yield* api.Increment("c-1", { by: 4 });
+          yield* api.Increment({ id: "c-1", by: 4 });
           const [first, second] = yield* Fiber.join(watched);
           expect([first!.cursor, second!.cursor]).toEqual([3, 4]);
 

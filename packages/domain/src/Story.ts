@@ -15,7 +15,6 @@ import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Command from "./Command.ts";
-import type * as Decision from "./Decision.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import type * as Key from "./Key.ts";
@@ -87,10 +86,6 @@ export type Step =
     }
   | {
       readonly _tag: "When";
-      /** The instance the command targets; absent for one a decision implements. */
-      readonly ref?: Aggregate.Ref;
-      /** The decision that implements the command, when it has no target. */
-      readonly decision?: Decision.Any;
       readonly command: { readonly _tag: string };
       readonly commandId?: string;
     }
@@ -176,11 +171,11 @@ export type Step =
 export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
 
 /**
- * A `when` step. Its type carries the command's class, so the steps after it
- * are checked against what the command declares.
+ * A `when` step. Its type carries the command, so the steps after it are
+ * checked against what the model's command of that tag declares.
  */
-export interface WhenStep<C = unknown> extends StepOf<"When"> {
-  readonly "~command"?: C;
+export interface WhenStep<Cmd = unknown> extends StepOf<"When"> {
+  readonly "~command"?: Cmd;
 }
 
 /** A `rejected` step; its type carries the rejection. */
@@ -198,10 +193,14 @@ export interface ProvideStep<I = unknown> extends StepOf<"Provide"> {
   readonly "~provides"?: I;
 }
 
-type CommandClassOf<A extends Aggregate.Any, Cmd> = Extract<
-  A["definition"]["commands"][number],
-  { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }
->;
+/** The model's command class for a command instance; `unknown` when the model has none. */
+type CommandClassOf<Cmds, Cmd> = [
+  Extract<Cmds, { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }>,
+] extends [infer K]
+  ? [K] extends [never]
+    ? unknown
+    : K
+  : unknown;
 type RejectionOf<C extends Command.Any> = Aggregate.InstanceOf<C["rejects"][number]>;
 type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
 type NameOf<X, Key extends string, Fallback extends string> = X extends {
@@ -242,23 +241,27 @@ type CheckReplied<H, A, C> = C extends Command.Any
  */
 export type Checked<
   S extends ReadonlyArray<Step>,
+  /** The model's command classes: a `when`'s command is looked up among them by tag. */
+  Cmds = never,
   C = unknown,
   P = never,
   Out extends ReadonlyArray<unknown> = [],
 > = S extends readonly [infer H extends Step, ...infer T extends ReadonlyArray<Step>]
-  ? [H] extends [WhenStep<infer K>]
-    ? K extends Command.Any
-      ? Checked<T, K, P, [...Out, CheckWhen<H, K, P>]>
-      : Checked<T, unknown, P, [...Out, H]>
+  ? [H] extends [WhenStep<infer Cmd>]
+    ? CommandClassOf<Cmds, Cmd> extends infer K
+      ? K extends Command.Any
+        ? Checked<T, Cmds, K, P, [...Out, CheckWhen<H, K, P>]>
+        : Checked<T, Cmds, unknown, P, [...Out, H]>
+      : never
     : [H] extends [ProvideStep<infer I>]
-      ? Checked<T, C, P | I, [...Out, H]>
+      ? Checked<T, Cmds, C, P | I, [...Out, H]>
       : [H] extends [RejectedStep<infer R>]
-        ? Checked<T, C, P, [...Out, CheckRejected<H, R, C>]>
+        ? Checked<T, Cmds, C, P, [...Out, CheckRejected<H, R, C>]>
         : [H] extends [RepliedStep<infer A>]
-          ? Checked<T, C, P, [...Out, CheckReplied<H, A, C>]>
+          ? Checked<T, Cmds, C, P, [...Out, CheckReplied<H, A, C>]>
           : [Step] extends [H]
-            ? Checked<T, unknown, any, [...Out, H]>
-            : Checked<T, C, P, [...Out, H]>
+            ? Checked<T, Cmds, unknown, any, [...Out, H]>
+            : Checked<T, Cmds, C, P, [...Out, H]>
   : [...Out, ...S];
 
 /** History: events already committed on a stream before the story starts. */
@@ -272,33 +275,18 @@ const given = <A extends Aggregate.Any>(
 });
 
 /**
- * Send a command: to an aggregate instance, or (for a command with no
- * target) through the decision that implements it. Its policies run until
- * they finish or suspend on an external system call.
+ * Send a command. Whatever implements it in the model handles it: the
+ * aggregate instance its input names, or a decision across several. Its
+ * policies run until they finish or suspend on an external system call.
  */
-function when<D extends Decision.Any>(
-  decision: D,
-  command: Aggregate.InstanceOf<D["command"]>,
-  options?: { readonly commandId?: string },
-): WhenStep<D["command"]>;
-function when<A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
-  ref: Aggregate.Ref<A>,
+const when = <Cmd extends { readonly _tag: string }>(
   command: Cmd,
   options?: { readonly commandId?: string },
-): WhenStep<CommandClassOf<A, Cmd>>;
-function when(
-  // Checked by the overloads.
-  target: any,
-  command: any,
-  options?: { readonly commandId?: string },
-): any {
-  return {
-    _tag: "When",
-    ...("kind" in target ? { decision: target } : { ref: target }),
-    command,
-    commandId: options?.commandId,
-  } satisfies StepOf<"When">;
-}
+): WhenStep<Cmd> => ({
+  _tag: "When",
+  command,
+  commandId: options?.commandId,
+});
 
 /**
  * The next events committed on a stream. With no events: nothing new was
@@ -735,7 +723,7 @@ const describeStep = (s: Step): string => {
     case "Then":
       return `${refName(s.ref)}: ${s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80)}`;
     case "When":
-      return `${s.ref ? refName(s.ref) : s.command._tag}: ${summarize(s.command)}`;
+      return summarize(s.command);
     case "Rejected":
       return summarize(s.rejection);
     case "Replied":
@@ -1040,6 +1028,19 @@ const explore = <E, R>(
     }
   });
 
+/** The aggregate instances a command is for, in a model: none when nothing implements it. */
+const instancesOf = (
+  definitions: Model.Any["definitions"],
+  command: { readonly _tag: string },
+): ReadonlyArray<Aggregate.Ref> => {
+  for (const aggregate of definitions.aggregates) {
+    const id = Aggregate.targetOf(aggregate, command);
+    if (id !== undefined) return [Aggregate.makeRef(aggregate, id)];
+  }
+  const decision = definitions.decisions?.find((d) => d.decisionName === command._tag);
+  return decision === undefined ? [] : Object.values(decision.definition.reads(command));
+};
+
 const isStoryFailure = (error: unknown): error is StoryFailure =>
   error !== null &&
   typeof error === "object" &&
@@ -1053,14 +1054,15 @@ const make =
     LE = never,
     LR = never,
     Systems extends ExternalSystem.Any = never,
+    Parts extends Model.Servable = Model.Servable,
   >(
-    domain: Model.ModelClass<Name, Provided, Policies>,
+    domain: Model.ModelClass<Name, Provided, Policies, Parts>,
     ...[options = {}]: [Policies] extends [never]
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
       : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
   <const S extends ReadonlyArray<Step>>(
-    ...steps: S & Checked<S>
+    ...steps: S & Checked<S, Parts["commands"][number]>
   ): Effect.Effect<
     void,
     StoryFailure | LE,
@@ -1222,7 +1224,14 @@ const make =
             if (unassertedRejection && s._tag !== "Rejected") {
               return yield* rejectionNotAsserted(unassertedRejection);
             }
-            if ("ref" in s && s.ref !== undefined) touched.set(refName(s.ref), s.ref);
+            if ("ref" in s) touched.set(refName(s.ref), s.ref);
+            // A command touches the instances it is for: the one its aggregate
+            // routes it to, or each one its decision reads.
+            if (s._tag === "When") {
+              for (const ref of instancesOf(domain.definitions, s.command)) {
+                touched.set(refName(ref), ref);
+              }
+            }
             switch (s._tag) {
               case "Clock": {
                 const at = clockMillis(s.at);
@@ -1271,16 +1280,13 @@ const make =
                 break;
               }
               case "When": {
-                // A decision's command goes the way an Api sends it: by its tag.
-                const client =
-                  s.ref === undefined
-                    ? internals.commands.get(s.command._tag)!
-                    : yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
-                        never,
-                        Aggregate.ClientImpl
-                      >;
+                // Whatever implements the command in the model, as an Api sends it.
+                const client = internals.commands.get(s.command._tag);
+                if (client === undefined) {
+                  return yield* fail(`the model has no command ${s.command._tag}`);
+                }
                 const result = yield* client
-                  .send(s.ref, s.command, { commandId: s.commandId ?? `story:${step}` })
+                  .send(s.command, { commandId: s.commandId ?? `story:${step}` })
                   .pipe(Effect.provide(provided), Effect.result);
                 if (result._tag === "Success") {
                   last = { _tag: "Accepted", receipt: result.success };

@@ -16,11 +16,11 @@ class HoldReleased extends Domain.Event("HoldReleased") {}
 class HoldExpired extends Domain.Event("HoldExpired") {}
 
 class PlaceHold extends Domain.Command("PlaceHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldPlaced],
 }) {}
 class ReleaseHold extends Domain.Command("ReleaseHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldReleased],
 }) {}
 /**
@@ -28,7 +28,7 @@ class ReleaseHold extends Domain.Command("ReleaseHold", {
  * keeps a released hold from expiring.
  */
 class ExpireHold extends Domain.Command("ExpireHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldExpired],
 }) {}
 
@@ -37,6 +37,11 @@ class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
+  target: {
+    PlaceHold: (command) => command.id,
+    ReleaseHold: (command) => command.id,
+    ExpireHold: (command) => command.id,
+  },
   decide: {
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],
@@ -75,7 +80,7 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
         // a redelivery arms the same expiry again, which changes nothing
-        yield* holds.schedule(source, new ExpireHold(), {
+        yield* holds.schedule(new ExpireHold({ id: source.id }), {
           after: "1 hour",
           commandId: expiryOf(source.id),
         });
@@ -108,20 +113,20 @@ class TicketResumed extends Domain.Event("TicketResumed") {}
 class TicketStalled extends Domain.Event("TicketStalled") {}
 
 class OpenTicket extends Domain.Command("OpenTicket", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [TicketOpened],
 }) {}
 class PauseTicket extends Domain.Command("PauseTicket", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [TicketPaused],
 }) {}
 class ResumeTicket extends Domain.Command("ResumeTicket", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [TicketResumed],
 }) {}
 /** Records the stall only on an open ticket; on a paused one it records nothing. */
 class MarkStalled extends Domain.Command("MarkStalled", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [TicketStalled],
 }) {}
 
@@ -130,6 +135,12 @@ class Ticket extends Domain.Aggregate("Ticket", {
   state: Schema.Struct({ status: Schema.Literals(["none", "open", "paused", "stalled"]) }),
   initial: { status: "none" },
   commands: [OpenTicket, PauseTicket, ResumeTicket, MarkStalled],
+  target: {
+    OpenTicket: (command) => command.id,
+    PauseTicket: (command) => command.id,
+    ResumeTicket: (command) => command.id,
+    MarkStalled: (command) => command.id,
+  },
   decide: {
     OpenTicket: () => [new TicketOpened()],
     PauseTicket: () => [new TicketPaused()],
@@ -153,7 +164,7 @@ const StallTimerLive = StallTimer.toLayer(
   Effect.gen(function* () {
     const tickets = yield* Ticket;
     return Effect.fn(function* ({ source }) {
-      yield* tickets.schedule(source, new MarkStalled(), {
+      yield* tickets.schedule(new MarkStalled({ id: source.id }), {
         after: "1 hour",
         commandId: `stall:${source.id}`,
       });
@@ -183,7 +194,10 @@ const ArmExpiryLive = ArmExpiry.toLayer(
         name: "arm",
         error: Flaky,
         execute: Effect.gen(function* () {
-          yield* holds.schedule(key, new ExpireHold(), { after: "20 millis", commandId: "x" });
+          yield* holds.schedule(new ExpireHold({ id: key }), {
+            after: "20 millis",
+            commandId: "x",
+          });
           if ((yield* Activity.CurrentAttempt) > 1) return;
           if (then === "wait") yield* Effect.sleep("100 millis");
           else yield* holds.unschedule(key, "x").pipe(Effect.orDie);
@@ -204,12 +218,12 @@ const t1 = Ticket.ref("t-1");
 /** Open, pause before the hour, let the timer fire as a no-op, resume. */
 const pausedThroughTheDeadline = [
   Story.clock("2026-01-01T00:00:00Z"),
-  Story.when(t1, new OpenTicket()),
+  Story.when(new OpenTicket({ id: t1.id })),
   Story.clock("2026-01-01T00:30:00Z"),
-  Story.when(t1, new PauseTicket()),
+  Story.when(new PauseTicket({ id: t1.id })),
   Story.clock("2026-01-01T01:00:00Z"),
   Story.then(t1, new TicketOpened(), new TicketPaused()),
-  Story.when(t1, new ResumeTicket()),
+  Story.when(new ResumeTicket({ id: t1.id })),
   Story.then(t1, new TicketResumed()),
 ] as const;
 
@@ -222,7 +236,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.effect("a scheduled command fires when it is due", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
-      Story.when(h1, new PlaceHold()),
+      Story.when(new PlaceHold({ id: h1.id })),
       Story.then(h1, new HoldPlaced()),
       Story.clock("2026-01-01T01:00:00Z"),
       Story.then(h1, new HoldExpired()),
@@ -232,8 +246,8 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.effect("an unscheduled command never fires", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
-      Story.when(h1, new PlaceHold()),
-      Story.when(h1, new ReleaseHold()),
+      Story.when(new PlaceHold({ id: h1.id })),
+      Story.when(new ReleaseHold({ id: h1.id })),
       Story.then(h1, new HoldPlaced(), new HoldReleased()),
       Story.clock("2026-01-01T02:00:00Z"),
       Story.then(h1),
@@ -244,9 +258,9 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.effect("unscheduling cancels only that instance's command", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
-      Story.when(h1, new PlaceHold()),
-      Story.when(h2, new PlaceHold()),
-      Story.when(h1, new ReleaseHold()),
+      Story.when(new PlaceHold({ id: h1.id })),
+      Story.when(new PlaceHold({ id: h2.id })),
+      Story.when(new ReleaseHold({ id: h1.id })),
       Story.then(h1, new HoldPlaced(), new HoldReleased()),
       Story.then(h2, new HoldPlaced()),
       Story.clock("2026-01-01T01:00:00Z"),
@@ -258,10 +272,10 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.effect("a release after the command fired is still recorded", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
-      Story.when(h1, new PlaceHold()),
+      Story.when(new PlaceHold({ id: h1.id })),
       Story.clock("2026-01-01T01:00:00Z"),
       Story.then(h1, new HoldPlaced(), new HoldExpired()),
-      Story.when(h1, new ReleaseHold()),
+      Story.when(new ReleaseHold({ id: h1.id })),
       Story.then(h1, new HoldReleased()),
     ),
   );
@@ -269,8 +283,8 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.live("an unscheduled command never fires on the real clock", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
-      yield* holds.schedule("h-3", new ExpireHold(), { after: "20 millis", commandId: "x" });
-      yield* holds.schedule("h-4", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-3" }), { after: "20 millis", commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-4" }), { after: "20 millis", commandId: "x" });
       yield* holds.unschedule("h-3", "x");
       // Once h-4's timer has run, h-3's would have too.
       expect((yield* untilExpired(holds.get("h-4"))).status).toBe("expired");
@@ -282,12 +296,12 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const holds = yield* Hold;
       const before = yield* Effect.sync(() => Date.now());
-      const receipt = yield* holds.schedule("h-9", new ExpireHold(), { after: "1 hour" });
+      const receipt = yield* holds.schedule(new ExpireHold({ id: "h-9" }), { after: "1 hour" });
       const at = DateTime.toEpochMillis(receipt.at);
       expect(at).toBeGreaterThanOrEqual(before + 3_600_000);
       expect(at).toBeLessThan(before + 3_600_000 + 1_000);
       yield* holds.unschedule("h-9", receipt.commandId);
-      const fixed = yield* holds.schedule("h-9", new ExpireHold(), {
+      const fixed = yield* holds.schedule(new ExpireHold({ id: "h-9" }), {
         at: DateTime.makeUnsafe("2030-01-01T00:00:00Z"),
         commandId: "x",
       });
@@ -298,7 +312,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.live("unscheduling a command that ran fails with AlreadyExecuted", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
-      yield* holds.schedule("h-5", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-5" }), { after: "20 millis", commandId: "x" });
       yield* untilExpired(holds.get("h-5"));
       const error = yield* Effect.flip(holds.unschedule("h-5", "x"));
       expect(error).toEqual(
@@ -310,8 +324,8 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.live("a schedule's id is its own: a command sent under the same id doesn't stop it", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
-      yield* holds.send("h-6", new PlaceHold(), { commandId: "x" });
-      yield* holds.schedule("h-6", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* holds.send(new PlaceHold({ id: "h-6" }), { commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-6" }), { after: "20 millis", commandId: "x" });
       expect((yield* untilExpired(holds.get("h-6"))).status).toBe("expired");
     }).pipe(Effect.provide(HoldsLive)),
   );
@@ -319,10 +333,10 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.live("unscheduling again fails with AlreadyCancelled, until it is scheduled again", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
-      yield* holds.schedule("h-7", new ExpireHold(), { after: "1 hour", commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-7" }), { after: "1 hour", commandId: "x" });
       yield* holds.unschedule("h-7", "x");
       expect((yield* Effect.flip(holds.unschedule("h-7", "x")))._tag).toBe("AlreadyCancelled");
-      yield* holds.schedule("h-7", new ExpireHold(), { after: "1 hour", commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-7" }), { after: "1 hour", commandId: "x" });
       yield* holds.unschedule("h-7", "x");
     }).pipe(Effect.provide(HoldsLive)),
   );
@@ -340,10 +354,10 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
   it.live("scheduling again after the command ran arms it again", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
-      yield* holds.schedule("h-10", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* holds.schedule(new ExpireHold({ id: "h-10" }), { after: "20 millis", commandId: "x" });
       yield* untilExpired(holds.get("h-10"));
       expect((yield* Effect.flip(holds.unschedule("h-10", "x")))._tag).toBe("AlreadyExecuted");
-      const receipt = yield* holds.schedule("h-10", new ExpireHold(), {
+      const receipt = yield* holds.schedule(new ExpireHold({ id: "h-10" }), {
         after: "1 hour",
         commandId: "x",
       });
@@ -389,7 +403,10 @@ describe(
       );
       return Effect.gen(function* () {
         const holds = yield* Hold;
-        yield* holds.schedule("h-13", new ExpireHold(), { after: "1 second", commandId: "x" });
+        yield* holds.schedule(new ExpireHold({ id: "h-13" }), {
+          after: "1 second",
+          commandId: "x",
+        });
         // the sleep ends 1ms before the platform's clock reaches the due time
         platformNow = 999;
         yield* TestClock.adjust("1 second");
@@ -414,10 +431,10 @@ describe("Domain schedule, armed again under the same id", { tags: ["unit", "loc
   it.effect("a pending timer is replaced, not doubled", () =>
     Story.make(Tickets, { layer: StallTimerLive })(
       Story.clock("2026-01-01T00:00:00Z"),
-      Story.when(t1, new OpenTicket()),
+      Story.when(new OpenTicket({ id: t1.id })),
       Story.clock("2026-01-01T00:30:00Z"),
-      Story.when(t1, new PauseTicket()),
-      Story.when(t1, new ResumeTicket()),
+      Story.when(new PauseTicket({ id: t1.id })),
+      Story.when(new ResumeTicket({ id: t1.id })),
       Story.then(t1, new TicketOpened(), new TicketPaused(), new TicketResumed()),
       // the first timer was due at 01:00; resuming replaced it with one due at 01:30
       Story.clock("2026-01-01T01:00:00Z"),

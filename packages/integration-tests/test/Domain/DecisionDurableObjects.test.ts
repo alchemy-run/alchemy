@@ -44,7 +44,7 @@ const hostOn = (inputGate: boolean) => (intercept?: Intercept) =>
 /** Account `a` with 100. */
 const funded = Effect.gen(function* () {
   const accounts = yield* Account;
-  yield* accounts.send(a, new Deposit({ amount: 100 }));
+  yield* accounts.send(new Deposit({ accountId: a, amount: 100 }));
   return accounts;
 });
 
@@ -97,7 +97,7 @@ for (const inputGate of [false, true]) {
         expect(yield* accounts.get(a)).toEqual({ balance: 70 });
         expect(yield* accounts.get(b)).toEqual({ balance: 30 });
         // Each instance takes its own commands again.
-        yield* accounts.send(b, new Deposit({ amount: 5 }));
+        yield* accounts.send(new Deposit({ accountId: b, amount: 5 }));
         expect(yield* accounts.get(b)).toEqual({ balance: 35 });
       }).pipe(Effect.scoped, Effect.provide(onSimHost())),
     );
@@ -110,7 +110,7 @@ for (const inputGate of [false, true]) {
           transfer.send(new TransferMoney({ from: a, to: b, amount: 500 })),
         );
         expect(rejection).toEqual(new InsufficientFunds({ balance: 100 }));
-        yield* accounts.send(a, new Deposit({ amount: 1 }));
+        yield* accounts.send(new Deposit({ accountId: a, amount: 1 }));
         expect(yield* accounts.get(a)).toEqual({ balance: 101 });
         expect(yield* accounts.get(b)).toEqual({ balance: 0 });
       }).pipe(Effect.scoped, Effect.provide(onSimHost())),
@@ -149,7 +149,7 @@ for (const inputGate of [false, true]) {
       () =>
         Effect.gen(function* () {
           const accounts = yield* funded;
-          yield* accounts.send(b, new Deposit({ amount: 100 }));
+          yield* accounts.send(new Deposit({ accountId: b, amount: 100 }));
           const transfer = yield* Transfer;
           // Opposite directions share both instances: preparing in stream order keeps them from deadlocking.
           const exits = yield* Effect.forEach(
@@ -171,7 +171,9 @@ for (const inputGate of [false, true]) {
           expect(Math.min(...balances)).toBeGreaterThanOrEqual(0);
           expect(sent).toBeGreaterThan(0);
           const events = yield* Effect.forEach([a, b], (id) =>
-            accounts.send(id, new Deposit({ amount: 0 })).pipe(Effect.map((r) => r.version - 2)),
+            accounts
+              .send(new Deposit({ accountId: id, amount: 0 }))
+              .pipe(Effect.map((r) => r.version - 2)),
           );
           expect(events[0]! + events[1]!).toBe(sent * 2);
         }).pipe(Effect.scoped, Effect.provide(onSimHost())),
@@ -216,7 +218,7 @@ for (const inputGate of [false, true]) {
             yield* doomed("t-1");
             yield* eventually(Effect.sync(crash.died));
             // `a` holds the intent until its deadline; then its next command goes through.
-            yield* accounts.send(a, new Deposit({ amount: 1 }));
+            yield* accounts.send(new Deposit({ accountId: a, amount: 1 }));
             expect(yield* accounts.get(a)).toEqual({ balance: 101 });
             expect(yield* accounts.get(b)).toEqual({ balance: 0 });
             // And the same transfer can be decided again.
@@ -237,9 +239,9 @@ for (const inputGate of [false, true]) {
             yield* doomed("t-1");
             yield* eventually(Effect.sync(crash.died));
             // `b` asks the primary, which aborts the intent once its deadline passed.
-            yield* accounts.send(b, new Deposit({ amount: 1 }));
+            yield* accounts.send(new Deposit({ accountId: b, amount: 1 }));
             expect(yield* accounts.get(b)).toEqual({ balance: 1 });
-            yield* accounts.send(a, new Deposit({ amount: 1 }));
+            yield* accounts.send(new Deposit({ accountId: a, amount: 1 }));
             expect(yield* accounts.get(a)).toEqual({ balance: 101 });
           }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
         },
@@ -256,7 +258,7 @@ for (const inputGate of [false, true]) {
             yield* eventually(Effect.sync(crash.died));
             expect(yield* accounts.get(a)).toEqual({ balance: 70 });
             // `b` learns the outcome from the primary the next time it is asked to do anything.
-            yield* accounts.send(b, new Deposit({ amount: 1 }));
+            yield* accounts.send(new Deposit({ accountId: b, amount: 1 }));
             expect(yield* accounts.get(b)).toEqual({ balance: 31 });
             // Sent again with the same id, the transfer is not decided twice.
             const transfer = yield* Transfer;

@@ -12,13 +12,11 @@ export class TourBooked extends Domain.Event("TourBooked", {
 export class TourCancelled extends Domain.Event("TourCancelled", { orgId: OrgId }) {}
 
 export class BookTour extends Domain.Command("BookTour", {
-  target: Schema.String,
-  input: { orgId: OrgId, unit: Schema.String },
+  input: { id: Schema.String, orgId: OrgId, unit: Schema.String },
   events: [TourBooked],
 }) {}
 export class CancelTour extends Domain.Command("CancelTour", {
-  target: Schema.String,
-  input: { orgId: OrgId },
+  input: { id: Schema.String, orgId: OrgId },
   events: [TourCancelled],
 }) {}
 
@@ -27,6 +25,7 @@ export class Tour extends Domain.Aggregate("Tour", {
   state: Schema.Struct({}),
   initial: {},
   commands: [BookTour, CancelTour],
+  target: { BookTour: (command) => command.id, CancelTour: (command) => command.id },
   decide: {
     BookTour: (_, { orgId, unit }) => [new TourBooked({ orgId, unit })],
     CancelTour: (_, { orgId }) => [new TourCancelled({ orgId })],
@@ -99,8 +98,7 @@ export const OrgFeedWriterLive = OrgFeedWriter.toLayer(
 
 export class Noted extends Domain.Event("Noted", { tour: Schema.String }) {}
 export class Note extends Domain.Command("Note", {
-  target: Schema.String,
-  input: { tour: Schema.String },
+  input: { id: Schema.String, tour: Schema.String },
   events: [Noted],
 }) {}
 /** An org's bookings, as notes. Its ids are org ids. */
@@ -109,6 +107,7 @@ export class Board extends Domain.Aggregate("Board", {
   state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
   initial: { notes: [] },
   commands: [Note],
+  target: { Note: (command) => command.id },
   decide: { Note: (_, { tour }) => [new Noted({ tour })] },
   evolve: { Noted: (s, e) => ({ notes: [...s.notes, e.tour] }) },
 }) {}
@@ -124,7 +123,7 @@ export const NoteBookingsLive = NoteBookings.toLayer(
   Effect.gen(function* () {
     const boards = yield* Board;
     return Effect.fn(function* ({ key, source }) {
-      yield* boards.send(key, new Note({ tour: source.id }));
+      yield* boards.send(new Note({ id: key, tour: source.id }));
     });
   }),
 );

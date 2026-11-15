@@ -62,6 +62,14 @@ export class Account extends Domain.Aggregate("Account", {
     CreditTransfer,
     RefundTransfer,
   ],
+  target: {
+    OpenAccount: (command) => command.accountId,
+    DepositMoney: (command) => command.accountId,
+    WithdrawMoney: (command) => command.accountId,
+    DebitTransfer: (command) => command.accountId,
+    CreditTransfer: (command) => command.accountId,
+    RefundTransfer: (command) => command.accountId,
+  },
   decide: {
     OpenAccount: Effect.fn(function* (account, cmd) {
       if (account._tag !== "Unopened") return yield* new AlreadyOpen();

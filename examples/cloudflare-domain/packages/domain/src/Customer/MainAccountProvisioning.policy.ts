@@ -18,8 +18,11 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     return Effect.fn(function* ({ source, event }) {
       yield* accounts
         .send(
-          mainAccountId(source.id),
-          new OpenAccount({ customerId: source.id, owner: event.name }),
+          new OpenAccount({
+            accountId: mainAccountId(source.id),
+            customerId: source.id,
+            owner: event.name,
+          }),
         )
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
     });

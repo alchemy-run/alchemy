@@ -68,12 +68,12 @@ describe("Domain decision in a story", { tags: ["unit", "local"] }, () => {
   it.effect("a decision's command records on each instance, replies and rejects", () =>
     story(
       Story.given(Account.ref("a"), new Deposited({ amount: 100 })),
-      Story.when(Transfer, new TransferMoney({ from: a, to: b, amount: 30 })),
+      Story.when(new TransferMoney({ from: a, to: b, amount: 30 })),
       Story.replied({ balance: 70 }),
       Story.then(Account.ref("a"), new TransferSent({ to: b, amount: 30 })),
       Story.then(Account.ref("b"), new TransferReceived({ from: a, amount: 30 })),
       Story.state(Account.ref("b"), { balance: 30 }),
-      Story.when(Transfer, new TransferMoney({ from: a, to: b, amount: 500 })),
+      Story.when(new TransferMoney({ from: a, to: b, amount: 500 })),
       Story.rejected(new InsufficientFunds({ balance: 70 })),
       Story.then(Account.ref("a")),
       Story.then(Account.ref("b")),
@@ -83,14 +83,10 @@ describe("Domain decision in a story", { tags: ["unit", "local"] }, () => {
   it.effect("history on one instance decides a command about another", () =>
     story(
       Story.given(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1 })),
-      Story.when(
-        Registration,
-        new RegisterCustomer({ customerId: c2, name: "Alex", username: sam }),
-      ),
+      Story.when(new RegisterCustomer({ customerId: c2, name: "Alex", username: sam })),
       Story.rejected(new UsernameTaken()),
       Story.then(Customer.ref("c-2")),
       Story.when(
-        Registration,
         new RegisterCustomer({ customerId: c2, name: "Alex", username: Username.make("alex") }),
       ),
       Story.then(
@@ -104,10 +100,10 @@ describe("Domain decision in a story", { tags: ["unit", "local"] }, () => {
   it.effect("a decision's effectful decide reads what the story provides", () =>
     story(
       Story.given(Account.ref("a"), new Deposited({ amount: 100 })),
-      Story.when(Refund, new RefundMoney({ from: a, to: b, amount: 10 })),
+      Story.when(new RefundMoney({ from: a, to: b, amount: 10 })),
       Story.rejected(new NotOwner()),
       Story.provide(CurrentActor, { accountId: "a" }),
-      Story.when(Refund, new RefundMoney({ from: a, to: b, amount: 10 })),
+      Story.when(new RefundMoney({ from: a, to: b, amount: 10 })),
       Story.then(Account.ref("a"), new TransferSent({ to: b, amount: 10 })),
       Story.then(Account.ref("b"), new TransferReceived({ from: a, amount: 10 })),
     ),
@@ -115,13 +111,15 @@ describe("Domain decision in a story", { tags: ["unit", "local"] }, () => {
 });
 
 describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
-  it.effect("the typed client sends it with no target", () =>
+  it.effect("the typed client sends it like any command", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.clientInProcess;
-      yield* bank.Deposit(a, { amount: 100 });
+      yield* bank.Deposit({ accountId: a, amount: 100 });
       const receipt = yield* bank.TransferMoney({ from: a, to: b, amount: 30 });
       expect(receipt).toEqual({
         reply: { balance: 70 },
+        stream: "Account/a",
+        version: 2,
         commits: [
           { stream: "Account/a", version: 2 },
           { stream: "Account/b", version: 1 },
@@ -147,12 +145,14 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
         return { status: response.status, body: yield* response.json };
       });
     return Effect.gen(function* () {
-      yield* post("/Deposit", { target: "a", input: { amount: 100 } });
+      yield* post("/Deposit", { input: { accountId: "a", amount: 100 } });
       const sent = yield* post("/TransferMoney", { input: { from: "a", to: "b", amount: 30 } });
       expect(sent).toEqual({
         status: 200,
         body: {
           reply: { balance: 70 },
+          stream: "Account/a",
+          version: 2,
           commits: [
             { stream: "Account/a", version: 2 },
             { stream: "Account/b", version: 1 },
@@ -176,7 +176,7 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
     );
   });
 
-  it.live("the CLI takes its input as flags, with no --target", () => {
+  it.live("the CLI takes its input as flags", () => {
     const cli = toCli(BankApi, { name: "bank", expose: ["Deposit", "TransferMoney"] });
     const CliEnvironment = Layer.mergeAll(
       FileSystem.layerNoop({}),
@@ -221,9 +221,11 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
           );
           return JSON.parse(stdout.join("\n")) as unknown;
         });
-      yield* run(["deposit", "--target", "a", "--amount", "100"]);
+      yield* run(["deposit", "--account-id", "a", "--amount", "100"]);
       expect(yield* run(["transfer-money", "--from", "a", "--to", "b", "--amount", "30"])).toEqual({
         reply: { balance: 70 },
+        stream: "Account/a",
+        version: 2,
         commits: [
           { stream: "Account/a", version: 2 },
           { stream: "Account/b", version: 1 },
@@ -232,7 +234,7 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(BankLive));
   });
 
-  it.live("an agent's tool takes its input, with no target", () => {
+  it.live("an agent's tool takes its input", () => {
     const tools = DomainAi.toToolkit(BankApi, { expose: ["Deposit", "TransferMoney"] });
     const call = (name: string, params: unknown) =>
       Effect.gen(function* () {
@@ -242,7 +244,7 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
         return { isFailure: last.isFailure, encoded: last.encodedResult as unknown };
       });
     return Effect.gen(function* () {
-      yield* call("DecisionBankApi_Deposit_send", { target: "a", input: { amount: 100 } });
+      yield* call("DecisionBankApi_Deposit_send", { input: { accountId: "a", amount: 100 } });
       expect(
         yield* call("DecisionBankApi_TransferMoney_send", {
           input: { from: "a", to: "b", amount: 30 },
@@ -251,6 +253,8 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
         isFailure: false,
         encoded: {
           reply: { balance: 70 },
+          stream: "Account/a",
+          version: 2,
           commits: [
             { stream: "Account/a", version: 2 },
             { stream: "Account/b", version: 1 },

@@ -94,6 +94,18 @@ export class Account extends Domain.Aggregate("Account", {
     RefundTransfer,
     RecordSettlement,
   ],
+  target: {
+    OpenAccount: (command) => command.accountId,
+    ChangeOwner: (command) => command.accountId,
+    DepositMoney: (command) => command.accountId,
+    WithdrawMoney: (command) => command.accountId,
+    FreezeAccount: (command) => command.accountId,
+    CloseAccount: (command) => command.accountId,
+    DebitTransfer: (command) => command.accountId,
+    CreditTransfer: (command) => command.accountId,
+    RefundTransfer: (command) => command.accountId,
+    RecordSettlement: (command) => command.accountId,
+  },
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened"

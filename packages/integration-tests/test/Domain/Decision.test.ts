@@ -41,7 +41,7 @@ const hosted = Bank.layer(Layer.empty).pipe(Layer.provide(InMemory));
 /** Two accounts, the first with 100. */
 const funded = Effect.gen(function* () {
   const accounts = yield* Account;
-  yield* accounts.send(a, new Deposit({ amount: 100 }));
+  yield* accounts.send(new Deposit({ accountId: a, amount: 100 }));
   return accounts;
 });
 
@@ -200,7 +200,7 @@ describe("Domain decision, unique values", { tags: ["unit", "local"] }, () => {
 
 describe("Domain decision, definitions", { tags: ["unit"] }, () => {
   class Opened extends Domain.Event("Opened") {}
-  class Open extends Domain.Command("Open", { target: Schema.String, events: [Opened] }) {}
+  class Open extends Domain.Command("Open", { input: { id: Schema.String }, events: [Opened] }) {}
   class OpenBoth extends Domain.Command("OpenBoth", {
     input: { left: Schema.String, right: Schema.String },
     events: [Opened],
@@ -210,6 +210,7 @@ describe("Domain decision, definitions", { tags: ["unit"] }, () => {
     state: Schema.Struct({ open: Schema.Boolean }),
     initial: { open: false },
     commands: [Open],
+    target: { Open: (command) => command.id },
     decide: { Open: () => [new Opened()] },
     evolve: { Opened: () => ({ open: true }) },
   }) {}

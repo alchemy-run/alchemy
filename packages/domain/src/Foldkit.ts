@@ -85,10 +85,11 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
   readonly [C in Api.CommandsOf<A> as `Succeeded${C["tag"]}`]: {
     commandId: typeof Schema.String;
     reply: Schema.Schema<Reply<C>>;
-  } & (C["target"] extends Schema.Top
-    ? { receipt: typeof Receipt }
-    : // A command a decision implements commits to every stream it read.
-      { commits: Schema.$Array<typeof Receipt> });
+    /** The first stream it committed to: what a read takes as `atLeast`. */
+    receipt: typeof Receipt;
+    /** Every stream it committed to: more than one for a command a decision implements. */
+    commits: Schema.$Array<typeof Receipt>;
+  };
 } & {
   readonly [C in Api.CommandsOf<A> as `Failed${C["tag"]}`]: {
     commandId: typeof Schema.String;
@@ -96,9 +97,7 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
   };
 };
 
-type Args<C extends DomainCommand.Any> = (C["target"] extends Schema.Top
-  ? { target: Schema.toType<C["target"]> }
-  : {}) & {
+type Args<C extends DomainCommand.Any> = {
   input: Schema.Schema<Input<C>>;
   commandId: typeof Schema.String;
 };
@@ -157,7 +156,8 @@ function commandDefinitions(api: Api.Any): unknown {
     cases[`Succeeded${command.tag}`] = {
       commandId: Schema.String,
       reply: command.reply ?? Schema.Void,
-      ...(command.target === undefined ? { commits: Schema.Array(Receipt) } : { receipt: Receipt }),
+      receipt: Receipt,
+      commits: Schema.Array(Receipt),
     };
     cases[`Failed${command.tag}`] = {
       commandId: Schema.String,
@@ -198,7 +198,6 @@ function commandDefinitions(api: Api.Any): unknown {
     const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
     definitions[command.tag] = Command.define(command.tag, {
       args: {
-        ...(command.target === undefined ? {} : { target: Schema.toType(command.target) }),
         input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
         commandId: Schema.String,
       },
@@ -221,9 +220,8 @@ function commandDefinitions(api: Api.Any): unknown {
             _tag: `Succeeded${command.tag}`,
             commandId,
             reply,
-            ...(command.target === undefined
-              ? { commits: receipt.commits }
-              : { receipt: { stream: receipt.stream, version: receipt.version } }),
+            receipt: { stream: receipt.stream, version: receipt.version },
+            commits: receipt.commits,
           };
         },
         (effect, { commandId }) =>

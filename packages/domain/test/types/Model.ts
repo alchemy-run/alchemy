@@ -15,8 +15,7 @@ const assertType = <T extends true>(_: T) => {};
 class Incremented extends Domain.Event("Incremented", { by: Schema.Int }) {}
 
 class Increment extends Domain.Command("Increment", {
-  target: Schema.String,
-  input: { by: Schema.Int },
+  input: { id: Schema.String, by: Schema.Int },
   events: [Incremented],
 }) {}
 
@@ -26,6 +25,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment],
+  target: { Increment: (command) => command.id },
   decide: {
     Increment: (_, command) => [Incremented.make({ by: command.by })],
   },
@@ -39,8 +39,9 @@ class Counter extends Domain.Aggregate("Counter", {
 const counter: Domain.Aggregate.Any = Counter;
 void counter;
 const ref = Counter.ref("one");
-const when = Story.when(ref, Increment.make({ by: 1 }));
-assertType<Equals<typeof when, WhenStep<typeof Increment>>>(true);
+const when = Story.when(Increment.make({ id: ref.id, by: 1 }));
+const carried: WhenStep<Increment> = when;
+void carried;
 
 class CounterTotal extends Domain.View("CounterTotal", {
   from: [Counter],

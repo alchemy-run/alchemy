@@ -192,7 +192,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     Effect.gen(function* () {
       const base = yield* url;
       const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
-      const exit = yield* api.Explode(fresh("explode")).pipe(Effect.exit);
+      const exit = yield* api.Explode({ id: fresh("explode") }).pipe(Effect.exit);
       if (!Exit.isFailure(exit)) return yield* Effect.die("Explode committed");
       expect(Cause.hasDies(exit.cause)).toBe(true);
       expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(

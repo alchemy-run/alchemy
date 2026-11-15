@@ -19,8 +19,7 @@ import { type Disk, type Intercept, simHost, type Stats } from "./sim-host.ts";
 
 class Booked extends Domain.Event("Booked", { n: Schema.Number }) {}
 class BookMany extends Domain.Command("BookMany", {
-  target: Schema.String,
-  input: { count: Schema.Number },
+  input: { id: Schema.String, count: Schema.Number },
   events: [Booked],
 }) {}
 class Ledger extends Domain.Aggregate("Ledger", {
@@ -28,6 +27,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ count: Schema.Number }),
   initial: { count: 0 },
   commands: [BookMany],
+  target: { BookMany: (command) => command.id },
   decide: {
     BookMany: (ledger, { count }) =>
       Array.from({ length: count }, (_, i) => new Booked({ n: ledger.count + i + 1 })),
@@ -82,7 +82,7 @@ const onSimHost = (stats: Stats) =>
 const booked = Effect.gen(function* () {
   const ledgers = yield* Ledger;
   const ledger = Ledger.ref("main");
-  const receipt = yield* ledgers.send(ledger, new BookMany({ count: ENTRIES }));
+  const receipt = yield* ledgers.send(new BookMany({ id: ledger.id, count: ENTRIES }));
   const atLeast = { stream: receipt.stream, version: receipt.version };
   yield* (yield* Totals).get(ledger, { atLeast });
   yield* (yield* Lines).peek(ledger, { atLeast, timeout: "30 seconds" });
@@ -133,7 +133,7 @@ class BooksBefore extends Domain.Model("Books", {
 
 const sendOne = Effect.gen(function* () {
   const ledger = Ledger.ref("main");
-  const receipt = yield* (yield* Ledger).send(ledger, new BookMany({ count: 1 }));
+  const receipt = yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 1 }));
   return { ledger, receipt };
 });
 
@@ -281,7 +281,9 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         );
         expect(receipt.version).toBe(1);
         // The instance's own state is saved: a second command sees it.
-        const second = yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: 1 }));
+        const second = yield* (yield* Ledger).send(
+          new BookMany({ id: Ledger.ref("main").id, count: 1 }),
+        );
         expect(second.version).toBe(2);
         expect(directory.listed).toEqual([]);
         // It is listed once the directory answers, with no further command.
@@ -291,7 +293,7 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         expect(directory.listed).toContain("main");
         // It is listed once: nothing is pending afterwards.
         const attempts = directory.state.attempts;
-        yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: 1 }));
+        yield* (yield* Ledger).send(new BookMany({ id: Ledger.ref("main").id, count: 1 }));
         yield* Effect.sleep("300 millis");
         expect(directory.state.attempts).toBe(attempts);
       }).pipe(
@@ -395,7 +397,7 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         const ledgers = yield* Ledger;
         const log = yield* MilestoneLog;
         const ledger = Ledger.ref("main");
-        const book = (count: number) => ledgers.send(ledger, new BookMany({ count }));
+        const book = (count: number) => ledgers.send(new BookMany({ id: ledger.id, count }));
         const logged = Effect.map(log.list(ledger), (page) => page.entries.map((e) => e.event.n));
         const milestones = yield* Milestones;
         /** Wait for the view to apply a command. */
@@ -461,7 +463,7 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         // transaction: that work must count as the commit's own call, or it
         // waits on the gate the transaction holds.
         const receipt = yield* ledgers
-          .send(Ledger.ref("gated"), new BookMany({ count: 1 }))
+          .send(new BookMany({ id: Ledger.ref("gated").id, count: 1 }))
           .pipe(Effect.timeout("5 seconds"));
         expect(receipt.version).toBe(1);
       }).pipe(Effect.scoped, Effect.provide(gated));

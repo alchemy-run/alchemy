@@ -12,6 +12,7 @@ export class Notebook extends Domain.Aggregate("Notebook", {
   state: Schema.Struct({ notes: Schema.Int }),
   initial: { notes: 0 },
   commands: [WriteNote],
+  target: { WriteNote: (command) => command.userId },
   decide: {
     WriteNote: Effect.fn(function* (_, cmd, { id }) {
       const user = yield* CurrentUser;
