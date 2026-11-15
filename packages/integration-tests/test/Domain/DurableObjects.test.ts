@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import { type InputGateShape, makeInputGate } from "alchemy/Workers/InputGate";
 import * as Clock from "effect/Clock";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
@@ -93,9 +94,37 @@ type Intercept = (
  * call, with storage that counts rows read and one alarm for its callbacks.
  * Calls cross a JSON boundary, as Workers RPC does.
  */
+/**
+ * Storage behind an instance's input gate, as Rivet's bridge runs it: each
+ * operation waits for its call's turn, and a transaction holds the gate.
+ */
+const gatedStorage = (
+  storage: DurableObjects.ObjectStorage,
+  gate: InputGateShape,
+): DurableObjects.ObjectStorage => ({
+  get: (key) => gate.storage(storage.get(key)),
+  put: ((keyOrEntries: string | Record<string, unknown>, value?: unknown) =>
+    gate.storage(
+      typeof keyOrEntries === "string"
+        ? storage.put(keyOrEntries, value)
+        : storage.put(keyOrEntries),
+    )) as DurableObjects.ObjectStorage["put"],
+  delete: ((keyOrKeys: string | ReadonlyArray<string>) =>
+    typeof keyOrKeys === "string"
+      ? gate.storage(storage.delete(keyOrKeys))
+      : gate.storage(storage.delete(keyOrKeys))) as DurableObjects.ObjectStorage["delete"],
+  list: (options) => gate.storage(storage.list(options)),
+  transaction: (effect) => gate.exclusive(storage.transaction(effect)),
+});
+
 const simHost = (
   stats: Stats,
-  options: { readonly disk?: Disk; readonly intercept?: Intercept } = {},
+  options: {
+    readonly disk?: Disk;
+    readonly intercept?: Intercept;
+    /** Give each instance Rivet's input gate: construction and each call are calls of their own. */
+    readonly inputGate?: boolean;
+  } = {},
 ) => {
   const disk = options.disk ?? { objects: new Map() };
   const classes = new Map<string, DurableObjects.ObjectImpl>();
@@ -107,7 +136,11 @@ const simHost = (
     if (built === undefined) {
       const saved = disk.objects.get(id) ?? { data: new Map(), alarm: undefined, cls, name };
       disk.objects.set(id, saved);
-      const storage = makeStorage(stats, saved.data);
+      const inputGate = options.inputGate ? Effect.runSync(makeInputGate) : undefined;
+      const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        inputGate === undefined ? effect : inputGate.call(effect);
+      const stored = makeStorage(stats, saved.data);
+      const storage = inputGate === undefined ? stored : gatedStorage(stored, inputGate);
       const gate = Semaphore.makeUnsafe(1);
       const scope = Scope.makeUnsafe();
       scopes.set(id, scope);
@@ -165,6 +198,7 @@ const simHost = (
         const record = yield* classes
           .get(cls)!
           .pipe(
+            asCall,
             Effect.provideService(DurableObjects.ObjectState, state),
             Effect.provideService(RuntimeContext, runtime),
             Effect.provideService(Scope.Scope, scope),
@@ -179,6 +213,7 @@ const simHost = (
                   return Effect.isEffect(result)
                     ? Effect.scoped(
                         (result as Effect.Effect<unknown, unknown, RuntimeContext>).pipe(
+                          asCall,
                           Effect.provideService(RuntimeContext, runtime),
                         ),
                       )
@@ -575,5 +610,26 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
       }).pipe(Effect.scoped);
     },
     { timeout: 90_000 },
+  );
+  it.live(
+    "a command commits on a host with an input gate, as Rivet runs one",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const gated = Books.layer(LinesWriterLive).pipe(
+        Layer.provideMerge(DurableObjects.makePlatform(simHost(stats, { inputGate: true }).host)),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+      );
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        // A first commit schedules its listing in the directory inside its
+        // transaction: that work must count as the commit's own call, or it
+        // waits on the gate the transaction holds.
+        const receipt = yield* ledgers
+          .send(Ledger.ref("gated"), new BookMany({ count: 1 }))
+          .pipe(Effect.timeout("5 seconds"));
+        expect(receipt.version).toBe(1);
+      }).pipe(Effect.scoped, Effect.provide(gated));
+    },
+    { timeout: 30_000 },
   );
 });
