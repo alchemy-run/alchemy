@@ -1,4 +1,5 @@
 import { Webhooks } from "@distilled.cloud/stripe";
+import { GetCoreEvent } from "@distilled.cloud/stripe/stripe";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
@@ -8,14 +9,23 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import {
   EventSource,
+  thinWebhookPath,
   webhookPath,
   webhookSecretEnvName,
   type ConsumeEventsProps,
   type EventSourceService,
 } from "./ConsumeEvents.ts";
-import type { StripeEventClass, StripeEventInstance } from "./Events.ts";
+import { EventDestination } from "./EventDestination.ts";
+import {
+  isThinEventClass,
+  type StripeEventClass,
+  type StripeEventInstance,
+  type ThinEventObject,
+} from "./Events.ts";
+import { attachStripeToken, authorizeWith } from "./StripeHttp.ts";
 import { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
 /** A host that accepts environment bindings, such as a Cloudflare Worker. */
@@ -68,42 +78,119 @@ export const ConsumeEventsLive = Layer.effect(
       props: ConsumeEventsProps,
       process: (event: StripeEventInstance) => Effect.Effect<void, never, never>,
     ) {
-      // The signing secret is bound through the host's RuntimeContext, which
+      // Signing secrets are bound through the host's RuntimeContext, which
       // every host provides its init, like `GitHub.RepositoryEventSourceLive`.
       const runtime = yield* RuntimeContext;
-      const path = webhookPath(props.path);
-      const secretKey = webhookSecretEnvName(path);
-      const byType = new Map(props.events.map((event) => [event.type, event] as const));
+      const snapshotEvents = props.events.filter((event) => !isThinEventClass(event));
+      const thinEvents = props.events.filter(isThinEventClass);
 
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
+      // Stripe only delivers to public URLs, and under `alchemy dev` the
+      // host is on localhost: skip the endpoints rather than fail the whole
+      // stack. Deliveries then answer 500 (no signing secret).
+      const provision = (path: string, create: Effect.Effect<void, never, any>) =>
+        globalThis.__ALCHEMY_RUNTIME__
+          ? Effect.void
+          : Namespace.push(
+              host.LogicalId,
+              Effect.gen(function* () {
+                const context = yield* Effect.serviceOption(AlchemyContext);
+                if (Option.isSome(context) && context.value.dev) {
+                  yield* Effect.logWarning(
+                    `Stripe.consumeEvents: no webhook for ${path} under alchemy dev; Stripe only delivers to public URLs, so deploy to receive events.`,
+                  );
+                  return;
+                }
+                yield* create;
+              }),
+            );
+
+      if (snapshotEvents.length > 0) {
+        const path = webhookPath(props.path);
+        yield* provision(
+          path,
           Effect.gen(function* () {
-            // Stripe only delivers to public URLs, and under `alchemy dev` the
-            // host is on localhost: skip the endpoint rather than fail the
-            // whole stack. Deliveries then answer 500 (no signing secret).
-            const context = yield* Effect.serviceOption(AlchemyContext);
-            if (Option.isSome(context) && context.value.dev) {
-              yield* Effect.logWarning(
-                `Stripe.consumeEvents: no webhook endpoint for ${path} under alchemy dev; Stripe only delivers to public URLs, so deploy to receive events.`,
-              );
-              return;
-            }
             const endpoint = yield* WebhookEndpoint(id, {
               url: Output.interpolate`${host.url}${path}`,
-              enabledEvents: [...props.events],
+              enabledEvents: [...snapshotEvents],
             });
             // A binding, not a prop: the endpoint depends on the host's URL.
             yield* bindWebhookSecret(host, endpoint.secret, path);
           }),
         );
+        const secret = runtime.get<unknown>(webhookSecretEnvName(path));
+        const byType = new Map(snapshotEvents.map((event) => [event.type, event] as const));
+        yield* host.route(path, (request) =>
+          handleDelivery(request, secret, (parsed) =>
+            Effect.gen(function* () {
+              const Ctor = byType.get(parsed.type ?? "");
+              if (Ctor === undefined) return;
+              const data =
+                typeof parsed.data === "object" && parsed.data !== null && "object" in parsed.data
+                  ? (parsed.data as { object: unknown }).object
+                  : parsed.data;
+              yield* process(new Ctor(data as never));
+            }),
+          ),
+        );
       }
 
-      const secret = runtime.get<unknown>(secretKey);
-      yield* host.route(path, (request) => handleDelivery(request, secret, byType, process));
+      if (thinEvents.length > 0) {
+        const path = thinWebhookPath(props.path);
+        // A thin delivery only carries the event id: the handler fetches the
+        // event, so the host needs a key that can read events.
+        const token = yield* attachStripeToken(undefined, ["events_read"], "Stripe.ConsumeEvents");
+        const authorize = authorizeWith(token);
+        yield* provision(
+          path,
+          Effect.gen(function* () {
+            const destination = yield* EventDestination(`${id}Thin`, {
+              eventPayload: "thin",
+              enabledEvents: thinEvents.map((event) => event.type),
+              webhookEndpoint: { url: Output.interpolate`${host.url}${path}` },
+            });
+            yield* bindWebhookSecret(host, destination.signingSecret, path);
+          }),
+        );
+        const secret = runtime.get<unknown>(webhookSecretEnvName(path));
+        const byType = new Map(thinEvents.map((event) => [event.type, event] as const));
+        yield* host.route(path, (request) =>
+          handleDelivery(request, secret, (notification) =>
+            Effect.gen(function* () {
+              const Ctor = byType.get(notification.type ?? "");
+              if (Ctor === undefined || typeof notification.id !== "string") return;
+              const event = yield* authorize(GetCoreEvent({ id: notification.id }));
+              const object = yield* decodeThinEvent(event);
+              yield* process(new Ctor(object));
+            }).pipe(Effect.orDie),
+          ),
+        );
+      }
     }) as EventSourceService;
   }),
 );
+
+const ThinEventSchema = Schema.Struct({
+  id: Schema.String,
+  created: Schema.String,
+  livemode: Schema.Boolean,
+  related_object: Schema.optional(
+    Schema.NullOr(Schema.Struct({ id: Schema.String, type: Schema.String, url: Schema.String })),
+  ),
+  data: Schema.optional(Schema.Unknown),
+  context: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+const decodeThinEvent = (event: unknown): Effect.Effect<ThinEventObject, Schema.SchemaError> =>
+  Schema.decodeUnknownEffect(ThinEventSchema)(event).pipe(
+    Effect.map((decoded) => ({
+      id: decoded.id,
+      created: decoded.created,
+      livemode: decoded.livemode,
+      relatedObject: decoded.related_object ?? undefined,
+      data: decoded.data,
+      context: decoded.context ?? undefined,
+    })),
+  );
 
 const asWebhookSecret = (raw: unknown): Redacted.Redacted<string> | undefined => {
   if (raw === undefined || raw === null || raw === "") return undefined;
@@ -123,8 +210,7 @@ const asWebhookSecret = (raw: unknown): Redacted.Redacted<string> | undefined =>
 const handleDelivery = <Req>(
   request: Request,
   secret: Effect.Effect<unknown>,
-  byType: Map<string, StripeEventClass>,
-  process: (event: StripeEventInstance) => Effect.Effect<void, never, Req>,
+  dispatch: (event: Webhooks.StripeEvent) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<Response, never, Req> =>
   Effect.gen(function* () {
     if (request.method !== "POST") {
@@ -149,14 +235,6 @@ const handleDelivery = <Req>(
     if (parsed === undefined) {
       return new Response("invalid signature", { status: 401 });
     }
-    const Ctor = byType.get(parsed.type ?? "");
-    if (Ctor === undefined) {
-      return new Response(null, { status: 200 });
-    }
-    const data =
-      typeof parsed.data === "object" && parsed.data !== null && "object" in parsed.data
-        ? (parsed.data as { object: unknown }).object
-        : parsed.data;
-    yield* process(new Ctor(data as never)).pipe(Effect.orDie);
+    yield* dispatch(parsed);
     return new Response(null, { status: 200 });
   });
