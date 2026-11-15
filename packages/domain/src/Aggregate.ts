@@ -144,12 +144,10 @@ export interface Definition<
    */
   readonly commands?: C;
   /**
-   * One entry per command: the id of the instance the command is for, read
-   * from the command's input. The command is routed to that one instance.
+   * The id of the instance a command is for, read from the command's input.
+   * Each of the aggregate's commands is routed to that one instance.
    */
-  readonly target?: {
-    readonly [T in C[number]["tag"]]: (command: InstanceOf<ByTag<C[number], T>>) => Id["Type"];
-  };
+  readonly keyOf?: (command: InstanceOf<C[number]>) => Id["Type"];
   /**
    * Events it folds but none of its own commands records: what a
    * `Domain.Decision` records on it. `evolve` has a handler for each.
@@ -284,7 +282,7 @@ export interface AnyDefinition {
   readonly state: Schema.Top;
   readonly initial: unknown;
   readonly commands: ReadonlyArray<Command.Any>;
-  readonly target: AnyHandlers;
+  readonly keyOf: ((command: never) => string) | undefined;
   readonly events: ReadonlyArray<Event.Any>;
   readonly decide: AnyHandlers;
   readonly evolve: AnyHandlers;
@@ -604,9 +602,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *   state: Schema.Struct({ balance: Schema.Int }),
  *   initial: { balance: 0 },
  *   commands: [WithdrawMoney],
- *   target: {
- *     WithdrawMoney: (cmd) => cmd.accountId,
- *   },
+ *   keyOf: (cmd) => cmd.accountId,
  *   decide: {
  *     WithdrawMoney: (account, cmd) =>
  *       cmd.amount > account.balance
@@ -649,7 +645,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ### Folding what decisions record
  * A `Domain.Decision` records events on the instances it reads. List them in
  * `events`, with an `evolve` handler for each. An aggregate that only takes
- * part in decisions leaves out `commands`, `target` and `decide`.
+ * part in decisions leaves out `commands`, `keyOf` and `decide`.
  *
  * **Example:** A username, claimed by a registration
  * ```typescript
@@ -681,7 +677,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *     state: Schema.Struct({ balance: Schema.Int }),
  *     initial: { balance: 0 },
  *     commands: [DepositMoney],
- *     target: { DepositMoney: (cmd) => cmd.accountId },
+ *     keyOf: (cmd) => cmd.accountId,
  *     decide: { DepositMoney: (account, cmd) => [new MoneyDeposited({ balanceAfter: account.balance + cmd.amount })] },
  *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
  *   },
@@ -750,7 +746,7 @@ export const commandIdFor = (
  *   state: CustomerState,
  *   initial: { _tag: "New" },
  *   commands: [Register], // declares events: [CustomerRegistered]
- *   target: { Register: (cmd) => cmd.customerId },
+ *   keyOf: (cmd) => cmd.customerId,
  *   decide: {
  *     Register: (customer, cmd) =>
  *       customer._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
@@ -790,7 +786,7 @@ export const make = <
     static readonly definition = {
       ...definition,
       commands,
-      target: definition.target ?? {},
+      keyOf: definition.keyOf,
       decide: definition.decide ?? {},
       // What its commands record, then what decisions record on it.
       events: [
@@ -816,24 +812,21 @@ export const make = <
   } as unknown as AggregateClass<Name, Resolved<Id, S, C, X>>;
 };
 
-/** An aggregate with commands has a `target` and a `decide` handler for each. */
+/** An aggregate with commands says which instance each is for, and decides each. */
 export type Decides<C extends ReadonlyArray<Command.Any>> = [C[number]] extends [never]
   ? unknown
-  : { readonly commands: C; readonly target: object; readonly decide: object };
+  : { readonly commands: C; readonly keyOf: Function; readonly decide: object };
 
 /**
- * The id of the instance a command is for, from the aggregate's `target`;
+ * The id of the instance a command is for, from the aggregate's `keyOf`;
  * `undefined` when the aggregate doesn't handle the command.
  *
  * @internal
  */
 export const targetOf = (aggregate: Any, command: { readonly _tag: string }): string | undefined =>
-  (
-    aggregate.definition.target as unknown as Record<
-      string,
-      ((command: unknown) => string) | undefined
-    >
-  )[command._tag]?.(command);
+  aggregate.definition.commands.some((cls) => cls.tag === command._tag)
+    ? (aggregate.definition.keyOf as ((command: unknown) => string) | undefined)?.(command)
+    : undefined;
 
 /** A definition with its events collected from its commands. */
 export type Resolved<
@@ -841,8 +834,10 @@ export type Resolved<
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
   X extends ReadonlyArray<Event.Any> = readonly [],
-> = Omit<Definition<Id, S, C, X>, "events" | "commands" | "decide" | "target"> &
-  Required<Pick<Definition<Id, S, C, X>, "commands" | "decide" | "target">> & {
+> = Omit<Definition<Id, S, C, X>, "events" | "commands" | "decide" | "keyOf"> &
+  Required<Pick<Definition<Id, S, C, X>, "commands" | "decide">> & {
+    /** Absent on an aggregate with no commands of its own. */
+    readonly keyOf: ((command: InstanceOf<C[number]>) => Id["Type"]) | undefined;
     readonly events: ReadonlyArray<EventsOf<C> | X[number]>;
   };
 

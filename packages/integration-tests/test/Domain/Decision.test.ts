@@ -210,7 +210,7 @@ describe("Domain decision, definitions", { tags: ["unit"] }, () => {
     state: Schema.Struct({ open: Schema.Boolean }),
     initial: { open: false },
     commands: [Open],
-    target: { Open: (command) => command.id },
+    keyOf: (command) => command.id,
     decide: { Open: () => [new Opened()] },
     evolve: { Opened: () => ({ open: true }) },
   }) {}

@@ -224,7 +224,7 @@ import { CustomerId } from "./Customer.id.ts";
 export class Customer extends Domain.Aggregate("Customer", {
   // ...
   commands: [RegisterCustomer],
-  target: { RegisterCustomer: (cmd) => cmd.customerId },
+  keyOf: (cmd) => cmd.customerId,
   decide: {
 -    RegisterCustomer: (customer, cmd) =>
 -      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],

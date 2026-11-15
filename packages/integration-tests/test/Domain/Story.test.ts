@@ -81,12 +81,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number, capped: Schema.Boolean }),
   initial: { total: 0, capped: false },
   commands: [Increment, Cap, ResetCounter, Remind],
-  target: {
-    Increment: (command) => command.id,
-    Cap: (command) => command.id,
-    ResetCounter: (command) => command.id,
-    Remind: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     ResetCounter: Effect.fn(function* () {
       const operator = yield* Operator;
@@ -155,7 +150,7 @@ class Move extends Domain.Aggregate("Move", {
   state: Schema.Struct({}),
   initial: {},
   commands: [MakeMove],
-  target: { MakeMove: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { MakeMove: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
   evolve: { Moved: (s) => s },
 }) {}
@@ -945,7 +940,7 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({}),
       initial: {},
       commands: [SetKey],
-      target: { SetKey: (command) => command.id },
+      keyOf: (command) => command.id,
       decide: { SetKey: (_, { secret }) => [new Keyed({ secret })] },
       evolve: { Keyed: (s) => s },
     }) {}
@@ -1150,7 +1145,7 @@ class Door extends Domain.Aggregate("Door", {
   state: Schema.Struct({}),
   initial: {},
   commands: [RequestCode, RecordOutcome],
-  target: { RequestCode: (command) => command.id, RecordOutcome: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     RequestCode: (_, { code }) => [new CodeRequested({ code })],
     RecordOutcome: (_, { outcome }) => [new CodeOutcome({ outcome })],
@@ -1266,7 +1261,7 @@ class Tallies extends Domain.Aggregate("Tallies", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Tally],
-  target: { Tally: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Tally: (tally) => [new Tallied({ total: tally.total + 1 })] },
   evolve: { Tallied: (_, e) => ({ total: e.total }) },
 }) {}
@@ -1292,7 +1287,7 @@ class Order extends Domain.Aggregate("Order", {
   state: Schema.Struct({ counted: Schema.Number }),
   initial: { counted: 0 },
   commands: [PlaceOrder, RecordCount],
-  target: { PlaceOrder: (command) => command.id, RecordCount: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     PlaceOrder: () => [new OrderPlaced()],
     RecordCount: (_, cmd) => [new OrderCounted({ total: cmd.total })],
@@ -1336,7 +1331,7 @@ class Box extends Domain.Aggregate("Box", {
   state: Schema.Struct({ closed: Schema.Boolean }),
   initial: { closed: false },
   commands: [CloseBox],
-  target: { CloseBox: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { CloseBox: (_, cmd) => [new BoxClosed({ items: cmd.items })] },
   evolve: { BoxClosed: () => ({ closed: true }) },
 }) {}
@@ -1368,7 +1363,7 @@ class Probe extends Domain.Aggregate("Probe", {
   state: Schema.Struct({ started: Schema.Boolean }),
   initial: { started: false },
   commands: [StartProbe],
-  target: { StartProbe: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { StartProbe: (_, cmd) => [new ProbeStarted({ signal: cmd.signal })] },
   evolve: { ProbeStarted: () => ({ started: true }) },
 }) {}

@@ -25,7 +25,7 @@ export class Tour extends Domain.Aggregate("Tour", {
   state: Schema.Struct({}),
   initial: {},
   commands: [BookTour, CancelTour],
-  target: { BookTour: (command) => command.id, CancelTour: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     BookTour: (_, { orgId, unit }) => [new TourBooked({ orgId, unit })],
     CancelTour: (_, { orgId }) => [new TourCancelled({ orgId })],
@@ -107,7 +107,7 @@ export class Board extends Domain.Aggregate("Board", {
   state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
   initial: { notes: [] },
   commands: [Note],
-  target: { Note: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Note: (_, { tour }) => [new Noted({ tour })] },
   evolve: { Noted: (s, e) => ({ notes: [...s.notes, e.tour] }) },
 }) {}

@@ -27,7 +27,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ count: Schema.Number }),
   initial: { count: 0 },
   commands: [BookMany],
-  target: { BookMany: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     BookMany: (ledger, { count }) =>
       Array.from({ length: count }, (_, i) => new Booked({ n: ledger.count + i + 1 })),

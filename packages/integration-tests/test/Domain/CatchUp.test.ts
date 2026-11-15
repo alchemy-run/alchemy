@@ -20,7 +20,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
-  target: { Deposit: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
@@ -35,7 +35,7 @@ class Journal extends Domain.Aggregate("Journal", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Log],
-  target: { Log: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Log: (_, cmd) => [new Logged({ note: cmd.note })] },
   evolve: { Logged: (s) => s },
 }) {}

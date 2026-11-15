@@ -32,7 +32,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [DepositMoney],
-  target: { DepositMoney: (cmd) => cmd.accountId },
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     DepositMoney: (s, cmd) =>
       cmd.amount > 10_000

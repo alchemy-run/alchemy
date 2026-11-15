@@ -66,11 +66,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: AccountState,                    // a Schema, usually a TaggedStruct union
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],  // events derive from the commands
-  target: {
-    OpenAccount: (cmd) => cmd.accountId,
-    DepositMoney: (cmd) => cmd.accountId,
-    WithdrawMoney: (cmd) => cmd.accountId,
-  },
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],

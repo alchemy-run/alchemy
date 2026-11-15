@@ -50,7 +50,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
-  target: { Deposit: (command) => command.walletId },
+  keyOf: (command) => command.walletId,
   decide: {
     Deposit: (wallet, cmd) =>
       cmd.amount > 100
@@ -222,7 +222,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Withdraw],
-      target: { Withdraw: (command) => command.walletId },
+      keyOf: (command) => command.walletId,
       decide: { Withdraw: () => [] },
       evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
     }) {}
@@ -352,7 +352,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Reset],
-      target: { Reset: (command) => command.walletId },
+      keyOf: (command) => command.walletId,
       decide: { Reset: () => [] },
       evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
     }) {}

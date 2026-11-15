@@ -40,7 +40,7 @@ class Wallet extends Domain.Aggregate(
     state: Schema.Struct({ balance: Schema.Int }),
     initial: { balance: 0 },
     commands: [Deposit, Close],
-    target: { Deposit: (command) => command.walletId, Close: (command) => command.walletId },
+    keyOf: (command) => command.walletId,
     decide: {
       Deposit: (wallet, cmd) => [
         new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),

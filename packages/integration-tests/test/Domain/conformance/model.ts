@@ -49,7 +49,7 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment, Explode],
-  target: { Increment: (command) => command.id, Explode: (command) => command.id },
+  keyOf: (command) => command.id,
   events: [Taken, Received],
   decide: {
     Increment: (_, command) =>
@@ -88,7 +88,7 @@ export class Echo extends Domain.Aggregate("Echo", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Mirror],
-  target: { Mirror: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Mirror: (_, command) => [new Mirrored({ by: command.by })],
   },
@@ -224,11 +224,7 @@ export class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
-  target: {
-    PlaceHold: (command) => command.id,
-    ReleaseHold: (command) => command.id,
-    ExpireHold: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],

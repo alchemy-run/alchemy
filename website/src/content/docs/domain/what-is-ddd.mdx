@@ -116,11 +116,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],
-  target: {
-    OpenAccount: (cmd) => cmd.accountId,
-    DepositMoney: (cmd) => cmd.accountId,
-    WithdrawMoney: (cmd) => cmd.accountId,
-  },
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],

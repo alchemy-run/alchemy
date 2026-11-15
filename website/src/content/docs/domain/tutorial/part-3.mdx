@@ -55,7 +55,7 @@ export class Customer extends Domain.Aggregate("Customer", {
   state: Schema.Struct({ name: Schema.NullOr(Schema.String) }),
   initial: { name: null },
   commands: [RegisterCustomer],
-  target: { RegisterCustomer: (cmd) => cmd.customerId },
+  keyOf: (cmd) => cmd.customerId,
   decide: {
     RegisterCustomer: (customer, cmd) =>
       customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],

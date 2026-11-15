@@ -58,7 +58,7 @@ export class Transfer extends Domain.Decision(TransferMoney, {
 
 Three things change around it:
 
-- **A command has no `target`.** Its input names every instance it involves. An aggregate that implements it says which field is its instance, in a `target` map; a decision names them in `reads`. So an implementation can move from an aggregate to a decision without changing the command or its callers.
+- **A command has no `target`.** Its input names every instance it involves. An aggregate that implements it says which field is its instance, with `keyOf`; a decision names them in `reads`. So an implementation can move from an aggregate to a decision without changing the command or its callers.
 - **An aggregate lists `events` it folds but doesn't decide.** `evolve` covers them. An aggregate that only takes part in decisions leaves out `commands` and `decide`.
 - **A model lists `decisions`.** Every command has exactly one implementation. A second one is a type error on its entry in the model (`"OpenBoth is already implemented by Door"`) and a `DefinitionError` (`ImplementedTwice`) from `Domain.verify`.
 

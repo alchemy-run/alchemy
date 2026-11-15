@@ -33,7 +33,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit, Audit],
-  target: { Deposit: (command) => command.id, Audit: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Deposit: (_, { amount }) => [new Deposited({ amount })],
     Audit: () => Effect.die(new Error(SECRET)),
@@ -52,7 +52,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Book],
-  target: { Book: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Book: (_, { wallet, amount, at }) => [new Booked({ wallet, amount, at })] },
   evolve: { Booked: (s, e) => ({ total: s.total + e.amount }) },
 }) {}
@@ -89,7 +89,7 @@ class Parcel extends Domain.Aggregate("Parcel", {
   state: Schema.Struct({ to: Schema.String, ref: Schema.String }),
   initial: { to: "", ref: "" },
   commands: [Ship],
-  target: { Ship: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Ship: (_, { target, commandId }) => [new Shipped({ to: target, ref: commandId })],
   },

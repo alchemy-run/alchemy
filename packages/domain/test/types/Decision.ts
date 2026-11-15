@@ -34,7 +34,7 @@ class Door extends Domain.Aggregate("Door", {
   state: Schema.Struct({ open: Schema.Boolean }),
   initial: { open: false },
   commands: [Open],
-  target: { Open: (command) => command.id },
+  keyOf: (command) => command.id,
   events: [Closed, Painted],
   decide: { Open: () => [Opened.make()] },
   evolve: {
@@ -75,7 +75,7 @@ class Shut extends Domain.Decision(CloseBoth, {
 }) {}
 
 // An aggregate with a command says which instance each is for.
-// @ts-expect-error Property 'target' is missing
+// @ts-expect-error Property 'keyOf' is missing
 class Untargeted extends Domain.Aggregate("Untargeted", {
   id: Schema.String,
   state: Schema.Struct({}),
@@ -92,7 +92,7 @@ class Shed extends Domain.Aggregate("Shed", {
   initial: {},
   commands: [Open],
   // @ts-expect-error a plain string is not a ShedId
-  target: { Open: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Open: () => [Opened.make()] },
   evolve: { Opened: (shed) => shed },
 }) {}
@@ -104,7 +104,7 @@ class Undecided extends Domain.Aggregate("Undecided", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Open],
-  target: { Open: (command) => command.id },
+  keyOf: (command) => command.id,
   evolve: { Opened: (state) => state },
 }) {}
 
@@ -114,7 +114,7 @@ class Gate extends Domain.Aggregate("Gate", {
   state: Schema.Struct({ opened: Schema.Int }),
   initial: { opened: 0 },
   commands: [OpenGate],
-  target: { OpenGate: (command) => command.id },
+  keyOf: (command) => command.id,
   events: [Painted],
   decide: {
     OpenGate: (gate, cmd) => (gate.opened > cmd.limit ? [] : [Opened.make()]),

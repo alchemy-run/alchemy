@@ -37,11 +37,7 @@ class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
-  target: {
-    PlaceHold: (command) => command.id,
-    ReleaseHold: (command) => command.id,
-    ExpireHold: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],
@@ -135,12 +131,7 @@ class Ticket extends Domain.Aggregate("Ticket", {
   state: Schema.Struct({ status: Schema.Literals(["none", "open", "paused", "stalled"]) }),
   initial: { status: "none" },
   commands: [OpenTicket, PauseTicket, ResumeTicket, MarkStalled],
-  target: {
-    OpenTicket: (command) => command.id,
-    PauseTicket: (command) => command.id,
-    ResumeTicket: (command) => command.id,
-    MarkStalled: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     OpenTicket: () => [new TicketOpened()],
     PauseTicket: () => [new TicketPaused()],

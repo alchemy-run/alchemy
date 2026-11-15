@@ -31,7 +31,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
-  target: { Deposit: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Deposit: (wallet, cmd) => [
       new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),
@@ -55,7 +55,7 @@ class Payment extends Domain.Aggregate("Payment", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Send],
-  target: { Send: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Send: (_, { from, to, amount }) => [new Sent({ from, to, amount })] },
   evolve: { Sent: (s) => s },
 }) {}
@@ -197,7 +197,7 @@ class Review extends Domain.Aggregate("Review", {
   state: Schema.Struct({ flags: Schema.Number }),
   initial: { flags: 0 },
   commands: [Flag],
-  target: { Flag: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Flag: (_, cmd) => [new Flagged({ reason: cmd.reason })] },
   evolve: { Flagged: (s) => ({ flags: s.flags + 1 }) },
 }) {}

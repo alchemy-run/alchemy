@@ -16,7 +16,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit, Withdraw],
-  target: { Deposit: (command) => command.id, Withdraw: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })],
     Withdraw: (_, cmd) => [new Withdrawn({ amount: cmd.amount })],

@@ -17,7 +17,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
-  target: { Deposit: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
@@ -32,7 +32,7 @@ class Payment extends Domain.Aggregate("Payment", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Send],
-  target: { Send: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Send: (_, { to, amount }) => [new Sent({ to, amount })] },
   evolve: { Sent: (s) => s },
 }) {}
@@ -176,31 +176,28 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
     });
   });
 
-  describe("command target", { tags: ["unit", "local"] }, () => {
+  describe("aggregate keyOf", { tags: ["unit", "local"] }, () => {
     it("a command addresses its aggregate's id", () => {
       class Account extends Domain.Aggregate("Account", {
         id: AccountId,
         state: Schema.Struct({}),
         initial: {},
         commands: [OpenAccount],
-        target: { OpenAccount: (command) => command.accountId },
+        keyOf: (command) => command.accountId,
         decide: { OpenAccount: () => [new Opened()] },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.ref("a-1").id).toBe("a-1");
     });
 
-    it("a command whose target is another id schema is a type error", () => {
+    it("a keyOf that returns another id schema is a type error", () => {
       class Account extends Domain.Aggregate("Account", {
         id: AccountId,
         state: Schema.Struct({}),
         initial: {},
         commands: [OpenAccount, OpenForCustomer],
-        target: {
-          OpenAccount: (command) => command.accountId,
-          // @ts-expect-error a CustomerId is not this aggregate's id
-          OpenForCustomer: (command) => command.customerId,
-        },
+        // @ts-expect-error a CustomerId is not this aggregate's id
+        keyOf: (command) => ("accountId" in command ? command.accountId : command.customerId),
         decide: {
           OpenAccount: () => [new Opened()],
           OpenForCustomer: () => [new Opened()],
@@ -210,14 +207,14 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
       expect(Account.aggregateName).toBe("Account");
     });
 
-    it("a command whose target is wider than the id is a type error", () => {
+    it("a keyOf that returns a wider type than the id is a type error", () => {
       class Account extends Domain.Aggregate("Account", {
         id: AccountId,
         state: Schema.Struct({}),
         initial: {},
         commands: [OpenAny],
         // @ts-expect-error a plain string is not this aggregate's id
-        target: { OpenAny: (command) => command.id },
+        keyOf: (command) => command.id,
         decide: { OpenAny: () => [new Opened()] },
         evolve: { Opened: (s) => s },
       }) {}

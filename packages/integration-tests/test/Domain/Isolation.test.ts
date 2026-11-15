@@ -19,7 +19,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Open],
-  target: { Open: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Open: (_, { owner }) => [new Opened({ owner })] },
   evolve: { Opened: (_, { owner }) => ({ owner }) },
 }) {}

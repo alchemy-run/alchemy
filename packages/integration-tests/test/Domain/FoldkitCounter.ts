@@ -30,7 +30,7 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment, Reset],
-  target: { Increment: (command) => command.counterId, Reset: (command) => command.counterId },
+  keyOf: (command) => command.counterId,
   decide: {
     Increment: (_, { amount }) =>
       amount > 10 ? new Limit({ amount }) : [Incremented.make({ amount })],

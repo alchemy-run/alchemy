@@ -25,7 +25,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment],
-  target: { Increment: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Increment: (_, command) => [Incremented.make({ by: command.by })],
   },

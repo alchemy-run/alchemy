@@ -37,7 +37,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Open, Debit],
-  target: { Open: (command) => command.id, Debit: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
     // The handler records what it wants on the engine's span; nothing else from the payload is.
@@ -72,7 +72,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ audits: Schema.Number }),
   initial: { audits: 0 },
   commands: [Audit, Remind],
-  target: { Audit: (command) => command.id, Remind: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Audit: (_, cmd) => [new Audited({ wallet: cmd.wallet })],
     Remind: () => [new Reminded()],

@@ -48,13 +48,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ open: Schema.Boolean, balance: Schema.Number }),
   initial: { open: false, balance: 0 },
   commands: [Open, Close, Debit, Credit, Refund],
-  target: {
-    Open: (command) => command.id,
-    Close: (command) => command.id,
-    Debit: (command) => command.id,
-    Credit: (command) => command.id,
-    Refund: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
     Close: () => [new Closed()],
@@ -97,7 +91,7 @@ class Transfer extends Domain.Aggregate("Transfer", {
   state: Schema.Struct({ requested: Schema.Boolean }),
   initial: { requested: false },
   commands: [RequestTransfer],
-  target: { RequestTransfer: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     RequestTransfer: (transfer, cmd) =>
       transfer.requested

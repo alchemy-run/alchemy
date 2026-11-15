@@ -77,7 +77,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: WalletState,
   initial: { owner: null, balance: 0, at: null },
   commands: [Deposit],
-  target: { Deposit: (command) => command.walletId },
+  keyOf: (command) => command.walletId,
   decide: {
     Deposit: Effect.fn(function* (_, cmd) {
       if (cmd.amount > 100) return yield* new OverLimit({ limit: 100 });
@@ -148,7 +148,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Sign],
-  target: { Sign: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Sign: Effect.fn(function* () {
       return [new Signed({ owner: yield* Owner })];
@@ -644,7 +644,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Credit],
-      target: { Credit: (command) => command.id },
+      keyOf: (command) => command.id,
       decide: { Credit: () => [] },
       evolve: { Credited: (_, e) => ({ balance: e.balance }) },
     }) {}

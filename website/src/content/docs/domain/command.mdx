@@ -111,15 +111,13 @@ export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
 
 The brand makes the id its own type. A `CustomerId` is a string too, but passing one where an `AccountId` is expected is a type error, so a command can't be sent to the wrong kind of instance.
 
-The aggregate that handles the command says which field that is, in its `target`. The model routes the command to that one instance.
+The aggregate that handles the command says which field that is, with `keyOf`. The model routes the command to that one instance.
 
 ```typescript title="src/Account.aggregate.ts"
-target: {
-  WithdrawMoney: (cmd) => cmd.accountId,
-},
+keyOf: (cmd) => cmd.accountId,
 ```
 
-The field must hold the aggregate's own id. Returning a `CustomerId`, or a plain string, from `Account`'s `target` is a type error.
+`keyOf` receives any of the aggregate's commands, so they share the field's name. It must return the aggregate's own id: returning a `CustomerId`, or a plain string, from `Account`'s `keyOf` is a type error.
 
 A command that involves several instances names each of them in its input, and a [decision](/domain/decision) implements it.
 

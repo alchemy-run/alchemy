@@ -68,13 +68,7 @@ class Account extends Domain.Aggregate("Account", {
   state: AccountState,
   initial: { owner: "", balance: 0, frozen: false },
   commands: [Open, Deposit, Withdraw, Freeze, Stamp],
-  target: {
-    Open: (command) => command.id,
-    Deposit: (command) => command.id,
-    Withdraw: (command) => command.id,
-    Freeze: (command) => command.id,
-    Stamp: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     Open: (_, { owner }, { now, commandId, stream, version }) => [
       new Opened({ owner, at: DateTime.toEpochMillis(now) }),
@@ -116,7 +110,7 @@ class Transfer extends Domain.Aggregate("Transfer", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Move],
-  target: { Move: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Move: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
   evolve: { Moved: (s) => s },
 }) {}
@@ -176,7 +170,7 @@ class Later extends Domain.Aggregate("Later", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Wait, Stray],
-  target: { Wait: (command) => command.id, Stray: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Wait: () => Effect.promise(() => Promise.resolve([new Waited()])),
     Stray: () => [new Frozen({ by: "nobody" })] as never,
@@ -208,7 +202,7 @@ class Door extends Domain.Aggregate("Door", {
   state: Schema.Struct({ shut: Schema.Boolean, by: Schema.String }),
   initial: { shut: false, by: "" },
   commands: [Close],
-  target: { Close: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Close: (door, { by }) => (door.shut ? AlreadyShut.make({ by: door.by }) : [Shut.make({ by })]),
   },

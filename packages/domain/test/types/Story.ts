@@ -22,7 +22,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Reset],
-  target: { Reset: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Reset: () => [Done.make()] },
   evolve: { Done: (s) => s },
 }) {}

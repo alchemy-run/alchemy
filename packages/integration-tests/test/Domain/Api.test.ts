@@ -49,11 +49,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number, closed: Schema.Boolean }),
   initial: { balance: 0, closed: false },
   commands: [Deposit, Withdraw, Close],
-  target: {
-    Deposit: (command) => command.id,
-    Withdraw: (command) => command.id,
-    Close: (command) => command.id,
-  },
+  keyOf: (command) => command.id,
   decide: {
     Deposit: (account, { amount }) =>
       account.closed ? new AccountClosed() : [new Deposited({ amount })],
@@ -228,7 +224,7 @@ class Vault extends Domain.Aggregate("Vault", {
   state: Schema.Struct({ items: Schema.Array(Schema.String) }),
   initial: { items: [] },
   commands: [Store],
-  target: { Store: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Store: (_, { item }) =>
       item === "ice"
@@ -321,7 +317,7 @@ class Note extends Domain.Aggregate("Note", {
   state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
   initial: { text: "", by: null },
   commands: [Write],
-  target: { Write: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Write: Effect.fn(function* (_, cmd) {
       return [new Written({ text: cmd.text, by: yield* Author })];
@@ -544,7 +540,7 @@ class Board extends Domain.Aggregate("Board", {
   state: Schema.Struct({ text: Schema.String }),
   initial: { text: "" },
   commands: [Post],
-  target: { Post: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: {
     Post: Effect.fn(function* (_, cmd) {
       return [new Posted({ text: cmd.text, by: yield* Author })];

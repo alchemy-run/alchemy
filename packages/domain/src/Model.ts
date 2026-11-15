@@ -896,7 +896,7 @@ const aggregateClient = (
       "domain.id": Aggregate.targetId(target),
     },
   });
-  /** The instance a command is for, from the aggregate's `target`. */
+  /** The instance a command is for, from the aggregate's `keyOf`. */
   const targetFor = (command: { readonly _tag: string }): Effect.Effect<string> =>
     Effect.suspend(() => {
       const target = Aggregate.targetOf(aggregate, command);

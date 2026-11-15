@@ -98,9 +98,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount],
-  target: {
-    OpenAccount: (cmd) => cmd.accountId,
-  },
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -111,7 +109,7 @@ export class Account extends Domain.Aggregate("Account", {
 }) {}
 ```
 
-The account is an aggregate. `target` says which account a command is for. `decide` takes a command and that account's current state, and returns events or a rejection. `evolve` folds each event into the next state.
+The account is an aggregate. `keyOf` says which account a command is for. `decide` takes a command and that account's current state, and returns events or a rejection. `evolve` folds each event into the next state.
 
 ## Group it in a model
 
@@ -232,10 +230,7 @@ export class Account extends Domain.Aggregate("Account", {
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount],
 +  commands: [OpenAccount, DepositMoney],
-  target: {
-    OpenAccount: (cmd) => cmd.accountId,
-+    DepositMoney: (cmd) => cmd.accountId,
-  },
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -333,11 +328,7 @@ export class Account extends Domain.Aggregate("Account", {
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount, DepositMoney],
 +  commands: [OpenAccount, DepositMoney, WithdrawMoney],
-  target: {
-    OpenAccount: (cmd) => cmd.accountId,
-    DepositMoney: (cmd) => cmd.accountId,
-+    WithdrawMoney: (cmd) => cmd.accountId,
-  },
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],

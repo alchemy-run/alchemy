@@ -65,7 +65,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
-  target: { Deposit: (command) => command.walletId },
+  keyOf: (command) => command.walletId,
   decide: {
     Deposit: (wallet, cmd) =>
       cmd.amount > 100
@@ -459,7 +459,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Rename],
-          target: { Rename: (command) => command.walletId },
+          keyOf: (command) => command.walletId,
           decide: { Rename: () => [] },
           evolve: {},
         }) {}
@@ -495,7 +495,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Clash],
-          target: { deposit: (command) => command.walletId },
+          keyOf: (command) => command.walletId,
           decide: { deposit: () => [] },
           evolve: { Deposited: (s) => s },
         }) {}
@@ -515,7 +515,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Reserved],
-          target: { Reserved: (command) => command.walletId },
+          keyOf: (command) => command.walletId,
           decide: { Reserved: () => [] },
           evolve: {},
         }) {}
@@ -547,7 +547,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({ balance: Schema.Int }),
           initial: { balance: 0 },
           commands: [Withdraw],
-          target: { Withdraw: (command) => command.walletId },
+          keyOf: (command) => command.walletId,
           decide: { Withdraw: () => [] },
           evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
         }) {}

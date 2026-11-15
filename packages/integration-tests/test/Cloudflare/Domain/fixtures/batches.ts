@@ -23,7 +23,7 @@ export class Pinger extends Domain.Aggregate("Pinger", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Ping],
-  target: { Ping: (command) => command.id },
+  keyOf: (command) => command.id,
   decide: { Ping: (_, { group, slow }) => [new Pinged({ group, slow })] },
   evolve: { Pinged: (s) => s },
 }) {}

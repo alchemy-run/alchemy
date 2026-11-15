@@ -40,12 +40,7 @@ class Registry extends Domain.Aggregate("Registry", {
   state: Schema.Array(Schema.String),
   initial: [],
   commands: [Record, Admit, Count, Batch],
-  target: {
-    Record: (command) => command.registryId,
-    Admit: (command) => command.registryId,
-    Count: (command) => command.registryId,
-    Batch: (command) => command.registryId,
-  },
+  keyOf: (command) => command.registryId,
   decide: {
     Record: () => [new Recorded()],
     Admit: (_, c) => [new Admitted({ payloadHash: c.payloadHash })],
@@ -75,7 +70,7 @@ class Subject extends Domain.Aggregate("Subject", {
   state: Schema.Int,
   initial: 0,
   commands: [Request, Settle],
-  target: { Request: (command) => command.subjectId, Settle: (command) => command.subjectId },
+  keyOf: (command) => command.subjectId,
   decide: { Request: () => [new Requested()], Settle: () => [new Settled()] },
   evolve: { Requested: (s) => s, Settled: (s) => s + 1 },
 }) {}
