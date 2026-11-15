@@ -34,10 +34,17 @@ class Session extends RpcMiddleware.Service<Session, { provides: Owner }>()("Tes
   // A middleware error answers with the status it is annotated with.
   error: Unauthenticated.pipe(HttpApiSchema.status(401)),
 }) {}
+/** What a defect says: an HTTP caller must never receive it. */
+const SECRET = "secret: SELECT * FROM wallets";
+/** The owner whose session adapter dies. */
+const CRASH = "crash";
 const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
   Option.match(Headers.get(headers, "x-owner"), {
     onNone: () => Effect.fail(new Unauthenticated()),
-    onSome: (owner) => Effect.provideService(effect, Owner, owner),
+    onSome: (owner) =>
+      owner === CRASH
+        ? Effect.die(new Error(`${SECRET} (session)`))
+        : Effect.provideService(effect, Owner, owner),
   }),
 );
 
@@ -74,6 +81,8 @@ class Wallet extends Domain.Aggregate("Wallet", {
   decide: {
     Deposit: Effect.fn(function* (_, cmd) {
       if (cmd.amount > 100) return yield* new OverLimit({ limit: 100 });
+      // An amount the wallet's adapter dies on.
+      if (cmd.amount === 13) return yield* Effect.die(new Error(`${SECRET} (decide)`));
       return [new Deposited({ owner: yield* Owner, amount: cmd.amount, at: cmd.at })];
     }),
   },
@@ -289,6 +298,27 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       expect(status).toBe(200);
       // The transform is decoded once on the way in and encoded once on the way out.
       expect(body).toEqual({ reply: { balance: 40, at }, stream: expect.any(String), version: 1 });
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("a defect answers with a 500 that holds nothing of its cause", () =>
+    Effect.gen(function* () {
+      const responses = [
+        // A defect in the command's handler, then in its middleware, then in a read's middleware.
+        yield* execute("POST", "/Deposit", {
+          owner: "sam",
+          body: { target: "w-defect", input: { amount: 13, at } },
+        }),
+        yield* execute("POST", "/Deposit", {
+          owner: CRASH,
+          body: { target: "w-defect", input: { amount: 1, at } },
+        }),
+        yield* execute("GET", "/Balance/w-defect", { owner: CRASH }),
+      ];
+      for (const response of responses) {
+        expect(response.status).toBe(500);
+        expect(yield* response.text).not.toContain(SECRET);
+      }
     }).pipe(Effect.provide(Served)),
   );
 

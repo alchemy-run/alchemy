@@ -1,7 +1,6 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import { GetProductCatalogTrialOffer } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -11,8 +10,7 @@ const { test } = Test.make({ providers: Stripe.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const getOffer = (id: string) =>
-  GetProductCatalogTrialOffer({ id }).pipe(withRequestOptions({ apiVersion: "2026-10-28.endive" }));
+const getOffer = (id: string) => GetProductCatalogTrialOffer({ id });
 
 test.provider(
   "create, deactivate, and replace a trial offer",

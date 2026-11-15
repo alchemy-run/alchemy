@@ -1,0 +1,58 @@
+---
+title: VPCs and NAT
+description: Put Droplets, Kubernetes clusters and databases on a private DigitalOcean VPC, peer two VPCs, and give private machines one outbound address with a NAT gateway.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **VPC** is a private network in one region. Droplets, Kubernetes nodes, database clusters and load balancers in it reach each other on private addresses, and traffic between them never leaves DigitalOcean's network. Every region has a **default VPC**, which resources join when you don't name one. **Peering** joins two VPCs, and a **NAT gateway** gives machines in a VPC one shared public address for outbound traffic.
+
+<Tree
+  nodes={[
+    {
+      id: "region", label: "nyc3", type: "region", icon: "map-pin", dashed: true, colGap: 8,
+      areas: ["vpc nat"],
+      phoneAreas: ["vpc", "nat"],
+    },
+    {
+      id: "vpc", label: "AppVpc", type: "VPC · 10.40.0.0/20", parent: "region", icon: "network",
+      areas: ["db web"], colGap: 8,
+    },
+    { id: "web", label: "Web", type: "Droplet", parent: "vpc", tone: "accent", icon: "server", specs: [["ip", "10.40.0.2"]] },
+    { id: "db", label: "Db", type: "Postgres cluster", parent: "vpc", icon: "brand:postgresql", specs: [["ip", "10.40.0.5"]] },
+    { id: "nat", label: "Egress", type: "NAT gateway · one public IP", parent: "region", icon: "arrow-up-right" },
+  ]}
+  links={[
+    { from: "web", to: "db", label: "private" },
+    { from: "web", to: "nat", label: "outbound" },
+  ]}
+  caption="Resources in the VPC reach each other privately. Outbound traffic leaves through the NAT gateway's single address, which a partner can allow-list."
+/>
+
+## Create a VPC
+
+```typescript
+const vpc = yield* DigitalOcean.Vpc("AppVpc", { region: "nyc3", ipRange: "10.40.0.0/20" });
+```
+
+Pass `vpc.vpcId` as `vpcUuid` on a Droplet, Kubernetes cluster, database cluster or load balancer in the same region. Without `ipRange`, DigitalOcean picks one that doesn't overlap the team's other VPCs.
+
+## Peer two VPCs
+
+```typescript
+yield* DigitalOcean.VpcPeering("AppToData", { vpcIds: [app.vpcId, data.vpcId] });
+```
+
+Peered VPCs, even in different regions, reach each other on private addresses.
+
+## Route outbound traffic through NAT
+
+```typescript
+yield* DigitalOcean.NatGateway("Egress", { region: "nyc3", vpcIds: [vpc.vpcId] });
+```
+
+## Limits
+
+- The first VPC in a region becomes that region's default, and a default VPC can't be deleted. Create VPCs in regions where the team already has one, or expect the first to stay.
+- A VPC's region and IP range can't change: changing them creates a new VPC.
+- A VPC with members can't be deleted; destroy waits until they're gone.

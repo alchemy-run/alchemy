@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteAccount,
   GetAccounts,
@@ -678,11 +677,8 @@ export const AccountProvider = () =>
             ? { groups: { payments_pricing: news.groups.paymentsPricing } }
             : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-account-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-account-${instanceId}`,
+        });
         createdThisPass = true;
       }
 

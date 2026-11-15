@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import type { StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetIssuingCards,
@@ -843,11 +842,8 @@ export const IssuingCardProvider = () =>
                 },
               }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-issuing-card-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-issuing-card-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

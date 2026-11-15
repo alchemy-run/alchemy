@@ -10,7 +10,6 @@ import { Resource } from "alchemy/Resource";
 import { subsetDiffers } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import { fromWire, toWire } from "./internal/case.ts";
-import { atSpecApiVersion } from "./internal/version.ts";
 import type { Providers } from "./Providers.ts";
 
 /** How often Stripe pays out the balance. */
@@ -154,13 +153,12 @@ const mergeCaptured = (later: unknown, earlier: unknown): unknown => {
   return Object.fromEntries([...keys].map((key) => [key, mergeCaptured(later[key], earlier[key])]));
 };
 
-// Balance settings nest under `payments` only from the spec's API version.
-const get = () => GetBalanceSettings({}).pipe(atSpecApiVersion);
+const get = () => GetBalanceSettings({});
 
 const update = (payments: BalanceSettingsPayments) =>
   CreateBalanceSettings({
     payments: toWire<NonNullable<CreateBalanceSettingsRequest["payments"]>>(payments),
-  }).pipe(atSpecApiVersion);
+  });
 
 export const BalanceSettingsProvider = () =>
   Provider.succeed(BalanceSettings, {

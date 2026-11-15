@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   CreateProductCatalogTrialOffer,
   GetProductCatalogTrialOffer,
@@ -11,7 +10,6 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { atSpecApiVersion, STRIPE_SPEC_API_VERSION } from "./internal/version.ts";
 import { isMissingStripeResource } from "./missing.ts";
 import type { Price } from "./Price.ts";
 import type { Providers } from "./Providers.ts";
@@ -158,7 +156,6 @@ const matches = (news: TrialOfferProps, attrs: TrialOfferAttributes) =>
 
 const getById = (id: string) =>
   GetProductCatalogTrialOffer({ id }).pipe(
-    atSpecApiVersion,
     Effect.catchIf(isMissingStripeResource, () => Effect.undefined),
   );
 
@@ -170,7 +167,7 @@ const findMatching = Effect.fn(function* (news: TrialOfferProps) {
       prices: [priceIdOf(news.price)],
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(atSpecApiVersion);
+    });
     const match = response.data.find((offer) => offer.active && matches(news, toAttrs(offer)));
     if (match !== undefined) return match;
     if (!response.has_more || response.data.length === 0) return undefined;
@@ -227,18 +224,14 @@ export const TrialOfferProvider = () =>
           end_behavior: { transition: { price: priceIdOf(news.endBehavior.transition.price) } },
           active: desiredActive,
           ...(news.nickname !== undefined ? { nickname: news.nickname } : {}),
-        }).pipe(
-          withRequestOptions({
-            apiVersion: STRIPE_SPEC_API_VERSION,
-            idempotencyKey: `alchemy-trial-offer-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-trial-offer-${instanceId}`,
+        });
       }
       if (current.active !== desiredActive) {
         current = yield* UpdateProductCatalogTrialOffer({
           id: current.id,
           active: desiredActive,
-        }).pipe(atSpecApiVersion);
+        });
       }
       return toAttrs(current);
     }),
@@ -247,7 +240,6 @@ export const TrialOfferProvider = () =>
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
       yield* UpdateProductCatalogTrialOffer({ id: existing.id, active: false }).pipe(
-        atSpecApiVersion,
         Effect.catchIf(isMissingStripeResource, () => Effect.void),
       );
     }),

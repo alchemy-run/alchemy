@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteCoupon,
   GetCoupons,
@@ -477,11 +476,8 @@ export const CouponProvider = () =>
             ? { applies_to: { products: news.appliesTo.products } }
             : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-coupon-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-coupon-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

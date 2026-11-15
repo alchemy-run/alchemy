@@ -18,7 +18,6 @@ import { tagRecord } from "alchemy/Tags";
 import { arrayEquals } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { atSpecApiVersion } from "./internal/version.ts";
 import {
   alchemyMetadataKeys,
   createInternalMetadata,
@@ -32,9 +31,6 @@ import type { Providers } from "./Providers.ts";
 const LIST_PAGE_SIZE = 20;
 const LIST_MAX_PAGES = 100;
 const NAME_MAX_LENGTH = 100;
-
-/** The v2 API rejects calls without an explicit version. */
-const atV2ApiVersion = atSpecApiVersion;
 
 /** `snapshot` delivers full objects; `thin` delivers ids you fetch yourself. */
 export type EventDestinationPayload = "snapshot" | "thin";
@@ -304,7 +300,6 @@ const toAttrs = (
 
 const getById = (id: string) =>
   GetCoreEventDestination({ id, include: ["webhook_endpoint.url"] }).pipe(
-    atV2ApiVersion,
     Effect.catchTag("EventDestinationNotFound", () => Effect.undefined),
   );
 
@@ -322,7 +317,7 @@ const listAllDestinations = Effect.fn(function* () {
       limit: LIST_PAGE_SIZE,
       include: ["webhook_endpoint.url"],
       ...(page !== undefined ? { page } : {}),
-    }).pipe(atV2ApiVersion);
+    });
     destinations.push(...response.data);
     page = nextPageOf(response.next_page_url);
     if (page === undefined) break;
@@ -478,7 +473,7 @@ export const EventDestinationProvider = () =>
                 },
               }
             : {}),
-        }).pipe(atV2ApiVersion);
+        });
       }
       const secret = redactSecret(current.webhook_endpoint?.signing_secret) ?? previousSecret;
 
@@ -507,15 +502,13 @@ export const EventDestinationProvider = () =>
                 },
               }
             : {}),
-        }).pipe(atV2ApiVersion);
+        });
       }
 
       if ((current.status === "disabled") !== desiredDisabled) {
-        current = yield* (
-          desiredDisabled
-            ? CreateCoreEventDestinationDisable({ id: current.id })
-            : CreateCoreEventDestinationEnable({ id: current.id })
-        ).pipe(atV2ApiVersion);
+        current = yield* desiredDisabled
+          ? CreateCoreEventDestinationDisable({ id: current.id })
+          : CreateCoreEventDestinationEnable({ id: current.id });
         current = (yield* getById(current.id)) ?? current;
       }
 
@@ -524,7 +517,6 @@ export const EventDestinationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       yield* DeleteCoreEventDestination({ id: output.id }).pipe(
-        atV2ApiVersion,
         Effect.catchTag("EventDestinationNotFound", () => Effect.void),
       );
     }),

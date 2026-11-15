@@ -177,9 +177,9 @@ export interface Definition<
    * `atLeast`, before the handler runs: projections (whose store it reads),
    * views and streams. The caller passes only the receipt: the keys to wait
    * on come from that command's own events, routed through each read's
-   * `key`/`keyOf`, so they may be keyed differently. A view waits for an
-   * aggregate it reads directly; a stream, for the projections that write
-   * it. An aggregate is never listed: the handler reads its latest commit
+   * `key`/`keyOf`, so they may be keyed differently. Each read waits
+   * through the views between it and the command's aggregate; a stream
+   * waits for the projections that write it. An aggregate is never listed: the handler reads its latest commit
    * with `get`. Reads not listed here are not covered.
    */
   readonly waitsFor?: From;

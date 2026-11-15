@@ -1529,6 +1529,47 @@ describe("construct namespaces", { tags: ["unit", "local"] }, () => {
       expect(plan.deletions).toEqual({});
     }),
   );
+
+  test.provider("binding edges between separate cycles order deletes", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", {});
+          const B = yield* BindingTarget("B", {});
+          const C = yield* BindingTarget("C", {});
+          const D = yield* BindingTarget("D", {});
+          yield* A.bind("FromB", { env: { PEER: B.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+          yield* C.bind("FromD", { env: { PEER: D.string } });
+          yield* D.bind("FromC", { env: { PEER: C.string } });
+          yield* A.bind("FromC", { env: { PEER: C.string } });
+
+          const E = yield* BindingTarget("E", {});
+          const F = yield* BindingTarget("F", {});
+          yield* E.bind("FromE", { env: { SELF: E.string } });
+          yield* F.bind("FromF", { env: { SELF: F.string } });
+          yield* E.bind("FromF", { env: { PEER: F.string } });
+        }),
+      );
+
+      const live = new Set(["A", "B", "C", "D", "E", "F"]);
+      const boundBy: Record<string, string> = { C: "A", F: "E" };
+      yield* stack.destroy().pipe(
+        Effect.provideService(TestResourceHooks, {
+          delete: (id) =>
+            Effect.gen(function* () {
+              if (id === "A" || id === "E") yield* Effect.sleep("30 millis");
+              if (live.has(boundBy[id])) {
+                return yield* Effect.fail(new Error(`${id} is still bound by ${boundBy[id]}`));
+              }
+              live.delete(id);
+            }),
+        }),
+      );
+
+      expect([...live]).toEqual([]);
+    }),
+  );
 });
 
 const createTestResourceState = (options: {
@@ -6311,6 +6352,88 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
       });
       const error = yield* refusalOf(makePlan(declare({ replaceString: "v3" })));
       expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  // A failed update that drops protect() leaves an `updating` row with the
+  // declared policy on top and the last successful row on `old`.
+  const failedUnprotect = (old: ResourceState | undefined) =>
+    ({
+      ...createTestResourceState({
+        logicalId: "A",
+        status: "updating",
+        props: { replaceString: "v1", string: "b" },
+      }),
+      removalPolicy: "destroy",
+      ...(old ? { old } : {}),
+    }) as ResourceState;
+
+  test(
+    "a failed unprotect update still refuses a replacement",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(
+        makePlan(declare({ replaceString: "v2", string: "b" }, false)),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "replace" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an orphan delete",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(makePlan(Effect.void));
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an Action taking over its FQN",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const A = Action("A", (input: { value: string }) => Effect.succeed(input));
+      const error = yield* refusalOf(
+        makePlan(
+          Effect.gen(function* () {
+            yield* A({ value: "x" });
+          }),
+        ),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "an updating row that was never protected can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(created({ replaceString: "v1", string: "a" })) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
+    }),
+  );
+
+  test(
+    "an updating row without old can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(undefined) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
     }),
   );
 

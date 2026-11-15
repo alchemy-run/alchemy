@@ -29,8 +29,10 @@ if (out === "--list") {
     const lines = [];
     for (const k of document.querySelector(".sl-markdown-content").children) {
       const h = k.matches(".sl-heading-wrapper") && k.querySelector("h2,h3,h4");
-      if (h) (lines.push(`${h.tagName} ${h.id}`), (lines.n = 0));
-      else if (lines.length) {
+      if (h) {
+        lines.push(`${h.tagName} ${h.id}`);
+        lines.n = 0;
+      } else if (lines.length) {
         const text = k.textContent.trim().replace(/\s+/g, " ").slice(0, 40);
         lines.push(`   ${lines.n++}: ${k.tagName.toLowerCase()} ${text}`);
       }

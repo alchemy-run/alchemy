@@ -58,6 +58,7 @@ export const createFlyHostRuntimeContext =
       const wrapped = serveFlyRpc(methods, safeHttpEffect(handler));
       const boots =
         shape === undefined || shape.fetch !== undefined || Object.keys(methods).length > 0;
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the Fly host provides FileSystem to every runner; HostRuntimeContext["serve"] can't name it
       return serveBase(
         wrapped,
         boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,

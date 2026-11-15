@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteProduct,
   GetProducts,
@@ -436,11 +435,8 @@ export const ProductProvider = () =>
             ? { package_dimensions: news.packageDimensions }
             : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-product-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-product-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

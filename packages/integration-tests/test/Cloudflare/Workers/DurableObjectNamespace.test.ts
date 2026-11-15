@@ -1730,6 +1730,85 @@ export default { async fetch() { return new Response("${version}"); } };
       { timeout: 120_000 },
     );
 
+    // #3300: removing classes must not depend on finding their namespaces in
+    // the account-wide listing. Cloudflare pages that listing (20 per page)
+    // in an unstable order, so on an account with several pages of
+    // namespaces some rows never come back and removing such a class failed
+    // with an empty `MissingDurableObjects`. 60 classes spread this Worker's
+    // own namespaces across several pages; the Worker's settings still bind
+    // every class, which is proof enough that it hosts them.
+    test.provider(
+      "removes durable object classes the paged namespace listing skips",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const classes = Array.from({ length: 60 }, (_, i) => `Paged${i}`);
+          const makeWorker = (hosted: string[], version: string) =>
+            Cloudflare.Worker("worker", {
+              script: `import { DurableObject } from "cloudflare:workers";
+${hosted.map((c) => `export class ${c} extends DurableObject {}`).join("\n")}
+export default { async fetch() { return new Response("${version}"); } };
+`,
+              env: Object.fromEntries(
+                hosted.map((c) => [c, Cloudflare.DurableObject(c, { className: c })]),
+              ),
+            });
+
+          const v1 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* makeWorker(classes, "v1") };
+            }),
+          );
+          expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+          expect(Object.keys(v1.worker.durableObjectNamespaces)).toHaveLength(60);
+          const removedIds = Object.values(v1.worker.durableObjectNamespaces);
+
+          // Remove every class but one in a single update.
+          const v2 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* makeWorker(classes.slice(0, 1), "v2") };
+            }),
+          );
+          expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+          expect(Object.keys(v2.worker.durableObjectNamespaces)).toEqual(["Paged0"]);
+
+          // Out-of-band: the Worker's settings bind only the kept class.
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: v2.worker.workerName,
+          });
+          expect(
+            (settings.bindings ?? [])
+              .filter((binding) => binding.type === "durable_object_namespace")
+              .map((binding) => ("className" in binding ? binding.className : undefined)),
+          ).toEqual(["Paged0"]);
+
+          // The removed namespaces are deleted (checked by id, so a skipped
+          // page can't make a surviving namespace look gone).
+          const survivors = yield* Effect.forEach(
+            removedIds.slice(1),
+            (namespaceId) =>
+              durableObjects.listNamespaceObjects({ accountId, id: namespaceId }).pipe(
+                Effect.as([namespaceId]),
+                Effect.catchTag("NamespaceNotFound", () => Effect.succeed([] as string[])),
+              ),
+            { concurrency: 10 },
+          ).pipe(
+            Effect.map((ids) => ids.flat()),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (ids) => ids.length === 0,
+              times: 8,
+            }),
+          );
+          expect(survivors).toEqual([]);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // Roll-forward from the legacy tag format: a worker last deployed by an
     // older alchemy carries one `alchemy:do:{logicalId}:{className}` tag per DO.
     // Simulate that by rewriting the live script tags to the legacy format

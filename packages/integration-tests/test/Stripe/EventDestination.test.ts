@@ -1,7 +1,6 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import { GetCoreEventDestination } from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
@@ -14,10 +13,8 @@ const { test } = Test.make({ providers: Stripe.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const atV2ApiVersion = withRequestOptions({ apiVersion: "2026-10-28.endive" });
-
 const getDestination = (id: string) =>
-  GetCoreEventDestination({ id, include: ["webhook_endpoint.url"] }).pipe(atV2ApiVersion);
+  GetCoreEventDestination({ id, include: ["webhook_endpoint.url"] });
 
 const waitUntilGone = (id: string) =>
   getDestination(id).pipe(

@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentLinks,
   GetPaymentLink,
@@ -1121,11 +1120,8 @@ export const PaymentLinkProvider = () =>
                 },
               }
             : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-payment-link-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-payment-link-${instanceId}`,
+        });
         current = yield* hydrateLineItems(current);
       }
 

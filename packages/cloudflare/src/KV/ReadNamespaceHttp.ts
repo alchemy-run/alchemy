@@ -71,17 +71,18 @@ export const makeReadKVHttpClient = (
 
   const getWithMetadataOne = (key: string, type: string) =>
     scope.pipe(
-      Effect.flatMap(({ accountId, namespaceId }) =>
-        Effect.all({
-          value: authorize(kv.getNamespaceValue({ accountId, namespaceId, keyName: key })).pipe(
-            Effect.flatMap((res) => materializeBody(res.body, type)),
-            Effect.catchTag("KeyNotFound", () => Effect.succeed(null)),
-          ),
-          metadata: authorize(
-            kv.getNamespaceMetadata({ accountId, namespaceId, keyName: key }),
-          ).pipe(Effect.catchTag(["KeyNotFound", "NamespaceNotFound"], () => Effect.succeed(null))),
-        }),
-      ),
+      Effect.flatMap(({ accountId, namespaceId }) => {
+        const value = authorize(
+          kv.getNamespaceValue({ accountId, namespaceId, keyName: key }),
+        ).pipe(
+          Effect.flatMap((res) => materializeBody(res.body, type)),
+          Effect.catchTag("KeyNotFound", () => Effect.succeed(null)),
+        );
+        const metadata = authorize(
+          kv.getNamespaceMetadata({ accountId, namespaceId, keyName: key }),
+        ).pipe(Effect.catchTag(["KeyNotFound", "NamespaceNotFound"], () => Effect.succeed(null)));
+        return Effect.all({ value, metadata });
+      }),
       Effect.mapError(toKVNamespaceError),
       Effect.map(({ value, metadata }) => ({
         value,

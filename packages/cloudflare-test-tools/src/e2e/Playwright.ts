@@ -27,6 +27,7 @@ export const make = (method: ServerMethod) =>
 
 const makeServerInstance = async (method: ServerMethod) => {
   const scope = Scope.makeUnsafe();
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the fixture's framework comes from a dynamically imported module; `Options.FrameworkLayer` can only promise an unknown failure
   const runtime = ManagedRuntime.make(Runtime.layer);
   const instance = await runtime.runPromise(
     Server.Server.use((server) => server[method]()).pipe(Scope.provide(scope)),

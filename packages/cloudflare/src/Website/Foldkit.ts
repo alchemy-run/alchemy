@@ -6,16 +6,16 @@ import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
-  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
-export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
+const FOLDKIT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/foldkit/source";
+
+export interface FoldkitProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * Custom Worker entry for a client-only app. Relative paths resolve from
    * {@link rootDir}; the Worker can serve client assets through `ASSETS`.
@@ -24,20 +24,12 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
    */
   main?: string;
   /**
-   * Foldkit project root directory, resolved from the working directory.
-   * @default process.cwd()
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are content-hashed to decide whether to rebuild.
-   * Defaults to non-gitignored project files and the nearest lockfile, with
-   * imported workspaces detected from the build. See {@link ViteOptions.memo}.
-   */
-  memo?: ViteOptions["memo"];
-  /**
-   * Overrides static asset routing defaults. Client-only apps use
-   * `notFoundHandling: "single-page-application"`. SSR and prerendered apps
-   * serve matching assets and send unmatched requests to Foldkit's handler.
+   * Overrides static asset routing defaults. Client-only apps, including
+   * any app with a custom {@link main}, use
+   * `notFoundHandling: "single-page-application"` in dev and on deploy, so
+   * a page load of a deep link gets the app shell. When Foldkit renders
+   * pages (`ssr.build` on deploy, its `ssr` dev host in dev), matching
+   * assets are served and unmatched requests reach Foldkit's handler.
    * Explicit options take precedence over these defaults.
    */
   assets?: AssetsConfig;
@@ -49,7 +41,9 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
  * Builds the project's Vite configuration and deploys its client assets
  * and generated server handler. Configure rendering in the app's
  * `foldkit(...)` plugin call; Alchemy derives asset routing from the
- * plugin's completed build metadata.
+ * rendering mode.
+ *
+ * Requires `@alchemy.run/frontend-frameworks` in the project.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
@@ -214,16 +208,14 @@ export const Foldkit: {
       ) => effectClass(Foldkit(id, propsEff))
     : Worker(
         id,
-        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => {
-          const { main, rootDir, memo, ...workerProps } = props ?? {};
-          return {
-            ...workerProps,
-            vite: {
-              framework: "foldkit" as const,
-              main,
-              rootDir,
-              memo,
-            },
-          };
-        }),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          main: null,
+          source: {
+            provider: FOLDKIT_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: { main: props?.main, memo: props?.memo },
+          },
+        })),
       )) as any;

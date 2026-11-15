@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   CreateTaxIds,
   DeleteTaxIds,
@@ -222,7 +221,8 @@ export const TaxIdProvider = () =>
           type: news.type,
           value: news.value,
           ...(news.owner !== undefined ? { owner: toWireOwner(news.owner) } : {}),
-        }).pipe(withRequestOptions({ idempotencyKey: `alchemy-tax-id-${instanceId}` }));
+          idempotencyKey: `alchemy-tax-id-${instanceId}`,
+        });
       }
       return toAttrs(current);
     }),

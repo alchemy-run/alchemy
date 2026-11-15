@@ -2219,6 +2219,9 @@ importers:
         specifier: 4.1.4
         version: 4.1.4
     devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2271,6 +2274,9 @@ importers:
         specifier: 'catalog:'
         version: 0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
     devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
@@ -2541,6 +2547,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2581,6 +2590,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2618,6 +2630,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -2658,6 +2673,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
@@ -4359,6 +4377,28 @@ importers:
       effect:
         specifier: 4.1.4
         version: 4.1.4
+
+  examples/digitalocean-app:
+    dependencies:
+      '@alchemy.run/digitalocean':
+        specifier: workspace:*
+        version: link:../../packages/digitalocean
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
 
   examples/docker-postgres:
     dependencies:
@@ -9445,6 +9485,55 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  packages/digitalocean:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/digitalocean':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/digitalocean
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
+      rolldown:
+        specifier: 1.2.16
+        version: 1.2.16
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      mysql2:
+        specifier: 3.24.5
+        version: 3.24.5(@types/node@26.6.5)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
   packages/docker:
     dependencies:
       rolldown:
@@ -9687,6 +9776,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/node-utils':
+        specifier: workspace:*
+        version: link:../node-utils
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
@@ -10688,6 +10780,9 @@ importers:
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../daytona
+      '@alchemy.run/digitalocean':
+        specifier: workspace:*
+        version: link:../digitalocean
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
@@ -10790,6 +10885,9 @@ importers:
       '@distilled.cloud/daytona':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/daytona
+      '@distilled.cloud/digitalocean':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/digitalocean
       '@distilled.cloud/e2b':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/e2b
@@ -10826,6 +10924,9 @@ importers:
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
@@ -11229,6 +11330,9 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
@@ -11888,6 +11992,22 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/clickhouse-cloud:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/cloudflare:
     dependencies:
       '@distilled.cloud/core':
@@ -12064,6 +12184,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../core
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../s3
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -12631,6 +12754,22 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/namespacelabs:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/neon:
     dependencies:
       '@distilled.cloud/core':
@@ -12902,6 +13041,22 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/proxmox:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/questrade:
     dependencies:
       '@distilled.cloud/core':
@@ -13148,6 +13303,22 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/starburst-galaxy:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/steel:
     dependencies:
       '@distilled.cloud/core':
@@ -13213,6 +13384,22 @@ importers:
         version: 26.6.5
 
   submodules/distilled/packages/tailscale:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
+  submodules/distilled/packages/technitium:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*

@@ -1,16 +1,11 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { withRequestOptions } from "@distilled.cloud/stripe";
-import { GetBalanceSettings as GetBalanceSettingsAnyVersion } from "@distilled.cloud/stripe/stripe";
+import { GetBalanceSettings } from "@distilled.cloud/stripe/stripe";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
 const { test } = Test.make({ providers: Stripe.providers() });
-
-// Balance settings nest under `payments` only from the SDK spec's API version.
-const GetBalanceSettings = (input: {}) =>
-  GetBalanceSettingsAnyVersion(input).pipe(withRequestOptions({ apiVersion: "2026-10-28.endive" }));
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
