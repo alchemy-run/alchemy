@@ -540,9 +540,15 @@ const backfillRuntime = (
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const context = yield* captureContext<ObjectState | RuntimeContext>();
+    // What the caller's fiber has wins: inside a transaction, a host can keep it
+    // there (Rivet's storage writes through the transaction it finds), and the
+    // backfill's writes must commit with it rather than wait for it.
     const provide = <A, E>(
       effect: Effect.Effect<A, E, ObjectState | RuntimeContext>,
-    ): Effect.Effect<A, E> => Effect.provide(effect, context);
+    ): Effect.Effect<A, E> =>
+      effect.pipe(
+        Effect.updateContext((current: Context.Context<never>) => Context.merge(context, current)),
+      ) as Effect.Effect<A, E>;
     const storage: Backfill.Storage = {
       get: <A>(key: string) => provide(state.storage.get<A>(key)),
       put: (entries) =>
