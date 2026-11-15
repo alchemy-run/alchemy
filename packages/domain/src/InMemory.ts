@@ -690,6 +690,7 @@ export const make = (
               {
                 ref: { source: kit.name, id },
                 model: () => model,
+                targets: () => kit.targets,
                 singleSource: (target) => planOf(target)?.singleSource === true,
                 log: (after, limit) =>
                   Effect.sync(() =>
@@ -964,6 +965,7 @@ export const make = (
               {
                 ref: { source: kit.name, id: key },
                 model: () => model,
+                targets: () => kit.targets,
                 singleSource: (target) => planOf(target)?.singleSource === true,
                 log: (after, limit) =>
                   Effect.map(entries, (all) =>

@@ -20,7 +20,7 @@ When the deploy finishes, `history` is already `complete`. A deploy that changes
 
 ## How the work spreads out
 
-Every instance lists itself in a directory on its first commit: a tree of Durable Objects, one subtree per aggregate and view, where each node lists up to 256 instances and splits into 16 children when it fills. The directory is only an index. A backfill reads it and does its work elsewhere.
+Every instance lists itself in a directory just after its first commit: a tree of Durable Objects, one subtree per aggregate and view, where each node lists up to 256 instances and splits into 16 children when it fills. The commit doesn't wait for the directory. It records that the instance still has to be listed, in the same write, and the instance lists itself once the call has returned, trying again until it does, even if it is evicted or restarted meanwhile. If a consumer was deployed in between, so that its run read the directory before the instance was listed, the instance asks for that consumer's history when it is listed. The directory is only an index. A backfill reads it and does its work elsewhere.
 
 The work belongs to the run, and every part of the run is an object of a class the deploy adds. A new view's class exists only in the code that adds it, and a rebuilt view gets a new class too (`DepositsViewV1`), so none of these objects can start on the code from before the deploy while Cloudflare rolls it out.
 
