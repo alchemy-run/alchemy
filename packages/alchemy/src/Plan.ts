@@ -461,6 +461,48 @@ const findRefCycle = (
   return undefined;
 };
 
+/**
+ * New resources whose props reference each other directly. A declaration
+ * can't reference a resource declared after it, so only declarations whose
+ * props Effects yield each other build this cycle: each yields the other while
+ * it is still being declared. Neither can be planned before the other, so the
+ * plan fails instead of waiting forever. Declaring each as a class (the Tag
+ * other declarations yield) with its implementation in `.make()` (a Layer)
+ * lets the references run through bindings instead.
+ */
+export class DeclarationCycleError extends Data.TaggedError("DeclarationCycleError")<{
+  message: string;
+  cycle: string[];
+}> {}
+
+/**
+ * The first cycle through props among `among` (`A -> B -> A`), if any. A
+ * resource's reference to itself isn't a cycle between declarations.
+ */
+const findDeclarationCycle = (
+  among: ReadonlySet<string>,
+  upstream: { readonly [fqn: string]: ReadonlyArray<string> },
+): string[] | undefined => {
+  const done = new Set<string>();
+  const walk = (fqn: string, path: string[]): string[] | undefined => {
+    const at = path.indexOf(fqn);
+    if (at !== -1) return [...path.slice(at), fqn];
+    if (done.has(fqn)) return undefined;
+    for (const next of upstream[fqn] ?? []) {
+      if (next === fqn || !among.has(next)) continue;
+      const found = walk(next, [...path, fqn]);
+      if (found) return found;
+    }
+    done.add(fqn);
+    return undefined;
+  };
+  for (const fqn of among) {
+    const cycle = walk(fqn, []);
+    if (cycle) return cycle;
+  }
+  return undefined;
+};
+
 const makePlan = <A>(
   stack: StackSpec<A>,
   options: FilteredPlanOptions = {},
@@ -1418,6 +1460,27 @@ const makePlan = <A>(
             `through bindings.`,
           owner: edge.owner,
           target: edge.target,
+        }),
+      );
+    }
+
+    // Fail before resolving anything: new resources whose props reference
+    // each other directly would each wait for the next.
+    const declarationCycle = findDeclarationCycle(newResourceFqns, newUpstreamDependencies);
+    if (declarationCycle !== undefined) {
+      return yield* Effect.die(
+        new DeclarationCycleError({
+          message:
+            `Resources ${declarationCycle.join(" -> ")} reference each other in their props, ` +
+            `so none can be planned before the next. Props Effects that yield each other build ` +
+            `this cycle: each yields the other while it is still being declared. Declare each as ` +
+            `a class, the Tag the others yield, and supply its implementation with \`.make()\`, ` +
+            `a Layer, so the references run through bindings: ` +
+            `https://alchemy.run/infrastructure-as-effects/circular-bindings. ` +
+            `Or reach one of them from the other by its id with its type's \`.ref(id)\`, ` +
+            `which binds to the declaration in this stack without yielding it: ` +
+            `https://alchemy.run/infrastructure-as-code/references`,
+          cycle: declarationCycle,
         }),
       );
     }
