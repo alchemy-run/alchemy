@@ -193,6 +193,9 @@
       "path": "./packages/domain/tsconfig.json"
     },
     {
+      "path": "./packages/domain/test/types/tsconfig.json"
+    },
+    {
       "path": "./packages/docker/tsconfig.json"
     },
     {

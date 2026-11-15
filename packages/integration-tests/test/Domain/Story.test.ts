@@ -24,6 +24,7 @@ import * as Redacted from "effect/Redacted";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { Activity, DurableDeferred } from "effect/workflow";
 
 // A tiny counter domain exercising every concept the story runner supports.
 class Incremented extends Domain.Event("Incremented", {
@@ -1238,5 +1239,250 @@ describe("Domain Story: an operation with several errors", { tags: ["unit", "loc
         ),
       ),
     ),
+  );
+});
+
+// A policy sends a command, then reads a view `atLeast` that write. The view
+// applies the event in a run of its own, which a story queues behind the
+// policy's run.
+class Tallied extends Domain.Event("Tallied", { total: Schema.Number }) {}
+class Tally extends Domain.Command("Tally", { target: Schema.String, events: [Tallied] }) {}
+class Tallies extends Domain.Aggregate("Tallies", {
+  id: Schema.String,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  commands: [Tally],
+  decide: { Tally: (tally) => [new Tallied({ total: tally.total + 1 })] },
+  evolve: { Tallied: (_, e) => ({ total: e.total }) },
+}) {}
+class TallyTotals extends Domain.View("TallyTotals", {
+  from: [Tallies],
+  key: Tallies,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  evolve: { Tallied: (_, e) => ({ total: e.total }) },
+}) {}
+class OrderPlaced extends Domain.Event("OrderPlaced") {}
+class OrderCounted extends Domain.Event("OrderCounted", { total: Schema.Number }) {}
+class PlaceOrder extends Domain.Command("PlaceOrder", {
+  target: Schema.String,
+  events: [OrderPlaced],
+}) {}
+class RecordCount extends Domain.Command("RecordCount", {
+  target: Schema.String,
+  input: { total: Schema.Number },
+  events: [OrderCounted],
+}) {}
+class Order extends Domain.Aggregate("Order", {
+  id: Schema.String,
+  state: Schema.Struct({ counted: Schema.Number }),
+  initial: { counted: 0 },
+  commands: [PlaceOrder, RecordCount],
+  decide: {
+    PlaceOrder: () => [new OrderPlaced()],
+    RecordCount: (_, cmd) => [new OrderCounted({ total: cmd.total })],
+  },
+  evolve: {
+    OrderPlaced: (order) => order,
+    OrderCounted: (_, e) => ({ counted: e.total }),
+  },
+}) {}
+const orderTally = Tallies.ref("orders");
+// Counts each order, and records on the order the total the view then shows.
+class CountOrders extends Domain.Policy("CountOrders", { from: Order, on: [OrderPlaced] }) {}
+const CountOrdersLive = CountOrders.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    const orders = yield* Order;
+    const totals = yield* TallyTotals;
+    return Effect.fn(function* ({ source }) {
+      const receipt = yield* tallies.send(orderTally, new Tally());
+      const read = yield* totals
+        .get(orderTally, { atLeast: { stream: receipt.stream, version: receipt.version } })
+        .pipe(Effect.orDie);
+      yield* orders.send(source, new RecordCount({ total: Option.getOrThrow(read).total }));
+    });
+  }),
+);
+class Shop extends Domain.Model("Shop", {
+  aggregates: [Tallies, Order],
+  views: [TallyTotals],
+  policies: [CountOrders],
+}) {}
+
+// A policy stops every item of a closed box at once.
+class BoxClosed extends Domain.Event("BoxClosed", { items: Schema.Array(Schema.String) }) {}
+class CloseBox extends Domain.Command("CloseBox", {
+  target: Schema.String,
+  input: { items: Schema.Array(Schema.String) },
+  events: [BoxClosed],
+}) {}
+class Box extends Domain.Aggregate("Box", {
+  id: Schema.String,
+  state: Schema.Struct({ closed: Schema.Boolean }),
+  initial: { closed: false },
+  commands: [CloseBox],
+  decide: { CloseBox: (_, cmd) => [new BoxClosed({ items: cmd.items })] },
+  evolve: { BoxClosed: () => ({ closed: true }) },
+}) {}
+class ItemWorker extends Domain.ExternalSystem("ItemWorker", {
+  stop: { args: { item: Schema.String } },
+}) {}
+class StopItems extends Domain.Policy("StopItems", { from: Box, on: [BoxClosed] }) {}
+const StopItemsLive = StopItems.toLayer(
+  Effect.gen(function* () {
+    const worker = yield* ItemWorker;
+    return Effect.fn(function* ({ event }) {
+      yield* Effect.forEach(event.items, (item) => worker.stop({ item }), {
+        concurrency: "unbounded",
+      });
+    });
+  }),
+);
+class Boxes extends Domain.Model("Boxes", { aggregates: [Box], policies: [StopItems] }) {}
+
+// A saga asks a remote system, and the policy that starts it may signal it
+// while it waits for the answer.
+class ProbeStarted extends Domain.Event("ProbeStarted", { signal: Schema.Boolean }) {}
+class StartProbe extends Domain.Command("StartProbe", {
+  target: Schema.String,
+  input: { signal: Schema.Boolean },
+  events: [ProbeStarted],
+}) {}
+class Probe extends Domain.Aggregate("Probe", {
+  id: Schema.String,
+  state: Schema.Struct({ started: Schema.Boolean }),
+  initial: { started: false },
+  commands: [StartProbe],
+  decide: { StartProbe: (_, cmd) => [new ProbeStarted({ signal: cmd.signal })] },
+  evolve: { ProbeStarted: () => ({ started: true }) },
+}) {}
+class Remote extends Domain.ExternalSystem("Remote", {
+  ask: { args: { id: Schema.String }, success: { ok: Schema.Boolean } },
+}) {}
+const poke = DurableDeferred.make("poke", { success: Schema.Void, error: Schema.Never });
+class ProbeRun extends Domain.Saga("ProbeRun", { key: Schema.String, input: {} }) {}
+class StartProbeRun extends Domain.Policy("StartProbeRun", { from: Probe, on: [ProbeStarted] }) {}
+const ProbeHandlers = Layer.mergeAll(
+  StartProbeRun.toLayer(
+    Effect.gen(function* () {
+      const runs = yield* ProbeRun;
+      return Effect.fn(function* ({ source, event }) {
+        const run = yield* runs.start(source.id, {});
+        if (event.signal) yield* run.signal(poke, undefined);
+      });
+    }),
+  ),
+  ProbeRun.toLayer(
+    Effect.gen(function* () {
+      const remote = yield* Remote;
+      return Effect.fn(function* ({ key }) {
+        yield* Activity.make({
+          name: "ask",
+          success: Schema.Boolean,
+          error: Schema.Never,
+          execute: remote.ask({ id: key }).pipe(Effect.map((answer) => answer.ok)),
+        });
+      });
+    }),
+  ),
+);
+class Probes extends Domain.Model("Probes", {
+  aggregates: [Probe],
+  policies: [StartProbeRun],
+  sagas: [ProbeRun],
+}) {}
+
+// A saga asks two questions at once.
+class AskBoth extends Domain.Saga("AskBoth", { key: Schema.String, input: {} }) {}
+class StartAskBoth extends Domain.Policy("StartAskBoth", { from: Probe, on: [ProbeStarted] }) {}
+const AskBothHandlers = Layer.mergeAll(
+  StartAskBoth.toLayer(
+    Effect.gen(function* () {
+      const runs = yield* AskBoth;
+      return Effect.fn(function* ({ source }) {
+        yield* runs.start(source.id, {});
+      });
+    }),
+  ),
+  AskBoth.toLayer(
+    Effect.gen(function* () {
+      const remote = yield* Remote;
+      return Effect.fn(function* ({ key }) {
+        yield* Effect.forEach(
+          ["x", "y"],
+          (part) =>
+            Activity.make({
+              name: `ask ${part}`,
+              success: Schema.Boolean,
+              error: Schema.Never,
+              execute: remote.ask({ id: `${key}/${part}` }).pipe(Effect.map((a) => a.ok)),
+            }),
+          { concurrency: "unbounded" },
+        );
+      });
+    }),
+  ),
+);
+class Pairs extends Domain.Model("Pairs", {
+  aggregates: [Probe],
+  policies: [StartAskBoth],
+  sagas: [AskBoth],
+}) {}
+
+describe("Domain Story: runs that wait", { tags: ["unit", "local"] }, () => {
+  it.effect(
+    "a policy reads a view at least at the write it sent",
+    () =>
+      Story.make(Shop, { layer: CountOrdersLive })(
+        Story.when(Order.ref("o-1"), new PlaceOrder()),
+        Story.then(Order.ref("o-1"), new OrderPlaced()),
+        Story.then(orderTally, new Tallied({ total: 1 })),
+        Story.then(Order.ref("o-1"), new OrderCounted({ total: 1 })),
+        Story.view(TallyTotals, orderTally, { total: 1 }),
+      ),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "a policy waits on several calls at once",
+    () =>
+      Story.make(Boxes, { layer: StopItemsLive, stub: [ItemWorker] })(
+        Story.when(Box.ref("b-1"), new CloseBox({ items: ["a", "b"] })),
+        Story.then(Box.ref("b-1"), new BoxClosed({ items: ["a", "b"] })),
+        Story.call("a", ItemWorker.stop, { item: "a" }),
+        Story.call("b", ItemWorker.stop, { item: "b" }),
+        Story.succeed("a", ItemWorker.stop, undefined),
+        Story.succeed("b", ItemWorker.stop, undefined),
+      ),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "a saga runs two activities at once",
+    () =>
+      Story.make(Pairs, { layer: AskBothHandlers, stub: [Remote] })(
+        Story.when(Probe.ref("p-2"), new StartProbe({ signal: false })),
+        Story.then(Probe.ref("p-2"), new ProbeStarted({ signal: false })),
+        Story.call("x", Remote.ask, { id: "p-2/x" }),
+        Story.call("y", Remote.ask, { id: "p-2/y" }),
+        Story.succeed("x", Remote.ask, { ok: true }),
+        Story.succeed("y", Remote.ask, { ok: true }),
+        Story.saga(AskBoth, "p-2", { _tag: "Completed", result: undefined }),
+      ),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "a saga is signalled while it waits on a call",
+    () =>
+      Story.make(Probes, { layer: ProbeHandlers, stub: [Remote] })(
+        Story.when(Probe.ref("p-1"), new StartProbe({ signal: true })),
+        Story.then(Probe.ref("p-1"), new ProbeStarted({ signal: true })),
+        Story.call(Remote.ask, { id: "p-1" }),
+        Story.succeed(Remote.ask, { ok: true }),
+        Story.saga(ProbeRun, "p-1", { _tag: "Completed", result: undefined }),
+      ),
+    { timeout: 30_000 },
   );
 });

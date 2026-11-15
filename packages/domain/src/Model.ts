@@ -42,6 +42,7 @@ import {
   type ViewEntry,
   type ViewSnapshot,
   type ViewStore,
+  RunWait,
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
@@ -899,7 +900,7 @@ const viewHost = (
     const read = store.read(id);
     const atLeast = options?.atLeast;
     if (!atLeast) return read;
-    return read.pipe(
+    const poll = read.pipe(
       Effect.flatMap((snapshot) =>
         (snapshot.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
           ? Effect.succeed(snapshot)
@@ -911,6 +912,11 @@ const viewHost = (
           Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
         ),
       }),
+    );
+    return Effect.gen(function* () {
+      const wait = yield* RunWait;
+      return yield* wait(poll);
+    }).pipe(
       Effect.mapError(() =>
         View.ConsistencyTimeout.make({
           view: view.viewName,
@@ -1022,13 +1028,19 @@ const waitUntil = <A>(
   timeout: Duration.Input | undefined,
   onTimeout: () => View.ConsistencyTimeout,
 ) =>
-  check.pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("25 millis"),
-      times: Math.ceil(Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) / 25),
-    }),
-    Effect.mapError(onTimeout),
-  );
+  Effect.gen(function* () {
+    const wait = yield* RunWait;
+    return yield* wait(
+      check.pipe(
+        Effect.retry({
+          schedule: Schedule.spaced("25 millis"),
+          times: Math.ceil(
+            Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) / 25,
+          ),
+        }),
+      ),
+    );
+  }).pipe(Effect.mapError(onTimeout));
 
 const streamHost = (
   kernel: Kernel.Kernel,
