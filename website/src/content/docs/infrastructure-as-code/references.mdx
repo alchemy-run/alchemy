@@ -148,10 +148,45 @@ const backend = yield* Output.stackRef<{ url: string }>("Backend", {
 Prefer `Resource.ref` and `yield* MyStack` — same lookups, real
 type bindings.
 
+## Reference a resource declared in this stack
+
+A ref whose `{ stack, stage, id }` names a resource this program
+declares, in this stack and stage, binds to that declaration instead
+of reading state. It behaves like a direct reference: the target is
+created before the resource that refs it and deleted after it, and the
+ref resolves to the target's fresh attributes. It needs no earlier
+deploy.
+
+That makes a ref the way to break a cycle between resources whose
+props would otherwise yield each other. Declare one normally, and
+reach it from the other by its id (its logical id, prefixed with its
+namespace path when it is declared inside one):
+
+```typescript
+const auth = yield* Cloudflare.Worker("Auth", {
+  main: "./src/auth.ts",
+  env: {
+    DISPATCHER: Cloudflare.WorkerEntrypoint(
+      yield* Cloudflare.Worker.ref("Dispatcher"),
+      "Dispatch",
+    ),
+  },
+});
+const dispatcher = yield* Cloudflare.Worker("Dispatcher", {
+  main: "./src/dispatcher.ts",
+  env: { AUTH: Cloudflare.WorkerEntrypoint(auth, "Verify") },
+});
+```
+
+Both Workers deploy together, on a fresh account, in one deploy.
+Declarations whose props yield each other directly can't be planned
+and fail with `DeclarationCycleError`
+([Circular references](/infrastructure-as-code/resource#circular-references)).
+
 ## Deploy order
 
-The upstream must already be deployed to the exact
-`{ stack, stage }` the reference names, or the plan fails fast
+A reference to another stack or stage needs its upstream already
+deployed to the exact `{ stack, stage }` it names, or the plan fails fast
 with a typed `InvalidReferenceError` — there is no
 deploy-and-hope path:
 

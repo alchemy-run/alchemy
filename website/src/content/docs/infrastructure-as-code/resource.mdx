@@ -373,6 +373,17 @@ referenced before its implementation exists:
 
 See [Circular Bindings](/infrastructure-as-effects/circular-bindings) for the full A↔B
 build-up and how alchemy plans the two-phase create-then-wire deploy.
+Declarations whose props Effects yield each other directly can't be
+planned, since each is still being declared when the other reads it: the
+plan fails with `DeclarationCycleError`, naming the cycle.
+
+Resources that aren't Effect-native runtimes, such as two
+[async Workers](/cloudflare/compute/workers#async-workers) that bind each
+other, break the cycle with a ref instead: declare one normally and reach
+it from the other with its type's `.ref(id)` (its logical id, prefixed
+with its namespace path inside one), which binds to the declaration in
+this stack without yielding it (see
+[References](/infrastructure-as-code/references#reference-a-resource-declared-in-this-stack)).
 
 ## Where next
 
