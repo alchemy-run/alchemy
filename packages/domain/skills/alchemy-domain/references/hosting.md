@@ -69,7 +69,7 @@ export default Bank.layer(BankHandlers).pipe(
 
 - Make the model's Layer the default export of `main`; set `handler` only when another export holds it.
 - Callers build the same model Layer, so they need the handlers' services too.
-- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- Both platforms push live reads over `Domain.protocolWebSocket`: the runtime that serves the Api holds the caller's socket, and the owner of the key pushes each commit. Over `Domain.protocolHttp`, live reads poll instead.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
 
 More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
