@@ -57,6 +57,14 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly publicUrl?: string;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
+  /**
+   * `false` for a prebuilt Worker, whose modules run as written. As on deploy,
+   * its declared `compatibilityFlags` are then used exactly, without Alchemy's
+   * defaults (https://github.com/alchemy-run/alchemy/issues/1721).
+   *
+   * @default true
+   */
+  readonly bundle?: boolean;
   readonly bindings: B;
   readonly modules: ReadonlyArray<Module>;
   readonly assets?: Assets;

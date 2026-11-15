@@ -203,6 +203,7 @@ export const RuntimeLive = Layer.effect(
           ...worker,
           compatibilityFlags: withDefaultFlags(worker.compatibilityFlags, {
             date: worker.compatibilityDate,
+            bundle: worker.bundle,
           }),
         };
         const [
