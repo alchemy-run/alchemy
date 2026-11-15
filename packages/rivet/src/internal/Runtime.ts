@@ -337,7 +337,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
       endpoint: env("RIVET_ENDPOINT"),
       token: env("RIVET_TOKEN"),
       namespace: env("RIVET_NAMESPACE"),
-      envoy: { poolName: env("RIVET_POOL") },
+      node: { poolName: env("RIVET_POOL") },
       noWelcome: true,
     } as never) as { startAndWait(): Promise<void>; shutdown(): Promise<void> };
 
