@@ -47,7 +47,7 @@ it.effect(
         [undefined, "Place"],
         ["Review", "Hold"],
       ]);
-      const [asked] = held?.[1]?.asked ?? [];
+      const [asked] = held?.[0]?.asked ?? [];
       expect(asked).toMatchObject({ by: "Review", call: "Risk.score", failed: false });
       expect((asked?.answer as { risk: number }).risk).toBeGreaterThan(0.5);
       expect(rule("OnlyBigOrdersAreHeld")).toMatchObject({ broken: undefined });
@@ -63,9 +63,12 @@ it.effect(
       const report = yield* shop;
       // Review parks an order only when Risk is down.
       const parked = report.outcomes.find((outcome) => outcome.tag === "OrderParked")?.story;
-      expect(parked?.[1]?.asked).toEqual([
-        { by: "Review", call: "Risk.score", answer: { _tag: "RiskUnavailable" }, failed: true },
-      ]);
+      expect(parked?.[0]?.asked.at(-1)).toMatchObject({
+        by: "Review",
+        call: "Risk.score",
+        answer: { _tag: "RiskUnavailable" },
+        failed: true,
+      });
       expect(report.failures).toEqual([]);
     }),
   60_000,

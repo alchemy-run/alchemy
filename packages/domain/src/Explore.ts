@@ -20,6 +20,7 @@ import * as Path from "effect/Path";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import * as ModelSearch from "./Explore/internal/ModelSearch.ts";
+import * as Script from "./Explore/internal/Script.ts";
 import type { Found, Move, Story } from "./Explore/internal/Search.ts";
 import * as Search from "./Explore/internal/Search.ts";
 import type * as Model from "./Model.ts";
@@ -31,7 +32,7 @@ import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import * as Value from "./Prove/internal/Value.ts";
 
 export type { Move, Outcome, Story } from "./Explore/internal/Search.ts";
-export type { Ending, Skipped, Step } from "./Explore/internal/ModelSearch.ts";
+export type { Asked, Ending, Skipped, Step } from "./Explore/internal/ModelSearch.ts";
 
 export interface Options {
   /** The file the aggregate is declared in: `new URL("../src/Account.ts", import.meta.url)`, or a path. */
@@ -74,6 +75,27 @@ export interface ModelOptions {
    * @default 2
    */
   readonly instances?: number;
+  /**
+   * The ways delivery goes wrong that every sequence is run with. The kernel
+   * delivers an event to a policy at least once and runs the reactions that
+   * wait at the same time in no set order, so both are on unless turned off.
+   */
+  readonly faults?: {
+    /**
+     * Deliver each event to each policy twice. The commands a policy sends
+     * get ids from the event, so an instance that took one does nothing the
+     * second time: what changes is what an external system answers.
+     * @default true
+     */
+    readonly redeliver?: boolean;
+    /**
+     * Run the reactions that wait at the same time in other orders too: after
+     * each command, each reaction that shares an aggregate with another is
+     * also tried behind the others.
+     * @default true
+     */
+    readonly reorder?: boolean;
+  };
   /** What `check` passes with, though it leaves part of the search undone. */
   readonly allow?: {
     /** Pass when the search stops at its budget before every sequence is run. */
@@ -196,7 +218,15 @@ const reportModel = (
       interpreter,
       located,
       options.apis.flatMap((api) => api.commands as ReadonlyArray<unknown>),
-      { depth, budget: options.budget ?? 100_000, instances: options.instances ?? 2 },
+      {
+        depth,
+        budget: options.budget ?? 100_000,
+        instances: options.instances ?? 2,
+        faults: {
+          redeliver: options.faults?.redeliver ?? true,
+          reorder: options.faults?.reorder ?? true,
+        },
+      },
     );
     const made: ModelReport = {
       model: model.modelName,
@@ -310,7 +340,7 @@ export function check(
 }
 
 /** Each part of a search that was not done, so that a pass would say less than it seems to. */
-const undone = (
+export const undone = (
   report: Report | ModelReport,
   allow: NonNullable<ModelOptions["allow"]>,
 ): ReadonlyArray<string> => {
@@ -438,18 +468,18 @@ const modelLines = (story: ModelSearch.Story, indent: string): ReadonlyArray<str
     ].join(" ");
     const asked = step.asked.map(
       (call) =>
-        `${indent}   ↳ ${call.by ?? "a caller"} asks ${call.call}  → ${call.failed ? "✗ " : ""}${Symbolic.show(call.answer)}`,
+        `${indent}   ↳ ${call.by ?? "a caller"}${call.again ? ", handling its event again," : ""} asks ${call.call}  → ${call.failed ? "✗ " : ""}${Symbolic.show(call.answer)}`,
     );
     if (step.after !== undefined)
       return [
-        ...asked,
         `${indent}${++sent}. after ${step.after}${step.by === undefined ? "" : `, ${step.by}`}: ${text}  → ${result(step)}`,
+        ...asked,
       ];
     return [
-      ...asked,
       step.by === undefined
         ? `${indent}${++sent}. ${text}  → ${result(step)}`
-        : `${indent}   ↳ ${step.by}: ${text}  → ${result(step)}`,
+        : `${indent}   ↳ ${step.by}${step.again ? ", handling its event again" : ""}: ${text}  → ${result(step)}`,
+      ...asked,
     ];
   });
 };
@@ -469,6 +499,11 @@ const renderModel = (report: ModelReport): string => {
     out.push(`Policies with no event to react to: ${report.idle.join(", ")}`);
   if (report.sagas.length > 0) out.push(`Sagas followed: ${report.sagas.join(", ")}`);
   if (report.views.length > 0) out.push(`Views followed: ${report.views.join(", ")}`);
+  const faults = [
+    ...(report.faults.redeliver ? ["each event delivered to each policy twice"] : []),
+    ...(report.faults.reorder ? ["each reaction also run behind the others that wait"] : []),
+  ];
+  if (faults.length > 0) out.push(`Delivery: ${faults.join(", ")}`);
   if (report.systems.length > 0)
     out.push(
       `External systems, each answering whatever its schema allows: ${report.systems.join(", ")}`,
@@ -588,8 +623,28 @@ const renderModel = (report: ModelReport): string => {
       ...report.undecided.map((entry) => `  ${count(entry.times)} times: ${entry.reason}`),
     );
   if (report.dead.length > 0) out.push("", `Never accepted: ${report.dead.join(", ")}`);
+  if (report.repeated.length > 0)
+    out.push(
+      "",
+      "Called again when an event is delivered again: each has to be safe to repeat",
+      ...report.repeated.map((call) => `  ${call}`),
+    );
   return out.join("\n");
 };
+
+/**
+ * A story of a model's report as the steps of a `Story`, to paste into a
+ * test: the sequence the explorer found then runs on the whole model in
+ * memory, with its policies, sagas and views, and stays as a regression test.
+ *
+ * **Example:** The sequence that breaks a rule, as a test
+ * ```typescript
+ * const report = yield* Explore.report(Bank, { apis: [CustomerApi] });
+ * const broken = report.rules.find((rule) => rule.broken)?.broken;
+ * if (broken) console.log(Explore.script(broken));
+ * ```
+ */
+export const script: (story: ModelSearch.Story) => string = Script.script;
 
 /** A report as text: the invariants, then every outcome with its shortest story. */
 export const render = (report: Report | ModelReport): string => {

@@ -26,11 +26,15 @@ it.effect(
   60_000,
 );
 
+// Every event handled once, in the order written: three commands deep, the
+// other orders and second deliveries are more than a test should wait for.
+// `Bank.verify.test.ts` runs two commands deep with both.
 const bank = (depth: number) =>
   Explore.check(Bank, {
     source: new URL("../src/Bank.model.ts", import.meta.url),
     apis: [CustomerApi, SupportApi],
     depth,
+    faults: { redeliver: false, reorder: false },
   });
 
 it.effect(
@@ -128,6 +132,7 @@ it.effect(
         apis: [CustomerApi],
         instances: 1,
         depth: 3,
+        faults: { redeliver: false, reorder: false },
       };
       const report = yield* Explore.report(Careless, options);
       const broken = (name: string) => report.rules.find((rule) => rule.name === name)?.broken;

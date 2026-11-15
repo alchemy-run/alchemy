@@ -19,7 +19,12 @@ import * as Value from "../../Prove/internal/Value.ts";
 export interface Move {
   readonly command: unknown;
   /** What each request context the command read held. */
-  readonly context: ReadonlyArray<{ readonly name: string; readonly value: unknown }>;
+  readonly context: ReadonlyArray<{
+    readonly name: string;
+    readonly value: unknown;
+    /** The request context's class, to provide the value with. */
+    readonly tag: unknown;
+  }>;
   readonly now: DateTime.Utc;
   readonly outcome:
     | {
@@ -245,12 +250,12 @@ export const search = Effect.fn(function* (
           }),
       });
       let context = Context.empty() as Context.Context<unknown>;
-      const read: Array<{ name: string; value: unknown }> = [];
+      const read: Array<{ name: string; value: unknown; tag: unknown }> = [];
       for (const [key, held] of run.contexts) {
         if (!key.startsWith(entry.label)) continue;
         const value = yield* build(key, held.value);
         context = Context.add(context, held.tag as Context.Key<unknown, unknown>, value);
-        read.push({ name: key.slice(key.lastIndexOf("/") + 1), value });
+        read.push({ name: key.slice(key.lastIndexOf("/") + 1), value, tag: held.tag });
       }
       const now = (yield* build("now", entry.inputs.now)) as DateTime.Utc;
       const prediction = Aggregate.predict(aggregate, state, command, {

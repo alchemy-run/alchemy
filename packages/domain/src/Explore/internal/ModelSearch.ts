@@ -29,8 +29,10 @@ export interface Step extends Move {
   readonly by: string | undefined;
   /** The delay of the schedule that sent the command, as the code wrote it. */
   readonly after: string | undefined;
-  /** What the external systems answered since the command before, to whoever sent this one. */
+  /** What the external systems answered after the command, before the next one ran. */
   readonly asked: ReadonlyArray<Asked>;
+  /** Whether the policy sent it while handling an event it had handled before. */
+  readonly again: boolean;
 }
 
 /** One call to an external system, and the answer the solver picked for it. */
@@ -39,9 +41,13 @@ export interface Asked {
   readonly by: string | undefined;
   /** The system and its operation: `FraudCheck.score`. */
   readonly call: string;
+  /** The operation itself, as the system's class holds it. */
+  readonly op: unknown;
   readonly answer: unknown;
   /** Whether the answer is one of the operation's declared errors. */
   readonly failed: boolean;
+  /** Whether the policy called while handling an event it had handled before. */
+  readonly again: boolean;
 }
 
 /** Commands callers send one after another, each followed by what the policies do about it. */
@@ -131,6 +137,13 @@ export interface Found {
   readonly views: ReadonlyArray<string>;
   /** The external systems called, each answered with every answer its schema allows. */
   readonly systems: ReadonlyArray<string>;
+  /** The ways delivery went wrong that the sequences were run with. */
+  readonly faults: { readonly redeliver: boolean; readonly reorder: boolean };
+  /**
+   * The external calls a policy makes again when an event is delivered to it
+   * again: each has to be safe to repeat, which the explorer cannot tell.
+   */
+  readonly repeated: ReadonlyArray<string>;
   /** The sagas that ran. */
   readonly sagas: ReadonlyArray<string>;
   /** The sagas no sequence started. */
@@ -157,6 +170,12 @@ export interface Options {
   readonly budget: number;
   /** The most instances of one aggregate in a sequence. */
   readonly instances: number;
+  readonly faults: {
+    /** Deliver each event to each policy twice: the kernel delivers at least once. */
+    readonly redeliver: boolean;
+    /** Run the reactions waiting at the same time in other orders too. */
+    readonly reorder: boolean;
+  };
 }
 
 /** A model, as far as the explorer reads it. */
@@ -237,6 +256,11 @@ interface PolicyImpl {
   readonly module: Module;
   /** The handler's construction: the argument of `toLayer`. */
   readonly node: Node;
+  /**
+   * The aggregates its handler names, so may send to: `undefined` when it
+   * names a saga, whose steps may send to any.
+   */
+  readonly writes: ReadonlySet<unknown> | undefined;
 }
 
 interface SagaClass {
@@ -308,6 +332,14 @@ interface Entry {
   readonly after: string | undefined;
   /** What each view emitted for the command's events, by the view's name. */
   readonly emitted: Array<{ readonly view: ViewImpl; readonly tags: ReadonlyArray<string> }>;
+  /** Sent by a policy handling an event again. */
+  readonly again: boolean;
+}
+
+/** What a policy's send gave the first time: a second delivery of the event gets it again. */
+interface Receipt {
+  readonly instance: number;
+  readonly applied: Paths.Applied;
 }
 
 /** One key of a view: the instance it follows, and its state. */
@@ -324,8 +356,10 @@ interface Call {
   readonly at: number;
   readonly by: string | undefined;
   readonly call: string;
+  readonly op: unknown;
   readonly answer: V;
   readonly failed: boolean;
+  readonly again: boolean;
 }
 
 /** A saga's run to go on with: one just started, or one whose signal came. */
@@ -340,6 +374,12 @@ interface Trigger {
   readonly parent: number;
   /** For a policy that reacts to a view: the view's state after the event. */
   readonly state?: V;
+  /** Names the delivery: the commands the policy sends for it get ids derived from it. */
+  readonly key: string;
+  /** The policy has handled this event once already. */
+  readonly again?: boolean;
+  /** Put behind the other reactions that were waiting. */
+  readonly deferred?: boolean;
 }
 
 /** One sequence while it runs. */
@@ -348,6 +388,10 @@ interface Sequence {
   readonly instances: Array<Instance>;
   readonly views: Array<ViewSlot>;
   readonly calls: Array<Call>;
+  /** What each send of each delivery gave, by the delivery and the send's place in it. */
+  readonly receipts: Map<string, Receipt>;
+  /** What each schedule of each delivery gave. */
+  readonly armed: Map<string, V>;
   readonly queue: Array<Trigger | Resume>;
   readonly sagas: Array<SagaRun>;
   timers: Array<Timer>;
@@ -355,17 +399,42 @@ interface Sequence {
   /** How each run that stopped did, and how many commands had run by then. */
   readonly endings: Array<{ readonly saga: string; readonly ending: string; readonly at: number }>;
   unsettled: boolean;
+  /** A reaction to the last command was put behind the others: one is, at most. */
+  moved: boolean;
   /** The policies, sagas and external systems that ran in it: they count once it can happen. */
   readonly ran: {
     readonly policies: Set<string>;
     readonly sagas: Set<string>;
     readonly systems: Set<string>;
+    readonly repeated: Set<string>;
   };
   /** The model's invariants on what the sequence left, once nothing more reacts. */
   rules: ReadonlyArray<Paths.Check>;
   /** What the model says holds in the end, on what the sequence left with nothing scheduled. */
   later: ReadonlyArray<Paths.Check>;
 }
+
+/**
+ * The first `length` commands of a story. What an external system answered
+ * after the last of them belongs to what came next, which is cut off.
+ */
+const cut = (story: Story, length: number): Story => {
+  if (length >= story.length) return story;
+  const made = story
+    .slice(0, length)
+    .map((step, index) => (index === length - 1 ? { ...step, asked: [] } : step));
+  wholes.set(made, story);
+  return made;
+};
+
+/** The whole sequence each cut story was the start of. */
+const wholes = new WeakMap<Story, Story>();
+
+/**
+ * The sequence a story is the start of, with everything the model did after
+ * the story's last command: a story is cut where what it shows happened.
+ */
+export const whole = (story: Story): Story => wholes.get(story) ?? story;
 
 /** The real code does something else than the explorer read. */
 class Disagreement extends Data.TaggedError("Disagreement")<{ readonly reason: string }> {}
@@ -383,7 +452,7 @@ const SUSPENDED: V = { _tag: "Opaque", what: "a saga waiting for a signal" };
 const MAX_SCHEDULES = 8;
 
 /** The most reactions followed after one command a caller sends. */
-const MAX_REACTIONS = 32;
+const MAX_REACTIONS = 96;
 
 const native = (name: string, call: (args: ReadonlyArray<V>, site: Site) => Eval<V>): V => ({
   _tag: "Native",
@@ -571,6 +640,26 @@ export const locate = Effect.fn(function* (
     });
   }
 
+  /** The aggregates a handler's code names. Two handlers that name none in common cannot write the same instance. */
+  const writesOf = Effect.fnUntraced(function* (module: Module, node: Node) {
+    const names = new Map<string, Node>();
+    walk(node, (inner) => {
+      if (inner.type === "Identifier" && typeof inner.name === "string")
+        names.set(inner.name, inner);
+    });
+    const writes = new Set<unknown>();
+    for (const named of names.values()) {
+      const value = yield* interpreter
+        .evaluate(named, interpreter.moduleEnv(module))
+        .pipe(Effect.result);
+      if (Result.isFailure(value) || value.success._tag !== "Host") continue;
+      const host = value.success.value;
+      if ((model.sagas ?? []).includes(host)) return undefined;
+      if (aggregates.some((agg) => agg.cls === host)) writes.add(host);
+    }
+    return writes;
+  });
+
   const policies: Array<PolicyImpl> = [];
   for (const cls of model.definitions.policies as ReadonlyArray<PolicyClass>) {
     const leave = (reason: string) =>
@@ -593,6 +682,7 @@ export const locate = Effect.fn(function* (
         on: cls.definition.on,
         module: handler.module,
         node: handler.node,
+        writes: yield* writesOf(handler.module, handler.node),
       });
   }
   const sagas: Array<SagaImpl> = [];
@@ -738,6 +828,7 @@ export const search = Effect.fn(function* (
         endings.set(`${saga.name} ${ending}`, { saga: saga.name, ending, story: undefined });
     const followed = new Set<string>();
     const called = new Set<string>();
+    const repeated = new Set<string>();
     const started = new Set<string>();
     const unread = new Map<string, Value.NotTranslated>();
     const disagreements = new Set<string>();
@@ -770,6 +861,8 @@ export const search = Effect.fn(function* (
       readonly instances: ReadonlyArray<Instance>;
       readonly views: ReadonlyArray<ViewSlot>;
       readonly calls: ReadonlyArray<Call>;
+      readonly receipts: ReadonlyMap<string, Receipt>;
+      readonly armed: ReadonlyMap<string, V>;
       readonly sagas: ReadonlyArray<SagaRun>;
       readonly timers: ReadonlyArray<Timer>;
       /** The commands callers sent and the schedules that came due. */
@@ -781,13 +874,16 @@ export const search = Effect.fn(function* (
       instances: [...from.instances],
       views: [...from.views],
       calls: [...from.calls],
+      receipts: new Map(from.receipts),
+      armed: new Map(from.armed),
       queue: [],
       sagas: [...from.sagas],
       timers: [...from.timers],
       failures: [],
       endings: [],
       unsettled: false,
-      ran: { policies: new Set(), sagas: new Set(), systems: new Set() },
+      moved: false,
+      ran: { policies: new Set(), sagas: new Set(), systems: new Set(), repeated: new Set() },
       rules: [],
       later: [],
     });
@@ -797,6 +893,8 @@ export const search = Effect.fn(function* (
       instances: [],
       views: [],
       calls: [],
+      receipts: new Map(),
+      armed: new Map(),
       sagas: [],
       timers: [],
       length: 0,
@@ -808,6 +906,10 @@ export const search = Effect.fn(function* (
      */
     let sequence = begin(nothing);
     let reacting: string | undefined;
+    /** The delivery a policy is handling, and how many commands it has sent or scheduled for it. */
+    let delivering:
+      | { readonly key: string; readonly again: boolean; ordinal: number; refused: boolean }
+      | undefined;
     let working:
       | {
           readonly journal: Map<string, Journaled>;
@@ -930,7 +1032,7 @@ export const search = Effect.fn(function* (
               : [];
         const emitted = made.filter((out) => out._tag !== "Undef");
         entry.emitted.push({ view, tags: emitted.map((out) => tagOf(out) ?? "?") });
-        for (const out of emitted) {
+        for (const [nth, out] of emitted.entries()) {
           const cls = out._tag === "Obj" ? out.brand?.cls : undefined;
           for (const policy of policies)
             if (policy.from === view.cls && policy.on.includes(cls))
@@ -940,6 +1042,7 @@ export const search = Effect.fn(function* (
                 event: out,
                 parent: at,
                 state: after ?? Value.nil,
+                key: `${at}/${view.name}/${tag}/${nth}/${policy.name}`,
               });
         }
       });
@@ -975,10 +1078,13 @@ export const search = Effect.fn(function* (
         at: sequence.trail.length,
         by: reacting,
         call,
+        op: (cls as unknown as Readonly<Record<string, unknown>>)[op],
         answer: value,
         failed: picked !== 0,
+        again: delivering?.again === true,
       });
       sequence.ran.systems.add(cls.systemName);
+      if (delivering?.again) sequence.ran.repeated.add(`${call}, by ${reacting}`);
       return picked === 0
         ? Effect.succeed(value)
         : Effect.fail(new Value.Rejected({ rejection: value }));
@@ -1027,7 +1133,11 @@ export const search = Effect.fn(function* (
         if (previous) run.assume(`(>= ${now.text} ${Smt.symbol(`${previous.label}now`)})`);
         // A scheduled command runs once its delay has passed.
         if (timer) run.assume(`(>= ${now.text} (+ ${timer.since} ${timer.millis}))`);
-        const sent = { by: timer ? timer.by : reacting, after: timer?.after };
+        const sent = {
+          by: timer ? timer.by : reacting,
+          after: timer?.after,
+          again: !timer && delivering?.again === true,
+        };
         const instance = sequence.instances[index]!;
         const step = yield* Paths.step(
           interpreter,
@@ -1087,11 +1197,17 @@ export const search = Effect.fn(function* (
           emitted: [],
           ...sent,
         });
-        for (const event of applied.events) {
+        for (const [nth, event] of applied.events.entries()) {
           const cls = event._tag === "Obj" ? event.brand?.cls : undefined;
           for (const policy of policies)
             if (policy.from === agg.cls && policy.on.includes(cls))
-              sequence.queue.push({ policy, instance: index, event, parent: at });
+              sequence.queue.push({
+                policy,
+                instance: index,
+                event,
+                parent: at,
+                key: `${at}/${nth}/${policy.name}`,
+              });
           for (const view of located.views)
             if (view.source === agg.cls) yield* fold(view, index, event, at);
         }
@@ -1170,12 +1286,25 @@ export const search = Effect.fn(function* (
       ) {
         const to = yield* addressed(agg, target, command, site, "sends");
         const index = resolve(agg, to.address, to.text);
-        const applied = yield* apply(
-          agg,
-          index,
-          to.cls,
-          pin(to.command, `${sequence.trail.length + 1}.command`),
-        );
+        // A command's id comes from the delivery and its place in it: the instance that
+        // took it once gives the same answer again, and does nothing more.
+        const slot =
+          delivering && !working ? `${delivering.key}#${delivering.ordinal++}` : undefined;
+        const before = slot === undefined ? undefined : sequence.receipts.get(slot);
+        const applied =
+          before && before.instance === index
+            ? before.applied
+            : yield* apply(
+                agg,
+                index,
+                to.cls,
+                pin(to.command, `${sequence.trail.length + 1}.command`),
+              );
+        // The kernel keeps what a command gave only once the command is taken: one it
+        // refused is decided again, on the state the instance has by then.
+        if (slot !== undefined && !before && applied._tag !== "Rejected")
+          sequence.receipts.set(slot, { instance: index, applied });
+        if (delivering && applied._tag === "Rejected") delivering.refused = true;
         if (applied._tag === "Rejected")
           return yield* new Value.Rejected({ rejection: applied.rejection });
         return Value.obj({
@@ -1200,6 +1329,10 @@ export const search = Effect.fn(function* (
       site: Site,
     ) {
       const to = yield* addressed(agg, target, command, site, "schedules");
+      // The same arming again, by a policy handling its event again: it stays as it is.
+      const slot = delivering && !working ? `${delivering.key}#${delivering.ordinal++}` : undefined;
+      const armed = slot === undefined ? undefined : sequence.armed.get(slot);
+      if (armed) return armed;
       const fields = options?._tag === "Obj" ? options.fields : {};
       const wait = fields.after;
       const millis =
@@ -1242,10 +1375,12 @@ export const search = Effect.fn(function* (
         after: wait?._tag === "Str" ? wait.value : `${millis} ms`,
         by: reacting,
       });
-      return Value.obj({
+      const receipt = Value.obj({
         commandId: Value.str(commandId),
         at: { _tag: "Time", millis: { sort: "Int", text: `(+ ${since} ${millis})` } },
       });
+      if (slot !== undefined) sequence.armed.set(slot, receipt);
+      return receipt;
     });
 
     const unschedule: (agg: Agg, target: V | undefined, id: V | undefined, site: Site) => Eval<V> =
@@ -1637,11 +1772,44 @@ export const search = Effect.fn(function* (
         }
         const trigger = next;
         const policy = trigger.policy;
+        // Reactions that wait at the same time run in no set order: this one may go last.
+        // One is moved after each command a caller sends, so the orders tried grow with
+        // the reactions, not with every way to shuffle them.
+        // Only where it can matter: two that write no aggregate in common give the same
+        // states in either order.
+        const clashes = (other: Trigger | Resume) =>
+          "resume" in other
+            ? policy.writes === undefined || policy.writes.size > 0
+            : !other.again &&
+              other.policy !== policy &&
+              (policy.writes === undefined ||
+                other.policy.writes === undefined ||
+                [...policy.writes].some((agg) => other.policy.writes!.has(agg)));
+        if (
+          options.faults.reorder &&
+          !sequence.moved &&
+          !trigger.deferred &&
+          !trigger.again &&
+          sequence.queue.some(clashes) &&
+          interpreter.current.run.choose(2) === 1
+        ) {
+          sequence.moved = true;
+          sequence.queue.push({ ...trigger, deferred: true });
+          continue;
+        }
         const site: Site = { module: policy.module, node: policy.node };
         const instance = sequence.instances[trigger.instance]!;
         const parent = sequence.trail[trigger.parent]!;
         const source = Value.obj({ aggregate: Value.str(instance.agg.name), id: instance.id });
         reacting = policy.name;
+        const delivery = {
+          key: trigger.key,
+          again: trigger.again === true,
+          ordinal: 0,
+          refused: false,
+        };
+        delivering = delivery;
+        const asked = sequence.calls.length;
         const rejection = yield* interpreter
           .evaluate(policy.node, interpreter.moduleEnv(policy.module))
           .pipe(
@@ -1671,7 +1839,18 @@ export const search = Effect.fn(function* (
             Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected.rejection)),
           );
         reacting = undefined;
+        delivering = undefined;
         sequence.ran.policies.add(policy.name);
+        // Delivery is at least once: the event comes again, after what else was waiting.
+        // A handler sends the same commands again, under the same ids, and every instance
+        // that took one does nothing more. Two things can change that: an external system
+        // that answers something else, and a command refused the first time.
+        if (
+          options.faults.redeliver &&
+          !trigger.again &&
+          (sequence.calls.length > asked || delivery.refused)
+        )
+          sequence.queue.push({ ...trigger, again: true, deferred: true });
         if (rejection)
           sequence.failures.push({ policy: policy.name, tag: tagOf(rejection) ?? "an error" });
       }
@@ -1715,13 +1894,15 @@ export const search = Effect.fn(function* (
           at: call.at,
           by: call.by,
           call: call.call,
+          op: call.op,
           answer: "value" in built ? built.value : "an answer the explorer cannot show",
           failed: call.failed,
+          again: call.again,
         });
       }
-      /** The calls made since the command before this one. */
+      /** The calls made after a command, by what reacted to it or to one before it. */
       const after = (at: number) =>
-        asked.flatMap(({ at: made, ...call }) => (made === at ? [call] : []));
+        asked.flatMap(({ at: made, ...call }) => (made === at + 1 ? [call] : []));
       for (const [at, entry] of played.trail.entries()) {
         const slot = real[entry.instance]!;
         const { _tag: tag, ...fields } = (yield* build("command", entry.inputs.command)) as {
@@ -1736,12 +1917,12 @@ export const search = Effect.fn(function* (
             }),
         });
         let context = Context.empty() as Context.Context<unknown>;
-        const read: Array<{ name: string; value: unknown }> = [];
+        const read: Array<{ name: string; value: unknown; tag: unknown }> = [];
         for (const [key, held] of run.contexts) {
           if (!key.startsWith(entry.label)) continue;
           const value = yield* build(key, held.value);
           context = Context.add(context, held.tag as Context.Key<unknown, unknown>, value);
-          read.push({ name: key.slice(key.lastIndexOf("/") + 1), value });
+          read.push({ name: key.slice(key.lastIndexOf("/") + 1), value, tag: held.tag });
         }
         const now = (yield* build("now", entry.inputs.now)) as DateTime.Utc;
         const prediction = Aggregate.predict(entry.agg.cls, slot.state, command, {
@@ -1774,6 +1955,7 @@ export const search = Effect.fn(function* (
           by: entry.by,
           after: entry.after,
           asked: after(at),
+          again: entry.again,
         };
         if (prediction._tag === "Rejected") {
           story.push({
@@ -1978,7 +2160,7 @@ export const search = Effect.fn(function* (
           const outcome = outcomes.get(name)!;
           if (shorter(outcome.story, length))
             wants.push((story) => {
-              if (shorter(outcome.story, length)) outcome.story = story.slice(0, length);
+              if (shorter(outcome.story, length)) outcome.story = cut(story, length);
             });
         };
         if (applied._tag === "Rejected") want("rejects", tagOf(applied.rejection));
@@ -1987,7 +2169,7 @@ export const search = Effect.fn(function* (
           const state = reached.get(`${entry.agg.name} ${tagOf(applied.state)}`);
           if (state && shorter(state.story, length))
             wants.push((story) => {
-              if (shorter(state.story, length)) state.story = story.slice(0, length);
+              if (shorter(state.story, length)) state.story = cut(story, length);
             });
         }
       }
@@ -1999,7 +2181,7 @@ export const search = Effect.fn(function* (
               endings.set(name, {
                 saga: ended.saga,
                 ending: ended.ending,
-                story: story.slice(0, ended.at),
+                story: cut(story, ended.at),
               });
           });
       }
@@ -2089,12 +2271,12 @@ export const search = Effect.fn(function* (
             if (found.rule) {
               const kept = found.rule === "invariant" ? ruled : ended;
               if (shorter(kept.get(found.name), found.at + 1))
-                kept.set(found.name, replayed!.story.slice(0, found.at + 1));
+                kept.set(found.name, cut(replayed!.story, found.at + 1));
               continue;
             }
             const entry = broken.get(found.name);
             if (entry && shorter(entry.story, found.at + 1))
-              entry.story = replayed!.story.slice(0, found.at + 1);
+              entry.story = cut(replayed!.story, found.at + 1);
           }
         }
       }
@@ -2172,6 +2354,7 @@ export const search = Effect.fn(function* (
         interpreter.hooks.provided.clear();
         sequence = begin(from);
         reacting = undefined;
+        delivering = undefined;
         working = undefined;
         stopped = undefined;
         const ran = yield* Effect.suspend(() => move(run)).pipe(
@@ -2232,12 +2415,14 @@ export const search = Effect.fn(function* (
         const fresh =
           [...played.ran.policies].some((name) => !followed.has(name)) ||
           [...played.ran.sagas].some((name) => !started.has(name)) ||
-          [...played.ran.systems].some((name) => !called.has(name));
+          [...played.ran.systems].some((name) => !called.has(name)) ||
+          [...played.ran.repeated].some((name) => !repeated.has(name));
         // Something ran here for the first time: it counts when the sequence can happen.
         if (feasible && fresh && (yield* Check.solve(solver, run, "false"))._tag === "Sat") {
           for (const name of played.ran.policies) followed.add(name);
           for (const name of played.ran.sagas) started.add(name);
           for (const name of played.ran.systems) called.add(name);
+          for (const name of played.ran.repeated) repeated.add(name);
         }
         const next: Open = {
           run,
@@ -2245,6 +2430,8 @@ export const search = Effect.fn(function* (
           instances: played.instances,
           views: played.views,
           calls: played.calls,
+          receipts: played.receipts,
+          armed: played.armed,
           sagas: played.sagas,
           timers: played.timers,
           length: from.length + 1,
@@ -2381,6 +2568,8 @@ export const search = Effect.fn(function* (
       idle: policies.flatMap((policy) => (followed.has(policy.name) ? [] : [policy.name])),
       views: located.views.map((view) => view.name),
       systems: [...called],
+      faults: options.faults,
+      repeated: [...repeated],
       sagas: [...started],
       unstarted: sagas.flatMap((saga) => (started.has(saga.name) ? [] : [saga.name])),
       endings: [...endings.values()],
