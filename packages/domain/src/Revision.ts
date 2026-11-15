@@ -86,22 +86,11 @@ export const countRevisions = (
   return models;
 };
 
-/** The environment value a platform binds the counts as: model name to revision. */
-export const revisionsText = (models: Readonly<Record<string, ModelRevision>>) =>
-  JSON.stringify(Object.fromEntries(Object.entries(models).map(([m, r]) => [m, r.revision])));
-
-/** Read {@link revisionsText} back: `undefined` for anything else. */
-export const parseRevisions = (text: unknown): Readonly<Record<string, number>> | undefined => {
-  if (typeof text !== "string" || text === "") return undefined;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, number>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-};
+/** What a platform binds into its code's environment: each model's revision, by name. */
+export const revisionCounts = (
+  models: Readonly<Record<string, ModelRevision>>,
+): Record<string, number> =>
+  Object.fromEntries(Object.entries(models).map(([model, { revision }]) => [model, revision]));
 
 export const RevisionProvider = () =>
   Provider.succeed(Revision, {
@@ -141,9 +130,9 @@ export const classRevisions = (name: string) => {
       `DOMAIN_REVISIONS_${name}`,
       resource === undefined
         ? Output.literal(undefined)
-        : resource.models.pipe(Output.map(revisionsText)),
+        : resource.models.pipe(Output.map(revisionCounts)),
     );
-    counts = parseRevisions(yield* ctx.get<string>(bound));
+    counts = yield* ctx.get<Readonly<Record<string, number>>>(bound);
   });
   const host: NonNullable<Host["revision"]> = {
     // Each model on the class binds its consumers: the next deploy counts them.
@@ -151,7 +140,10 @@ export const classRevisions = (name: string) => {
       resource === undefined
         ? Effect.void
         : resource.bind`${modelName}`({ model: modelName, consumers: [...consumers] }),
-    current: ({ modelName }) => counts?.[modelName],
+    current: ({ modelName }) => {
+      const revision = counts?.[modelName];
+      return typeof revision === "number" ? revision : undefined;
+    },
   };
   return { phase, host };
 };

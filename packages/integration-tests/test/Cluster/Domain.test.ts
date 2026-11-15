@@ -6,7 +6,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { domainRevisions, ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, waitForReady } from "../Domain/conformance/conformance.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
 import DomainFront from "./fixtures/domain/front.ts";
@@ -47,6 +47,13 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
+
+    test(
+      "the runners run with the model's revision",
+      Effect.gen(function* () {
+        expect(yield* domainRevisions).toEqual({ DomainObjects: { Conformance: 1 } });
+      }),
+    );
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
   },
