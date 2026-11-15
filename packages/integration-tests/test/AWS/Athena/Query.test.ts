@@ -155,6 +155,34 @@ describe(
     );
 
     test.provider(
+      "reads every page of a result longer than one GetQueryResults page",
+      () =>
+        Effect.gen(function* () {
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/many`));
+          expect(response.status).toBe(200);
+          const body = (yield* response.json) as {
+            state: string;
+            columns: string[];
+            types: string[];
+            rows: number;
+            values: Array<Array<string | null>>;
+          };
+          expect(body.state).toBe("SUCCEEDED");
+          expect(body.columns).toEqual(["x", "y"]);
+          expect(body.types).toEqual(["integer", "integer"]);
+          // The header row, then 2,500 data rows across three pages of at most 1,000.
+          expect(body.rows).toBe(2501);
+          expect(body.values.length).toBe(2500);
+          expect(body.values[0]).toEqual(["1", "1"]);
+          expect(body.values[1]).toEqual(["2", null]);
+          expect(body.values[1999]).toEqual(["2000", null]);
+          expect(body.values[2499]).toEqual(["2500", null]);
+          expect(body.values.filter((row) => row[1] === null).length).toBe(1250);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
       "runs SELECT COUNT(*) over a Glue table on S3 CSV data",
       () =>
         Effect.gen(function* () {

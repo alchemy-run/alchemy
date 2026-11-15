@@ -126,7 +126,8 @@ const deepEqual = (a: unknown, b: unknown): boolean => {
   return kx.every((k) => deepEqual((x as any)[k], (y as any)[k]));
 };
 
-const isOperatorObject = (value: unknown): value is Record<string, unknown> =>
+/** Is this field filter a set of operators (`{ gt: 1 }`) rather than a value or a nested filter? @internal */
+export const isOperatorObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" &&
   value !== null &&
   !Array.isArray(value) &&
