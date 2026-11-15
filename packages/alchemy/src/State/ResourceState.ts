@@ -107,6 +107,8 @@ export interface UpdatingReourceState extends BaseResourceState {
     bindings: any[];
     /** The old output properties that have been successfully applied. */
     attr: Attr;
+    /** The removal policy of the last successful deploy. */
+    removalPolicy?: RemovalPolicy["Service"];
     // TODO(sam): do I need to track the old downstream edges?
     // downstream: string[];
   };
