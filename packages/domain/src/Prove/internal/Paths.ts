@@ -377,14 +377,15 @@ export const unread = (
 };
 
 /**
- * The object passed to `Domain.Aggregate(name, { ... })` or
- * `Domain.Model(name, { ... })` in a file: the one with the property `key`,
- * which an event or a command of the same name does not have.
+ * The object passed to `Domain.Aggregate(name, { ... })`,
+ * `Domain.Model(name, { ... })` or `Domain.View(name, { ... })` in a file: the
+ * one with the property `key`, which an event or a command of the same name
+ * does not have.
  */
 export const find = (
   program: Node,
   name: string,
-  key: "decide" | "aggregates",
+  key: "decide" | "aggregates" | "from",
 ): Node | undefined => {
   const visit = (node: unknown): Node | undefined => {
     if (Array.isArray(node)) {

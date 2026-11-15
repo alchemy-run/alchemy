@@ -102,11 +102,23 @@ export interface Members<
    * Rules that hold across the model's aggregates whenever nothing is left to
    * react: every policy has handled the events it reacts to and every saga
    * has finished or waits. Each is named and given every instance, with its
-   * state and the events it recorded: `true` while the rule holds.
-   * `Explore.check` looks for a sequence of commands that breaks one.
+   * state and the events it recorded, and every key of the model's views
+   * with its state: `true` while the rule holds. `Explore.check` looks for a
+   * sequence of commands that breaks one.
    */
-  readonly invariants?: { readonly [name: string]: (model: Instances<A>) => boolean };
+  readonly invariants?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V>) => boolean;
+  };
 }
+
+/** Every key of a model's views that has a state, by view name: what a model invariant is given. */
+export type Keys<V extends ReadonlyArray<View.Any>> = {
+  readonly [K in V[number] as K["viewName"]]: ReadonlyArray<{
+    /** The id of the instance the key follows. */
+    readonly id: string;
+    readonly state: NonNullable<View.StateOf<K>>;
+  }>;
+};
 
 /** Every instance of a model's aggregates, by aggregate name: what a model invariant is given. */
 export type Instances<A extends ReadonlyArray<Aggregate.Any>> = {

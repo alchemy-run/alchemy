@@ -184,6 +184,33 @@ export const make = (host: Host) => {
       return Effect.succeed(Value.term(x.sort, pick(x.text, y.text)));
     };
 
+  // The date of a UTC time, as text: `formatIsoDate` and `formatIsoDateUtc` give the same.
+  const isoDate: Model = ([time], site) => {
+    if (time?._tag !== "Time") return wrongArguments(site, "DateTime.formatIsoDate");
+    const run = host.current.run;
+    // A function of the day, not of the millisecond: the solver then learns
+    // one fact per day it tries, instead of one per instant.
+    const day = Smt.symbol(`day of ${time.millis.text.replaceAll("|", "")}`);
+    if (!run.declarations.has(day)) {
+      run.declarations.set(day, `(declare-const ${day} Int)`);
+      run.assume(`(= ${day} (div ${time.millis.text} ${DAY}))`);
+    }
+    return Effect.succeed<V>({
+      _tag: "Term",
+      term: run.apply(
+        "DateTime.formatIsoDate",
+        { sort: "Int", text: day },
+        "String",
+        (at) => DateTime.formatIsoDate(DateTime.makeUnsafe(at * DAY)),
+        // "2026-11-10": true of every day, so no day is ever "".
+        (date) => `(= (str.len ${date.text}) 10)`,
+        // Two days never share a date: the solver cannot invent a day that
+        // reads as another, which it would otherwise try one day at a time.
+        true,
+      ),
+    });
+  };
+
   const models: Readonly<Record<string, Model>> = {
     "effect/Effect:fn": fn,
     "effect/Effect:fnUntraced": fn,
@@ -272,31 +299,8 @@ export const make = (host: Host) => {
     "effect/Optic:id": () => Effect.succeed<V>({ _tag: "Optic", path: [] }),
     "effect/Optic:modify": modify,
     "effect/Optic:replace": replace,
-    "effect/DateTime:formatIsoDate": ([time], site) => {
-      if (time?._tag !== "Time") return wrongArguments(site, "DateTime.formatIsoDate");
-      const run = host.current.run;
-      // A function of the day, not of the millisecond: the solver then learns
-      // one fact per day it tries, instead of one per instant.
-      const day = Smt.symbol(`day of ${time.millis.text.replaceAll("|", "")}`);
-      if (!run.declarations.has(day)) {
-        run.declarations.set(day, `(declare-const ${day} Int)`);
-        run.assume(`(= ${day} (div ${time.millis.text} ${DAY}))`);
-      }
-      return Effect.succeed<V>({
-        _tag: "Term",
-        term: run.apply(
-          "DateTime.formatIsoDate",
-          { sort: "Int", text: day },
-          "String",
-          (at) => DateTime.formatIsoDate(DateTime.makeUnsafe(at * DAY)),
-          // "2026-11-10": true of every day, so no day is ever "".
-          (date) => `(= (str.len ${date.text}) 10)`,
-          // Two days never share a date: the solver cannot invent a day that
-          // reads as another, which it would otherwise try one day at a time.
-          true,
-        ),
-      });
-    },
+    "effect/DateTime:formatIsoDate": isoDate,
+    "effect/DateTime:formatIsoDateUtc": isoDate,
     "effect/DateTime:toEpochMillis": ([time], site) =>
       time?._tag === "Time"
         ? Effect.succeed<V>({ _tag: "Term", term: time.millis })

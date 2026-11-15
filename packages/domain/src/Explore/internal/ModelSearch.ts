@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
+import * as ExternalSystem from "../../ExternalSystem.ts";
 import * as Check from "../../Prove/internal/Check.ts";
 import * as Induction from "../../Prove/internal/Induction.ts";
 import type { Interpreter } from "../../Prove/internal/Interpreter.ts";
@@ -28,6 +29,19 @@ export interface Step extends Move {
   readonly by: string | undefined;
   /** The delay of the schedule that sent the command, as the code wrote it. */
   readonly after: string | undefined;
+  /** What the external systems answered since the command before, to whoever sent this one. */
+  readonly asked: ReadonlyArray<Asked>;
+}
+
+/** One call to an external system, and the answer the solver picked for it. */
+export interface Asked {
+  /** The policy or saga that called. */
+  readonly by: string | undefined;
+  /** The system and its operation: `FraudCheck.score`. */
+  readonly call: string;
+  readonly answer: unknown;
+  /** Whether the answer is one of the operation's declared errors. */
+  readonly failed: boolean;
 }
 
 /** Commands callers send one after another, each followed by what the policies do about it. */
@@ -102,6 +116,10 @@ export interface Found {
   readonly followed: ReadonlyArray<string>;
   /** The policies no sequence recorded an event for. */
   readonly idle: ReadonlyArray<string>;
+  /** The views folded along every sequence: a policy reacts to one, or an invariant reads one. */
+  readonly views: ReadonlyArray<string>;
+  /** The external systems called, each answered with every answer its schema allows. */
+  readonly systems: ReadonlyArray<string>;
   /** The sagas that ran. */
   readonly sagas: ReadonlyArray<string>;
   /** The sagas no sequence started. */
@@ -135,6 +153,7 @@ export interface ModelLike {
   readonly modelName: string;
   readonly definitions: {
     readonly aggregates: ReadonlyArray<Aggregate.Any>;
+    readonly views?: ReadonlyArray<unknown>;
     readonly policies: ReadonlyArray<unknown>;
   };
   readonly sagas?: ReadonlyArray<unknown>;
@@ -149,6 +168,39 @@ interface PolicyClass {
 interface CommandClass extends Paths.CommandClass {
   readonly events: ReadonlyArray<{ readonly tag: string }>;
   readonly rejects: ReadonlyArray<{ readonly tag: string }>;
+}
+
+type RealHandler = (...args: ReadonlyArray<unknown>) => unknown;
+
+interface ViewClass {
+  readonly viewName: string;
+  readonly definition: {
+    readonly from: ReadonlyArray<unknown>;
+    readonly key: unknown;
+    readonly state?: unknown;
+    readonly initial?: unknown;
+    readonly keyOf?: unknown;
+    readonly evolve?: Readonly<Record<string, unknown>>;
+    readonly events?: ReadonlyArray<{ readonly tag: string }>;
+    readonly emit?: Readonly<Record<string, unknown>>;
+  };
+}
+
+/** A view the explorer folds: keyed by the one aggregate it reads, each event to its own instance. */
+interface ViewImpl {
+  readonly name: string;
+  readonly cls: ViewClass;
+  readonly definition: Paths.Definition;
+  readonly source: Aggregate.Any;
+  readonly stateful: boolean;
+  readonly initial: V;
+  /** The events it says it emits: without them it passes on each event it folds. */
+  readonly declared: ReadonlySet<string> | undefined;
+}
+
+interface SystemClass {
+  readonly systemName: string;
+  readonly ops: Readonly<Record<string, ExternalSystem.OpSpec>>;
 }
 
 interface Agg {
@@ -242,6 +294,26 @@ interface Entry {
   readonly checks: ReadonlyArray<Paths.Check>;
   readonly by: string | undefined;
   readonly after: string | undefined;
+  /** What each view emitted for the command's events, by the view's name. */
+  readonly emitted: Array<{ readonly view: ViewImpl; readonly tags: ReadonlyArray<string> }>;
+}
+
+/** One key of a view: the instance it follows, and its state. */
+interface ViewSlot {
+  readonly view: ViewImpl;
+  readonly instance: number;
+  /** `undefined` once the view deleted the key. */
+  readonly state: V | undefined;
+}
+
+/** A call to an external system: the answer is an input the solver picks. */
+interface Call {
+  /** The commands that had run when it was made. */
+  readonly at: number;
+  readonly by: string | undefined;
+  readonly call: string;
+  readonly answer: V;
+  readonly failed: boolean;
 }
 
 /** A saga's run to go on with: one just started, or one whose signal came. */
@@ -254,12 +326,16 @@ interface Trigger {
   readonly instance: number;
   readonly event: V;
   readonly parent: number;
+  /** For a policy that reacts to a view: the view's state after the event. */
+  readonly state?: V;
 }
 
 /** One sequence while it runs. */
 interface Sequence {
   readonly trail: Array<Entry>;
   readonly instances: Array<Instance>;
+  readonly views: Array<ViewSlot>;
+  readonly calls: Array<Call>;
   readonly queue: Array<Trigger | Resume>;
   readonly sagas: Array<SagaRun>;
   timers: Array<Timer>;
@@ -267,6 +343,12 @@ interface Sequence {
   /** How each run that stopped did, and how many commands had run by then. */
   readonly endings: Array<{ readonly saga: string; readonly ending: string; readonly at: number }>;
   unsettled: boolean;
+  /** The policies, sagas and external systems that ran in it: they count once it can happen. */
+  readonly ran: {
+    readonly policies: Set<string>;
+    readonly sagas: Set<string>;
+    readonly systems: Set<string>;
+  };
   /** The model's invariants on what the sequence left, once nothing more reacts. */
   rules: ReadonlyArray<Paths.Check>;
 }
@@ -407,14 +489,84 @@ export const locate = Effect.fn(function* (
     }
   }
 
-  const policies: Array<PolicyImpl> = [];
+  // The model's own invariants, where its file declares them.
+  const home = modules.find(
+    (m) =>
+      Paths.find(m.program, model.modelName, "aggregates") !== undefined &&
+      Object.values(m.exports).includes(model),
+  );
+  const declared: Paths.Definition | undefined = home && {
+    module: home,
+    node: Paths.find(home.program, model.modelName, "aggregates")!,
+    name: model.modelName,
+    state: undefined,
+  };
+  /** The names the model's invariants use: a view one names is one they read. */
+  const named = new Set<string>();
+  if (declared)
+    for (const property of declared.node.properties as ReadonlyArray<Node>)
+      if (
+        property.type === "Property" &&
+        ["invariants", "eventually"].includes(String(property.key.name ?? property.key.value))
+      )
+        walk(property.value, (node) => {
+          if (node.type === "Identifier" && typeof node.name === "string") named.add(node.name);
+        });
+
+  const views: Array<ViewImpl> = [];
+  /** Why the explorer does not fold a view, by its class. */
+  const unfolded = new Map<unknown, string>();
   const skipped: Array<Skipped> = [];
+  for (const cls of (model.definitions.views ?? []) as ReadonlyArray<ViewClass>) {
+    const def = cls.definition;
+    const module = modules.find(
+      (m) =>
+        Object.values(m.exports).includes(cls) &&
+        Paths.find(m.program, cls.viewName, "from") !== undefined,
+    );
+    const source = aggregates.find((agg) => agg.cls === def.key)?.cls;
+    const reason = !module
+      ? "is not declared in a file the model's file imports"
+      : !source || def.from.length !== 1 || def.from[0] !== source
+        ? "reads more than the aggregate that keys it, which the explorer does not follow yet"
+        : def.keyOf !== undefined
+          ? "routes its events with keyOf, which the explorer does not follow yet"
+          : undefined;
+    if (reason !== undefined || !module || !source) {
+      unfolded.set(cls, reason ?? "is not followed");
+      if (named.has(cls.viewName))
+        skipped.push({ policy: cls.viewName, reason: reason!, file: undefined, line: undefined });
+      continue;
+    }
+    views.push({
+      name: cls.viewName,
+      cls,
+      definition: {
+        module,
+        node: Paths.find(module.program, cls.viewName, "from")!,
+        name: cls.viewName,
+        state: def.state,
+      },
+      source,
+      stateful: def.state !== undefined,
+      initial: lift(def.initial),
+      declared: def.events ? new Set(def.events.map((event) => event.tag)) : undefined,
+    });
+  }
+
+  const policies: Array<PolicyImpl> = [];
   for (const cls of model.definitions.policies as ReadonlyArray<PolicyClass>) {
     const leave = (reason: string) =>
       skipped.push({ policy: cls.policyName, reason, file: undefined, line: undefined });
     const handler = handlers.get(cls);
-    if (!aggregates.some((agg) => agg.cls === cls.definition.from))
-      leave("reacts to a view, which the explorer does not follow yet");
+    const view = unfolded.get(cls.definition.from);
+    if (view !== undefined)
+      leave(`reacts to ${(cls.definition.from as ViewClass).viewName}, a view that ${view}`);
+    else if (
+      !aggregates.some((agg) => agg.cls === cls.definition.from) &&
+      !views.some((view) => view.cls === cls.definition.from)
+    )
+      leave("reacts to something the model does not list");
     else if (!Array.isArray(cls.definition.on)) leave("its events are not a list");
     else if (!handler) leave("its toLayer is not in a file the model's file imports");
     else
@@ -445,18 +597,6 @@ export const locate = Effect.fn(function* (
         node: handler.node,
       });
   }
-  // The model's own invariants, where its file declares them.
-  const home = modules.find(
-    (m) =>
-      Paths.find(m.program, model.modelName, "aggregates") !== undefined &&
-      Object.values(m.exports).includes(model),
-  );
-  const declared: Paths.Definition | undefined = home && {
-    module: home,
-    node: Paths.find(home.program, model.modelName, "aggregates")!,
-    name: model.modelName,
-    state: undefined,
-  };
   unread.push(
     ...(declared ? Paths.unread(declared, model) : Object.keys(model.invariants ?? {})).map(
       (name) => `${model.modelName}.${name}`,
@@ -467,7 +607,11 @@ export const locate = Effect.fn(function* (
     names: declared ? Paths.invariantNames(declared) : [],
     real: (model.invariants ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
   };
-  return { aggregates, missing, unread, policies, sagas, skipped, rules };
+  // Only a view something depends on is folded: a policy reacts to it, or an invariant reads it.
+  const folded = views.filter(
+    (view) => named.has(view.name) || policies.some((policy) => policy.from === view.cls),
+  );
+  return { aggregates, missing, unread, policies, sagas, skipped, rules, views: folded };
 });
 
 export type Located = Effect.Success<ReturnType<typeof locate>>;
@@ -566,7 +710,8 @@ export const search = Effect.fn(function* (
       for (const ending of ["completes", ...saga.rejects.map((tag) => `fails with ${tag}`)])
         endings.set(`${saga.name} ${ending}`, { saga: saga.name, ending, story: undefined });
     const followed = new Set<string>();
-    const ran = new Set<string>();
+    const called = new Set<string>();
+    const started = new Set<string>();
     const unread = new Map<string, Value.NotTranslated>();
     const disagreements = new Set<string>();
     const undecided = new Map<string, number>();
@@ -596,6 +741,8 @@ export const search = Effect.fn(function* (
       readonly run: Value.Run;
       readonly trail: ReadonlyArray<Entry>;
       readonly instances: ReadonlyArray<Instance>;
+      readonly views: ReadonlyArray<ViewSlot>;
+      readonly calls: ReadonlyArray<Call>;
       readonly sagas: ReadonlyArray<SagaRun>;
       readonly timers: ReadonlyArray<Timer>;
       /** The commands callers sent and the schedules that came due. */
@@ -605,18 +752,23 @@ export const search = Effect.fn(function* (
     const begin = (from: Open): Sequence => ({
       trail: [...from.trail],
       instances: [...from.instances],
+      views: [...from.views],
+      calls: [...from.calls],
       queue: [],
       sagas: [...from.sagas],
       timers: [...from.timers],
       failures: [],
       endings: [],
       unsettled: false,
+      ran: { policies: new Set(), sagas: new Set(), systems: new Set() },
       rules: [],
     });
     const nothing: Open = {
       run: new Value.Run([]),
       trail: [],
       instances: [],
+      views: [],
+      calls: [],
       sagas: [],
       timers: [],
       length: 0,
@@ -678,6 +830,152 @@ export const search = Effect.fn(function* (
       }
     };
 
+    /** A view's handler for an event: the one under the event's tag, or under its source's name. */
+    const handlerOf: (view: ViewImpl, key: string, tag: string) => Eval<V | undefined> =
+      Effect.fnUntraced(function* (view: ViewImpl, key: string, tag: string) {
+        const site: Site = { module: view.definition.module, node: view.definition.node };
+        const all = yield* Paths.handlers(interpreter, view.definition, key);
+        for (const name of [tag, view.source.aggregateName]) {
+          const found = yield* interpreter.member(all, name, site);
+          if (found._tag === "Undef") continue;
+          if (found._tag === "Obj")
+            return yield* Value.notTranslated(site, `${view.name} has a handler for each route`);
+          return found;
+        }
+        return undefined;
+      });
+
+    /**
+     * Fold one event into the view's key for the instance that recorded it,
+     * as the kernel does: `evolve`, then `emit` with the state before and
+     * after. The policies that react to the view get what it emits.
+     */
+    const fold: (view: ViewImpl, index: number, event: V, at: number) => Eval<void> =
+      Effect.fnUntraced(function* (view: ViewImpl, index: number, event: V, at: number) {
+        const site: Site = { module: view.definition.module, node: view.definition.node };
+        const tag = tagOf(event);
+        if (tag === undefined) return;
+        const entry = sequence.trail[at]!;
+        const instance = sequence.instances[index]!;
+        const where = sequence.views.findIndex(
+          (slot) => slot.view === view && slot.instance === index,
+        );
+        const current = where < 0 ? undefined : sequence.views[where]!.state;
+        const ref = Value.obj({ aggregate: Value.str(instance.agg.name), id: instance.id });
+        const context = {
+          key: ref,
+          source: ref,
+          state: Value.undef,
+          envelope: Value.obj({
+            id: instance.id,
+            at: entry.inputs.now,
+            commandId: entry.inputs.commandId,
+            correlationId: entry.inputs.commandId,
+          }),
+          at: entry.inputs.now,
+        };
+        const before = view.stateful ? (current ?? view.initial) : Value.nil;
+        const evolve = view.stateful ? yield* handlerOf(view, "evolve", tag) : undefined;
+        let after = current;
+        if (evolve) {
+          const made = yield* interpreter.call(evolve, [before, event, Value.obj(context)], site);
+          after = made._tag === "Null" || made._tag === "Undef" ? undefined : made;
+          const next: ViewSlot = { view, instance: index, state: after };
+          if (where < 0) sequence.views.push(next);
+          else sequence.views[where] = next;
+        }
+        const emit = yield* handlerOf(view, "emit", tag);
+        const made = !view.declared
+          ? evolve
+            ? [event]
+            : []
+          : emit
+            ? yield* interpreter
+                .call(
+                  emit,
+                  [event, Value.obj({ ...context, before, after: after ?? Value.nil })],
+                  site,
+                )
+                .pipe(Effect.map((out) => (out._tag === "Arr" ? out.items : [out])))
+            : view.declared.has(tag)
+              ? [event]
+              : [];
+        const emitted = made.filter((out) => out._tag !== "Undef");
+        entry.emitted.push({ view, tags: emitted.map((out) => tagOf(out) ?? "?") });
+        for (const out of emitted) {
+          const cls = out._tag === "Obj" ? out.brand?.cls : undefined;
+          for (const policy of policies)
+            if (policy.from === view.cls && policy.on.includes(cls))
+              sequence.queue.push({
+                policy,
+                instance: index,
+                event: out,
+                parent: at,
+                state: after ?? Value.nil,
+              });
+        }
+      });
+
+    /**
+     * Call an external system: the explorer does not know what it answers,
+     * so the answer is an input, and the solver picks it. Each error the
+     * operation declares is a path of its own.
+     */
+    const answer = (
+      cls: SystemClass,
+      op: string,
+      spec: ExternalSystem.OpSpec,
+      site: Site,
+    ): Eval<V> => {
+      const run = interpreter.current.run;
+      const errors: ReadonlyArray<unknown> =
+        spec.error === undefined
+          ? []
+          : Array.isArray(spec.error)
+            ? (spec.error as ReadonlyArray<unknown>)
+            : [spec.error];
+      const picked = errors.length === 0 ? 0 : run.choose(errors.length + 1);
+      const schema = picked === 0 ? ExternalSystem.successSchema(spec) : errors[picked - 1];
+      // A class's own type is opaque to the solver: its fields are what an answer is made of.
+      const fields = (schema as { readonly fields?: Schema.Struct.Fields } | undefined)?.fields;
+      const ast = Symbolic.typeOf(fields ? Schema.Struct(fields) : schema);
+      const call = `${cls.systemName}.${op}`;
+      if (!ast)
+        return Effect.fail(Value.notTranslated(site, `${call} answers something with no schema`));
+      const value = Symbolic.symbolic(ast, `answer${sequence.calls.length + 1}.${call}`, run);
+      sequence.calls.push({
+        at: sequence.trail.length,
+        by: reacting,
+        call,
+        answer: value,
+        failed: picked !== 0,
+      });
+      sequence.ran.systems.add(cls.systemName);
+      return picked === 0
+        ? Effect.succeed(value)
+        : Effect.fail(new Value.Rejected({ rejection: value }));
+    };
+    const systems = new Map<unknown, V>();
+    const systemOf = (cls: SystemClass): V => {
+      const made =
+        systems.get(cls) ??
+        Value.obj(
+          Object.fromEntries(
+            Object.entries(cls.ops).map(([op, spec]) => [
+              op,
+              native(`${cls.systemName}.${op}`, (_, site) =>
+                Effect.succeed<V>({
+                  _tag: "Effect",
+                  run: Effect.suspend(() => answer(cls, op, spec, site)),
+                }),
+              ),
+            ]),
+          ),
+        );
+      systems.set(cls, made);
+      return made;
+    };
+
     /** Send one command to an instance, in the run of the current sequence. */
     const apply: (
       agg: Agg,
@@ -726,6 +1024,7 @@ export const search = Effect.fn(function* (
             inputs: step.inputs,
             applied,
             checks: [],
+            emitted: [],
             ...sent,
           });
           return applied;
@@ -757,6 +1056,7 @@ export const search = Effect.fn(function* (
           inputs: step.inputs,
           applied,
           checks,
+          emitted: [],
           ...sent,
         });
         for (const event of applied.events) {
@@ -764,6 +1064,8 @@ export const search = Effect.fn(function* (
           for (const policy of policies)
             if (policy.from === agg.cls && policy.on.includes(cls))
               sequence.queue.push({ policy, instance: index, event, parent: at });
+          for (const view of located.views)
+            if (view.source === agg.cls) yield* fold(view, index, event, at);
         }
         return applied;
       },
@@ -1097,7 +1399,7 @@ export const search = Effect.fn(function* (
       return kind === "Saga"
         ? { _tag: "Opaque", what: "a saga" }
         : kind === "ExternalSystem"
-          ? { _tag: "Opaque", what: "an external system" }
+          ? systemOf(host as SystemClass)
           : undefined;
     };
 
@@ -1244,7 +1546,7 @@ export const search = Effect.fn(function* (
           ),
         ),
       );
-      ran.add(saga.name);
+      sequence.ran.sagas.add(saga.name);
       if (exit === SUSPENDED) {
         sequence.sagas[index] = { ...entry, journal: frame.journal, waiting: frame.waiting };
         sequence.endings.push({
@@ -1324,6 +1626,7 @@ export const search = Effect.fn(function* (
                     source,
                     key: source,
                     event: trigger.event,
+                    state: trigger.state ?? Value.undef,
                     envelope: Value.obj({
                       id: instance.id,
                       at: parent.inputs.now,
@@ -1340,7 +1643,7 @@ export const search = Effect.fn(function* (
             Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected.rejection)),
           );
         reacting = undefined;
-        followed.add(policy.name);
+        sequence.ran.policies.add(policy.name);
         if (rejection)
           sequence.failures.push({ policy: policy.name, tag: tagOf(rejection) ?? "an error" });
       }
@@ -1372,6 +1675,22 @@ export const search = Effect.fn(function* (
       const story: Array<Step> = [];
       const breaks: Array<{ readonly name: string; readonly at: number; readonly rule?: true }> =
         [];
+      /** Each view's real state, by view and instance. */
+      const seen = new Map<string, unknown>();
+      const asked: Array<Asked & { readonly at: number }> = [];
+      for (const call of played.calls) {
+        const built = Symbolic.concretize(call.answer, model);
+        asked.push({
+          at: call.at,
+          by: call.by,
+          call: call.call,
+          answer: "value" in built ? built.value : "an answer the explorer cannot show",
+          failed: call.failed,
+        });
+      }
+      /** The calls made since the command before this one. */
+      const after = (at: number) =>
+        asked.flatMap(({ at: made, ...call }) => (made === at ? [call] : []));
       for (const [at, entry] of played.trail.entries()) {
         const slot = real[entry.instance]!;
         const { _tag: tag, ...fields } = (yield* build("command", entry.inputs.command)) as {
@@ -1418,7 +1737,13 @@ export const search = Effect.fn(function* (
           return yield* new Disagreement({
             reason: `the explorer read that ${where} ${expected}, but the real code ${actual}`,
           });
-        const who = { aggregate: entry.agg.name, id: slot.id, by: entry.by, after: entry.after };
+        const who = {
+          aggregate: entry.agg.name,
+          id: slot.id,
+          by: entry.by,
+          after: entry.after,
+          asked: after(at),
+        };
         if (prediction._tag === "Rejected") {
           story.push({
             ...who,
@@ -1448,17 +1773,84 @@ export const search = Effect.fn(function* (
         });
         for (const [name, holds] of Object.entries(entry.agg.rules))
           if (holds(moved) !== true) breaks.push({ name: `${entry.agg.name}.${name}`, at });
+        // The real views on the real events: they emit what the explorer read, or it is wrong.
+        const ref = Aggregate.makeRef(entry.agg.cls, slot.id as never);
+        for (const [index, view] of located.views.entries()) {
+          if (view.source !== entry.agg.cls) continue;
+          const def = view.cls.definition;
+          const key = `${index}/${entry.instance}`;
+          const tags: Array<string> = [];
+          for (const [offset, event] of prediction.events.entries()) {
+            const pick = (map: Readonly<Record<string, unknown>> | undefined) =>
+              [map?.[event._tag], map?.[entry.agg.name]].find(
+                (handler): handler is RealHandler => typeof handler === "function",
+              );
+            const context = {
+              key: ref,
+              source: ref,
+              state: undefined,
+              envelope: {
+                id: slot.id,
+                stream: `${entry.agg.name}/${slot.id}`,
+                seq: slot.version - prediction.events.length + offset + 1,
+                at: now,
+                commandId: (yield* build("commandId", entry.inputs.commandId)) as string,
+              },
+              at: now,
+            };
+            const before = view.stateful ? (seen.get(key) ?? def.initial) : null;
+            const evolve = view.stateful ? pick(def.evolve) : undefined;
+            const emit = pick(def.emit);
+            const out = yield* Effect.try({
+              try: () => {
+                if (evolve) seen.set(key, evolve(before, event, context) ?? null);
+                const state = seen.get(key) ?? null;
+                return !view.declared
+                  ? evolve
+                    ? [event]
+                    : []
+                  : emit
+                    ? [emit(event, { ...context, before, after: state })].flat()
+                    : view.declared.has(event._tag)
+                      ? [event]
+                      : [];
+              },
+              catch: (cause) =>
+                new Disagreement({
+                  reason: `the view ${view.name} fails on the real code at ${where}: ${String(cause)}`,
+                }),
+            });
+            for (const one of out as ReadonlyArray<{ readonly _tag: string } | undefined>)
+              if (one !== undefined) tags.push(one._tag);
+          }
+          const read = entry.emitted.flatMap((made) => (made.view === view ? made.tags : []));
+          if (read.join(", ") !== tags.join(", "))
+            return yield* new Disagreement({
+              reason: `the explorer read that ${view.name} emits [${read.join(", ")}] after ${where}, but the real view emits [${tags.join(", ")}]`,
+            });
+        }
       }
       if (played.rules.length > 0) {
         // The same sequence on the real code, and the model's real invariants on what it left.
-        const model = Object.fromEntries(
-          aggs.map((agg) => [
-            agg.name,
-            real.flatMap((slot) =>
-              slot.agg === agg ? [{ id: slot.id, state: slot.state, events: slot.events }] : [],
-            ),
-          ]),
-        );
+        const model = {
+          ...Object.fromEntries(
+            located.views.map((view, index) => [
+              view.name,
+              real.flatMap((slot, instance) => {
+                const state = seen.get(`${index}/${instance}`) ?? null;
+                return state === null ? [] : [{ id: slot.id, state }];
+              }),
+            ]),
+          ),
+          ...Object.fromEntries(
+            aggs.map((agg) => [
+              agg.name,
+              real.flatMap((slot) =>
+                slot.agg === agg ? [{ id: slot.id, state: slot.state, events: slot.events }] : [],
+              ),
+            ]),
+          ),
+        };
         for (const name of located.rules.names) {
           const holds = yield* Effect.try({
             try: () => located.rules.real[name]?.(model),
@@ -1657,8 +2049,21 @@ export const search = Effect.fn(function* (
 
     /** Every instance in a sequence, by aggregate, with its state and the events it recorded. */
     const world = (played: Sequence): V =>
-      Value.obj(
-        Object.fromEntries(
+      Value.obj({
+        ...Object.fromEntries(
+          located.views.map((view) => [
+            view.name,
+            {
+              _tag: "Arr",
+              items: played.views.flatMap((slot) =>
+                slot.view === view && slot.state
+                  ? [Value.obj({ id: played.instances[slot.instance]!.id, state: slot.state })]
+                  : [],
+              ),
+            } satisfies V,
+          ]),
+        ),
+        ...Object.fromEntries(
           aggs.map((agg) => [
             agg.name,
             {
@@ -1684,7 +2089,7 @@ export const search = Effect.fn(function* (
             } satisfies V,
           ]),
         ),
-      );
+      });
 
     /** Every way one move can go from a sequence, with the reactions to it. */
     const play = Effect.fn(function* (
@@ -1741,11 +2146,23 @@ export const search = Effect.fn(function* (
         const canGoOn = changed && !played.unsettled && from.length + 1 < options.depth;
         moving = from.length + 1;
         const feasible = yield* visit(run, played, from.trail.length, canGoOn);
+        const fresh =
+          [...played.ran.policies].some((name) => !followed.has(name)) ||
+          [...played.ran.sagas].some((name) => !started.has(name)) ||
+          [...played.ran.systems].some((name) => !called.has(name));
+        // Something ran here for the first time: it counts when the sequence can happen.
+        if (feasible && fresh && (yield* Check.solve(solver, run, "false"))._tag === "Sat") {
+          for (const name of played.ran.policies) followed.add(name);
+          for (const name of played.ran.sagas) started.add(name);
+          for (const name of played.ran.systems) called.add(name);
+        }
         if (feasible && canGoOn)
           longer.push({
             run,
             trail: played.trail,
             instances: played.instances,
+            views: played.views,
+            calls: played.calls,
             sagas: played.sagas,
             timers: played.timers,
             length: from.length + 1,
@@ -1837,8 +2254,10 @@ export const search = Effect.fn(function* (
       reached: [...reached.values()],
       followed: [...followed],
       idle: policies.flatMap((policy) => (followed.has(policy.name) ? [] : [policy.name])),
-      sagas: [...ran],
-      unstarted: sagas.flatMap((saga) => (ran.has(saga.name) ? [] : [saga.name])),
+      views: located.views.map((view) => view.name),
+      systems: [...called],
+      sagas: [...started],
+      unstarted: sagas.flatMap((saga) => (started.has(saga.name) ? [] : [saga.name])),
       endings: [...endings.values()],
       skipped: [...located.skipped, ...skipped.values()],
       failures: [...failures.values()],

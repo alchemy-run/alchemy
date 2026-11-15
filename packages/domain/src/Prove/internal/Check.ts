@@ -94,7 +94,8 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
       const argument = model.get(application.argument);
       if (typeof argument !== "number") return [];
       const value = application.real(argument);
-      const point = `(= (${functionOf(application)} ${Smt.int(argument).text}) ${Smt.string(value).text})`;
+      const at = application.sort === "Real" ? Smt.real(argument) : Smt.int(argument);
+      const point = `(= (${functionOf(application)} ${at.text}) ${Smt.string(value).text})`;
       return [
         { application, argument, value, point, agrees: model.get(application.term) === value },
       ];
@@ -107,7 +108,10 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
     if (points.every((p) => p.agrees)) return answer;
     // Same arguments, with the functions' real values: often still a counterexample.
     const pinned = yield* ask(
-      points.flatMap((p) => [`(= ${p.application.argument} ${Smt.int(p.argument).text})`, p.point]),
+      points.flatMap((p) => [
+        `(= ${p.application.argument} ${(p.application.sort === "Real" ? Smt.real(p.argument) : Smt.int(p.argument)).text})`,
+        p.point,
+      ]),
     );
     if (pinned._tag === "Sat" && real(pinned.model).every((p) => p.agrees)) return pinned;
     facts.push(...points.map((p) => p.point));

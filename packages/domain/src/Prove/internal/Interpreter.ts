@@ -622,8 +622,24 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       );
     }
     if (operator === "+") {
-      const s = textual(a) ?? (a._tag === "Num" ? Smt.string(String(a.value)) : undefined);
-      const t = textual(b) ?? (b._tag === "Num" ? Smt.string(String(b.value)) : undefined);
+      // A number in a string is its text. The solver knows the text of a
+      // number only as the real `String` gives it, one number at a time.
+      const written = (v: V) =>
+        textual(v) ??
+        (v._tag === "Num"
+          ? Smt.string(String(v.value))
+          : v._tag === "Term" && (v.term.sort === "Int" || v.term.sort === "Real")
+            ? current.run.apply(
+                `String of ${v.term.sort}`,
+                v.term,
+                "String",
+                String,
+                undefined,
+                true,
+              )
+            : undefined);
+      const s = written(a);
+      const t = written(b);
       if (s && t)
         return Effect.succeed(
           a._tag !== "Term" && b._tag !== "Term"

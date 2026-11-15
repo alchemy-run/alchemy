@@ -144,6 +144,8 @@ export const notTranslated = (site: Site, reason: string): NotTranslated =>
 export interface Application {
   readonly term: string;
   readonly argument: string;
+  /** The sort of the argument. */
+  readonly sort: Sort;
   /** The real function, on the argument's value in a counterexample. */
   readonly real: (argument: number) => string;
   /** Whether different arguments always give different results. */
@@ -240,7 +242,13 @@ export class Run {
     this.declarations.set(fn, `(declare-fun ${fn} (${argument.sort}) ${result})`);
     const text = `(${fn} ${argument.text})`;
     if (!this.applications.has(text) && known) this.assume(known({ sort: result, text }));
-    this.applications.set(text, { term: text, argument: argument.text, real, injective });
+    this.applications.set(text, {
+      term: text,
+      argument: argument.text,
+      sort: argument.sort,
+      real,
+      injective,
+    });
     return { sort: result, text };
   }
 }

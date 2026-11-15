@@ -9,6 +9,7 @@ import { SupportApi } from "../src/SupportApi.api.ts";
 import { Aside } from "./fixtures/Aside.aggregate.ts";
 import { Deny } from "./fixtures/Deny.aggregate.ts";
 import { Gap } from "./fixtures/Gap.aggregate.ts";
+import { Outlet, OutletApi } from "./fixtures/Outlet.model.ts";
 import { Parity } from "./fixtures/Parity.aggregate.ts";
 import { Shadow } from "./fixtures/Shadow.aggregate.ts";
 
@@ -111,15 +112,19 @@ it.effect(
   "a policy the explorer leaves out fails the check until it is allowed by name",
   () =>
     Effect.gen(function* () {
-      const failed = yield* Explore.check(Bank, {
-        source: new URL("../src/Bank.model.ts", import.meta.url),
-        apis: [CustomerApi, SupportApi],
+      // Notify reacts to a view that routes its events, which the explorer does not fold.
+      const options = {
+        source: new URL("./fixtures/Outlet.model.ts", import.meta.url),
+        apis: [OutletApi],
         depth: 1,
-      }).pipe(Effect.flip);
+      };
+      const failed = yield* Explore.check(Outlet, options).pipe(Effect.flip);
       expect(failed._tag).toBe("Incomplete");
       if (failed._tag !== "Incomplete") return;
       expect(failed.reasons).toHaveLength(1);
-      expect(failed.reasons[0]).toContain("FraudReview");
+      expect(failed.reasons[0]).toContain("Notify");
+      const report = yield* Explore.check(Outlet, { ...options, allow: { skipped: ["Notify"] } });
+      expect(report.skipped.map((skipped) => skipped.policy)).toEqual(["Notify"]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );
@@ -133,7 +138,6 @@ it.effect(
         apis: [CustomerApi, SupportApi],
         depth: 2,
         budget: 50,
-        allow: { skipped: ["FraudReview"] },
       };
       const failed = yield* Explore.check(Bank, options).pipe(Effect.flip);
       expect(failed._tag).toBe("Incomplete");
@@ -141,7 +145,7 @@ it.effect(
       expect(failed.report.truncated).toBe(true);
       const report = yield* Explore.check(Bank, {
         ...options,
-        allow: { ...options.allow, truncated: true },
+        allow: { truncated: true },
       });
       expect(report.truncated).toBe(true);
     }).pipe(Effect.provide(NodeServices.layer)),

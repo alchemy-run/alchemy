@@ -423,18 +423,28 @@ const count = (n: number): string => n.toLocaleString("en-US");
 const modelLines = (story: ModelSearch.Story, indent: string): ReadonlyArray<string> => {
   const timed = new Set(story.map((step) => DateTime.toEpochMillis(step.now))).size > 1;
   let sent = 0;
-  return story.map((step) => {
+  return story.flatMap((step) => {
     const text = [
       `${step.aggregate} ${Symbolic.show(step.id)}`,
       Symbolic.show(step.command),
       ...step.context.map((entry) => `as ${Symbolic.show(entry.value)}`),
       ...(timed ? [`at ${DateTime.formatIso(step.now)}`] : []),
     ].join(" ");
+    const asked = step.asked.map(
+      (call) =>
+        `${indent}   ↳ ${call.by ?? "a caller"} asks ${call.call}  → ${call.failed ? "✗ " : ""}${Symbolic.show(call.answer)}`,
+    );
     if (step.after !== undefined)
-      return `${indent}${++sent}. after ${step.after}${step.by === undefined ? "" : `, ${step.by}`}: ${text}  → ${result(step)}`;
-    return step.by === undefined
-      ? `${indent}${++sent}. ${text}  → ${result(step)}`
-      : `${indent}   ↳ ${step.by}: ${text}  → ${result(step)}`;
+      return [
+        ...asked,
+        `${indent}${++sent}. after ${step.after}${step.by === undefined ? "" : `, ${step.by}`}: ${text}  → ${result(step)}`,
+      ];
+    return [
+      ...asked,
+      step.by === undefined
+        ? `${indent}${++sent}. ${text}  → ${result(step)}`
+        : `${indent}   ↳ ${step.by}: ${text}  → ${result(step)}`,
+    ];
   });
 };
 
@@ -452,6 +462,11 @@ const renderModel = (report: ModelReport): string => {
   if (report.idle.length > 0)
     out.push(`Policies with no event to react to: ${report.idle.join(", ")}`);
   if (report.sagas.length > 0) out.push(`Sagas followed: ${report.sagas.join(", ")}`);
+  if (report.views.length > 0) out.push(`Views followed: ${report.views.join(", ")}`);
+  if (report.systems.length > 0)
+    out.push(
+      `External systems, each answering whatever its schema allows: ${report.systems.join(", ")}`,
+    );
   if (report.unstarted.length > 0)
     out.push(`Sagas no sequence started: ${report.unstarted.join(", ")}`);
   if (report.skipped.length > 0)

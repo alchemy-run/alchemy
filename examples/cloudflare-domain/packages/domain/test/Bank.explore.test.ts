@@ -31,8 +31,6 @@ const bank = (depth: number) =>
     source: new URL("../src/Bank.model.ts", import.meta.url),
     apis: [CustomerApi, SupportApi],
     depth,
-    // FraudReview reacts to a view, which the explorer does not follow yet.
-    allow: { skipped: ["FraudReview"] },
   });
 
 it.effect(
