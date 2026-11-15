@@ -1,13 +1,12 @@
 import type { ReplacedResourceState, ResourceState } from "alchemy/State/ResourceState";
-import { encodeState } from "alchemy/State/StateEncoding";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { makeStateCipher } from "./Cipher.ts";
 import { EncryptionKey } from "./Token.ts";
 
 /**
@@ -36,54 +35,12 @@ export default class Store extends DurableObject<Store>()(
       const keyHex = yield* encryptionSecret
         .get()
         .pipe(retrySecretRead, Effect.map(Redacted.value));
-      const cryptoKey = yield* Effect.tryPromise(() =>
-        crypto.subtle.importKey("raw", Buffer.from(keyHex, "hex"), { name: "AES-CTR" }, false, [
-          "encrypt",
-          "decrypt",
-        ]),
-      );
-
-      const encryptValue = (value: unknown) =>
-        Effect.tryPromise(async () => {
-          const plaintext = new TextEncoder().encode(JSON.stringify(encodeState(value)));
-          const counter = crypto.getRandomValues(allocBytes(NONCE_BYTES));
-          const ct = new Uint8Array(
-            await crypto.subtle.encrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              plaintext,
-            ),
-          );
-          // Frame as a single base64 string: nonce || ciphertext.
-          return Buffer.concat([counter, ct]).toString("base64");
-        }).pipe(Effect.orDie);
-
-      const decryptEntry = (entry: string) =>
-        Effect.gen(function* () {
-          const framed = Buffer.from(entry, "base64");
-          const counter = framed.subarray(0, NONCE_BYTES);
-          const ciphertext = framed.subarray(NONCE_BYTES);
-          const pt = yield* Effect.result(
-            Effect.tryPromise(() =>
-              crypto.subtle.decrypt(
-                { name: "AES-CTR", counter, length: 64 },
-                cryptoKey,
-                ciphertext,
-              ),
-            ),
-          );
-          if (Result.isFailure(pt)) {
-            // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
-            // So, we catch a decryption error here and return undefined instead.
-            // The engine should reconcile, hopefully, but users may lose some data
-            yield* Effect.logError(
-              "Error decrypting entry. Returning undefined instead.",
-              pt.failure,
-            );
-            return undefined;
-          }
-          return JSON.parse(new TextDecoder().decode(pt.success)) as ResourceState;
-        });
+      const cipher = yield* makeStateCipher(keyHex, state.id.toString());
+      // A missing database record is different from unreadable ciphertext:
+      // only a genuine missing entry returns undefined; decrypt failures
+      // abort the request so Alchemy cannot replace a persisted secret.
+      const decryptEntry = (entry: string, key: string) =>
+        cipher.decrypt(entry, key).pipe(Effect.map((decoded) => decoded as ResourceState));
 
       return {
         // -- Root DO methods -----------------------------------------
@@ -159,7 +116,9 @@ export default class Store extends DurableObject<Store>()(
           storage
             .get<string>(resourceKey(stage, fqn))
             .pipe(
-              Effect.flatMap((entry) => (entry == null ? Effect.undefined : decryptEntry(entry))),
+              Effect.flatMap((entry) =>
+                entry == null ? Effect.undefined : decryptEntry(entry, resourceKey(stage, fqn)),
+              ),
             ),
 
         /**
@@ -167,7 +126,7 @@ export default class Store extends DurableObject<Store>()(
          * value unchanged.
          */
         set: ({ stage, fqn, value }: { stage: string; fqn: string; value: ResourceState }) =>
-          encryptValue(value).pipe(
+          cipher.encrypt(value, resourceKey(stage, fqn)).pipe(
             Effect.flatMap((encrypted) =>
               storage.put<string>(resourceKey(stage, fqn), encrypted).pipe(Effect.asVoid),
             ),
@@ -207,7 +166,9 @@ export default class Store extends DurableObject<Store>()(
           storage
             .get<string>(stackOutputKey(stage))
             .pipe(
-              Effect.flatMap((entry) => (entry == null ? Effect.undefined : decryptEntry(entry))),
+              Effect.flatMap((entry) =>
+                entry == null ? Effect.undefined : decryptEntry(entry, stackOutputKey(stage)),
+              ),
             ),
 
         /**
@@ -215,7 +176,7 @@ export default class Store extends DurableObject<Store>()(
          * `stage`. Returns the stored value unchanged.
          */
         setOutput: ({ stage, value }: { stage: string; value: any }) =>
-          encryptValue(value).pipe(
+          cipher.encrypt(value, stackOutputKey(stage)).pipe(
             Effect.flatMap((encrypted) =>
               storage.put<string>(stackOutputKey(stage), encrypted).pipe(Effect.asVoid),
             ),
@@ -230,8 +191,11 @@ export default class Store extends DurableObject<Store>()(
         getReplacedResources: ({ stage }: { stage: string }) =>
           pipe(
             storage.list<string>({ prefix: stagePrefix(stage) }),
-            Effect.map((entries) => [...entries.values()].filter((e): e is string => !!e)),
-            Effect.flatMap(Effect.forEach(decryptEntry, { concurrency: "unbounded" })),
+            Effect.flatMap((entries) =>
+              Effect.forEach([...entries.entries()], ([key, entry]) => decryptEntry(entry, key), {
+                concurrency: "unbounded",
+              }),
+            ),
             Effect.map((decoded) =>
               decoded.filter((d): d is ReplacedResourceState => d?.status === "replaced"),
             ),
@@ -260,9 +224,6 @@ const STACK_OUTPUT_PREFIX = `o${SEP}`;
 /** Key prefix for stack-index entries in the root DO. */
 const STACK_INDEX_PREFIX = "s:";
 
-/** AES-CTR counter block length. */
-const NONCE_BYTES = 16;
-
 /** Build the resource key inside a *stack DO*. */
 const resourceKey = (stage: string, fqn: string) => `${RESOURCE_PREFIX}${stage}${SEP}${fqn}`;
 
@@ -289,4 +250,3 @@ const parseResourceKey = (key: string): { stage: string; fqn: string } | undefin
  * the resulting buffer satisfies Web Crypto's `BufferSource` type
  * constraint under strict DOM typings.
  */
-const allocBytes = (size: number): Uint8Array<ArrayBuffer> => new Uint8Array(new ArrayBuffer(size));

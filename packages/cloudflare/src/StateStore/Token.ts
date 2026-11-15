@@ -71,7 +71,8 @@ export const AuthToken = Effect.gen(function* () {
 
 /**
  * A 32-byte (256-bit) random value, hex-encoded, that seeds the
- * AES-CTR key used to encrypt resource state at rest. Generated once
+ * AES-256-GCM key used to encrypt new resource state at rest (and to
+ * decrypt historical AES-CTR records without rotating it). Generated once
  * and persisted, so the ciphertext stored by the Durable Object can
  * always be decrypted by subsequent worker boots.
  */
@@ -84,7 +85,7 @@ export const EncryptionKeySecretName = "AlchemyStateStoreEncryptionKey" as const
 /**
  * The encryption key secret. The raw hex-encoded bytes live inside
  * Cloudflare's Secrets Store; the Durable Object binds to it at
- * runtime to derive an AES-CTR `CryptoKey` via Web Crypto's
+ * runtime to derive AES-GCM and legacy AES-CTR `CryptoKey`s via Web Crypto's
  * `subtle.importKey`.
  */
 export const EncryptionKey = Effect.gen(function* () {
