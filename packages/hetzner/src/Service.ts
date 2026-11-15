@@ -1,6 +1,7 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { buildImageArchive, hashImageArchive } from "@alchemy.run/docker/ImageArchive";
 import * as Hetzner from "@distilled.cloud/hetzner";
+import * as Servers from "@distilled.cloud/hetzner/servers";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -295,7 +296,7 @@ export const ServiceProvider = () =>
           const serverId =
             output.serverId ?? (olds !== undefined ? serverIdOf(olds.server) : undefined);
           if (serverId === undefined) return undefined;
-          const live = yield* Hetzner.servers.getServer({ id: serverId }).pipe(
+          const live = yield* Servers.getServer({ id: serverId }).pipe(
             Effect.map(({ server }) => server),
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
