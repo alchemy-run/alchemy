@@ -408,7 +408,8 @@ const plainEnv = (env: SandboxProps["env"]) =>
 
 export const toAttributes = (sandbox: boat.Sandbox): SandboxAttributes => ({
   sandboxId: sandbox.id,
-  name: sandbox.name,
+  // Boat omits `name` only on a cancelled sandbox, which `observeSandbox` drops.
+  name: sandbox.name ?? "",
   state: sandbox.state,
   type: sandbox.type,
   vcpu: sandbox.vcpu,
