@@ -110,9 +110,9 @@ const gatedStorage = (
         : storage.put(keyOrEntries),
     )) as DurableObjects.ObjectStorage["put"],
   delete: ((keyOrKeys: string | ReadonlyArray<string>) =>
-    gate.storage(
-      typeof keyOrKeys === "string" ? storage.delete(keyOrKeys) : storage.delete(keyOrKeys),
-    )) as DurableObjects.ObjectStorage["delete"],
+    typeof keyOrKeys === "string"
+      ? gate.storage(storage.delete(keyOrKeys))
+      : gate.storage(storage.delete(keyOrKeys))) as DurableObjects.ObjectStorage["delete"],
   list: (options) => gate.storage(storage.list(options)),
   transaction: (effect) => gate.exclusive(storage.transaction(effect)),
 });
