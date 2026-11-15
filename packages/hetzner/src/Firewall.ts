@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as FirewallActions from "@distilled.cloud/hetzner/firewall_actions";
 import * as Firewalls from "@distilled.cloud/hetzner/firewalls";
 import type {

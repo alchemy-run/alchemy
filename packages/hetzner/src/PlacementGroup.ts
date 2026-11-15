@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as PlacementGroups from "@distilled.cloud/hetzner/placement_groups";
 import type { GetPlacementGroupResponsePlacementGroup } from "@distilled.cloud/hetzner/placement_groups";
 import { Unowned } from "alchemy/AdoptPolicy";

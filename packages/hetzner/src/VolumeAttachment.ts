@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as VolumeActions from "@distilled.cloud/hetzner/volume_actions";
 import * as Volumes from "@distilled.cloud/hetzner/volumes";
 import type { GetVolumeResponseVolume } from "@distilled.cloud/hetzner/volumes";

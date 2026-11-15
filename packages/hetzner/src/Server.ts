@@ -1,5 +1,4 @@
 import { generateKeyPairSync } from "node:crypto";
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as FirewallActions from "@distilled.cloud/hetzner/firewall_actions";
 import * as ServerActions from "@distilled.cloud/hetzner/server_actions";
 import * as Servers from "@distilled.cloud/hetzner/servers";

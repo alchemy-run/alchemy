@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as PrimaryIpActions from "@distilled.cloud/hetzner/primary_ip_actions";
 import * as PrimaryIps from "@distilled.cloud/hetzner/primary_ips";
 import type { GetPrimaryIpResponsePrimaryIp } from "@distilled.cloud/hetzner/primary_ips";

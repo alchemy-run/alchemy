@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as SshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import type { GetSshKeyResponseSshKey } from "@distilled.cloud/hetzner/ssh_keys";
 import { Unowned } from "alchemy/AdoptPolicy";

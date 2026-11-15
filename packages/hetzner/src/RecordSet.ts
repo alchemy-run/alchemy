@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as ZoneRrsetActions from "@distilled.cloud/hetzner/zone_rrset_actions";
 import * as ZoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import type {

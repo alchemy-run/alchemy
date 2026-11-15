@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as ZoneActions from "@distilled.cloud/hetzner/zone_actions";
 import * as Zones from "@distilled.cloud/hetzner/zones";
 import type { ZonePrimary, ZoneSecondary } from "@distilled.cloud/hetzner/zones";

@@ -1,4 +1,3 @@
-import * as Rivet from "@distilled.cloud/rivet";
 import * as Namespaces from "@distilled.cloud/rivet/namespaces";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";

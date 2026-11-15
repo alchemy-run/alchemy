@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as FloatingIpActions from "@distilled.cloud/hetzner/floating_ip_actions";
 import * as FloatingIps from "@distilled.cloud/hetzner/floating_ips";
 import type { GetFloatingIpResponseFloatingIp } from "@distilled.cloud/hetzner/floating_ips";

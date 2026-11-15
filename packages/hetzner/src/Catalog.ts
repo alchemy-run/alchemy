@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Images from "@distilled.cloud/hetzner/images";
 import * as Isos from "@distilled.cloud/hetzner/isos";
 import * as LoadBalancerTypes from "@distilled.cloud/hetzner/load_balancer_types";

@@ -1,4 +1,3 @@
-import * as Rivet from "@distilled.cloud/rivet";
 import * as Pools from "@distilled.cloud/rivet/pools";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";

@@ -1,6 +1,5 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { buildImageArchive, hashImageArchive } from "@alchemy.run/docker/ImageArchive";
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Servers from "@distilled.cloud/hetzner/servers";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";

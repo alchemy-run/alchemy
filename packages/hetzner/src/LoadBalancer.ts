@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as LoadBalancerActions from "@distilled.cloud/hetzner/load_balancer_actions";
 import * as LoadBalancers from "@distilled.cloud/hetzner/load_balancers";
 import type {

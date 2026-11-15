@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Certificates from "@distilled.cloud/hetzner/certificates";
 import type { GetCertificateResponseCertificate } from "@distilled.cloud/hetzner/certificates";
 import { Unowned } from "alchemy/AdoptPolicy";

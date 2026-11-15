@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as NetworkActions from "@distilled.cloud/hetzner/network_actions";
 import * as Networks from "@distilled.cloud/hetzner/networks";
 import { Unowned } from "alchemy/AdoptPolicy";

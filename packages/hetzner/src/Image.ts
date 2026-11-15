@@ -1,4 +1,3 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
 import * as ImageActions from "@distilled.cloud/hetzner/image_actions";
 import * as Images from "@distilled.cloud/hetzner/images";
 import type {
