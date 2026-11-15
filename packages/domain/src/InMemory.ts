@@ -1,3 +1,5 @@
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -27,6 +29,7 @@ import {
   type StreamMeta,
   type ViewEntry,
   type ViewSnapshot,
+  RunWait,
 } from "./Platform.ts";
 import { serveSocket } from "./Watch.ts";
 
@@ -113,6 +116,17 @@ interface Timer {
   readonly fire: Effect.Effect<void>;
 }
 
+/** A forked run, and how many of its waits and polls are in progress. */
+interface Run {
+  waits: number;
+  polls: number;
+}
+
+/** The run the current fiber belongs to, so its waits count once for it. */
+const CurrentRun = Context.Reference<Run | undefined>("alchemy/Domain/InMemory/CurrentRun", {
+  defaultValue: () => undefined,
+});
+
 /** A function that builds each value once per argument. */
 const memo = <A>(make: (key: string) => A) => {
   const made = new Map<string, A>();
@@ -136,37 +150,85 @@ export const make = (
   // Deliveries and saga runs, in the order they were queued.
   const pending: Array<Work> = [];
   let draining = false;
-  // Forked runs, and how many of them are waiting (on an external call, a
-  // lock, or their turn). Every change wakes `quiet`.
+  // Forked runs, how many of them are waiting (on an external call, a lock,
+  // or their turn, or polling for another run's work), and how many of those
+  // are polling. A run counts once, however many of its fibers wait at once.
+  // Every change wakes `quiet`.
   let running = 0;
-  let suspended = 0;
+  let waitingRuns = 0;
+  let pollingRuns = 0;
   let changed = Deferred.makeUnsafe<void>();
   const notify = () => {
     const was = changed;
     changed = Deferred.makeUnsafe<void>();
     Deferred.doneUnsafe(was, Effect.void);
   };
-  const started = () => {
+  // This platform's runs, so a run of another platform never counts here.
+  const runs = new WeakSet<Run>();
+  /** Count `effect` as a run from now until it ends; its waits count once for it. */
+  const tracked = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    const run: Run = { waits: 0, polls: 0 };
+    runs.add(run);
     running++;
     notify();
+    return effect.pipe(
+      Effect.provideService(CurrentRun, run),
+      Effect.ensuring(
+        Effect.sync(() => {
+          running--;
+          notify();
+        }),
+      ),
+    );
   };
-  const stopped = Effect.sync(() => {
-    running--;
-    notify();
-  });
-  const waiting = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.suspend(() => {
-      suspended++;
-      notify();
-      return effect.pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            suspended--;
+  /** Count the current run as waiting (or polling) while `effect` runs. */
+  const hold =
+    (kind: keyof Run) =>
+    <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      Effect.flatMap(Effect.service(CurrentRun), (current) =>
+        Effect.suspend(() => {
+          // A wait outside any run of this platform counts on its own.
+          const run = current && runs.has(current) ? current : { waits: 0, polls: 0 };
+          const recount = (change: () => void) => {
+            const waited = run.waits + run.polls > 0;
+            const polled = run.polls > 0;
+            change();
+            waitingRuns += Number(run.waits + run.polls > 0) - Number(waited);
+            pollingRuns += Number(run.polls > 0) - Number(polled);
             notify();
-          }),
-        ),
+          };
+          recount(() => run[kind]++);
+          return effect.pipe(Effect.ensuring(Effect.sync(() => recount(() => run[kind]--))));
+        }),
       );
-    });
+  const waiting = hold("waits");
+  /**
+   * A poll for another run's work. The queue goes on while it polls (`quiet`),
+   * so the run it waits for can start; the platform is not `idle` until it
+   * ends. Each pause between its tries ends at the next change of the platform
+   * (a run that starts, waits or ends), so it sees the work at once.
+   */
+  const poll = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.clockWith((clock) =>
+      hold("polls")(
+        Effect.provideService(effect, Clock.Clock, {
+          currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+          currentTimeMillis: clock.currentTimeMillis,
+          currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+          currentTimeNanos: clock.currentTimeNanos,
+          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: clock.monotonicTimeNanos,
+          sleep: (duration) =>
+            Effect.suspend(() => Effect.raceFirst(clock.sleep(duration), Deferred.await(changed))),
+        }),
+      ),
+    );
+  /**
+   * With `manual`: a run that polls for another run's work (a read `atLeast` a
+   * write) waits, so the queue goes on and the run it waits for can start.
+   */
+  const pollsWait = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    options.manual ? Effect.provideService(effect, RunWait, poll) : effect;
   /** Run `effect` holding `lock`, counted as waiting while another run holds it. */
   const exclusively =
     (lock: Semaphore.Semaphore) =>
@@ -183,7 +245,7 @@ export const make = (
       .pipe(Effect.flatMap((taken) => (taken ? Effect.void : waiting(lock.take(1)))));
   /** Wait until every forked run is finished or waiting. */
   const quiet: Effect.Effect<void> = Effect.suspend(function wait(): Effect.Effect<void> {
-    if (running === suspended) return Effect.void;
+    if (running === waitingRuns) return Effect.void;
     return Deferred.await(changed).pipe(Effect.flatMap(wait));
   });
   const failures: Array<unknown> = [];
@@ -324,10 +386,7 @@ export const make = (
     enqueue: (run, key) =>
       enqueueWork([
         {
-          run: Effect.suspend(() => {
-            started();
-            return Effect.forkDetach(run.pipe(Effect.ensuring(stopped))).pipe(Effect.asVoid);
-          }),
+          run: Effect.suspend(() => run.pipe(pollsWait, tracked, Effect.forkDetach, Effect.asVoid)),
           label: `saga ${key}`,
           lane: `saga:${key}`,
         },
@@ -354,7 +413,9 @@ export const make = (
 
   const control: Control = {
     drain,
-    idle: Effect.sync(() => pending.length === 0 && !draining && running === suspended),
+    idle: Effect.sync(
+      () => pending.length === 0 && !draining && running === waitingRuns - pollingRuns,
+    ),
     suspended: waiting,
     failures,
     deaths,
@@ -1074,23 +1135,21 @@ export const make = (
                     ) {
                       if (!p.timer) {
                         p.timer = true;
-                        started();
-                        yield* Effect.forkDetach(
-                          Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
-                            Effect.andThen(
-                              Effect.sync(() => {
-                                p.timer = false;
-                              }),
-                            ),
-                            Effect.andThen(process(key, true)),
-                            Effect.ensuring(stopped),
+                        yield* Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
+                          Effect.andThen(
+                            Effect.sync(() => {
+                              p.timer = false;
+                            }),
                           ),
+                          Effect.andThen(process(key, true)),
+                          tracked,
+                          Effect.forkDetach,
                         );
                       }
                       return;
                     }
                     const run = p.log.slice(p.processed, p.processed + size);
-                    yield* kit.run(key, run);
+                    yield* kit.run(key, run).pipe(pollsWait);
                     p.processed += run.length;
                     for (const { delivery } of run) {
                       p.checkpoints[delivery.source] = Math.max(
@@ -1111,17 +1170,16 @@ export const make = (
               if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
               p.intake[delivery.source] = delivery.seq;
               p.log.push({ position: p.log.length + 1, delivery, at: now() });
-              started();
-              return Effect.forkDetach(
-                process(delivery.key, false).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.sync(() => failures.push(cause)).pipe(
-                      Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
-                    ),
+              return process(delivery.key, false).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.sync(() => failures.push(cause)).pipe(
+                    Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
                   ),
-                  Effect.ensuring(stopped),
                 ),
-              ).pipe(Effect.asVoid);
+                tracked,
+                Effect.forkDetach,
+                Effect.asVoid,
+              );
             });
           const target = targetId({
             kind: "projection",
@@ -1287,19 +1345,18 @@ export const make = (
           };
           return {
             receive: (delivery) =>
-              Effect.suspend(() => {
-                started();
-                return exclusively(lockFor(delivery.key))(kit.run(delivery)).pipe(
+              Effect.suspend(() =>
+                exclusively(lockFor(delivery.key))(kit.run(delivery).pipe(pollsWait)).pipe(
                   Effect.catchCause((cause) =>
                     Effect.sync(() => failures.push(cause)).pipe(
                       Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
                   ),
-                  Effect.ensuring(stopped),
+                  tracked,
                   Effect.forkDetach,
                   Effect.asVoid,
-                );
-              }),
+                ),
+              ),
           };
         }),
 

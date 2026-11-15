@@ -720,3 +720,17 @@ export const hostedModels = ({
         }),
     );
 };
+
+/**
+ * How a platform counts a run that waits for another run's work: a read
+ * `atLeast` a write that polls until its view or projection has it. The
+ * manual in-memory platform (a story) runs one queued item at a time, until
+ * every run it started is finished or waiting; it provides this so a poll is
+ * waiting and the run it waits for can start. Other platforms run their work
+ * concurrently and leave it as is.
+ *
+ * @internal
+ */
+export const RunWait = Context.Reference<
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+>("alchemy/Domain/Platform/RunWait", { defaultValue: () => (effect) => effect });
