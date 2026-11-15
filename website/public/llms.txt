@@ -1237,7 +1237,7 @@ TLS certificates from any ACME certificate authority as Stack resources, validat
 
 A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Cloudflare, Rivet, Effect Cluster or in memory.
 
-- [Domain](https://alchemy.run/domain) — A domain-driven design framework for Effect. Model your business as commands, aggregates, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
+- [Domain](https://alchemy.run/domain) — A domain-driven design framework for Effect. Model your business as commands, aggregates, decisions, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
 - [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd) — The concepts of Domain-Driven Design, event sourcing and CQRS, and how they fit together to model a business.
 - [Project layout](https://alchemy.run/domain/project-layout) — How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
 - [Part 1: Model an account](https://alchemy.run/domain/tutorial/part-1) — Declare events, commands and rejections, decide them in an aggregate, and check it with stories.
