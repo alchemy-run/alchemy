@@ -27,7 +27,7 @@ export const BankInMemory = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
 );
 ```
 
-Policies and projections run for real, and views catch up just after each command, as they do on Cloudflare.
+Policies and projections run for real, and views catch up just after each command, as they do on Cloudflare. A [decision](/domain/decision) records on every instance it reads in one step.
 
 ## Call it through an Api
 

@@ -395,6 +395,10 @@ While an instance holds a decision's events, its own commands wait: a few millis
 
 An instance that many decisions read becomes the place they queue. Two transfers out of the same account run one after the other, as two withdrawals do.
 
+## What it can't do yet
+
+A command a decision implements can't be [scheduled](/domain/command#send-it-later), and it has no `predict` for [optimistic updates](/domain/optimistic-updates). Send it when it's due, and show its result when the receipt arrives.
+
 ## Decision, saga or policy?
 
 A decision is one rule, answered at once, over instances in the same model. It can't wait, and it can't call an external system.
