@@ -145,6 +145,54 @@ export class Account extends Domain.Aggregate("Account", {
 
 See [Aggregate](/domain/aggregate).
 
+## Decisions: one rule across several aggregates
+
+Some rules are about more than one aggregate. A transfer moves money from one account to another: the first must have the funds, and both must change, or neither.
+
+No single account can decide that. Each one sees only its own balance, and nothing outside its boundary changes in the same step. Splitting the rule into two commands, a withdrawal and then a deposit, leaves a moment where the money has left one account and not reached the other.
+
+A **decision** is where such a rule lives. It reads every aggregate the command names, decides against all of their states together, and records events on each of them. Every event commits, or none does.
+
+<DAG
+  nodes={[
+    { id: "command", label: "TransferMoney", type: "command", kind: "command", col: 0, row: 0 },
+    { id: "decision", label: "Transfer", type: "decision", kind: "decision", col: 1, row: 0 },
+    { id: "from", label: "Account a-1", type: "TransferSent", kind: "aggregate", col: 2, row: 0 },
+    { id: "to", label: "Account a-2", type: "TransferReceived", kind: "aggregate", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "command", to: "decision" },
+    { from: "decision", to: "from" },
+    { from: "decision", to: "to" },
+  ]}
+  caption="One command, decided once, recorded on both accounts or on neither."
+/>
+
+The command names both accounts in its input. The decision says which instances that means, and what to record on each:
+
+```typescript title="src/Transfer.decision.ts"
+export class Transfer extends Domain.Decision(TransferMoney, {
+  reads: (cmd) => ({ from: Account.ref(cmd.from), to: Account.ref(cmd.to) }),
+  decide: ({ from, to }, cmd) =>
+    from.state._tag !== "Open" || to.state._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > from.state.balance
+        ? new InsufficientFunds({ balance: from.state.balance, requested: cmd.amount })
+        : [
+            from.record(new TransferSent({ to: to.id, amount: cmd.amount })),
+            to.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+          ],
+}) {}
+```
+
+A decision keeps no state of its own. Each account applies what was recorded on it, the same way it applies its own events, so its balance is still the account's to hold.
+
+The caller gets one answer, at once: the transfer happened, or it was refused and nothing changed. That's the difference from a process that takes time, which comes later as a saga.
+
+Reach for a decision only when a rule really spans aggregates. Most rules belong to one, and an aggregate that decides alone never waits for another.
+
+See [Decision](/domain/decision).
+
 ## Event sourcing: the events are the record
 
 Most systems store the current state and overwrite it on every change. **Event sourcing** stores the events instead, and treats the current state as something derived from them.
@@ -309,7 +357,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 
 Policies and aggregates both apply rules, but different kinds. An aggregate enforces invariants: rules that must hold the instant a command commits, inside one boundary, and that can refuse the command. A policy applies a procedure: what the business does next, often across aggregates or outside the model. It runs after the event, and it can't refuse what already happened. It can only decide what happens next, through commands that the receiving aggregates can still refuse.
 
-When a rule involves several aggregates and can be answered at once, like registering a customer under a username nobody else holds, a **decision** reads them together and records on all of them or on none. See [Decision](/domain/decision).
+A rule that involves several aggregates and can be answered at once is a [decision](#decisions-one-rule-across-several-aggregates), not a policy: it can still refuse the command.
 
 When a process takes several steps across aggregates and can fail partway, like a transfer that waits for an approval before it debits one account and credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
 
@@ -381,6 +429,7 @@ A model lists its building blocks:
 ```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Customer],
+  decisions: [Transfer],
   views: [AccountSummary, Statement],
   policies: [MainAccountProvisioning],
   projections: [Ledger],
