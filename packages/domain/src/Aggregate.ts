@@ -75,6 +75,8 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
   readonly events: ReadonlyArray<Ev>;
   /** The command's reply, if it declares one. */
   readonly reply: Reply;
+  /** For a command a `Domain.Decision` implements: every stream it committed to. */
+  readonly commits?: ReadonlyArray<{ readonly stream: string; readonly version: number }>;
 }
 
 /**
@@ -122,7 +124,8 @@ export interface Definition<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-  E extends Event.Any = EventsOf<C>,
+  X extends ReadonlyArray<Event.Any> = readonly [],
+  E extends Event.Any = EventsOf<C> | X[number],
 > {
   /** Schema of the aggregate id (a string or branded string). */
   readonly id: Id;
@@ -130,8 +133,17 @@ export interface Definition<
   readonly state: S;
   /** The state of an instance that has never committed an event. */
   readonly initial: S["Type"];
-  /** Every command this aggregate handles, each declaring the events it records. */
-  readonly commands: C;
+  /**
+   * Every command this aggregate handles, each declaring the events it
+   * records. Leave it out, with `decide`, for an aggregate that only folds
+   * what `Domain.Decision`s record on it.
+   */
+  readonly commands?: C;
+  /**
+   * Events it folds but none of its own commands records: what a
+   * `Domain.Decision` records on it. `evolve` has a handler for each.
+   */
+  readonly events?: X;
   /**
    * One handler per command, given the instance's current state, the command
    * and the decision's context: returns the events to commit (from the
@@ -141,7 +153,7 @@ export interface Definition<
    * `yield* CurrentActor`) and fails with a rejection; it may require
    * nothing else.
    */
-  readonly decide: {
+  readonly decide?: {
     readonly [T in C[number]["tag"]]: (
       state: S["Type"],
       command: InstanceOf<ByTag<C[number], T>>,
@@ -624,6 +636,27 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
+ * ### Folding what decisions record
+ * A `Domain.Decision` records events on the instances it reads. List them in
+ * `events`, with an `evolve` handler for each. An aggregate that only takes
+ * part in decisions leaves out `commands` and `decide`.
+ *
+ * **Example:** A username, claimed by a registration
+ * ```typescript
+ * export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+ *   id: Username,
+ *   state: Schema.Union([
+ *     Schema.TaggedStruct("Free", {}),
+ *     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+ *   ]),
+ *   initial: { _tag: "Free" },
+ *   events: [UsernameClaimed],
+ *   evolve: {
+ *     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
+ *   },
+ * }) {}
+ * ```
+ *
  * ### Annotating aggregates
  * The last argument is its annotations: data for what is built on the
  * model, read back as `X.annotations`. Add your own keys by augmenting
@@ -723,27 +756,37 @@ export const make = <
   const Name extends string,
   Id extends IdSchema,
   S extends Schema.Top,
-  const C extends ReadonlyArray<Command.Any>,
+  const C extends ReadonlyArray<Command.Any> = readonly [],
+  const X extends ReadonlyArray<Event.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C> & TargetsMatch<Id, C>,
+  definition: Definition<Id, S, C, X> & TargetsMatch<Id, C> & Decides<C>,
   annotations: Annotations = {},
-): AggregateClass<Name, Resolved<Id, S, C>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C>>>()(
+): AggregateClass<Name, Resolved<Id, S, C, X>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, X>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
   // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
   const decodeId = Schema.decodeUnknownSync(
     definition.id as unknown as Schema.Codec<unknown, unknown>,
   );
+  const commands: ReadonlyArray<Command.Any> = definition.commands ?? [];
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C> = {
+    static readonly definition = {
       ...definition,
-      events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C>;
+      commands,
+      decide: definition.decide ?? {},
+      // What its commands record, then what decisions record on it.
+      events: [
+        ...new Set([
+          ...commands.flatMap((command) => command.events),
+          ...(definition.events ?? []),
+        ]),
+      ],
+    } as unknown as Resolved<Id, S, C, X>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
@@ -757,19 +800,26 @@ export const make = <
     ) {
       return predict(this, state, command, options);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, X>>;
 };
+
+/** An aggregate with commands has a `decide` handler for each. */
+export type Decides<C extends ReadonlyArray<Command.Any>> = [C[number]] extends [never]
+  ? unknown
+  : { readonly commands: C; readonly decide: object };
 
 /**
  * A command whose `target` is the aggregate's `id`, both ways; any other
  * command becomes a message naming it.
  */
 type CheckTarget<Id extends IdSchema, Cmd> = Cmd extends Command.Any
-  ? [Id["Type"]] extends [Cmd["target"]["Type"]]
-    ? [Cmd["target"]["Type"]] extends [Id["Type"]]
-      ? Cmd
+  ? Cmd["target"] extends Schema.Top
+    ? [Id["Type"]] extends [Cmd["target"]["Type"]]
+      ? [Cmd["target"]["Type"]] extends [Id["Type"]]
+        ? Cmd
+        : `${Cmd["tag"]}'s target must be this aggregate's id schema`
       : `${Cmd["tag"]}'s target must be this aggregate's id schema`
-    : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+    : `${Cmd["tag"]} has no target: implement it with a Domain.Decision`
   : Cmd;
 
 /**
@@ -778,7 +828,7 @@ type CheckTarget<Id extends IdSchema, Cmd> = Cmd extends Command.Any
  * A mismatched command is a type error on its entry in `commands`.
  */
 export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = {
-  readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
+  readonly commands?: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
 /** A definition with its events collected from its commands. */
@@ -786,9 +836,11 @@ export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-> = Definition<Id, S, C> & {
-  readonly events: ReadonlyArray<EventsOf<C>>;
-};
+  X extends ReadonlyArray<Event.Any> = readonly [],
+> = Omit<Definition<Id, S, C, X>, "events" | "commands" | "decide"> &
+  Required<Pick<Definition<Id, S, C, X>, "commands" | "decide">> & {
+    readonly events: ReadonlyArray<EventsOf<C> | X[number]>;
+  };
 
 /**
  * The class type returned by {@link make}.

@@ -61,6 +61,8 @@ An aggregate type has many instances, one per id, and every command names the id
 
 Each instance handles one command at a time. Commands for the same instance queue, and each is decided against the state the previous one left. Commands for different instances run independently. This is what makes an instance a consistency boundary: nothing else changes its state while it decides.
 
+A command that involves several instances names them all in its input. A [decision](/domain/decision) reads them together and records on all of them or on none.
+
 <DAG
   nodes={[
     { id: "c1", label: "command", type: "for id 1", layer: 0, kind: "command" },

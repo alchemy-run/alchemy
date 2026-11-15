@@ -14,7 +14,9 @@ import * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
+import type * as Decision from "./Decision.ts";
 import {
+  DecisionsUnsupported,
   DefinitionError,
   ForeignAppend,
   LazyViewNeedsOneSource,
@@ -27,6 +29,7 @@ import * as Key from "./Key.ts";
 import {
   type Accepted,
   type AggregateStore,
+  type DecisionStore,
   type Delivery,
   type ListRange,
   type ModelHost,
@@ -67,7 +70,10 @@ export class Internals extends Context.Service<
     readonly aggregates: ReadonlyMap<string, AggregateStore>;
     readonly views: ReadonlyMap<string, ViewStore>;
     readonly streams: ReadonlyMap<string, StreamStore>;
-    /** The client of the aggregate that handles each command, by command tag. */
+    /**
+     * The client of what implements each command, by command tag: its
+     * aggregate, or its decision as an aggregate client that takes no target.
+     */
     readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
     /** Each view's read API, by view name. */
     readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Key.Any, unknown>>;
@@ -91,8 +97,15 @@ export interface Members<
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any> = readonly [],
   Q extends ReadonlyArray<Query.Any> = readonly [],
+  D extends ReadonlyArray<Decision.Any> = readonly [],
 > {
   readonly aggregates: A;
+  /**
+   * The decisions that implement commands across several aggregates. Each
+   * command has one implementation: listing a decision for a command an
+   * aggregate or another decision implements is a type error on its entry.
+   */
+  readonly decisions?: ImplementedOnce<A, D>;
   readonly views?: V;
   readonly policies?: P;
   readonly projections?: J;
@@ -121,7 +134,9 @@ export interface ModelClass<
   readonly modelName: Name;
   /** The model's aggregates, in order. */
   readonly aggregates: Parts["aggregates"];
-  /** Every command of the model's aggregates, each once. */
+  /** The model's decisions, in order. */
+  readonly decisions: Parts["decisions"];
+  /** Every command of the model's aggregates and decisions, each once. */
   readonly commands: Parts["commands"];
   /** The model's views, in order. */
   readonly views: Parts["views"];
@@ -163,12 +178,49 @@ export interface Any extends Servable {
  */
 export interface Servable {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
-  /** Every command of the model's aggregates, each once. */
+  readonly decisions: ReadonlyArray<Decision.Any>;
+  /** Every command of the model's aggregates and decisions, each once. */
   readonly commands: ReadonlyArray<Command.Any>;
   readonly views: ReadonlyArray<View.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
   readonly queries: ReadonlyArray<Query.Any>;
 }
+
+/** The name of the aggregate, among `A`, that implements the command tagged `Tag`. */
+type ImplementerOf<A extends ReadonlyArray<Aggregate.Any>, Tag> = A[number] extends infer Agg
+  ? Agg extends Aggregate.Any
+    ? // A widened aggregate (another model's `aggregates`) names no command: checked when the model is built.
+      string extends Agg["definition"]["commands"][number]["tag"]
+      ? never
+      : Tag extends Agg["definition"]["commands"][number]["tag"]
+        ? Agg["aggregateName"]
+        : never
+    : never
+  : never;
+
+/** Every decision of `D` but the one at index `K`. */
+type OtherDecisions<D extends ReadonlyArray<Decision.Any>, K> = {
+  [J in keyof D]: J extends K ? never : D[J];
+}[number];
+
+/**
+ * A model's decisions, each implementing a command nothing else in the
+ * model implements. An entry whose command an aggregate or another decision
+ * implements becomes a message naming it.
+ */
+export type ImplementedOnce<
+  A extends ReadonlyArray<Aggregate.Any>,
+  D extends ReadonlyArray<Decision.Any>,
+> = {
+  readonly [K in keyof D]: string extends D[K]["decisionName"]
+    ? // A widened list (another model's `decisions`) names no command: checked when the model is built.
+      D[K]
+    : [ImplementerOf<A, D[K]["decisionName"]>] extends [never]
+      ? D[K]["decisionName"] extends OtherDecisions<D, K>["decisionName"]
+        ? `${D[K]["decisionName"]} is already implemented by another decision`
+        : D[K]
+      : `${D[K]["decisionName"]} is already implemented by ${ImplementerOf<A, D[K]["decisionName"]>}`;
+};
 
 /** What a model's members serve. */
 export interface ServableBy<
@@ -176,9 +228,13 @@ export interface ServableBy<
   V extends ReadonlyArray<View.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   Q extends ReadonlyArray<Query.Any> = readonly [],
+  D extends ReadonlyArray<Decision.Any> = readonly [],
 > {
   readonly aggregates: A;
-  readonly commands: ReadonlyArray<A[number]["definition"]["commands"][number]>;
+  readonly decisions: D;
+  readonly commands: ReadonlyArray<
+    A[number]["definition"]["commands"][number] | D[number]["command"]
+  >;
   readonly views: V;
   readonly streams: S;
   readonly queries: Q;
@@ -190,8 +246,10 @@ type ProvidedBy<
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any>,
+  D extends ReadonlyArray<Decision.Any> = readonly [],
 > =
   | Identifier<A[number]>
+  | Identifier<D[number]>
   | Identifier<V[number]>
   | Identifier<S[number]>
   | Saga.Identifier<G[number]>
@@ -277,6 +335,19 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Deciding across aggregates
+ * List each `Domain.Decision` in `decisions`. Every command has one
+ * implementation, an aggregate or a decision: a second is a type error on
+ * its entry.
+ *
+ * **Example:** A model with a decision
+ * ```typescript
+ * export class Bank extends Domain.Model("Bank", {
+ *   aggregates: [Account],
+ *   decisions: [Transfer],
+ * }) {}
+ * ```
+ *
  * ### Annotating models
  * The last argument is its annotations: data for what is built on the
  * model, read back as `X.annotations`. Add your own keys by augmenting
@@ -307,18 +378,21 @@ export const make = <
   const S extends ReadonlyArray<DomainStream.Any> = readonly [],
   const G extends ReadonlyArray<Saga.Any> = readonly [],
   const Q extends ReadonlyArray<Query.Any> = readonly [],
+  const D extends ReadonlyArray<Decision.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G, Q>,
+  members: Members<A, V, P, J, S, G, Q, D>,
   annotations: Annotations = {},
 ): ModelClass<
   Name,
-  ProvidedBy<A, V, J, S, G>,
+  ProvidedBy<A, V, J, S, G, D>,
   HandledBy<P, J, G, Q, V, S>,
-  ServableBy<A, V, S, Q>
+  ServableBy<A, V, S, Q, D>
 > => {
+  const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
+    decisions,
     views: members.views ?? [],
     policies: members.policies ?? [],
     projections: members.projections ?? [],
@@ -332,8 +406,12 @@ export const make = <
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
     static readonly aggregates = definitions.aggregates;
+    static readonly decisions = decisions;
     static readonly commands = [
-      ...new Set(definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands)),
+      ...new Set([
+        ...definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands),
+        ...decisions.map((decision) => decision.command),
+      ]),
     ];
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
@@ -357,9 +435,9 @@ export const make = <
     }
   } as unknown as ModelClass<
     Name,
-    ProvidedBy<A, V, J, S, G>,
+    ProvidedBy<A, V, J, S, G, D>,
     HandledBy<P, J, G, Q, V, S>,
-    ServableBy<A, V, S, Q>
+    ServableBy<A, V, S, Q, D>
   >;
 };
 
@@ -480,6 +558,27 @@ const build = <A, E, R>(
         yield* platform.aggregate(aggregate, kernel.aggregateKit(aggregate, deliver)),
       );
     }
+    // Decisions commit across the aggregates' stores, so they are hosted after them.
+    const decisions = definitions.decisions ?? [];
+    const decisionStores = new Map<string, DecisionStore>();
+    if (decisions.length > 0) {
+      const host = platform.decision;
+      if (host === undefined) {
+        return yield* Effect.die(
+          new DefinitionError({
+            reason: new DecisionsUnsupported({
+              decisions: decisions.map((decision) => decision.decisionName),
+            }),
+          }),
+        );
+      }
+      for (const decision of decisions) {
+        decisionStores.set(
+          decision.decisionName,
+          yield* host(decision, kernel.decisionKit(decision)),
+        );
+      }
+    }
     const viewTarget = (name: string) => kernel.targetIdOf("view", name);
     for (const name of lazy) {
       if (!kernel.inPlace("view", name))
@@ -538,6 +637,29 @@ const build = <A, E, R>(
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
+    }
+    for (const decision of decisions) {
+      const client = decisionClient(
+        kernel,
+        decision,
+        decisionStores.get(decision.decisionName)!,
+        random,
+      );
+      hosts = Context.add(hosts, decision, client);
+      // An Api and a story send every command the same way: this one ignores the target.
+      commands.set(decision.command.tag, {
+        send: (_target, command, options) =>
+          Effect.map(client.send(command, options), (receipt) => ({
+            stream: receipt.commits[0]?.stream ?? "",
+            version: receipt.commits[0]?.version ?? 0,
+            events: receipt.events,
+            reply: receipt.reply,
+            commits: receipt.commits,
+          })),
+        schedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
+        unschedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
+        get: () => Effect.die(new Error(`${decision.decisionName} has no state`)),
+      });
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
     for (const view of definitions.views) {
@@ -832,6 +954,49 @@ const aggregateClient = (
         .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
   };
 };
+
+const decisionClient = (
+  kernel: Kernel.Kernel,
+  decision: Decision.Any,
+  store: DecisionStore,
+  random: SecureRandom.SecureRandom["Service"],
+): Decision.ClientImpl => ({
+  send: (command, options) =>
+    Effect.gen(function* () {
+      // The span records a rejection as an outcome; the caller still fails with it.
+      const result = yield* Effect.gen(function* () {
+        const commandId = yield* Aggregate.commandIdFor(options, random);
+        const context = yield* RequestContext.capture;
+        const correlationId = yield* Telemetry.correlationFor(commandId);
+        yield* Effect.annotateCurrentSpan({
+          "domain.command_id": commandId,
+          "domain.correlation_id": correlationId,
+        });
+        const trace = yield* Telemetry.currentTrace;
+        const result = yield* store.send(yield* kernel.encodeDecisionCommand(decision, command), {
+          commandId,
+          context,
+          correlationId,
+          ...(trace ? { trace } : {}),
+        });
+        yield* Effect.annotateCurrentSpan(
+          "domain.outcome",
+          result._tag === "Accepted"
+            ? "accepted"
+            : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected"),
+        );
+        return result;
+      }).pipe(
+        Effect.withSpan(`Domain.send ${decision.decisionName}`, {
+          kind: "client",
+          attributes: { "domain.decision": decision.decisionName },
+        }),
+      );
+      return result._tag === "Rejected"
+        ? yield* Effect.fail(kernel.decodeDecisionRejection(decision, result.rejection))
+        : yield* kernel.decodeDecisionReceipt(decision, result.receipt);
+    }),
+});
 
 const decodeSnapshot = (
   kernel: Kernel.Kernel,

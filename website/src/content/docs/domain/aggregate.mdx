@@ -243,13 +243,13 @@ Each instance processes one command at a time. When two withdrawals for the same
 
 Everything a command produces, its events, the new state, the reply and the deliveries to views and policies, commits together or not at all. This is what makes an instance a consistency boundary: its rules hold at every moment, for every observer.
 
-Nothing spans two instances. A transfer between accounts can't debit one and credit the other in a single step, because they're separate boundaries. Instead, each account handles its own side, and a [saga](/domain/saga) drives the steps in order.
+An instance decides alone, from its own state. A rule that involves two instances, like a transfer that debits one account and credits another, is decided by a [decision](/domain/decision), which reads both and records on both together. A process that takes time is carried out step by step by a [saga](/domain/saga).
 
 That shapes how big an aggregate should be. Draw it around the rules that must hold together, and no wider. A customer and their accounts are separate aggregates: no rule needs a customer's name and an account's balance to change in the same step, and keeping them apart means one busy account never slows down the others.
 
 ## Give a rule across instances its own aggregate
 
-Some rules span many instances. Usernames must be unique across every customer, but each customer is its own aggregate, and no customer can see the others. Making `Customer` check every other customer would need a transaction across all of them, which doesn't exist.
+Some rules span many instances. Usernames must be unique across every customer, but each customer is its own aggregate, and no customer can see the others. Making `Customer` check every other customer would mean reading all of them.
 
 The answer is to ask what the rule is about. Uniqueness is about one username, so make the username the aggregate. `UsernameClaim` is keyed by the username itself, and holds who has it:
 
@@ -261,22 +261,16 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
   ]),
   initial: { _tag: "Free" },
-  commands: [ClaimUsername],
-  decide: {
-    ClaimUsername: (usernameClaim, cmd) =>
-      usernameClaim._tag === "Free"
-        ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : usernameClaim.customerId === cmd.customerId
-          ? []
-          : new UsernameTaken(),
-  },
+  events: [UsernameClaimed],
   evolve: {
     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
   },
 }) {}
 ```
 
-Two customers who ask for `sam` at the same moment both send `ClaimUsername` to the same instance, `UsernameClaim/sam`. It decides one at a time, so one wins and the other is told `UsernameTaken`. The rule holds without anything spanning two aggregates. See [Unique values](/domain/unique-values).
+It has no commands of its own. `events` lists what a [decision](/domain/decision) records on it, and `evolve` folds them.
+
+Registering a customer reads the customer and the username together, and records on both or on neither. Two customers who ask for `sam` at the same moment both read the same instance, `UsernameClaim/sam`, so one wins and the other is told `UsernameTaken`. See [Unique values](/domain/unique-values).
 
 ## Keep a process's state in an aggregate
 
@@ -307,15 +301,7 @@ export class UsernameClaim extends Domain.Aggregate(
       Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
     ]),
     initial: { _tag: "Free" },
-    commands: [ClaimUsername],
-    decide: {
-      ClaimUsername: (usernameClaim, cmd) =>
-        usernameClaim._tag === "Free"
-          ? [new UsernameClaimed({ customerId: cmd.customerId })]
-          : usernameClaim.customerId === cmd.customerId
-            ? []
-            : new UsernameTaken(),
-    },
+    events: [UsernameClaimed],
     evolve: {
       UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
     },
@@ -338,4 +324,4 @@ The same client reads an instance's current state, as of its latest commit, with
 
 Clients outside the model send commands through an [Api](/domain/api). They never read an aggregate's state directly: a [view](/domain/view) projects what they may see of it, so the aggregate's state stays free to change with its rules.
 
-Next, [View](/domain/view): the query side, built from the events aggregates record.
+Next, [Decision](/domain/decision): a command decided across several instances at once.

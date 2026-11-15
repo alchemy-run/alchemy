@@ -1,9 +1,10 @@
 /**
  * The model every Domain platform runs for the conformance suite: an
  * aggregate that rejects, a view, a policy that starts a saga, a saga that
- * writes to another aggregate, and a policy that schedules and cancels a
- * command. Between them the platform hosts every kind of object and runs
- * its workflow engine and its durable timers.
+ * writes to another aggregate, a policy that schedules and cancels a
+ * command, and a decision that commits across two instances. Between them
+ * the platform hosts every kind of object, runs its workflow engine and its
+ * durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
@@ -22,21 +23,45 @@ export class Increment extends Domain.Command("Increment", {
   reply: { total: Schema.Int },
 }) {}
 
+export class Taken extends Domain.Event("Taken", { by: Schema.Int }) {}
+export class Received extends Domain.Event("Received", { by: Schema.Int }) {}
+export class Short extends Domain.Rejection("Short", { total: Schema.Int }) {}
+
+/** Move part of one counter's total to another: both change, or neither. */
+export class Give extends Domain.Command("Give", {
+  input: { from: Schema.String, to: Schema.String, by: Schema.Int },
+  events: [Taken, Received],
+  rejects: [Short],
+  reply: { total: Schema.Int },
+}) {}
+
 export class Counter extends Domain.Aggregate("Counter", {
   id: Schema.String,
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment],
+  events: [Taken, Received],
   decide: {
     Increment: (_, command) =>
       command.by > 10 ? new TooBig({ max: 10 }) : [new Incremented({ by: command.by })],
   },
   evolve: {
     Incremented: (state, event) => ({ total: state.total + event.by }),
+    Taken: (state, event) => ({ total: state.total - event.by }),
+    Received: (state, event) => ({ total: state.total + event.by }),
   },
   reply: {
     Increment: (state) => ({ total: state.total }),
   },
+}) {}
+
+export class Giving extends Domain.Decision(Give, {
+  reads: (command) => ({ from: Counter.ref(command.from), to: Counter.ref(command.to) }),
+  decide: ({ from, to }, command) =>
+    command.by > from.state.total
+      ? new Short({ total: from.state.total })
+      : [from.record(new Taken({ by: command.by })), to.record(new Received({ by: command.by }))],
+  reply: ({ from }) => ({ total: from.total }),
 }) {}
 
 export class Mirrored extends Domain.Event("Mirrored", { by: Schema.Int }) {}
@@ -71,6 +96,8 @@ export class CounterTotal extends Domain.View("CounterTotal", {
       total: view.total + event.by,
       increments: view.increments + 1,
     }),
+    Taken: (view, event) => ({ ...view, total: view.total - event.by }),
+    Received: (view, event) => ({ ...view, total: view.total + event.by }),
   },
 }) {}
 
@@ -173,6 +200,7 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold],
+  decisions: [Giving],
   views: [CounterTotal],
   policies: [StartMirror, HoldDeadline],
   sagas: [MirrorFirst],
@@ -181,7 +209,7 @@ export class Conformance extends Domain.Model("Conformance", {
 /** The model's Api: its counter and view, served at the front's `/api`. */
 export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
-  commands: ["Increment"],
+  commands: ["Increment", "Give"],
   views: ["CounterTotal"],
 }) {}
 

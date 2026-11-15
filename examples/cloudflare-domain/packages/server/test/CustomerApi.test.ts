@@ -166,7 +166,8 @@ it.live("a customer can only register themselves", () =>
     Effect.gen(function* () {
       const sam = yield* asCustomer("c-1");
       const error = yield* sam
-        .RegisterCustomer(CustomerId.make("c-2"), {
+        .RegisterCustomer({
+          customerId: CustomerId.make("c-2"),
           name: "not sam",
           username: Username.make("not-sam"),
         })
@@ -183,7 +184,11 @@ it.live("a request without a session is unauthorized", () =>
         Effect.provide(sessionClient("nobody")),
       );
       const error = yield* anonymous
-        .RegisterCustomer(CustomerId.make("c-1"), { name: "x", username: Username.make("x") })
+        .RegisterCustomer({
+          customerId: CustomerId.make("c-1"),
+          name: "x",
+          username: Username.make("x"),
+        })
         .pipe(Effect.flip);
       expect(error._tag).toBe("Unauthorized");
     }),
@@ -197,7 +202,8 @@ it.live("a session the bank didn't sign is unauthorized", () =>
         CustomerApi.clientInProcess.pipe(
           Effect.provide(sessionClient(token)),
           Effect.flatMap((client) =>
-            client.RegisterCustomer(CustomerId.make("c-1"), {
+            client.RegisterCustomer({
+              customerId: CustomerId.make("c-1"),
               name: "x",
               username: Username.make("x"),
             }),

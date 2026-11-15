@@ -254,7 +254,11 @@ type CommandArgs<Input> = {} extends Input
   ? [input?: Input, options?: CommandOptions]
   : [input: Input, options?: CommandOptions];
 
-/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(target, input, options)`. */
+/**
+ * The typed client of a command exposed in an Api:
+ * `bank.WithdrawMoney(target, input, options)`, or `bank.TransferMoney(input, options)`
+ * for a command a `Domain.Decision` implements, which has no target.
+ */
 export type CommandClient<C extends Command.Any> =
   C["rpc"] extends Rpc.Rpc<
     infer _Tag,
@@ -264,10 +268,11 @@ export type CommandClient<C extends Command.Any> =
     infer Middleware,
     infer _Requires
   >
-    ? Payload["Type"] extends { readonly target: infer Target; readonly input: infer Input }
+    ? Payload["Type"] extends { readonly input: infer Input }
       ? (
-          target: Target,
-          ...args: CommandArgs<Input>
+          ...args: Payload["Type"] extends { readonly target: infer Target }
+            ? [target: Target, ...args: CommandArgs<Input>]
+            : CommandArgs<Input>
         ) => Effect.Effect<
           Success["Type"],
           | Error["Type"]
@@ -500,9 +505,9 @@ const declaredOnly = (rpc: Rpc.Any) => {
   };
 };
 
-/** The wire payload of a command: its target, an optional command id, and its input. */
+/** The wire payload of a command: its target (if it has one), an optional command id, and its input. */
 interface CommandPayload {
-  readonly target: string;
+  readonly target?: string;
   readonly commandId?: string;
   readonly input: object;
 }
@@ -592,11 +597,12 @@ const handlersOf = (
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
             aggregate.send(target, new entry(input), { commandId }).pipe(
-              Effect.map((receipt) => ({
-                reply: receipt.reply,
-                stream: receipt.stream,
-                version: receipt.version,
-              })),
+              Effect.map((receipt) =>
+                // A command a decision implements commits to every stream it read.
+                entry.target === undefined
+                  ? { reply: receipt.reply, commits: receipt.commits ?? [] }
+                  : { reply: receipt.reply, stream: receipt.stream, version: receipt.version },
+              ),
             ),
           );
         continue;
@@ -914,11 +920,12 @@ const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
-      client[entry.tag] = (
-        target: unknown,
-        input: object = {},
-        { commandId, ...options }: CommandOptions = {},
-      ) => send({ target, commandId, input }, options);
+      client[entry.tag] =
+        entry.target === undefined
+          ? (input: object = {}, { commandId, ...options }: CommandOptions = {}) =>
+              send({ commandId, input }, options)
+          : (target: unknown, input: object = {}, { commandId, ...options }: CommandOptions = {}) =>
+              send({ target, commandId, input }, options);
       continue;
     }
     if (entry.kind === "Query") {

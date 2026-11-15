@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import { Account } from "../Account/Account.aggregate.ts";
 import { mainAccountId } from "../Account/Account.id.ts";
 import { OpenAccount } from "../Account/OpenAccount.command.ts";
-import { CustomerRegistered } from "./ConfirmRegistration.command.ts";
 import { Customer } from "./Customer.aggregate.ts";
+import { CustomerRegistered } from "./RegisterCustomer.command.ts";
 
 /** Whenever a customer registers, open their main account. */
 export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {

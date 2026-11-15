@@ -22,7 +22,8 @@ export interface Any extends Schema.Top {
   readonly kind: "Command";
   readonly annotations: Annotations;
   readonly tag: string;
-  readonly target: TargetSchema;
+  /** The id schema of the aggregate it addresses; `undefined` for one a `Decision` implements. */
+  readonly target: TargetSchema | undefined;
   readonly events: ReadonlyArray<Event.Any>;
   readonly rejects: ReadonlyArray<Rejection.Any>;
   readonly reply: Schema.Top | undefined;
@@ -44,31 +45,48 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   ? Schema.Struct<Reply>
   : undefined;
 
-/** What a client sends: the target, an optional idempotency key, and the input. */
-export type PayloadFields<Target extends TargetSchema, F extends Fields> = {
-  readonly target: Target;
+/**
+ * What a client sends: the target (when the command has one), an optional
+ * idempotency key, and the input.
+ */
+export type PayloadFields<Target extends TargetSchema | undefined, F extends Fields> = ([
+  Target,
+] extends [TargetSchema]
+  ? { readonly target: Target }
+  : {}) & {
   readonly commandId: Schema.optional<typeof Schema.String>;
   readonly input: Schema.Struct<F>;
 };
 
-/** What a client receives: the reply and the position of the committed events. */
-export type SuccessFields<Reply extends Schema.Top | undefined> = {
+/** Where a command's events were committed: one stream, and its version after them. */
+export const Commit = Schema.Struct({ stream: Schema.String, version: Schema.Number });
+export type Commit = typeof Commit.Type;
+
+/**
+ * What a client receives: the reply and the position of the committed events.
+ * A command with a target commits to one stream; one a `Decision` implements
+ * commits to every stream it recorded on.
+ */
+export type SuccessFields<
+  Reply extends Schema.Top | undefined,
+  Target extends TargetSchema | undefined = TargetSchema,
+> = {
   readonly reply: Reply extends Schema.Top ? Reply : typeof Schema.Void;
-  readonly stream: typeof Schema.String;
-  readonly version: typeof Schema.Number;
-};
+} & ([Target] extends [TargetSchema]
+  ? { readonly stream: typeof Schema.String; readonly version: typeof Schema.Number }
+  : { readonly commits: Schema.$Array<typeof Commit> });
 
 /** The Effect RPC definition of a command. */
 export type CommandRpc<
   Tag extends string,
-  Target extends TargetSchema,
+  Target extends TargetSchema | undefined,
   F extends Fields,
   Rejects extends ReadonlyArray<Rejection.Any>,
   Reply extends Schema.Top | undefined,
 > = Rpc.Rpc<
   Tag,
   Schema.Struct<PayloadFields<Target, F>>,
-  Schema.Struct<SuccessFields<Reply>>,
+  Schema.Struct<SuccessFields<Reply, Target>>,
   Rejects extends readonly [] ? typeof Schema.Never : Schema.Union<Rejects>
 >;
 
@@ -77,7 +95,7 @@ export type CommandRpc<
  */
 export interface CommandClass<
   Tag extends string,
-  Target extends TargetSchema,
+  Target extends TargetSchema | undefined,
   F extends Fields,
   Events extends ReadonlyArray<Event.Any>,
   Rejects extends ReadonlyArray<Rejection.Any>,
@@ -99,7 +117,7 @@ export interface CommandClass<
 }
 
 interface Options {
-  readonly target: TargetSchema;
+  readonly target?: TargetSchema | undefined;
   readonly input?: Fields;
   readonly middleware?: Middleware.List;
   readonly events?: ReadonlyArray<Event.Any>;
@@ -127,9 +145,10 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
 };
 
 /**
- * A request to change one aggregate instance. It names the instance it
- * targets, its input, the events it may record, the rejections it may return,
- * the middleware that guards it, and the reply its caller receives.
+ * A request to change the model. It names the aggregate instance it targets
+ * (or, for one that involves several, names them in its input), its input,
+ * the events it may record, the rejections it may return, the middleware
+ * that guards it, and the reply its caller receives.
  *
  * ### Declaring a command
  * **Example:** A command with its event and rejection
@@ -180,6 +199,23 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * }) {}
  * ```
  *
+ * ### Involving several instances
+ * A command that involves more than one aggregate instance has no `target`:
+ * its input names them, and a `Domain.Decision` implements it.
+ *
+ * **Example:** A transfer between two accounts
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import * as Schema from "effect/Schema";
+ * import { AccountId, InsufficientFunds, TransferReceived, TransferSent } from "./Account.ts";
+ *
+ * export class TransferMoney extends Domain.Command("TransferMoney", {
+ *   input: { from: AccountId, to: AccountId, amount: Schema.Int },
+ *   events: [TransferSent, TransferReceived],
+ *   rejects: [InsufficientFunds],
+ * }) {}
+ * ```
+ *
  * ### Sending it once
  * Pass a `commandId`, and a resend with the same id returns the first
  * receipt instead of applying the command again.
@@ -210,7 +246,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  */
 export const make = <
   const Tag extends string,
-  Target extends TargetSchema,
+  Target extends TargetSchema | undefined = undefined,
   const F extends Fields = {},
   const Ms extends Middleware.List = readonly [],
   const Events extends ReadonlyArray<Event.Any> = readonly [],
@@ -219,8 +255,12 @@ export const make = <
 >(
   tag: Tag,
   options: {
-    /** The id schema of the aggregate this command addresses. */
-    readonly target: Target;
+    /**
+     * The id schema of the aggregate this command addresses. Leave it out for
+     * a command a `Domain.Decision` implements: it names the instances it
+     * involves in its input.
+     */
+    readonly target?: Target;
     /** The command's fields. */
     readonly input?: F;
     /**
@@ -248,17 +288,17 @@ export const make = <
   Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
 > => {
   const rejects = options.rejects ?? [];
+  const reply = options.reply ? Schema.Struct(options.reply) : Schema.Void;
   const rpc = Rpc.make(tag, {
     payload: {
-      target: options.target,
+      ...(options.target === undefined ? {} : { target: options.target }),
       commandId: Schema.optional(Schema.String),
       input: inputSchema(options.input),
     },
-    success: Schema.Struct({
-      reply: options.reply ? Schema.Struct(options.reply) : Schema.Void,
-      stream: Schema.String,
-      version: Schema.Number,
-    }),
+    success:
+      options.target === undefined
+        ? Schema.Struct({ reply, commits: Schema.Array(Commit) })
+        : Schema.Struct({ reply, stream: Schema.String, version: Schema.Number }),
     error: rejects.length === 0 ? Schema.Never : Schema.Union(rejects),
   });
   return build(

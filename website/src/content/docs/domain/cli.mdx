@@ -126,6 +126,8 @@ $ bank account-summary get --key a-1 --at-least '{"stream":"Account/a-1","versio
 
 A command whose input has a field named like a payload field, such as its own `target`, takes its whole input as `--input` JSON instead.
 
+A command a [decision](/domain/decision) implements has no `--target`: its input's fields name the instances it involves.
+
 ## Read failures
 
 The CLI decodes the input against the call's schema before it sends anything, so a bad flag fails without a request:

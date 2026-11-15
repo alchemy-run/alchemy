@@ -1252,6 +1252,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Command](https://alchemy.run/domain/command) — How a command names its target, carries its data, declares every outcome, and reaches its aggregate exactly once.
 - [Event](https://alchemy.run/domain/event) — What an event records, what to put in it, how it's stored, and how the rest of the model consumes it.
 - [Aggregate](https://alchemy.run/domain/aggregate) — How an aggregate holds state, decides commands, applies events, and keeps its rules consistent.
+- [Decision](https://alchemy.run/domain/decision) — How a decision implements one command across several aggregate instances, and commits what it records on all of them or on none.
 - [View](https://alchemy.run/domain/view) — How a view folds events into a read model per key, emits events of its own, combines other views, and serves reads.
 - [Projection](https://alchemy.run/domain/projection) — How a projection consumes events into a store you own, in order per key, batched and replayable, and why it never sends commands.
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
@@ -1277,7 +1278,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
 - [Sign in with better-auth](https://alchemy.run/domain/better-auth) — Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 - [Views as security boundaries](https://alchemy.run/domain/view-security) — Decide who may read each view, keep watches honest as data changes hands, and give each audience a view of its own.
-- [Unique values](https://alchemy.run/domain/unique-values) — Keep a value unique across every customer by making the value itself an aggregate.
+- [Unique values](https://alchemy.run/domain/unique-values) — Keep a value unique across every customer by giving the value an aggregate of its own, and deciding the claim together with what it's for.
 - [Deadlines](https://alchemy.run/domain/deadlines) — Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.
 - [History at scale](https://alchemy.run/domain/backfill) — How a deploy backfills new views and projections on Cloudflare, how long it takes, and how to run a large Domain within Cloudflare's limits.
 - [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
@@ -1286,4 +1287,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~268 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~272 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -1966,6 +1966,7 @@ export default defineConfig({
                 { label: "Command", link: "/domain/command" },
                 { label: "Event", link: "/domain/event" },
                 { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "Decision", link: "/domain/decision" },
                 { label: "View", link: "/domain/view" },
                 { label: "Projection", link: "/domain/projection" },
                 { label: "Stream", link: "/domain/stream" },

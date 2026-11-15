@@ -15,6 +15,7 @@ import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Command from "./Command.ts";
+import type * as Decision from "./Decision.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import type * as Key from "./Key.ts";
@@ -86,7 +87,10 @@ export type Step =
     }
   | {
       readonly _tag: "When";
-      readonly ref: Aggregate.Ref;
+      /** The instance the command targets; absent for one a decision implements. */
+      readonly ref?: Aggregate.Ref;
+      /** The decision that implements the command, when it has no target. */
+      readonly decision?: Decision.Any;
       readonly command: { readonly _tag: string };
       readonly commandId?: string;
     }
@@ -267,17 +271,34 @@ const given = <A extends Aggregate.Any>(
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
-/** Send a command. Its policies run until they finish or suspend on an external system call. */
-const when = <A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
+/**
+ * Send a command: to an aggregate instance, or (for a command with no
+ * target) through the decision that implements it. Its policies run until
+ * they finish or suspend on an external system call.
+ */
+function when<D extends Decision.Any>(
+  decision: D,
+  command: Aggregate.InstanceOf<D["command"]>,
+  options?: { readonly commandId?: string },
+): WhenStep<D["command"]>;
+function when<A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
   ref: Aggregate.Ref<A>,
   command: Cmd,
   options?: { readonly commandId?: string },
-): WhenStep<CommandClassOf<A, Cmd>> => ({
-  _tag: "When",
-  ref,
-  command: command as { readonly _tag: string },
-  commandId: options?.commandId,
-});
+): WhenStep<CommandClassOf<A, Cmd>>;
+function when(
+  // Checked by the overloads.
+  target: any,
+  command: any,
+  options?: { readonly commandId?: string },
+): any {
+  return {
+    _tag: "When",
+    ...("kind" in target ? { decision: target } : { ref: target }),
+    command,
+    commandId: options?.commandId,
+  } satisfies StepOf<"When">;
+}
 
 /**
  * The next events committed on a stream. With no events: nothing new was
@@ -714,7 +735,7 @@ const describeStep = (s: Step): string => {
     case "Then":
       return `${refName(s.ref)}: ${s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80)}`;
     case "When":
-      return `${refName(s.ref)}: ${summarize(s.command)}`;
+      return `${s.ref ? refName(s.ref) : s.command._tag}: ${summarize(s.command)}`;
     case "Rejected":
       return summarize(s.rejection);
     case "Replied":
@@ -1201,7 +1222,7 @@ const make =
             if (unassertedRejection && s._tag !== "Rejected") {
               return yield* rejectionNotAsserted(unassertedRejection);
             }
-            if ("ref" in s) touched.set(refName(s.ref), s.ref);
+            if ("ref" in s && s.ref !== undefined) touched.set(refName(s.ref), s.ref);
             switch (s._tag) {
               case "Clock": {
                 const at = clockMillis(s.at);
@@ -1250,10 +1271,14 @@ const make =
                 break;
               }
               case "When": {
-                const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
-                  never,
-                  Aggregate.ClientImpl
-                >;
+                // A decision's command goes the way an Api sends it: by its tag.
+                const client =
+                  s.ref === undefined
+                    ? internals.commands.get(s.command._tag)!
+                    : yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
+                        never,
+                        Aggregate.ClientImpl
+                      >;
                 const result = yield* client
                   .send(s.ref, s.command, { commandId: s.commandId ?? `story:${step}` })
                   .pipe(Effect.provide(provided), Effect.result);

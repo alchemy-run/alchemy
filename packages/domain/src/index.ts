@@ -21,6 +21,7 @@
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as DecisionModule from "./Decision.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
 import type * as KeyModule from "./Key.ts";
@@ -109,6 +110,21 @@ export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
 /** No command was scheduled with that id. */
 export const NotScheduled = AggregateModule.NotScheduled;
 export type NotScheduled = AggregateModule.NotScheduled;
+
+export declare namespace Decision {
+  /** Any Decision class. */
+  export type Any = DecisionModule.Any;
+  /** One aggregate instance a decision read: its state, and `record`. */
+  export type Read<A extends AggregateModule.Any> = DecisionModule.Read<A>;
+  /** An event recorded on an instance a decision read. */
+  export type Recorded<E = unknown> = DecisionModule.Recorded<E>;
+  /** What an accepted command returns: every stream it committed to, its events and reply. */
+  export type Receipt<Ev = unknown, Reply = unknown> = DecisionModule.Receipt<Ev, Reply>;
+  /** One stream a decision committed to, and its version after. */
+  export type Commit = DecisionModule.Commit;
+}
+/** A command decided across several aggregates, atomically. See {@link DecisionModule.make}. */
+export const Decision = DecisionModule.make;
 
 /**
  * What keys a view, policy, projection or stream: an aggregate (one instance

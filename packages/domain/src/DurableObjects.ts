@@ -17,11 +17,12 @@ import {
  * @module
  */
 import type { HttpEffect } from "alchemy/Http";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -38,6 +39,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
+import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
 import { isAfter, mergeCheckpoints } from "./InMemory.ts";
 import {
   type Accepted,
@@ -56,6 +58,7 @@ import {
   type PolicyKit,
   type ProjectionKit,
   type Push,
+  type SeedResult,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -67,6 +70,7 @@ import {
   type ViewKit,
   type ViewSnapshot,
 } from "./Platform.ts";
+import * as TwoPhase from "./TwoPhase.ts";
 
 // ---------------------------------------------------------------- the host
 
@@ -523,7 +527,13 @@ const backfillRuntime = (
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const context = yield* captureContext<ObjectState | RuntimeContext>();
+    // Only these two services: a whole captured context would also carry
+    // construction's references, such as the call an input gate (Rivet's)
+    // tells calls apart by. Storage a commit's transaction reaches through a
+    // job would then wait on the gate that transaction holds.
+    const context = Context.make(ObjectState, state).pipe(
+      Context.add(RuntimeContext, yield* RuntimeContext),
+    );
     const provide = <A, E>(
       effect: Effect.Effect<A, E, ObjectState | RuntimeContext>,
     ): Effect.Effect<A, E> => Effect.provide(effect, context);
@@ -785,19 +795,58 @@ const registerJob = (
     Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
   );
 
+/** What an instance holds for a decision until it commits or aborts: see `TwoPhase`. */
+interface Intent extends TwoPhase.Prepare {
+  /** When the primary lets it be aborted, on the primary's own clock. */
+  readonly deadline: number;
+}
+
+/** What the primary keeps of a decision's outcome. */
+type Outcome =
+  /** Committed: kept until each of these instances has applied its intent. */
+  | { readonly _tag: "Committed"; readonly waiting: ReadonlyArray<TwoPhase.Address> }
+  /** Aborted once its deadline passed: a late prepare or commit finds this. */
+  | { readonly _tag: "Aborted"; readonly at: number };
+
+/** How long an aborted decision is remembered: far longer than any call is retried. */
+const ABORTED_TTL_MS = 60 * 60_000;
+
+/** A decision's intent holds the instance: nothing else commits to it until that settles. */
+class InstanceHeld extends Data.TaggedError("InstanceHeld")<{}> {
+  override get message() {
+    return "the instance stayed held by a decision that neither committed nor aborted";
+  }
+}
+
+/** How long a command waits for an instance a decision holds: longer than an intent lives. */
+const HELD = {
+  schedule: Schedule.min([Schedule.exponential("10 millis"), Schedule.spaced("250 millis")]),
+  times: 60,
+} as const;
+
+/** The object of another instance, for the two-phase commit: `undefined` when its class isn't in this code. */
+type Peer = (address: TwoPhase.Address) => Stub | undefined;
+
+const sameAddress = (a: TwoPhase.Address, b: TwoPhase.Address) =>
+  a.aggregate === b.aggregate && a.id === b.id;
+
 const aggregateObject = (
   kit: AggregateKit,
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
   random: Random,
+  peer: Peer,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const outbox = yield* queue<Delivery>("outbox", kit.deliver);
-    const currentMeta = state.storage
-      .get<{ state: Json; version: number }>("meta")
+    // `held` marks an instance a decision's intent holds, so a command learns
+    // it from the row it reads anyway.
+    const storedMeta = state.storage
+      .get<{ state: Json; version: number; held?: true }>("meta")
       .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
+    const currentMeta = Effect.map(storedMeta, ({ state, version }) => ({ state, version }));
     const eventsAfter = (after: number) =>
       state.storage
         .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
@@ -852,7 +901,8 @@ const aggregateObject = (
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         if (duplicate) return { sent: duplicate, kick: false };
-        const current = yield* currentMeta;
+        const current = yield* storedMeta;
+        if (current.held) return yield* new InstanceHeld();
         const result = yield* kit.handle({
           id,
           state: current.state,
@@ -875,37 +925,180 @@ const aggregateObject = (
             reply: result.reply,
           },
         };
-        const routed = yield* state.storage.transaction(
+        const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
-            const events: Record<string, StoredEvent> = {};
-            for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
-            yield* state.storage.put(events);
-            yield* state.storage.put("meta", {
-              state: result.state,
-              version: result.version,
-            });
             yield* state.storage.put(`receipt:${meta.commandId}`, sent);
-            // Listed in the directory after the call returns, not before it commits.
-            yield* listAfterCommit(runtime.jobs, id);
-            // Live to caught-up consumers; through the backfill to lagging ones.
-            const live = yield* Backfill.routeCommit(
-              sourceFor(id),
-              kit.targets,
-              yield* state.storage.get<Routed>("routed"),
-              current.version,
-              result.version,
-              result.deliveries,
-            );
-            yield* state.storage.put("routed", live.routed);
-            yield* outbox.stage(live.send);
-            return live.send;
+            return yield* persist(id, current.version, result);
           }),
         );
-        return { sent, kick: routed.length > 0 };
+        return { sent, kick };
       });
+    /**
+     * Store decided events, the state after them and their deliveries. Call
+     * inside the storage transaction that commits them; `true` when there are
+     * deliveries to send.
+     */
+    const persist = (id: string, from: number, result: SeedResult) =>
+      Effect.gen(function* () {
+        const events: Record<string, StoredEvent> = {};
+        for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
+        yield* state.storage.put(events);
+        yield* state.storage.put("meta", { state: result.state, version: result.version });
+        // Listed in the directory after the call returns, not before it commits.
+        yield* listAfterCommit(runtime.jobs, id);
+        // Live to caught-up consumers; through the backfill to lagging ones.
+        const live = yield* Backfill.routeCommit(
+          sourceFor(id),
+          kit.targets,
+          yield* state.storage.get<Routed>("routed"),
+          from,
+          result.version,
+          result.deliveries,
+        );
+        yield* state.storage.put("routed", live.routed);
+        yield* outbox.stage(live.send);
+        return live.send.length > 0;
+      });
+
+    // ------------------------------------------------ decisions (see `TwoPhase`)
+    const intentOf = state.storage.get<Intent>("intent");
+    const outcomeKey = (txId: string) => `tx:${txId}`;
+    const isPrimary = (id: string, intent: Intent) =>
+      sameAddress(intent.primary, { aggregate: kit.name, id });
+    /** Turn the intent into events. Callers run it `exclusively`. */
+    const applyIntent = (id: string, txId: string) =>
+      Effect.gen(function* () {
+        const intent = yield* intentOf;
+        if (intent === undefined || intent.txId !== txId) return { applied: false, kick: false };
+        const current = yield* currentMeta;
+        const result =
+          intent.events.length === 0
+            ? undefined
+            : yield* kit.record({
+                id,
+                state: current.state,
+                version: current.version,
+                events: intent.events,
+                commandId: intent.commandId,
+                now: intent.now,
+                correlationId: intent.correlationId,
+                trace: intent.trace,
+              });
+        const kick = yield* state.storage.transaction(
+          Effect.gen(function* () {
+            yield* release;
+            if (isPrimary(id, intent)) {
+              // The commit point: the receipt, and the outcome for whoever asks.
+              yield* state.storage.put(`decided:${intent.commandId}`, intent.receipt);
+              if (intent.others.length > 0) {
+                yield* state.storage.put<Outcome>(outcomeKey(txId), {
+                  _tag: "Committed",
+                  waiting: intent.others,
+                });
+              }
+            }
+            return result === undefined ? false : yield* persist(id, current.version, result);
+          }),
+        );
+        return { applied: true, kick };
+      });
+    /** Cancel the wake-up that settles an intent, once it is settled. */
+    let cancelSettle: Effect.Effect<void, never, RuntimeContext> = Effect.void;
+    /** Let go of the intent: the instance takes commands again. */
+    const release = Effect.gen(function* () {
+      yield* state.storage.delete("intent");
+      yield* state.storage.put("meta", yield* currentMeta);
+      // Settled: it has no need to wake up for it.
+      yield* Effect.suspend(() => cancelSettle);
+    });
+    /** Drop the intent. Callers run it `exclusively`. */
+    const dropIntent = (txId: string) =>
+      Effect.gen(function* () {
+        const intent = yield* intentOf;
+        if (intent?.txId === txId) yield* state.storage.transaction(release);
+      });
+    /** As the primary: what became of a decision, aborting one past its deadline. Callers run it `exclusively`. */
+    const outcomeOf = (id: string, txId: string) =>
+      Effect.gen(function* () {
+        const recorded = yield* state.storage.get<Outcome>(outcomeKey(txId));
+        if (recorded !== undefined) return recorded._tag;
+        const intent = yield* intentOf;
+        // Neither held nor recorded: it never prepared here, it was aborted, or
+        // it committed and every other instance already has it.
+        if (intent === undefined || intent.txId !== txId) return "Aborted" as const;
+        const now = yield* Clock.currentTimeMillis;
+        if (now < intent.deadline) return "Pending" as const;
+        // Nobody committed it in time. Remembered, so a late commit finds it aborted.
+        const stale = yield* state.storage.list<Outcome>({ prefix: "tx:", limit: 64 });
+        yield* state.storage.delete(
+          [...stale]
+            .filter(([, old]) => old._tag === "Aborted" && old.at < now - ABORTED_TTL_MS)
+            .map(([key]) => key),
+        );
+        yield* state.storage.transaction(
+          Effect.gen(function* () {
+            yield* release;
+            yield* state.storage.put<Outcome>(outcomeKey(txId), { _tag: "Aborted", at: now });
+          }),
+        );
+        return "Aborted" as const;
+      });
+    /**
+     * Settle the intent this instance holds, if it can be: by its own
+     * deadline as the primary, else by asking the primary. `true` when the
+     * instance is free. Calls another object, so it runs outside `exclusively`.
+     */
+    const settle = (id: string) =>
+      Effect.gen(function* () {
+        const intent = yield* intentOf;
+        if (intent === undefined) return true;
+        if (isPrimary(id, intent)) {
+          return (yield* exclusively(outcomeOf(id, intent.txId))) !== "Pending";
+        }
+        const primary = peer(intent.primary);
+        if (primary === undefined) return false;
+        const outcome = yield* callOnce<"Committed" | "Aborted" | "Pending">(
+          primary.txOutcome(intent.primary.id, intent.txId),
+        ).pipe(Effect.catchCause(() => Effect.succeed("Pending" as const)));
+        if (outcome === "Pending") return false;
+        if (outcome === "Aborted") {
+          yield* exclusively(dropIntent(intent.txId));
+          return true;
+        }
+        const { applied, kick } = yield* exclusively(applyIntent(id, intent.txId));
+        if (kick) yield* outbox.kick;
+        if (applied) {
+          yield* callOnce(
+            primary.txForget(intent.primary.id, intent.txId, [{ aggregate: kit.name, id }]),
+          ).pipe(Effect.ignoreCause);
+        }
+        return true;
+      });
+    /**
+     * Run `effect` exclusively once no decision holds the instance: one left
+     * by a caller that died is settled first, or waited out.
+     */
+    const whenFree = <A, E extends { readonly _tag: string }>(
+      id: string,
+      effect: Effect.Effect<A, E | InstanceHeld, ObjectState | RuntimeContext>,
+    ) => {
+      const attempt = exclusively(effect);
+      return attempt.pipe(
+        // Settle what holds it, then try again at once: most intents settle here.
+        Effect.catchTag("InstanceHeld", () => Effect.andThen(settle(id), attempt)),
+        Effect.retry({ ...HELD, while: (error) => error._tag === "InstanceHeld" }),
+        Effect.catchTag("InstanceHeld", (held) => Effect.die(held)),
+      );
+    };
+    // An instance whose decision stopped midway settles itself once the
+    // intent's deadline has passed, so nothing waits for its next command.
+    const settler = yield* makeCallback("domain:settle", (job: { readonly id: string }) =>
+      Effect.flatMap(settle(job.id), (free) => (free ? Effect.void : new InstanceHeld())),
+    );
+    cancelSettle = settler.cancel("settle").pipe(Effect.ignore);
     const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
-        const { sent, kick } = yield* exclusively(commit(id, command, meta));
+        const { sent, kick } = yield* whenFree(id, commit(id, command, meta));
         if (kick) yield* outbox.kick;
         return sent;
       });
@@ -932,7 +1125,8 @@ const aggregateObject = (
       }) =>
         Effect.gen(function* () {
           const key = `scheduled:${job.name ?? job.meta.commandId}`;
-          const kick = yield* exclusively(
+          const kick = yield* whenFree(
+            job.id,
             Effect.gen(function* () {
               // A job scheduled before tokens existed has none, and runs.
               if (job.token !== undefined && (yield* state.storage.get<string>(key)) !== job.token)
@@ -986,6 +1180,89 @@ const aggregateObject = (
         }).pipe(exclusively, reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
+      // The two-phase commit of a decision, as one of its instances: see `TwoPhase.Participant`.
+      txRead: (id: string, commandId?: string) =>
+        Effect.gen(function* () {
+          if (!(yield* settle(id))) return { _tag: "Busy" } satisfies TwoPhase.ReadResult;
+          return yield* exclusively(
+            Effect.gen(function* (): Generator<any, TwoPhase.ReadResult> {
+              if ((yield* intentOf) !== undefined) return { _tag: "Busy" };
+              const receipt =
+                commandId === undefined
+                  ? undefined
+                  : yield* state.storage.get<TwoPhase.Prepare["receipt"]>(`decided:${commandId}`);
+              if (receipt !== undefined) return { _tag: "Decided", receipt };
+              return { _tag: "Read", ...(yield* currentMeta) };
+            }),
+          );
+        }).pipe(reportDefects),
+      txPrepare: (id: string, prepare: TwoPhase.Prepare) =>
+        Effect.gen(function* () {
+          yield* settle(id);
+          return yield* exclusively(
+            Effect.gen(function* (): Generator<any, TwoPhase.PrepareResult> {
+              const held = yield* intentOf;
+              if (held !== undefined) {
+                return held.txId === prepare.txId ? { _tag: "Prepared" } : { _tag: "Busy" };
+              }
+              if (sameAddress(prepare.primary, { aggregate: kit.name, id })) {
+                const receipt = yield* state.storage.get<TwoPhase.Prepare["receipt"]>(
+                  `decided:${prepare.commandId}`,
+                );
+                if (receipt !== undefined) return { _tag: "Decided", receipt };
+                // Aborted after its deadline: this prepare arrived late.
+                if ((yield* state.storage.get(outcomeKey(prepare.txId))) !== undefined) {
+                  return { _tag: "Conflict" };
+                }
+              }
+              if ((yield* currentMeta).version !== prepare.version) return { _tag: "Conflict" };
+              yield* state.storage.transaction(
+                Effect.gen(function* () {
+                  yield* state.storage.put<Intent>("intent", {
+                    ...prepare,
+                    deadline: (yield* Clock.currentTimeMillis) + TwoPhase.INTENT_TTL_MS,
+                  });
+                  yield* state.storage.put("meta", { ...(yield* currentMeta), held: true });
+                }),
+              );
+              yield* settler.schedule("settle", {
+                after: Duration.millis(TwoPhase.INTENT_TTL_MS + 1_000),
+                payload: { id },
+              });
+              return { _tag: "Prepared" };
+            }),
+          );
+        }).pipe(reportDefects),
+      txCommit: (id: string, txId: string) =>
+        Effect.gen(function* () {
+          const { applied, kick } = yield* exclusively(applyIntent(id, txId));
+          if (kick) yield* outbox.kick;
+          if (applied) return "Committed" as const;
+          // Asked again because the first answer was lost: it did commit.
+          const outcome = yield* state.storage.get<Outcome>(outcomeKey(txId));
+          return outcome?._tag === "Committed" ? ("Committed" as const) : ("Gone" as const);
+        }).pipe(reportDefects),
+      // Only the primary drops an intent on the sender's word. Any other
+      // instance asks the primary first: the sender may not know that its
+      // commit landed.
+      txAbort: (id: string, txId: string) =>
+        Effect.gen(function* () {
+          const intent = yield* intentOf;
+          if (intent === undefined || intent.txId !== txId) return;
+          if (isPrimary(id, intent)) return yield* exclusively(dropIntent(txId));
+          yield* settle(id);
+        }).pipe(reportDefects),
+      txOutcome: (id: string, txId: string) => outcomeOf(id, txId).pipe(exclusively, reportDefects),
+      txForget: (_id: string, txId: string, others: ReadonlyArray<TwoPhase.Address>) =>
+        Effect.gen(function* () {
+          const recorded = yield* state.storage.get<Outcome>(outcomeKey(txId));
+          if (recorded?._tag !== "Committed") return;
+          const waiting = recorded.waiting.filter(
+            (address) => !others.some((other) => sameAddress(address, other)),
+          );
+          if (waiting.length === 0) yield* state.storage.delete(outcomeKey(txId));
+          else yield* state.storage.put<Outcome>(outcomeKey(txId), { _tag: "Committed", waiting });
+        }).pipe(exclusively, reportDefects),
       // The backfill protocol, as a source.
       // Any code answers these: a run reads its log, and routes it with its own code.
       bfLog: (id: string, after: number, limit: number) =>
@@ -1689,6 +1966,7 @@ export const makePlatform = <R>(
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `init` is the host's context minus its Scope, which declaring needs none of
         Effect.provide(effect, init) as Effect.Effect<A, E>;
       const random = yield* SecureRandom.SecureRandom;
+      const commitDecision = yield* TwoPhase.DecisionCommit;
       // Model names are unique per host, not per platform build: two different
       // models named alike would declare the same classes. The same model
       // hosted twice declares them again, which is harmless.
@@ -1882,7 +2160,12 @@ export const makePlatform = <R>(
                   const name = `${aggregate.aggregateName}Aggregate`;
                   const namespace = yield* object(
                     name,
-                    aggregateObject(kit, net, current, consumerPlans, random),
+                    aggregateObject(kit, net, current, consumerPlans, random, (address) =>
+                      (
+                        sources.get(`${address.aggregate}Aggregate`) ??
+                        bound(`${address.aggregate}Aggregate`)
+                      )?.getByName(address.id),
+                    ),
                   );
                   sources.set(name, namespace);
                   return {
@@ -1948,6 +2231,52 @@ export const makePlatform = <R>(
                   };
                 }),
               ),
+            // A decision has no object of its own: whoever sends its command
+            // runs the commit across the instances it reads.
+            decision: (decision, kit) =>
+              Effect.sync(() => {
+                const participant = (read: TwoPhase.Address): TwoPhase.Participant => {
+                  const namespace =
+                    sources.get(`${read.aggregate}Aggregate`) ??
+                    bound(`${read.aggregate}Aggregate`);
+                  if (namespace === undefined) {
+                    const missing = Effect.die(
+                      new DefinitionError({
+                        reason: new DecisionsUnsupported({ decisions: [decision.decisionName] }),
+                      }),
+                    );
+                    return {
+                      read: () => missing,
+                      prepare: () => missing,
+                      commit: () => missing,
+                      abort: () => missing,
+                      forget: () => missing,
+                    };
+                  }
+                  const stub = namespace.getByName(read.id);
+                  return {
+                    read: (commandId) => unwrapDefects(stub.txRead(read.id, commandId)),
+                    prepare: (prepare) => unwrapDefects(stub.txPrepare(read.id, prepare)),
+                    commit: (txId) => unwrapDefects(stub.txCommit(read.id, txId)),
+                    abort: (txId) => unwrapDefects(stub.txAbort(read.id, txId)),
+                    forget: (txId, others) => unwrapDefects(stub.txForget(read.id, txId, others)),
+                  };
+                };
+                return {
+                  send: (command, meta) =>
+                    announce.pipe(
+                      Effect.andThen(
+                        commitDecision({
+                          kit,
+                          command,
+                          meta,
+                          participant,
+                          txId: Effect.orDie(random.uuidV4()),
+                        }),
+                      ),
+                    ),
+                };
+              }),
             view: (view, kit) =>
               inInit(
                 Effect.gen(function* () {

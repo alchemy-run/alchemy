@@ -1,0 +1,452 @@
+---
+title: Decision
+description: How a decision implements one command across several aggregate instances, and commits what it records on all of them or on none.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A decision implements a command that involves several aggregate instances. It reads them, decides against all of their states together, and records events on them. Every event commits, or none does.
+
+In the example bank, a transfer is a decision: it debits one account and credits another in one step.
+
+<DAG
+  nodes={[
+    { id: "command", label: "TransferMoney", type: "from, to, amount", kind: "command", layer: 0 },
+    { id: "decision", label: "Transfer", type: "decides both", kind: "decision", layer: 1 },
+    { id: "from", label: "Account a-1", type: "TransferSent", kind: "aggregate", layer: 2 },
+    { id: "to", label: "Account a-2", type: "TransferReceived", kind: "aggregate", layer: 2 },
+  ]}
+  edges={[
+    { from: "command", to: "decision" },
+    { from: "decision", to: "from" },
+    { from: "decision", to: "to" },
+  ]}
+  caption="One command, decided once, recorded on two instances together."
+/>
+
+## A rule that spans two instances
+
+An [aggregate](/domain/aggregate) instance decides alone. It sees its own state and nothing else, so an account can refuse an overdraft but can't know whether the account it pays exists.
+
+Without a decision, a rule about two instances becomes a conversation between them: a [policy](/domain/policy) or a [saga](/domain/saga) sends one command, waits for its event, and sends the next. In between, only half of it has happened, so each side needs a state for "pending" and a way to undo.
+
+A decision has no in-between. Use one when the rule should be answered at once and should never be half done.
+
+## Declare a command with no target
+
+A command an aggregate implements names one instance as its `target`. A command a decision implements has no target. Its input names every instance it involves.
+
+```typescript title="src/Account/TransferMoney.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./Account.id.ts";
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Int,
+}) {}
+
+export class TransferSent extends Domain.Event("TransferSent", {
+  to: AccountId,
+  amount: Schema.Int,
+}) {}
+
+export class TransferReceived extends Domain.Event("TransferReceived", {
+  from: AccountId,
+  amount: Schema.Int,
+}) {}
+
+export class TransferMoney extends Domain.Command("TransferMoney", {
+  input: { from: AccountId, to: AccountId, amount: Schema.Int },
+  events: [TransferSent, TransferReceived],
+  rejects: [InsufficientFunds],
+}) {}
+```
+
+Everything else about the command is the same: its events, its rejections, its reply and its middleware.
+
+## Let the aggregate fold the events
+
+A decision keeps no state. Each event it records lands on one aggregate instance, which folds it with its own `evolve`.
+
+List those events in the aggregate's `events`, and give `evolve` a handler for each.
+
+```typescript title="src/Account/Account.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./Account.id.ts";
+import { DepositMoney, MoneyDeposited } from "./DepositMoney.command.ts";
+import { TransferReceived, TransferSent } from "./TransferMoney.command.ts";
+
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  commands: [DepositMoney],
+  events: [TransferSent, TransferReceived],
+  decide: {
+    DepositMoney: (_, cmd) => [new MoneyDeposited({ amount: cmd.amount })],
+  },
+  evolve: {
+    MoneyDeposited: (account, e) => ({ balance: account.balance + e.amount }),
+    TransferSent: (account, e) => ({ balance: account.balance - e.amount }),
+    TransferReceived: (account, e) => ({ balance: account.balance + e.amount }),
+  },
+}) {}
+```
+
+The account still decides its own commands. `DepositMoney` goes to one account, so it stays there.
+
+## Decide against every instance
+
+A decision takes the command it implements, the instances it reads, and how it decides.
+
+```typescript title="src/Account/Transfer.decision.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+import {
+  InsufficientFunds,
+  TransferMoney,
+  TransferReceived,
+  TransferSent,
+} from "./TransferMoney.command.ts";
+
+export class Transfer extends Domain.Decision(TransferMoney, {
+  reads: (cmd) => ({
+    from: Account.ref(cmd.from),
+    to: Account.ref(cmd.to),
+  }),
+  decide: ({ from, to }, cmd) =>
+    cmd.amount > from.state.balance
+      ? new InsufficientFunds({ balance: from.state.balance })
+      : [
+          from.record(new TransferSent({ to: to.id, amount: cmd.amount })),
+          to.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+        ],
+}) {}
+```
+
+`reads` names the instances, each under a key. It depends only on the command, so the same command always involves the same instances.
+
+`decide` receives each instance under its key, with its `id`, its `state` and its `version`. It returns one of the command's rejections, or the events to record.
+
+## Record each event on one instance
+
+An event is recorded on an instance with that instance's `record`. `from.record(...)` puts `TransferSent` in the sending account's history, and `to.record(...)` puts `TransferReceived` in the receiving account's.
+
+`record` takes only events the instance folds. Recording a `TransferSent` on a `Customer` is a type error.
+
+An empty array accepts the command and records nothing, as it does in an aggregate.
+
+## Add it to the model
+
+List the decision next to the aggregates it reads.
+
+```typescript title="src/Bank.model.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account/Account.aggregate.ts";
+import { Transfer } from "./Account/Transfer.decision.ts";
+
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account],
+  decisions: [Transfer],
+}) {}
+```
+
+Every command has one implementation: an aggregate or a decision. A second one is a type error on its entry in the model, and `Domain.verify` reports it as `ImplementedTwice`.
+
+## Send it
+
+The decision's class is a service tag. `yield*` it for its client, and send the command with no id beside it.
+
+```typescript title="src/Account/payRent.ts"
+import * as Effect from "effect/Effect";
+import { AccountId } from "./Account.id.ts";
+import { Transfer } from "./Transfer.decision.ts";
+import { TransferMoney } from "./TransferMoney.command.ts";
+
+export const payRent = Effect.gen(function* () {
+  const transfer = yield* Transfer;
+  return yield* transfer.send(
+    new TransferMoney({
+      from: AccountId.make("a-1"),
+      to: AccountId.make("a-2"),
+      amount: 900,
+    }),
+  );
+});
+```
+
+`send` succeeds once every event is committed. It fails with one of the command's rejections, and then nothing was recorded on either account.
+
+Pass a `commandId` as you would to an aggregate. A command sent again under the same id returns its first receipt and records nothing new.
+
+## Read what it committed
+
+The receipt lists every stream the decision read, with its version after the commit.
+
+```typescript title="src/Account/payRentAndRead.ts"
+import * as Effect from "effect/Effect";
+import { Account } from "./Account.aggregate.ts";
+import { AccountId } from "./Account.id.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
+import { Transfer } from "./Transfer.decision.ts";
+import { TransferMoney } from "./TransferMoney.command.ts";
+
+export const payRentAndRead = Effect.gen(function* () {
+  const transfer = yield* Transfer;
+  const summaries = yield* AccountSummary;
+  const receipt = yield* transfer.send(
+    new TransferMoney({
+      from: AccountId.make("a-1"),
+      to: AccountId.make("a-2"),
+      amount: 900,
+    }),
+  );
+  return yield* summaries.get(Account.ref("a-2"), { atLeast: receipt.commits[1] });
+});
+```
+
+`commits` is in stream order, so `Account/a-1` comes before `Account/a-2`. Each entry is what a [view](/domain/view) takes as `atLeast`, to wait until it has applied that write.
+
+## Reply to the caller
+
+A command that declares a `reply` gets it from the decision.
+
+```typescript title="src/Account/TransferMoney.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./Account.id.ts";
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Int,
+}) {}
+
+export class TransferSent extends Domain.Event("TransferSent", {
+  to: AccountId,
+  amount: Schema.Int,
+}) {}
+
+export class TransferReceived extends Domain.Event("TransferReceived", {
+  from: AccountId,
+  amount: Schema.Int,
+}) {}
+
+export class TransferMoney extends Domain.Command("TransferMoney", {
+  input: { from: AccountId, to: AccountId, amount: Schema.Int },
+  events: [TransferSent, TransferReceived],
+  rejects: [InsufficientFunds],
+  reply: { balance: Schema.Int },
+}) {}
+```
+
+The decision's `reply` receives each instance's state after the events, under the same keys as `reads`.
+
+```typescript title="src/Account/Transfer.decision.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+import {
+  InsufficientFunds,
+  TransferMoney,
+  TransferReceived,
+  TransferSent,
+} from "./TransferMoney.command.ts";
+
+export class Transfer extends Domain.Decision(TransferMoney, {
+  reads: (cmd) => ({
+    from: Account.ref(cmd.from),
+    to: Account.ref(cmd.to),
+  }),
+  decide: ({ from, to }, cmd) =>
+    cmd.amount > from.state.balance
+      ? new InsufficientFunds({ balance: from.state.balance })
+      : [
+          from.record(new TransferSent({ to: to.id, amount: cmd.amount })),
+          to.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+        ],
+  reply: ({ from }) => ({ balance: from.balance }),
+}) {}
+```
+
+A command with a `reply` whose decision has none is a type error.
+
+## Authorize in decide
+
+`decide` can be an `Effect.fn` that reads what the command's [middleware](/domain/sessions) provides, and fails with a rejection. Here the command requires a session.
+
+```typescript title="src/Account/TransferMoney.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Session } from "../Session.middleware.ts";
+import { AccountId } from "./Account.id.ts";
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Int,
+}) {}
+
+export class NotACustomer extends Domain.Rejection("NotACustomer") {}
+
+export class TransferSent extends Domain.Event("TransferSent", {
+  to: AccountId,
+  amount: Schema.Int,
+}) {}
+
+export class TransferReceived extends Domain.Event("TransferReceived", {
+  from: AccountId,
+  amount: Schema.Int,
+}) {}
+
+export class TransferMoney extends Domain.Command("TransferMoney", {
+  middleware: [Session],
+  input: { from: AccountId, to: AccountId, amount: Schema.Int },
+  events: [TransferSent, TransferReceived],
+  rejects: [InsufficientFunds, NotACustomer],
+}) {}
+```
+
+The session provides the current actor, and `decide` reads it.
+
+```typescript title="src/Account/Transfer.decision.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import { Account } from "./Account.aggregate.ts";
+import {
+  InsufficientFunds,
+  NotACustomer,
+  TransferMoney,
+  TransferReceived,
+  TransferSent,
+} from "./TransferMoney.command.ts";
+
+export class Transfer extends Domain.Decision(TransferMoney, {
+  reads: (cmd) => ({
+    from: Account.ref(cmd.from),
+    to: Account.ref(cmd.to),
+  }),
+  decide: Effect.fn(function* ({ from, to }, cmd) {
+    const actor = yield* CurrentActor;
+    if (actor._tag !== "Customer") return yield* new NotACustomer();
+    if (cmd.amount > from.state.balance) {
+      return yield* new InsufficientFunds({ balance: from.state.balance });
+    }
+    return [
+      from.record(new TransferSent({ to: to.id, amount: cmd.amount })),
+      to.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+    ];
+  }),
+}) {}
+```
+
+It may read only what the middleware provides, as an aggregate's `decide` may. A decision that needs an external system belongs in a [saga](/domain/saga).
+
+## Serve it through an Api
+
+An [Api](/domain/api) lists the command by name, like any other.
+
+```typescript title="src/CustomerApi.api.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Bank } from "./Bank.model.ts";
+
+export class CustomerApi extends Domain.Api("CustomerApi", {
+  model: Bank,
+  commands: ["DepositMoney", "TransferMoney"],
+}) {}
+```
+
+Its client method takes the input and no target: `bank.TransferMoney({ from, to, amount: 900 })`. The same holds over plain HTTP, the CLI and MCP, where the command has no `target` field.
+
+## How it commits
+
+In memory, a decision holds the instances it reads, decides, and records before it lets go.
+
+On [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) and [Effect Cluster](/domain/effect-cluster), each instance is an object with storage of its own, so a decision commits in two phases.
+
+<DAG
+  nodes={[
+    { id: "read", label: "1 · read", type: "state and version", col: 0, row: 0 },
+    { id: "prepare", label: "2 · prepare", type: "each holds the events", col: 1, row: 0 },
+    { id: "commit", label: "3 · commit the first", type: "the decision happened", col: 2, row: 0, tone: "accent" },
+    { id: "rest", label: "4 · commit the rest", type: "each records its events", col: 3, row: 0 },
+  ]}
+  edges={[
+    { from: "read", to: "prepare" },
+    { from: "prepare", to: "commit" },
+    { from: "commit", to: "rest" },
+  ]}
+  caption="Before step 3 nothing happened. After it, everything did."
+/>
+
+Each instance is prepared in turn: it checks that nothing changed since it was read, and holds the decision's events without recording them. Then the first instance commits, in one write of its own. That write is the moment the decision happens. The others record their events next.
+
+If an instance changed in between, the decision starts over and decides again against the new state.
+
+## When the sender stops midway
+
+Whoever sends the command runs those steps, and may stop at any of them. An instance left holding events asks the first instance what happened. If it committed, the instance records its events. If it didn't, the instance drops them.
+
+An instance that hears nothing asks on its own a few seconds later, so nothing waits for its next command.
+
+## What it costs
+
+A decision makes a few calls per instance, where an aggregate's command makes one.
+
+While an instance holds a decision's events, its own commands wait: a few milliseconds, or a few seconds when the sender stopped midway.
+
+An instance that many decisions read becomes the place they queue. Two transfers out of the same account run one after the other, as two withdrawals do.
+
+## Decision, saga or policy?
+
+A decision is one rule, answered at once, over instances in the same model. It can't wait, and it can't call an external system.
+
+A [saga](/domain/saga) is a process that takes time: it waits for an approval or a timer, calls a payment provider, and undoes earlier steps when a later one fails.
+
+A [policy](/domain/policy) reacts after the fact: an event was recorded, so something else should happen.
+
+Moving money between two accounts of your own bank is a decision. Moving it to another bank is a saga.
+
+## Test it
+
+A [story](/domain/story) sends a decision's command with `Story.when`, and asserts what each instance recorded with `Story.then`.
+
+```typescript title="test/transfers.test.ts"
+import { it } from "@effect/vitest";
+import { Story } from "@alchemy.run/domain/Story";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountId } from "../src/Account/Account.id.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { Transfer } from "../src/Account/Transfer.decision.ts";
+import {
+  InsufficientFunds,
+  TransferMoney,
+  TransferReceived,
+  TransferSent,
+} from "../src/Account/TransferMoney.command.ts";
+import { Bank } from "../src/Bank.model.ts";
+
+const story = Story.make(Bank);
+const a1 = AccountId.make("a-1");
+const a2 = AccountId.make("a-2");
+
+it.effect("a transfer is recorded on both accounts", () =>
+  story(
+    Story.given(Account.ref("a-1"), new MoneyDeposited({ amount: 1000 })),
+    Story.when(Transfer, new TransferMoney({ from: a1, to: a2, amount: 900 })),
+    Story.then(Account.ref("a-1"), new TransferSent({ to: a2, amount: 900 })),
+    Story.then(Account.ref("a-2"), new TransferReceived({ from: a1, amount: 900 })),
+  ),
+);
+
+it.effect("an overdraft is refused, and neither account changes", () =>
+  story(
+    Story.given(Account.ref("a-1"), new MoneyDeposited({ amount: 100 })),
+    Story.when(Transfer, new TransferMoney({ from: a1, to: a2, amount: 900 })),
+    Story.rejected(new InsufficientFunds({ balance: 100 })),
+    Story.then(Account.ref("a-1")),
+    Story.then(Account.ref("a-2")),
+  ),
+);
+```
+
+`Story.given` puts history on any instance the decision reads, so a test starts from the states that matter.
+
+Next, [View](/domain/view): how the model answers reads.

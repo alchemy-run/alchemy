@@ -166,6 +166,98 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "a decision commits to every instance it reads",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("give-from"), fresh("give-to")];
+      yield* call(`/increment/${from}?by=5`);
+      expect(yield* call(`/give/${from}?to=${to}&by=3`)).toEqual({
+        accepted: 2,
+        commits: [
+          { stream: `Counter/${from}`, version: 2 },
+          { stream: `Counter/${to}`, version: 1 },
+        ],
+      });
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 2 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 3 });
+      // Each instance takes its own commands again, and its view follows.
+      expect(yield* call(`/increment/${to}?by=1`)).toMatchObject({ accepted: 4 });
+      const view = yield* eventually<{ total: number }>(`/total/${to}`, (v) => v.total === 4);
+      expect(view).toMatchObject({ total: 4 });
+    }),
+    options,
+  );
+
+  test(
+    "a rejected decision commits nothing",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("short-from"), fresh("short-to")];
+      yield* call(`/increment/${from}?by=2`);
+      expect(yield* call(`/give/${from}?to=${to}&by=3`)).toEqual({ rejected: "Short" });
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 2 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 0 });
+    }),
+    options,
+  );
+
+  test(
+    "a decision sent twice under one id commits once",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("once-from"), fresh("once-to")];
+      yield* call(`/increment/${from}?by=5`);
+      const first = yield* call(`/give/${from}?to=${to}&by=2&id=give-${from}`);
+      expect(yield* call(`/give/${from}?to=${to}&by=2&id=give-${from}`)).toEqual(first);
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 3 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 2 });
+    }),
+    options,
+  );
+
+  test(
+    "decisions that share instances commit one at a time, in both directions",
+    Effect.gen(function* () {
+      const [left, right] = [fresh("swap-left"), fresh("swap-right")];
+      yield* call(`/increment/${left}?by=10`);
+      yield* call(`/increment/${right}?by=10`);
+      type Given = { accepted?: number; rejected?: string };
+      const results = yield* Effect.forEach(
+        Array.from({ length: 12 }, (_, i) => i),
+        (i) =>
+          call<Given>(
+            i % 2 === 0 ? `/give/${left}?to=${right}&by=4` : `/give/${right}?to=${left}&by=4`,
+          ),
+        { concurrency: "unbounded" },
+      );
+      const totals = [
+        (yield* call<{ total: number }>(`/counter/${left}`)).total,
+        (yield* call<{ total: number }>(`/counter/${right}`)).total,
+      ];
+      // Nothing is lost or made up, and nobody goes below zero.
+      expect(totals[0]! + totals[1]!).toBe(20);
+      expect(Math.min(...totals)).toBeGreaterThanOrEqual(0);
+      expect(results.filter((result) => result.accepted !== undefined).length).toBeGreaterThan(0);
+    }),
+    options,
+  );
+
+  test(
+    "a decision's command is served by an Api, with no target",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("api-from"), fresh("api-to")];
+      const base = yield* url;
+      yield* call(`/increment/${from}?by=5`);
+      const api = yield* ConformanceApi.clientHttp(`${base}/api`);
+      const receipt = yield* api.Give({ from, to, by: 3 });
+      expect(receipt.reply).toEqual({ total: 2 });
+      expect(receipt.commits.map((commit) => commit.stream)).toEqual([
+        `Counter/${from}`,
+        `Counter/${to}`,
+      ]);
+      expect(yield* Effect.flip(api.Give({ from, to, by: 30 }))).toMatchObject({ _tag: "Short" });
+    }).pipe(Effect.scoped),
+    options,
+  );
+
+  test(
     "a view applies every event once, in order",
     Effect.gen(function* () {
       const id = fresh("view");

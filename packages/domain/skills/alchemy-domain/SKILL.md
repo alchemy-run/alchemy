@@ -30,6 +30,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A request to change something, named `<Verb><Noun>` (`WithdrawMoney`): a **Command**.
 - A way a request is refused (`InsufficientFunds`): a **Rejection**.
 - A thing whose rules must hold in one transaction (one account's balance): an **Aggregate**. It decides commands against its state.
+- A rule about several of those things at once, answered at once (register a customer under a unique username; move money between two of your own accounts): a **Decision**. It reads the instances, and records on all of them or on none.
 - A question someone asks (balance, statement, dashboard): a **View**, keyed by what it's about.
 - "Whenever X happens, do Y": a **Policy**.
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
@@ -38,13 +39,13 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
 - Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
-A rule that spans aggregates never becomes a cross-aggregate transaction. Give the invariant its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username). Or reserve first and commit after, in a policy or saga, with a deadline for anything that waits.
+A rule that spans aggregates needs an aggregate for each thing it's about. Give an invariant with no owner its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username), and implement the command with a decision that reads every instance involved. A process that takes time, waits, or calls an external system is a saga, with a deadline for anything that waits.
 
-More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [Domain Model](https://alchemy.run/domain/model).
+More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [Domain Model](https://alchemy.run/domain/model), [Decision](https://alchemy.run/domain/decision).
 
 ## Conventions
 
-- **One block per file, named `<Noun>.<kind>.ts`.** The kinds are `.aggregate`, `.command`, `.view`, `.policy`, `.saga`, `.projection`, `.stream`, `.query`, `.external`, `.api` and `.model`. Plus `.middleware`, `.context` and `.rejection`. An aggregate's id lives in `<Aggregate>.id.ts` next to it. Plain values (`Money.ts`) and helpers keep plain names.
+- **One block per file, named `<Noun>.<kind>.ts`.** The kinds are `.aggregate`, `.command`, `.decision`, `.view`, `.policy`, `.saga`, `.projection`, `.stream`, `.query`, `.external`, `.api` and `.model`. Plus `.middleware`, `.context` and `.rejection`. An aggregate's id lives in `<Aggregate>.id.ts` next to it. Plain values (`Money.ts`) and helpers keep plain names.
 - **A command file holds the command, the events it records, and the rejections only it returns.** A rejection or event used by several commands gets its own file.
 - **A block's implementation sits in its file** (`TransferExecutionLive` in `TransferExecution.policy.ts`), unless it touches infrastructure. Then it lives in the server package.
 - **Folders are subdomains** (`Account/`, `Transfer/`). The model, Apis, middleware and request context sit at the package root.

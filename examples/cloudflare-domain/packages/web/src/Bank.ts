@@ -325,8 +325,11 @@ export const update = (model: Model, message: Message) =>
         commands: [
           Command.mapMessage(
             BankClient.RegisterCustomer({
-              target: model.customerId,
-              input: { name: model.customerId, username: Username.make(model.customerId) },
+              input: {
+                customerId: model.customerId,
+                name: model.customerId,
+                username: Username.make(model.customerId),
+              },
               commandId: allocation.commandId,
             }),
             (result) => Message.ReceivedBankResult({ result }),

@@ -112,6 +112,61 @@ More: [Aggregate](https://alchemy.run/domain/aggregate).
 
 More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggregate#focus-on-a-state-with-optics), [Aggregate: Never refuse a compensation](https://alchemy.run/domain/aggregate#never-refuse-a-compensation).
 
+## Decision
+
+A command that involves several aggregate instances has no `target`: its input names them. A decision implements it. It reads the instances, decides against all their states, and records events on them; all commit, or none.
+
+```ts
+// Customer/RegisterCustomer.command.ts
+export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
+  input: { customerId: CustomerId, name: Schema.String, username: Username },   // no target
+  events: [CustomerRegistered, UsernameClaimed],
+  rejects: [AlreadyRegistered, UsernameTaken],
+}) {}
+
+// Customer/UsernameClaim.aggregate.ts: only folds what decisions record on it
+export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+  id: Username,
+  state: Schema.Union([
+    Schema.TaggedStruct("Free", {}),
+    Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+  ]),
+  initial: { _tag: "Free" },
+  events: [UsernameClaimed],              // no `commands`, no `decide`
+  evolve: { UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }) },
+}) {}
+
+// Customer/Registration.decision.ts
+export class Registration extends Domain.Decision(RegisterCustomer, {
+  reads: (cmd) => ({
+    customer: Customer.ref(cmd.customerId),
+    claim: UsernameClaim.ref(cmd.username),
+  }),
+  decide: ({ customer, claim }, cmd) =>
+    customer.state._tag === "Registered"
+      ? new AlreadyRegistered()
+      : claim.state._tag === "Claimed"
+        ? new UsernameTaken()
+        : [
+            customer.record(new CustomerRegistered({ name: cmd.name, username: cmd.username })),
+            claim.record(new UsernameClaimed({ customerId: customer.id })),
+          ],
+}) {}
+
+const registration = yield* Registration;
+yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", username }));
+```
+
+- **`reads` depends only on the command.** Each instance arrives in `decide` under its key, with `id`, `state`, `version` and `record`.
+- **`record` puts an event on one instance**, which folds it with its own `evolve`. An aggregate lists such events in `events`. Views and policies see them like any other.
+- **`decide` follows an aggregate's rules:** events, `[]`, or a declared rejection; pure, or an `Effect.fn` that reads only middleware context. A command with a `reply` needs the decision's `reply`, from each instance's state after the events.
+- **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.
+- **The receipt has `commits`**, one `{ stream, version }` per instance read: pass one as a view's `atLeast`.
+- **An Api client takes its input with no target:** `bank.RegisterCustomer({ customerId, name, username })`. In a story: `Story.when(Registration, command)`.
+- **Use a saga instead** when the process waits, takes time, or calls an external system.
+
+More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Unique values](https://alchemy.run/domain/unique-values).
+
 ## Request context and middleware
 
 ```ts
@@ -397,8 +452,9 @@ An Api is the domain's interface for its own clients. For a public or partner AP
 // Bank.model.ts
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
+  decisions: [Registration],
   views: [AccountSummary, Statement, CustomerDashboard],
-  policies: [UsernameReservation, MainAccountProvisioning, TransferExecution],
+  policies: [MainAccountProvisioning, TransferExecution],
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
@@ -407,7 +463,7 @@ export class Bank extends Domain.Model("Bank", {
 
 /** Every policy, saga, projection and query implementation, as one Layer. */
 export const BankHandlers = Layer.mergeAll(
-  UsernameReservationLive, MainAccountProvisioningLive, TransferExecutionLive,
+  MainAccountProvisioningLive, TransferExecutionLive,
   ExecuteTransferLive, LedgerLive, AccountCardsLive, AccountLedgerLive,
 );
 ```

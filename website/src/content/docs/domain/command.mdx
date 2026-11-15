@@ -117,6 +117,8 @@ The target must be the id of the aggregate that lists the command. If `Account` 
 
 The target isn't part of the command's data. You pass it alongside the command when you send it, and the model uses it to route the command to that one instance.
 
+A command that involves several instances has no `target`. Its input names them, and a [decision](/domain/decision) implements it.
+
 ## Carry the request's data
 
 `input` lists the fields the caller provides, each as a schema. You create the command with them, and the aggregate reads them in `decide`.

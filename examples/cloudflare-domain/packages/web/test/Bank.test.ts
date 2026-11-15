@@ -300,7 +300,10 @@ test("a new customer opens their account; it appears through the subscription", 
       BankClient.Message.SucceededRegisterCustomer({
         commandId: "s:0",
         reply: undefined,
-        receipt: { stream: "Customer/c-1", version: 1 },
+        commits: [
+          { stream: "Customer/c-1", version: 1 },
+          { stream: "UsernameClaim/c-1", version: 1 },
+        ],
       }),
     ),
     model((model) => expect(model.balance).toEqual(Option.none())),

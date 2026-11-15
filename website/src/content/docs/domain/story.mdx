@@ -160,6 +160,8 @@ const story = Story.make(Bank, {
 });
 ```
 
+A command a [decision](/domain/decision) implements is sent through the decision: `Story.when(Registration, new RegisterCustomer({ ... }))`. What it records is asserted per instance, with `then`.
+
 Everything runs in memory, so a story that spans several aggregates, a policy and a saga still runs in milliseconds. There's no database to reset and nothing to mock: the history is the setup, and the events are the assertions.
 
 ## A passing story accounts for everything

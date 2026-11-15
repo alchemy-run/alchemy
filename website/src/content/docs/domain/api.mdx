@@ -66,6 +66,8 @@ Policies, projections and external systems are never on an Api. They run inside 
 
 A command becomes a method that takes its target and input together, and returns the receipt with the reply. Its middleware runs first, and its aggregate's `decide` has the final say.
 
+A command a [decision](/domain/decision) implements has no target, so its method takes the input alone: `bank.TransferMoney({ from, to, amount: 900 })`. Its receipt lists every stream it committed to, as `commits`.
+
 ```typescript title="packages/server/test/apiEntries.ts"
 const { reply } = yield* bank.DepositMoney(accountId, { amount: 500 });
 ```

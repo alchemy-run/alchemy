@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import type * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -204,4 +205,23 @@ export const evolveView = (
       }) ?? null;
   }
   return current;
+};
+
+/**
+ * Call a command's client with a decoded wire payload: its target first,
+ * when it has one.
+ *
+ * @internal
+ */
+export const sendPayload = (
+  send: unknown,
+  payload: unknown,
+  options: object,
+): Effect.Effect<unknown, unknown> => {
+  const { input, commandId } = payload as { readonly input: unknown; readonly commandId?: string };
+  const args = [input, { ...options, ...(commandId === undefined ? {} : { commandId }) }];
+  const call = send as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
+  return typeof payload === "object" && payload !== null && "target" in payload
+    ? call(payload.target, ...args)
+    : call(...args);
 };

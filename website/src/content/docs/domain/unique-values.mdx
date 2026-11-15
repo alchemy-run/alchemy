@@ -1,26 +1,25 @@
 ---
 title: Unique values
-description: Keep a value unique across every customer by making the value itself an aggregate.
+description: Keep a value unique across every customer by giving the value an aggregate of its own, and deciding the claim together with what it's for.
 ---
 
-Usernames must be unique across all customers, but each customer is its own aggregate and can't see the others. Make the rule its own aggregate, keyed by the value it protects.
+Usernames must be unique across all customers, but each customer is its own aggregate and can't see the others. Give the rule an aggregate of its own, keyed by the value it protects, and decide the registration across both.
 
 ## Make the username an aggregate
 
-Each username is one instance. Two customers claiming the same name send commands to the same instance, which handles one at a time, so one of them wins.
+Each username is one instance, and it holds who has it. Every registration that asks for a name reads the same instance, so two can't both find it free.
 
-```typescript
-// packages/domain/src/Customer/UsernameClaim.aggregate.ts
+```typescript title="packages/domain/src/Customer/UsernameClaim.aggregate.ts"
 import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
-import { ClaimUsername, UsernameClaimed, UsernameTaken } from "./ClaimUsername.command.ts";
 import { CustomerId } from "./Customer.id.ts";
+import { UsernameClaimed } from "./RegisterCustomer.command.ts";
 import { Username } from "./Username.ts";
 
 /**
  * One username, and who holds it. Uniqueness spans every customer, so the
- * invariant is its own aggregate, keyed by the username: two customers
- * claiming the same name race on this one instance, and one of them wins.
+ * invariant has an aggregate of its own, keyed by the username: every
+ * registration that asks for a name reads this one instance.
  */
 export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
   id: Username,
@@ -29,110 +28,128 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
   ]),
   initial: { _tag: "Free" },
-  commands: [ClaimUsername],
-  decide: {
-    ClaimUsername: (usernameClaim, cmd) =>
-      usernameClaim._tag === "Free"
-        ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : usernameClaim.customerId === cmd.customerId
-          ? []
-          : new UsernameTaken(),
-  },
+  events: [UsernameClaimed],
   evolve: {
     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
   },
 }) {}
 ```
 
-Claiming a name you already hold records nothing, so a repeated claim is harmless.
+It has no commands of its own. It only folds `UsernameClaimed`, which the registration records on it.
 
-## Declare the claim
+## Declare the registration
 
-```typescript
-// packages/domain/src/Customer/ClaimUsername.command.ts
+Registering involves two instances, the customer and the username, so the command has no `target`. Its input names both.
+
+```typescript title="packages/domain/src/Customer/RegisterCustomer.command.ts"
 import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Session } from "../Session.middleware.ts";
 import { CustomerId } from "./Customer.id.ts";
 import { Username } from "./Username.ts";
+
+/** The customer is already registered. */
+export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
+
+/** A customer may only register themselves. */
+export class NotTheCustomer extends Domain.Rejection("NotTheCustomer") {}
 
 /** Someone else holds this username. */
 export class UsernameTaken extends Domain.Rejection("UsernameTaken") {}
 
+export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
+  name: Schema.String,
+  username: Username,
+}) {}
+
 export class UsernameClaimed extends Domain.Event("UsernameClaimed", { customerId: CustomerId }) {}
 
 /**
- * Reserve a username for a customer. Sent by `UsernameReservation`; claiming
- * a username the customer already holds records nothing.
+ * Sign up as a customer under a unique username. It involves the customer
+ * and the username, so `Registration` decides it across both;
+ * `MainAccountProvisioning` then opens the customer's main account.
  */
-export class ClaimUsername extends Domain.Command("ClaimUsername", {
-  target: Username,
-  input: { customerId: CustomerId },
-  events: [UsernameClaimed],
-  rejects: [UsernameTaken],
+export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
+  middleware: [Session],
+  input: { customerId: CustomerId, name: Schema.String, username: Username },
+  events: [CustomerRegistered, UsernameClaimed],
+  rejects: [AlreadyRegistered, NotTheCustomer, UsernameTaken],
 }) {}
 ```
 
-## Claim it before registering
+## Decide the claim with the registration
 
-Registration records a request, and a policy claims the username before the customer counts as registered. A taken name rejects the registration, and nothing that follows a registration happens.
+A [decision](/domain/decision) reads the customer and the username together. It records the registration on one and the claim on the other, or it refuses and records nothing.
 
-```typescript
-// packages/domain/src/Customer/UsernameReservation.policy.ts
+```typescript title="packages/domain/src/Customer/Registration.decision.ts"
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
-import { ClaimUsername } from "./ClaimUsername.command.ts";
-import { ConfirmRegistration } from "./ConfirmRegistration.command.ts";
+import { CurrentActor } from "../CurrentActor.context.ts";
 import { Customer } from "./Customer.aggregate.ts";
-import { RegistrationRequested } from "./RegisterCustomer.command.ts";
-import { RejectRegistration } from "./RejectRegistration.command.ts";
+import {
+  AlreadyRegistered,
+  CustomerRegistered,
+  NotTheCustomer,
+  RegisterCustomer,
+  UsernameClaimed,
+  UsernameTaken,
+} from "./RegisterCustomer.command.ts";
 import { UsernameClaim } from "./UsernameClaim.aggregate.ts";
 
 /**
- * Reserve first, then commit: claim the username, and only then register the
- * customer. Nothing downstream (the main account) happens for a registration
- * whose username is taken.
+ * Register a customer and claim their username together. Both are recorded,
+ * or neither is: a taken username rejects the registration, and two
+ * customers who ask for one name at the same moment can't both get it.
  */
-export class UsernameReservation extends Domain.Policy("UsernameReservation", {
-  from: Customer,
-  on: [RegistrationRequested],
-}) {}
-
-export const UsernameReservationLive = UsernameReservation.toLayer(
-  Effect.gen(function* () {
-    const claims = yield* UsernameClaim;
-    const customers = yield* Customer;
-    return Effect.fn(function* ({ source, event }) {
-      yield* claims.send(event.username, new ClaimUsername({ customerId: source.id })).pipe(
-        Effect.andThen(customers.send(source, new ConfirmRegistration())),
-        Effect.catchTag("UsernameTaken", () =>
-          customers.send(source, new RejectRegistration({ reason: "username taken" })),
-        ),
-      );
-    });
+export class Registration extends Domain.Decision(RegisterCustomer, {
+  reads: (cmd) => ({
+    customer: Customer.ref(cmd.customerId),
+    claim: UsernameClaim.ref(cmd.username),
   }),
-);
+  decide: Effect.fn(function* ({ customer, claim }, cmd) {
+    const actor = yield* CurrentActor;
+    if (actor._tag === "Customer" && actor.customerId !== customer.id) {
+      return yield* new NotTheCustomer();
+    }
+    if (customer.state._tag === "Registered") return yield* new AlreadyRegistered();
+    if (claim.state._tag === "Claimed") return yield* new UsernameTaken();
+    return [
+      customer.record(new CustomerRegistered({ name: cmd.name, username: cmd.username })),
+      claim.record(new UsernameClaimed({ customerId: customer.id })),
+    ];
+  }),
+}) {}
 ```
 
-See [Saga](/domain/saga#take-the-step-you-cant-undo-first) for why the claim comes first.
+The caller learns at once. A taken name fails the command with `UsernameTaken`, and the customer is never left half registered.
+
+Two customers who ask for `sam` at the same moment both read `UsernameClaim/sam`. One commits first. The other finds the username changed since it read it, decides again, and is refused.
 
 ## Test it
 
-```typescript
-// packages/domain/test/usernames.test.ts
+```typescript title="packages/domain/test/usernames.test.ts"
 import { it } from "@effect/vitest";
 import { Story } from "@alchemy.run/domain/Story";
-import { customer } from "../src/Actor.ts";
 import * as Layer from "effect/Layer";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { mainAccountId } from "../src/Account/Account.id.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { customer } from "../src/Actor.ts";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";
-import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { CurrentActor } from "../src/CurrentActor.context.ts";
-import { ClaimUsername, UsernameClaimed, UsernameTaken } from "../src/Customer/ClaimUsername.command.ts";
-import { CustomerId } from "../src/Customer/Customer.id.ts";
 import { Customer } from "../src/Customer/Customer.aggregate.ts";
-import { RegisterCustomer, RegistrationRequested } from "../src/Customer/RegisterCustomer.command.ts";
-import { RegistrationRejected } from "../src/Customer/RejectRegistration.command.ts";
-import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import {
+  CustomerRegistered,
+  RegisterCustomer,
+  UsernameClaimed,
+  UsernameTaken,
+} from "../src/Customer/RegisterCustomer.command.ts";
+import { Registration } from "../src/Customer/Registration.decision.ts";
 import { Username } from "../src/Customer/Username.ts";
+import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
@@ -140,32 +157,31 @@ const story = Story.make(Bank, {
   stub: [FraudCheck, Payments],
 });
 const sam = Username.make("sam");
-const samsClaim = UsernameClaim.ref("sam");
+const c1 = CustomerId.make("c-1");
+const c2 = CustomerId.make("c-2");
 
-it.effect("a username can only be claimed once", () =>
+it.effect("registering claims the username with it, then opens a main account", () =>
   story(
-    Story.when(samsClaim, new ClaimUsername({ customerId: CustomerId.make("c-1") })),
-    Story.then(samsClaim, new UsernameClaimed({ customerId: CustomerId.make("c-1") })),
-    Story.when(samsClaim, new ClaimUsername({ customerId: CustomerId.make("c-2") })),
-    Story.rejected(new UsernameTaken()),
+    Story.provide(CurrentActor, customer("c-1")),
+    Story.when(Registration, new RegisterCustomer({ customerId: c1, name: "sam", username: sam })),
+    Story.then(Customer.ref("c-1"), new CustomerRegistered({ name: "sam", username: sam })),
+    Story.then(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1 })),
+    Story.then(Account.ref(mainAccountId(c1)), new AccountOpened({ customerId: c1, owner: "sam" })),
   ),
 );
 
-it.effect("registering with a taken username is rejected", () =>
+it.effect("a taken username rejects the registration, and nothing is recorded", () =>
   story(
-    Story.given(samsClaim, new UsernameClaimed({ customerId: CustomerId.make("c-1") })),
+    Story.given(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1 })),
     Story.provide(CurrentActor, customer("c-2")),
-    Story.when(Customer.ref("c-2"), new RegisterCustomer({ name: "alex", username: sam })),
-    Story.then(
-      Customer.ref("c-2"),
-      new RegistrationRequested({ name: "alex", username: sam }),
-      new RegistrationRejected({ username: sam, reason: "username taken" }),
-    ),
+    Story.when(Registration, new RegisterCustomer({ customerId: c2, name: "alex", username: sam })),
+    Story.rejected(new UsernameTaken()),
+    Story.then(Customer.ref("c-2")),
   ),
 );
 ```
 
-The second customer's registration is requested, the policy finds the name taken, and the registration is rejected. No account is opened for it.
+A registration that commits opens the customer's main account, through a policy on `CustomerRegistered`. A rejected one records nothing, so nothing follows it.
 
 :::note
 The full registration flow is in the [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain/packages/domain/src/Customer).

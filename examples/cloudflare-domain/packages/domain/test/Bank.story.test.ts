@@ -31,16 +31,16 @@ import {
 import { type Actor, agent, customer, system } from "../src/Actor.ts";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { CurrentActor } from "../src/CurrentActor.context.ts";
-import { UsernameClaimed } from "../src/Customer/ClaimUsername.command.ts";
-import { CustomerRegistered } from "../src/Customer/ConfirmRegistration.command.ts";
 import { Customer } from "../src/Customer/Customer.aggregate.ts";
 import { CustomerId } from "../src/Customer/Customer.id.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.view.ts";
 import {
+  CustomerRegistered,
   RegisterCustomer,
-  RegistrationRequested,
+  UsernameClaimed,
+  UsernameTaken,
 } from "../src/Customer/RegisterCustomer.command.ts";
-import { RegistrationRejected } from "../src/Customer/RejectRegistration.command.ts";
+import { Registration } from "../src/Customer/Registration.decision.ts";
 import { Username } from "../src/Customer/Username.ts";
 import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.view.ts";
@@ -96,15 +96,14 @@ const samsName = Username.make("sam");
 const opened = (customerId = "c-1") =>
   new AccountOpened({ customerId: CustomerId.make(customerId), owner: "sam" });
 
-it.effect("registering claims the username, then opens a main account", () =>
+it.effect("registering claims the username with it, then opens a main account", () =>
   story(
     as(sam),
-    when(c1, new RegisterCustomer({ name: "sam", username: samsName })),
-    then(
-      c1,
-      new RegistrationRequested({ name: "sam", username: samsName }),
-      new CustomerRegistered({ name: "sam", username: samsName }),
+    when(
+      Registration,
+      new RegisterCustomer({ customerId: c1.id, name: "sam", username: samsName }),
     ),
+    then(c1, new CustomerRegistered({ name: "sam", username: samsName })),
     then(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1.id })),
     then(
       Account.ref(mainAccountId(CustomerId.make("c-1"))),
@@ -120,24 +119,23 @@ it.effect("registering claims the username, then opens a main account", () =>
   ),
 );
 
-it.effect("a taken username rejects the registration, and nothing else happens", () =>
+it.effect("a taken username rejects the registration, and nothing is recorded", () =>
   story(
     given(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1.id })),
     as(alex),
-    when(c2, new RegisterCustomer({ name: "alex", username: samsName })),
-    then(
-      c2,
-      new RegistrationRequested({ name: "alex", username: samsName }),
-      new RegistrationRejected({ username: samsName, reason: "username taken" }),
+    when(
+      Registration,
+      new RegisterCustomer({ customerId: c2.id, name: "alex", username: samsName }),
     ),
+    rejected(new UsernameTaken()),
+    then(c2),
     then(Account.ref(mainAccountId(CustomerId.make("c-2")))),
     // The customer can try again with another name.
-    when(c2, new RegisterCustomer({ name: "alex", username: Username.make("alex") })),
-    then(
-      c2,
-      new RegistrationRequested({ name: "alex", username: Username.make("alex") }),
-      new CustomerRegistered({ name: "alex", username: Username.make("alex") }),
+    when(
+      Registration,
+      new RegisterCustomer({ customerId: c2.id, name: "alex", username: Username.make("alex") }),
     ),
+    then(c2, new CustomerRegistered({ name: "alex", username: Username.make("alex") })),
     then(UsernameClaim.ref("alex"), new UsernameClaimed({ customerId: c2.id })),
     then(
       Account.ref(mainAccountId(CustomerId.make("c-2"))),

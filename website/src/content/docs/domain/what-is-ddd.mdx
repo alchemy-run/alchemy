@@ -309,7 +309,9 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 
 Policies and aggregates both apply rules, but different kinds. An aggregate enforces invariants: rules that must hold the instant a command commits, inside one boundary, and that can refuse the command. A policy applies a procedure: what the business does next, often across aggregates or outside the model. It runs after the event, and it can't refuse what already happened. It can only decide what happens next, through commands that the receiving aggregates can still refuse.
 
-When a process takes several steps across aggregates and can fail partway, like a transfer that debits one account and then credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
+When a rule involves several aggregates and can be answered at once, like registering a customer under a username nobody else holds, a **decision** reads them together and records on all of them or on none. See [Decision](/domain/decision).
+
+When a process takes several steps across aggregates and can fail partway, like a transfer that waits for an approval before it debits one account and credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
 
 ## Testing: given, when, then
 
@@ -372,7 +374,7 @@ DDD splits the business into **bounded contexts**: areas in which one model and 
 
 ## How @alchemy.run/domain models these concepts
 
-Each of these concepts is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
+Each of these concepts is a building block in `@alchemy.run/domain`. A bounded context is a [`Domain.Model`](/domain/model), and its published interface is an [`Api`](/domain/api). Inside it, you declare [commands](/domain/command), [events](/domain/event), [aggregates](/domain/aggregate) with `decide` and `evolve`, [decisions](/domain/decision) for commands that involve several of them, [views](/domain/view), [projections](/domain/projection), [queries](/domain/query) and [policies](/domain/policy). The platform you run the model on provides the guarantees described here: one command at a time per aggregate, events and state committed together, and every event delivered to every view and policy that consumes it, in order.
 
 A model lists its building blocks:
 

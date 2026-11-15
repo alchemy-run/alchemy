@@ -20,6 +20,7 @@ import {
   DuplicateFlag,
   ReservedFlag,
 } from "./DefinitionError.ts";
+import { sendPayload } from "./internal.ts";
 import {
   exposedOf,
   isMethod,
@@ -295,13 +296,7 @@ const invoke = (
 ): Effect.Effect<unknown, unknown> => {
   const served = (client as Record<string, unknown>)[op.name];
   if (op.operation === "send") {
-    const { target, input, commandId } = payload;
-    const send = served as (
-      target: unknown,
-      input: unknown,
-      options: unknown,
-    ) => Effect.Effect<unknown, unknown>;
-    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
+    return sendPayload(served, payload, { headers });
   }
   if (op.operation === "ask") {
     const { input, ...options } = payload;
