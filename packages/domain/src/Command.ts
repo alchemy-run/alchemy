@@ -159,8 +159,9 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * ```
  *
  * ### Guarding it with middleware
- * `middleware` runs in order before the command reaches its aggregate. What
- * it provides, such as the current actor, is what `decide` may read.
+ * `middleware` runs in list order before the command reaches its aggregate:
+ * the first entry runs first, and what it provides, such as the current
+ * actor, reaches the entries after it and `decide`.
  *
  * **Example:** Requiring a session and a second factor
  * ```typescript
@@ -223,7 +224,8 @@ export const make = <
     /** The command's fields. */
     readonly input?: F;
     /**
-     * Middleware that guards the command when an Api exposes it, in order.
+     * Middleware that guards the command when an Api exposes it, run in list
+     * order: the first entry runs first.
      * What it provides is what `decide` may read.
      */
     readonly middleware?: Ms;

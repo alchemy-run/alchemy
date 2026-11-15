@@ -429,6 +429,96 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
   );
 });
 
+// ---------------------------------------------------------------- middleware order
+
+class Banned extends Domain.Rejection("Banned") {}
+/** Refuses banned authors. It reads the Author that AuthorSession provides. */
+class BanCheck extends RpcMiddleware.Service<BanCheck>()("Test/BanCheck", { error: Banned }) {}
+const BanCheckLive = Layer.succeed(BanCheck, (effect) =>
+  Effect.serviceOption(Author).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.die("BanCheck ran before AuthorSession provided Author"),
+        onSome: (author) => (author === "mallory" ? Effect.fail(new Banned()) : effect),
+      }),
+    ),
+  ),
+);
+
+class Posted extends Domain.Event("Posted", { text: Schema.String, by: Schema.String }) {}
+class Post extends Domain.Command("Post", {
+  target: Schema.String,
+  middleware: [AuthorSession, BanCheck],
+  input: { text: Schema.String },
+  events: [Posted],
+}) {}
+class Board extends Domain.Aggregate("Board", {
+  id: Schema.String,
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  commands: [Post],
+  decide: {
+    Post: Effect.fn(function* (_, cmd) {
+      return [new Posted({ text: cmd.text, by: yield* Author })];
+    }),
+  },
+  evolve: { Posted: (_, e) => ({ text: e.text }) },
+}) {}
+class BoardView extends Domain.View("BoardView", {
+  from: [Board],
+  key: Board,
+  middleware: [AuthorSession, BanCheck],
+  rejects: [NotYours],
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  evolve: { Posted: (_, e) => ({ text: e.text }) },
+}) {}
+const BoardViewLive = BoardView.toLayer(
+  Effect.succeed(
+    Effect.fn(function* () {
+      yield* Author;
+    }),
+  ),
+);
+class Boards extends Domain.Model("Boards", { aggregates: [Board], views: [BoardView] }) {}
+class BoardsApi extends Domain.Api("BoardsApi", {
+  model: Boards,
+  commands: ["Post"],
+  views: ["BoardView"],
+}) {}
+const BoardsWorld = Layer.mergeAll(
+  Boards.layer(BoardViewLive),
+  AuthorSessionLive,
+  BanCheckLive,
+).pipe(Layer.provideMerge(InMemory));
+
+describe("Domain middleware order", { tags: ["unit", "local"] }, () => {
+  it.live("the first middleware listed runs first and provides to the ones after it", () =>
+    Effect.gen(function* () {
+      const boards = yield* BoardsApi.clientInProcess;
+      const asSam = { headers: { "x-author": "sam" } };
+      const asMallory = { headers: { "x-author": "mallory" } };
+
+      // AuthorSession runs first, so an anonymous caller is refused by it, not BanCheck.
+      expect((yield* boards.Post("b-1", { text: "hi" }).pipe(Effect.flip))._tag).toBe(
+        "Unauthenticated",
+      );
+      expect((yield* boards.BoardView.get("b-1").pipe(Effect.flip))._tag).toBe("Unauthenticated");
+
+      // BanCheck runs second and reads the Author that AuthorSession provided.
+      expect((yield* boards.Post("b-1", { text: "hi" }, asMallory).pipe(Effect.flip))._tag).toBe(
+        "Banned",
+      );
+      expect((yield* boards.BoardView.get("b-1", asMallory).pipe(Effect.flip))._tag).toBe("Banned");
+
+      const receipt = yield* boards.Post("b-1", { text: "hi" }, asSam);
+      expect(yield* boards.BoardView.get("b-1", { ...asSam, atLeast: receipt })).toEqual({
+        text: "hi",
+      });
+    }).pipe(Effect.scoped, Effect.provide(BoardsWorld)),
+  );
+});
+
 // ---------------------------------------------------------------- a view's Layer
 
 /** Authors an editor has suspended: kept outside the model. */

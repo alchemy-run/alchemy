@@ -17,7 +17,7 @@ import {
  * @module
  */
 import type { HttpEffect } from "alchemy/Http";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -523,7 +523,13 @@ const backfillRuntime = (
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const context = yield* captureContext<ObjectState | RuntimeContext>();
+    // Only these two services: a whole captured context would also carry
+    // construction's references, such as the call an input gate (Rivet's)
+    // tells calls apart by. Storage a commit's transaction reaches through a
+    // job would then wait on the gate that transaction holds.
+    const context = Context.make(ObjectState, state).pipe(
+      Context.add(RuntimeContext, yield* RuntimeContext),
+    );
     const provide = <A, E>(
       effect: Effect.Effect<A, E, ObjectState | RuntimeContext>,
     ): Effect.Effect<A, E> => Effect.provide(effect, context);
