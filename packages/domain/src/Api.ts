@@ -474,29 +474,38 @@ const rpcsOf = (entry: Servable): ReadonlyArray<Rpc.Any> =>
 
 // ---------------------------------------------------------------- handlers
 
+/** The message of the one defect a client receives, whatever went wrong. */
+export const INTERNAL_ERROR = "Internal server error";
+
 /**
- * Only an entry's declared errors are public. Anything else (an
- * infrastructure error, an undeclared rejection) becomes a defect, so it
- * never leaks as a typed error the client cannot decode.
+ * Only an entry's declared errors are public. Anything else (a defect, an
+ * infrastructure error, an undeclared rejection) is logged here, with its
+ * full cause, and reaches the client as one generic defect: its text can
+ * hold stacks, file paths and nested errors (an adapter's SQL error).
  */
 const declaredOnly = (rpc: Rpc.Any) => {
   const props = rpc as Rpc.AnyWithProps;
   const isDeclared = Schema.is(props.errorSchema);
   const success = props.successSchema as Schema.Top & { readonly error?: Schema.Top };
   const isDeclaredInStream = success.error ? Schema.is(success.error) : isDeclared;
+  const redact =
+    (declared: (error: unknown) => boolean) =>
+    <E>(cause: Cause.Cause<E>): Effect.Effect<never, E> =>
+      cause.reasons.every(
+        (reason) =>
+          Cause.isInterruptReason(reason) || (Cause.isFailReason(reason) && declared(reason.error)),
+      )
+        ? Effect.failCause(cause)
+        : Effect.logError("Domain.Api: a request failed with an undeclared error", cause).pipe(
+            Effect.annotateLogs({ "domain.rpc": props._tag }),
+            Effect.andThen(Effect.die(new Error(INTERNAL_ERROR))),
+          );
+  const redactEffect = redact(isDeclared);
+  const redactStream = redact(isDeclaredInStream);
   return {
-    effect: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.catchIf(
-        effect,
-        (e) => !isDeclared(e),
-        (e) => Effect.die(e),
-      ),
+    effect: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.catchCause(effect, redactEffect),
     stream: <A, E, R>(stream: Stream.Stream<A, E, R>) =>
-      Stream.catchIf(
-        stream,
-        (e) => !isDeclaredInStream(e),
-        (e) => Stream.die(e),
-      ),
+      Stream.catchCause(stream, (cause) => Stream.fromEffect(redactStream(cause))),
   };
 };
 
@@ -523,34 +532,75 @@ interface ReadPayload {
 
 const caughtUpAt = (seq: number): Read.CaughtUp => ({ _tag: "CaughtUp", cursor: seq });
 
+/** How a read judges a key's state, and what of an event it filters on. */
+interface Judge<A> {
+  /** `validate` on a state of the key. */
+  readonly judge: (state: unknown) => Effect.Effect<void, unknown>;
+  /** The key's state once `event` applied, as `validate` sees it. */
+  readonly stateOf: (event: A) => unknown;
+  /** Whether the read's `where` keeps `event`. */
+  readonly keeps: (event: A) => boolean;
+}
+
 /**
  * A key's events from `start`, with a `CaughtUp` frame after its history: the
- * events up to `end`, the key's `seq` when the read began. `keep` judges and
- * filters each event after the end is found, so a filtered-out last event
- * still ends the history.
+ * events up to `end`, the key's `seq` when the read began, whose state is
+ * `endState`. Every event the filter keeps is judged before it is sent, and
+ * the `CaughtUp` frame is judged like an event: against the state the
+ * history ends at. So a caller `validate` refuses is refused the same way
+ * whether the key has history or none (#3060).
  */
 const withCaughtUp = <A>(
   start: number,
   end: number,
+  endState: unknown,
   events: Stream.Stream<A, unknown>,
   seqOf: (event: A) => number,
-  keep: (event: A) => Effect.Effect<ReadonlyArray<unknown>, unknown>,
+  { judge, stateOf, keeps }: Judge<A>,
 ): Stream.Stream<unknown, unknown> => {
   let sent = start >= end;
   const rest = events.pipe(
-    Stream.mapEffect((event) =>
-      keep(event).pipe(
-        Effect.map((out) => {
-          if (sent || seqOf(event) < end) return out;
+    Stream.mapEffect(
+      Effect.fn(function* (event: A) {
+        const kept = keeps(event);
+        const ends = !sent && seqOf(event) >= end;
+        // A kept event is judged before it is sent; one that ends the history is judged for the marker.
+        if (kept || ends) yield* judge(stateOf(event));
+        const out: Array<unknown> = kept ? [event] : [];
+        if (ends) {
           sent = true;
-          return [...out, caughtUpAt(seqOf(event))];
-        }),
-      ),
+          out.push(caughtUpAt(seqOf(event)));
+        }
+        return out;
+      }),
     ),
     Stream.flatMap((out) => Stream.fromIterable(out)),
   );
-  return start >= end ? Stream.concat(Stream.succeed(caughtUpAt(start)), rest) : rest;
+  return start >= end
+    ? Stream.concat(Stream.fromEffect(Effect.as(judge(endState), caughtUpAt(start))), rest)
+    : rest;
 };
+
+/**
+ * Read a key for a caller, judged before anything the caller asked for
+ * runs: `validate` judges the key's current state, then, if the read waits
+ * for `atLeast`, the state it waited for (only if it moved). A caller
+ * `validate` refuses is refused at once, so how long a wait takes tells it
+ * nothing about the key (#2906).
+ */
+const judgedRead = Effect.fn(function* <A>(
+  read: (atLeast: Query.AtLeast | undefined) => Effect.Effect<A, unknown>,
+  judge: (value: A) => Effect.Effect<void, unknown>,
+  versionOf: (value: A) => number,
+  atLeast: Query.AtLeast | undefined,
+) {
+  const current = yield* read(undefined);
+  yield* judge(current);
+  if (atLeast === undefined) return current;
+  const waited = yield* read(atLeast);
+  if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
+  return waited;
+});
 
 type Handler = (input: never) => unknown;
 
@@ -637,11 +687,11 @@ const handlersOf = (
         const latest = (id: string) =>
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
-          host.peek(refOf(id), { atLeast }).pipe(
-            Effect.flatMap((found) => {
-              const entry = Option.getOrNull(found);
-              return check("get", refOf(id))(entry).pipe(Effect.as(entry));
-            }),
+          judgedRead(
+            (atLeast) => host.peek(refOf(id), { atLeast }).pipe(Effect.map(Option.getOrNull)),
+            check("get", refOf(id)),
+            (entry) => entry?.envelope.seq ?? 0,
+            atLeast,
           ),
         );
         handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id }) =>
@@ -663,13 +713,15 @@ const handlersOf = (
                 withCaughtUp(
                   start,
                   last?.envelope.seq ?? 0,
+                  last,
                   host.events(refOf(id), { after: start }),
                   (entry) => entry.envelope.seq,
-                  // Each entry is judged as the key's latest entry at that point.
-                  (entry) =>
-                    matches(where as Filter<unknown> | undefined, entry.event)
-                      ? check("events", refOf(id))(entry).pipe(Effect.as([entry]))
-                      : Effect.succeed([]),
+                  {
+                    judge: check("events", refOf(id)),
+                    // Each entry is judged as the key's latest entry at that point.
+                    stateOf: (entry) => entry,
+                    keeps: (entry) => matches(where as Filter<unknown> | undefined, entry.event),
+                  },
                 ),
               ),
             ),
@@ -697,13 +749,22 @@ const handlersOf = (
         const refOf = (id: string) => Key.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
+        // The key's state with its cursor, judged before the read waits for `atLeast`.
+        const judgedSnapshot = (id: string, mode: Read.Mode, atLeast: Query.AtLeast | undefined) =>
+          judgedRead(
+            (atLeast) => host.snapshot(refOf(id), { atLeast }),
+            (snapshot) => check(mode, refOf(id))(snapshot.state),
+            (snapshot) => snapshot.cursor,
+            atLeast,
+          );
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
-          host.get(refOf(id), { atLeast }).pipe(
-            Effect.flatMap((found) => {
-              const state = Option.getOrNull(found);
-              return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
-            }),
-          ),
+          (atLeast === undefined
+            ? host.get(refOf(id)).pipe(
+                Effect.map(Option.getOrNull),
+                Effect.tap((state) => check("get", refOf(id))(state)),
+              )
+            : Effect.map(judgedSnapshot(id, "get", atLeast), (snapshot) => snapshot.state)
+          ).pipe(Effect.map((state) => visible(state, where))),
         );
         const viewStore = internals.views.get(name)!;
         // From the stored snapshots, so each state comes with the seq it is valid at.
@@ -717,7 +778,9 @@ const handlersOf = (
               return check(
                 "watch",
                 refOf(id),
-              )(state).pipe(Effect.as({ state: visible(state, where), cursor: snapshot.seq }));
+              )(state).pipe(
+                Effect.map(() => ({ state: visible(state, where), cursor: snapshot.seq })),
+              );
             }),
           ),
         );
@@ -729,34 +792,30 @@ const handlersOf = (
                 withCaughtUp(
                   start,
                   snapshot.seq,
+                  snapshot.state === null
+                    ? null
+                    : internals.kernel.decodeViewState(entry, snapshot.state),
                   host.events(refOf(id), { after: start }),
-                  (entry) => entry.envelope.seq,
-                  (entry) =>
-                    matches(where as Filter<unknown> | undefined, entry.event)
-                      ? check("events", refOf(id))(entry.state).pipe(Effect.as([entry]))
-                      : Effect.succeed([]),
+                  (event) => event.envelope.seq,
+                  {
+                    judge: check("events", refOf(id)),
+                    stateOf: (event) => event.state,
+                    keeps: (event) => matches(where as Filter<unknown> | undefined, event.event),
+                  },
                 ),
               ),
             ),
           );
         });
         handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
-          host
-            .snapshot(refOf(id), { atLeast })
-            .pipe(
-              Effect.flatMap(({ state, cursor }) =>
-                check(
-                  "get",
-                  refOf(id),
-                )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
-              ),
-            ),
+          judgedSnapshot(id, "get", atLeast).pipe(
+            Effect.map(({ state, cursor }) => ({ state: visible(state, where), cursor })),
+          ),
         );
         handlers[`${name}.list`] = effect(
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
-            host.get(refOf(id), { atLeast }).pipe(
-              Effect.flatMap((found) => found.pipe(Option.getOrNull, check("list", refOf(id)))),
+            judgedSnapshot(id, "list", atLeast).pipe(
               Effect.andThen(
                 host.list(refOf(id), {
                   where: where as Filter<unknown> | undefined,
