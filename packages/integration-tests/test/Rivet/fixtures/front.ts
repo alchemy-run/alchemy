@@ -162,6 +162,19 @@ export default class Front extends Docker.Service<Front>()(
           const greeting = yield* greeters.getByName("front").greet(name);
           return yield* HttpServerResponse.json({ greeting });
         }
+        // An instance reached by a key of several parts, including the
+        // characters RivetKit escapes, and a one-part key reached both ways.
+        if (group === "keyed" && name !== undefined) {
+          const parts = [name, "a,b", "", "c\\d"];
+          const multi = yield* tallies.getByKey(parts).addressed();
+          yield* tallies.getByName(name).increment("count");
+          const single = tallies.getByKey([name]);
+          return yield* HttpServerResponse.json({
+            multi,
+            single: yield* single.addressed(),
+            count: yield* single.read("count"),
+          });
+        }
         // `n` concurrent increments on one instance; returns its final count.
         // `?tx=1` makes each one a transaction.
         if (group === "race" && name !== undefined) {

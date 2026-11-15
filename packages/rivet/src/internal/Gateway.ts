@@ -22,16 +22,21 @@ export interface GatewayTarget {
   readonly pool: string;
   /** The actor name: the Durable Object's logical id. */
   readonly name: string;
-  /** The instance key. */
-  readonly key: string;
+  /** The instance key: RivetKit's array of parts, one per element. */
+  readonly key: ReadonlyArray<string>;
 }
 
 /** The header the gateway reads the caller's token from, as RivetKit's client sends it. */
 export const TOKEN_HEADER = "x-rivet-token";
 
-/** RivetKit's canonical key encoding (one part). */
-const encodeKey = (key: string) =>
-  key === "" ? "\\0" : key.replace(/\\/g, "\\\\").replace(/,/g, "\\,");
+/**
+ * RivetKit's canonical key encoding: each part escapes `\\` and `,` with a
+ * backslash and an empty part is `\0`; the parts are joined with a comma.
+ */
+const encodeKey = (key: ReadonlyArray<string>) =>
+  key
+    .map((part) => (part === "" ? "\\0" : part.replace(/\\/g, "\\\\").replace(/,/g, "\\,")))
+    .join(",");
 
 /**
  * The gateway URL for a request to `/path?query` on an actor addressed by

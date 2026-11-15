@@ -49,6 +49,12 @@ const kitchen = rooms.getByName("kitchen");
 
 You never create an instance. Every name exists from the start, and the first call to a name brings its instance to life.
 
+A name is a key of one part. When an instance is identified by several values, such as a tenant and a room, address it by every part with `getByKey`, so no value can pass for another by containing a separator. It is the same key a RivetKit client passes to `getOrCreate`, and the instance reads it back from `DurableObjectState`'s `key`:
+
+```typescript title="src/api.ts"
+const room = rooms.getByKey(["acme", "lobby"]);
+```
+
 ## One instance per name
 
 However many callers ask for the lobby, from however many servers, they all reach the same instance. There's never a second lobby with a different idea of who's in it.
