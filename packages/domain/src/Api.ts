@@ -475,7 +475,7 @@ const rpcsOf = (entry: Servable): ReadonlyArray<Rpc.Any> =>
 // ---------------------------------------------------------------- handlers
 
 /** The message of the one defect a client receives, whatever went wrong. */
-export const INTERNAL_ERROR = "Internal server error";
+const INTERNAL_ERROR = "Internal server error";
 
 /**
  * Only an entry's declared errors are public. Anything else (a defect, an
@@ -505,7 +505,7 @@ const declaredOnly = (rpc: Rpc.Any) => {
   return {
     effect: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.catchCause(effect, redactEffect),
     stream: <A, E, R>(stream: Stream.Stream<A, E, R>) =>
-      Stream.catchCause(stream, (cause) => Stream.fromEffect(redactStream(cause))),
+      Stream.catchCause(stream, (cause) => cause.pipe(redactStream, Stream.fromEffect)),
   };
 };
 
