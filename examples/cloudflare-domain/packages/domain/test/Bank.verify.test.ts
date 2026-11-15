@@ -34,13 +34,18 @@ it.effect(
         // These are about several instances: no sequence of two commands breaks them.
         "Bank.TransfersLoseNoMoney": "checked",
         "Bank.NoTransferLeftPending": "checked",
+        // What the Ledger projection is given, against what the accounts recorded.
+        "Bank.LedgerIsGivenEveryDeposit": "checked",
         "Bank.EveryTransferEnds": "checked",
       });
-      // Every sequence found ran on the real bank, with its policies, saga and views.
-      expect(report.runs.length).toBeGreaterThan(20);
+      // Every sequence found ran on the real bank, with its policies, saga, views and
+      // projections, and so did the walks of commands picked at random.
+      expect(report.runs.length - report.walked).toBeGreaterThan(20);
+      expect(report.walked).toBeGreaterThan(50);
+      expect(report.explored.projections).toEqual(["Ledger"]);
       expect(report.undone).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
-  120_000,
+  300_000,
 );
 
 it.effect(

@@ -113,7 +113,7 @@ it.effect(
   "a policy the explorer leaves out fails the check until it is allowed by name",
   () =>
     Effect.gen(function* () {
-      // Notify reacts to a view that routes its events, which the explorer does not fold.
+      // Notify reads the state of an order, which the explorer does not follow.
       const options = {
         source: new URL("./fixtures/Outlet.model.ts", import.meta.url),
         apis: [OutletApi],

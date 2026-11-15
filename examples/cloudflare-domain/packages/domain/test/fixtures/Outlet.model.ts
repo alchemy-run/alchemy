@@ -2,25 +2,25 @@ import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { Order, OrderPlaced } from "./Shop.model.ts";
 
-/** The latest order, under a key the view picks for each event. */
-export class Latest extends Domain.View("Latest", {
-  from: [Order],
-  key: Order,
-  keyOf: { OrderPlaced: ({ source }) => source },
-}) {}
-
-/** Whenever an order is the latest, tell someone. */
+/** Whenever an order is placed, look at it, and tell someone. */
 export class Notify extends Domain.Policy("Notify", {
-  from: Latest,
+  from: Order,
   on: [OrderPlaced],
 }) {}
 
-export const NotifyLive = Notify.toLayer(Effect.succeed(() => Effect.void));
+export const NotifyLive = Notify.toLayer(
+  Effect.gen(function* () {
+    const orders = yield* Order;
+    return Effect.fn(function* ({ source }) {
+      // Reading an instance's state from a policy is something the explorer does not follow.
+      yield* orders.get(source);
+    });
+  }),
+);
 
-/** A shop whose one policy reacts to a view the explorer does not fold. */
+/** A shop whose one policy the explorer cannot follow. */
 export class Outlet extends Domain.Model("Outlet", {
   aggregates: [Order],
-  views: [Latest],
   policies: [Notify],
 }) {}
 

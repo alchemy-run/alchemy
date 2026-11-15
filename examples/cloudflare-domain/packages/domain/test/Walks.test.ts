@@ -1,4 +1,5 @@
 import * as Explore from "@alchemy.run/domain/Explore";
+import { Story } from "@alchemy.run/domain/Story";
 import * as Verify from "@alchemy.run/domain/Verify";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
@@ -58,6 +59,14 @@ it.effect(
       expect(failed.message).toContain("✗ Ladder.NobodyReachesTheTop breaks");
       const passed = yield* Verify.model(Ladder, { apis: [LadderApi], walks: { count: 0 } });
       expect(passed.rules).toMatchObject([{ standing: "checked" }]);
+      // With a story runner, each walk is run on the real model too.
+      const ran = yield* Verify.report(Ladder, {
+        apis: [LadderApi],
+        walks: { count: 10 },
+        story: Story.make(Ladder),
+      });
+      expect(ran.walked).toBe(10);
+      expect(ran.runs.filter((run) => run.failure !== undefined)).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );

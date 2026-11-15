@@ -77,14 +77,14 @@ export const ops = (shown: Story): ReadonlyArray<Op> => {
         if (asked.again)
           made.push({
             _tag: "Note",
-            text: `${asked.by} handles its event a second time and asks ${asked.call} again: a story delivers each event once, so it does not make this call`,
+            text: `${asked.by} ${asked.step === undefined ? "handles its event" : `runs its step ${asked.step}`} a second time and asks ${asked.call} again: a story does each once, so it does not make this call`,
           });
         else made.push({ _tag: "Call", asked }, { _tag: "Answer", asked });
     for (const step of group)
       if (step.again)
         made.push({
           _tag: "Note",
-          text: `${step.by} handles its event a second time and sends ${tagOf(step.command)} again: a story delivers each event once, so it does not run this step`,
+          text: `${step.by} ${step.step === undefined ? "handles its event" : `runs its step ${step.step}`} a second time and sends ${tagOf(step.command)} again: a story does each once, so it does not run this step`,
         });
     const streams = new Map<string, { aggregate: string; id: string; events: Array<unknown> }>();
     for (const step of group) {
@@ -106,8 +106,12 @@ export const ops = (shown: Story): ReadonlyArray<Op> => {
   return made;
 };
 
-/** Whether a story needs an event delivered twice, which a `Story` does not do. */
-export const redelivers = (shown: Story): boolean => whole(shown).some((step) => step.again);
+/**
+ * Whether a story needs something a `Story` does not do: an event delivered
+ * twice, a saga's step run twice, or a scheduled command that runs late.
+ */
+export const redelivers = (shown: Story): boolean =>
+  whole(shown).some((step) => step.again || step.late);
 
 const tagOf = (value: unknown): string => String((value as { readonly _tag?: unknown })._tag);
 

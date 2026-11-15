@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import type * as DateTime from "effect/DateTime";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -9,6 +9,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
 import * as ExternalSystem from "../../ExternalSystem.ts";
+import * as Key from "../../Key.ts";
 import * as Check from "../../Prove/internal/Check.ts";
 import * as Induction from "../../Prove/internal/Induction.ts";
 import type { Interpreter } from "../../Prove/internal/Interpreter.ts";
@@ -31,8 +32,18 @@ export interface Step extends Move {
   readonly after: string | undefined;
   /** What the external systems answered after the command, before the next one ran. */
   readonly asked: ReadonlyArray<Asked>;
-  /** Whether the policy sent it while handling an event it had handled before. */
+  /**
+   * Whether it was sent a second time round: by a policy handling an event it
+   * had handled before, or by a saga running a step it had run before.
+   */
   readonly again: boolean;
+  /** The saga step that sent it, by name. */
+  readonly step: string | undefined;
+  /**
+   * Whether a scheduled command was due by then and had not run. A platform
+   * runs each instance's schedule on its own, so one can run late.
+   */
+  readonly late: boolean;
 }
 
 /** One call to an external system, and the answer the solver picked for it. */
@@ -46,8 +57,10 @@ export interface Asked {
   readonly answer: unknown;
   /** Whether the answer is one of the operation's declared errors. */
   readonly failed: boolean;
-  /** Whether the policy called while handling an event it had handled before. */
+  /** Whether the call was made a second time round, as a command is. */
   readonly again: boolean;
+  /** The saga step that called, by name. */
+  readonly step: string | undefined;
 }
 
 /** Commands callers send one after another, each followed by what the policies do about it. */
@@ -135,10 +148,16 @@ export interface Found {
   readonly idle: ReadonlyArray<string>;
   /** The views folded along every sequence: a policy reacts to one, or an invariant reads one. */
   readonly views: ReadonlyArray<string>;
+  /** The projections an invariant reads: what each is given is followed along every sequence. */
+  readonly projections: ReadonlyArray<string>;
   /** The external systems called, each answered with every answer its schema allows. */
   readonly systems: ReadonlyArray<string>;
   /** The ways delivery went wrong that the sequences were run with. */
-  readonly faults: { readonly redeliver: boolean; readonly reorder: boolean };
+  readonly faults: {
+    readonly redeliver: boolean;
+    readonly reorder: boolean;
+    readonly rerun: boolean;
+  };
   /**
    * The longer sequences run past the ones every sequence was run to: each a
    * walk of commands picked at random, from a seed that picks the same again.
@@ -151,6 +170,8 @@ export interface Found {
     readonly commands: number;
     /** The most commands callers sent in one. */
     readonly longest: number;
+    /** Each walk as it ended, with the values the solver picked: a story to run on the real model. */
+    readonly stories: ReadonlyArray<Story>;
   };
   /**
    * The external calls a policy makes again when an event is delivered to it
@@ -188,6 +209,8 @@ export interface Options {
     readonly redeliver: boolean;
     /** Run the reactions waiting at the same time in other orders too. */
     readonly reorder: boolean;
+    /** Run a saga's step again, as when it stopped before its result was kept. */
+    readonly rerun: boolean;
   };
   /** Longer sequences to run after every short one: how many, of how many commands, from which seed. */
   readonly walks: { readonly count: number; readonly length: number; readonly seed: number };
@@ -200,6 +223,7 @@ export interface ModelLike {
     readonly aggregates: ReadonlyArray<Aggregate.Any>;
     readonly views?: ReadonlyArray<unknown>;
     readonly policies: ReadonlyArray<unknown>;
+    readonly projections?: ReadonlyArray<unknown>;
   };
   readonly sagas?: ReadonlyArray<unknown>;
   readonly invariants?: { readonly [name: string]: (model: never) => boolean };
@@ -229,19 +253,28 @@ interface ViewClass {
     readonly evolve?: Readonly<Record<string, unknown>>;
     readonly events?: ReadonlyArray<{ readonly tag: string }>;
     readonly emit?: Readonly<Record<string, unknown>>;
+    /** A projection's events. */
+    readonly on?: ReadonlyArray<unknown>;
   };
 }
 
-/** A view the explorer folds: keyed by the one aggregate it reads, each event to its own instance. */
+/** A view or a projection the explorer follows: what reads the model's events, key by key. */
 interface ViewImpl {
   readonly name: string;
+  /** A projection keeps no state the model declares: what it is given is what is known of it. */
+  readonly kind: "view" | "projection";
   readonly cls: ViewClass;
   readonly definition: Paths.Definition;
-  readonly source: Aggregate.Any;
+  /** The aggregates and views it reads, by class, with the name its handlers know each by. */
+  readonly sources: ReadonlyMap<unknown, string>;
+  /** The name of the aggregate that keys it: `undefined` when a value does. */
+  readonly keyedBy: string | undefined;
   readonly stateful: boolean;
   readonly initial: V;
   /** The events it says it emits: without them it passes on each event it folds. */
   readonly declared: ReadonlySet<string> | undefined;
+  /** For a projection: the events it handles. */
+  readonly on: ReadonlyArray<unknown>;
 }
 
 interface SystemClass {
@@ -347,8 +380,27 @@ interface Entry {
   readonly after: string | undefined;
   /** What each view emitted for the command's events, by the view's name. */
   readonly emitted: Array<{ readonly view: ViewImpl; readonly tags: ReadonlyArray<string> }>;
-  /** Sent by a policy handling an event again. */
+  /** Sent by a policy handling an event again, or by a saga running a step again. */
   readonly again: boolean;
+  /** The saga step that sent it. */
+  readonly step: string | undefined;
+  /** The commands still scheduled when it ran: when each was scheduled, and its delay. */
+  readonly pending: ReadonlyArray<{ readonly since: string; readonly millis: number }>;
+}
+
+/**
+ * What gives commands their ids: the delivery of an event to a policy, or a
+ * step of a saga. Run again, it sends the same commands under the same ids.
+ */
+interface Scope {
+  readonly key: string;
+  /** It ran once already. */
+  readonly again: boolean;
+  /** The saga step, by name. */
+  readonly step?: string;
+  ordinal: number;
+  /** A command it sent was refused: run again, the command is decided again. */
+  refused: boolean;
 }
 
 /** What a policy's send gave the first time: a second delivery of the event gets it again. */
@@ -357,10 +409,19 @@ interface Receipt {
   readonly applied: Paths.Applied;
 }
 
-/** One key of a view: the instance it follows, and its state. */
+/** What a projection was given: an event, under a key, with its source's state. */
+interface Fed {
+  readonly view: ViewImpl;
+  readonly key: V;
+  readonly event: V;
+  readonly state: V;
+}
+
+/** One key of a view, and its state. */
 interface ViewSlot {
   readonly view: ViewImpl;
-  readonly instance: number;
+  /** The id the key is under: an instance's, or a value. */
+  readonly key: V;
   /** `undefined` once the view deleted the key. */
   readonly state: V | undefined;
 }
@@ -375,6 +436,7 @@ interface Call {
   readonly answer: V;
   readonly failed: boolean;
   readonly again: boolean;
+  readonly step: string | undefined;
 }
 
 /** A saga's run to go on with: one just started, or one whose signal came. */
@@ -384,7 +446,10 @@ interface Resume {
 
 interface Trigger {
   readonly policy: PolicyImpl;
-  readonly instance: number;
+  /** What the event came from, as the policy is given it: a ref, or a view's key. */
+  readonly source: V;
+  /** The id of what the event came from. */
+  readonly id: V;
   readonly event: V;
   readonly parent: number;
   /** For a policy that reacts to a view: the view's state after the event. */
@@ -402,6 +467,7 @@ interface Sequence {
   readonly trail: Array<Entry>;
   readonly instances: Array<Instance>;
   readonly views: Array<ViewSlot>;
+  readonly fed: Array<Fed>;
   readonly calls: Array<Call>;
   /** What each send of each delivery gave, by the delivery and the send's place in it. */
   readonly receipts: Map<string, Receipt>;
@@ -416,6 +482,8 @@ interface Sequence {
   unsettled: boolean;
   /** A reaction to the last command was put behind the others: one is, at most. */
   moved: boolean;
+  /** A saga's step was run again: one is, at most. */
+  reran: boolean;
   /** The policies, sagas and external systems that ran in it: they count once it can happen. */
   readonly ran: {
     readonly policies: Set<string>;
@@ -629,40 +697,63 @@ export const locate = Effect.fn(function* (
   /** Why the explorer does not fold a view, by its class. */
   const unfolded = new Map<unknown, string>();
   const skipped: Array<Skipped> = [];
-  for (const cls of (model.definitions.views ?? []) as ReadonlyArray<ViewClass>) {
+  const readers: ReadonlyArray<{ readonly cls: ViewClass; readonly kind: "view" | "projection" }> =
+    [
+      ...((model.definitions.views ?? []) as ReadonlyArray<ViewClass>).map((cls) => ({
+        cls,
+        kind: "view" as const,
+      })),
+      ...((model.definitions.projections ?? []) as ReadonlyArray<ViewClass>).map((cls) => ({
+        cls,
+        kind: "projection" as const,
+      })),
+    ];
+  for (const { cls, kind } of readers) {
     const def = cls.definition;
+    const name =
+      kind === "view"
+        ? cls.viewName
+        : (cls as unknown as { readonly projectionName: string }).projectionName;
     const module = modules.find(
       (m) =>
-        Object.values(m.exports).includes(cls) &&
-        Paths.find(m.program, cls.viewName, "from") !== undefined,
+        Object.values(m.exports).includes(cls) && Paths.find(m.program, name, "from") !== undefined,
     );
-    const source = aggregates.find((agg) => agg.cls === def.key)?.cls;
-    const reason = !module
-      ? "is not declared in a file the model's file imports"
-      : !source || def.from.length !== 1 || def.from[0] !== source
-        ? "reads more than the aggregate that keys it, which the explorer does not follow yet"
-        : def.keyOf !== undefined
-          ? "routes its events with keyOf, which the explorer does not follow yet"
-          : undefined;
-    if (reason !== undefined || !module || !source) {
+    const sources = new Map<unknown, string>();
+    let unknown: string | undefined;
+    for (const source of def.from) {
+      const agg = aggregates.find((agg) => agg.cls === source);
+      const view = views.find((view) => view.cls === source);
+      if (agg) sources.set(source, agg.name);
+      else if (view && view.kind === "view") sources.set(source, view.name);
+      else
+        unknown =
+          unfolded.get(source) === undefined
+            ? "reads something the model does not list before it"
+            : `reads ${(source as ViewClass).viewName}, a view that ${unfolded.get(source)}`;
+    }
+    const reason = !module ? "is not declared in a file the model's file imports" : unknown;
+    if (reason !== undefined || !module) {
       unfolded.set(cls, reason ?? "is not followed");
-      if (named.has(cls.viewName))
-        skipped.push({ policy: cls.viewName, reason: reason!, file: undefined, line: undefined });
+      if (named.has(name))
+        skipped.push({ policy: name, reason: reason!, file: undefined, line: undefined });
       continue;
     }
     views.push({
-      name: cls.viewName,
+      name,
+      kind,
       cls,
       definition: {
         module,
-        node: Paths.find(module.program, cls.viewName, "from")!,
-        name: cls.viewName,
+        node: Paths.find(module.program, name, "from")!,
+        name,
         state: def.state,
       },
-      source,
-      stateful: def.state !== undefined,
+      sources,
+      keyedBy: aggregates.find((agg) => agg.cls === def.key)?.name,
+      stateful: kind === "view" && def.state !== undefined,
       initial: lift(def.initial),
       declared: def.events ? new Set(def.events.map((event) => event.tag)) : undefined,
+      on: def.on ?? [],
     });
   }
 
@@ -747,10 +838,22 @@ export const locate = Effect.fn(function* (
       .filter((name) => !rules.later.includes(name))
       .map((name) => `${model.modelName}.${name}`),
   );
-  // Only a view something depends on is folded: a policy reacts to it, or an invariant reads it.
-  const folded = views.filter(
-    (view) => named.has(view.name) || policies.some((policy) => policy.from === view.cls),
+  // Only what something depends on is followed: a policy reacts to it, an invariant reads
+  // it, or a view that is followed reads it.
+  const wanted = new Set(
+    views.filter(
+      (view) => named.has(view.name) || policies.some((policy) => policy.from === view.cls),
+    ),
   );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const view of views)
+      if (!wanted.has(view) && [...wanted].some((reader) => reader.sources.has(view.cls))) {
+        wanted.add(view);
+        grew = true;
+      }
+  }
+  const folded = views.filter((view) => wanted.has(view));
   return { aggregates, missing, unread, policies, sagas, skipped, rules, views: folded };
 });
 
@@ -886,6 +989,7 @@ export const search = Effect.fn(function* (
       readonly trail: ReadonlyArray<Entry>;
       readonly instances: ReadonlyArray<Instance>;
       readonly views: ReadonlyArray<ViewSlot>;
+      readonly fed: ReadonlyArray<Fed>;
       readonly calls: ReadonlyArray<Call>;
       readonly receipts: ReadonlyMap<string, Receipt>;
       readonly armed: ReadonlyMap<string, V>;
@@ -899,6 +1003,7 @@ export const search = Effect.fn(function* (
       trail: [...from.trail],
       instances: [...from.instances],
       views: [...from.views],
+      fed: [...from.fed],
       calls: [...from.calls],
       receipts: new Map(from.receipts),
       armed: new Map(from.armed),
@@ -909,6 +1014,7 @@ export const search = Effect.fn(function* (
       endings: [],
       unsettled: false,
       moved: false,
+      reran: false,
       ran: { policies: new Set(), sagas: new Set(), systems: new Set(), repeated: new Set() },
       rules: [],
       later: [],
@@ -918,6 +1024,7 @@ export const search = Effect.fn(function* (
       trail: [],
       instances: [],
       views: [],
+      fed: [],
       calls: [],
       receipts: new Map(),
       armed: new Map(),
@@ -933,11 +1040,15 @@ export const search = Effect.fn(function* (
     let sequence = begin(nothing);
     let reacting: string | undefined;
     /** The delivery a policy is handling, and how many commands it has sent or scheduled for it. */
-    let delivering:
-      | { readonly key: string; readonly again: boolean; ordinal: number; refused: boolean }
-      | undefined;
+    let delivering: Scope | undefined;
+    /** The saga step in progress, and how many commands it has sent or scheduled. */
+    let stepping: Scope | undefined;
+    /** What gives the commands being sent their ids: the step of a saga, or the delivery of an event. */
+    const scopeOf = (): Scope | undefined => (working ? stepping : delivering);
     let working:
       | {
+          /** Names the run: the commands its steps send get ids from it. */
+          readonly id: string;
           readonly journal: Map<string, Journaled>;
           readonly signals: ReadonlyMap<string, V>;
           /** What to run when the run ends, last registered first. */
@@ -986,61 +1097,163 @@ export const search = Effect.fn(function* (
       }
     };
 
-    /** A view's handler for an event: the one under the event's tag, or under its source's name. */
-    const handlerOf: (view: ViewImpl, key: string, tag: string) => Eval<V | undefined> =
-      Effect.fnUntraced(function* (view: ViewImpl, key: string, tag: string) {
+    /**
+     * A view's handler for an event: the one under the event's tag, or under
+     * its source's name, and for a view with routes, the one of the route.
+     */
+    const handlerOf: (
+      view: ViewImpl,
+      key: string,
+      tag: string,
+      origin: string,
+      route: string | undefined,
+    ) => Eval<V | undefined> = Effect.fnUntraced(function* (
+      view: ViewImpl,
+      key: string,
+      tag: string,
+      origin: string,
+      route: string | undefined,
+    ) {
+      const site: Site = { module: view.definition.module, node: view.definition.node };
+      const all = yield* Paths.handlers(interpreter, view.definition, key);
+      for (const name of [tag, origin]) {
+        const found = yield* interpreter.member(all, name, site);
+        if (found._tag === "Undef") continue;
+        if (found._tag !== "Obj") return found;
+        if (route === undefined) return undefined;
+        const routed = yield* interpreter.member(found, route, site);
+        return routed._tag === "Undef" ? undefined : routed;
+      }
+      return undefined;
+    });
+
+    /** The id a route gave: a ref's, or the value of a key that is one. */
+    const idOf = (reached: V): V | undefined =>
+      reached._tag === "Undef" || reached._tag === "Null"
+        ? undefined
+        : reached._tag === "Obj" && reached.fields.id
+          ? reached.fields.id
+          : reached;
+
+    /** The keys of a view an event goes to, as the kernel routes it: by `keyOf`, or to its own source. */
+    const routesOf: (
+      view: ViewImpl,
+      tag: string,
+      origin: string,
+      routing: V,
+      source: V,
+    ) => Eval<ReadonlyArray<{ readonly route: string | undefined; readonly key: V }>> =
+      Effect.fnUntraced(function* (
+        view: ViewImpl,
+        tag: string,
+        origin: string,
+        routing: V,
+        source: V,
+      ) {
         const site: Site = { module: view.definition.module, node: view.definition.node };
-        const all = yield* Paths.handlers(interpreter, view.definition, key);
-        for (const name of [tag, view.source.aggregateName]) {
+        const all = yield* Paths.handlers(interpreter, view.definition, "keyOf");
+        let custom: V | undefined;
+        for (const name of [tag, origin]) {
           const found = yield* interpreter.member(all, name, site);
           if (found._tag === "Undef") continue;
-          if (found._tag === "Obj")
-            return yield* Value.notTranslated(site, `${view.name} has a handler for each route`);
-          return found;
+          custom = found;
+          break;
         }
-        return undefined;
+        const made: Array<{ route: string | undefined; key: V }> = [];
+        if (!custom) {
+          const key = idOf(source);
+          if (key) made.push({ route: undefined, key });
+        } else if (custom._tag === "Obj") {
+          for (const [route, pick] of Object.entries(custom.fields)) {
+            const key = idOf(yield* interpreter.call(pick, [routing], site));
+            if (key) made.push({ route, key });
+          }
+        } else {
+          const key = idOf(yield* interpreter.call(custom, [routing], site));
+          if (key) made.push({ route: undefined, key });
+        }
+        for (const { key } of made)
+          if (textOf(key) === undefined)
+            return yield* Value.notTranslated(
+              site,
+              `${view.name} routes ${tag} to a key the explorer cannot follow`,
+            );
+        return made;
       });
 
+    /** Whether a view takes an event from a source at all, as the kernel decides it. */
+    const consumes = (view: ViewImpl, tag: string, origin: string, cls: unknown): boolean => {
+      if (view.kind === "projection") return view.on.includes(cls);
+      const def = view.cls.definition;
+      return Boolean(
+        def.evolve?.[tag] ||
+        def.evolve?.[origin] ||
+        def.emit?.[tag] ||
+        def.emit?.[origin] ||
+        view.declared?.has(tag),
+      );
+    };
+
     /**
-     * Fold one event into the view's key for the instance that recorded it,
-     * as the kernel does: `evolve`, then `emit` with the state before and
-     * after. The policies that react to the view get what it emits.
+     * Give one event to a view, as the kernel does: route it to its keys, and
+     * for each `evolve`, then `emit` with the state before and after. The
+     * policies and views that read the view get what it emits.
      */
-    const fold: (view: ViewImpl, index: number, event: V, at: number) => Eval<void> =
-      Effect.fnUntraced(function* (view: ViewImpl, index: number, event: V, at: number) {
-        const site: Site = { module: view.definition.module, node: view.definition.node };
-        const tag = tagOf(event);
-        if (tag === undefined) return;
-        const entry = sequence.trail[at]!;
-        const instance = sequence.instances[index]!;
-        const where = sequence.views.findIndex(
-          (slot) => slot.view === view && slot.instance === index,
-        );
+    const fold: (
+      view: ViewImpl,
+      origin: unknown,
+      source: V,
+      state: V,
+      event: V,
+      at: number,
+    ) => Eval<void> = Effect.fnUntraced(function* (
+      view: ViewImpl,
+      origin: unknown,
+      source: V,
+      state: V,
+      event: V,
+      at: number,
+    ) {
+      const site: Site = { module: view.definition.module, node: view.definition.node };
+      const tag = tagOf(event);
+      const from = view.sources.get(origin);
+      const cls = event._tag === "Obj" ? event.brand?.cls : undefined;
+      if (tag === undefined || from === undefined || !consumes(view, tag, from, cls)) return;
+      const entry = sequence.trail[at]!;
+      const envelope = Value.obj({
+        id: idOf(source) ?? Value.undef,
+        at: entry.inputs.now,
+        commandId: entry.inputs.commandId,
+        correlationId: entry.inputs.commandId,
+      });
+      const routing = Value.obj({ event, source, state, envelope });
+      const tags: Array<string> = [];
+      for (const { route, key } of yield* routesOf(view, tag, from, routing, source)) {
+        const ref =
+          view.keyedBy === undefined
+            ? key
+            : Value.obj({ aggregate: Value.str(view.keyedBy), id: key });
+        if (view.kind === "projection") {
+          sequence.fed.push({ view, key, event, state });
+          tags.push(tag);
+          continue;
+        }
+        const context = { key: ref, source, state, envelope, at: entry.inputs.now };
+        const where = sequence.views.findIndex((slot) => slot.view === view && same(slot.key, key));
         const current = where < 0 ? undefined : sequence.views[where]!.state;
-        const ref = Value.obj({ aggregate: Value.str(instance.agg.name), id: instance.id });
-        const context = {
-          key: ref,
-          source: ref,
-          state: Value.undef,
-          envelope: Value.obj({
-            id: instance.id,
-            at: entry.inputs.now,
-            commandId: entry.inputs.commandId,
-            correlationId: entry.inputs.commandId,
-          }),
-          at: entry.inputs.now,
-        };
         const before = view.stateful ? (current ?? view.initial) : Value.nil;
-        const evolve = view.stateful ? yield* handlerOf(view, "evolve", tag) : undefined;
+        const evolve = view.stateful
+          ? yield* handlerOf(view, "evolve", tag, from, route)
+          : undefined;
         let after = current;
         if (evolve) {
           const made = yield* interpreter.call(evolve, [before, event, Value.obj(context)], site);
           after = made._tag === "Null" || made._tag === "Undef" ? undefined : made;
-          const next: ViewSlot = { view, instance: index, state: after };
+          const next: ViewSlot = { view, key, state: after };
           if (where < 0) sequence.views.push(next);
           else sequence.views[where] = next;
         }
-        const emit = yield* handlerOf(view, "emit", tag);
+        const emit = yield* handlerOf(view, "emit", tag, from, route);
         const made = !view.declared
           ? evolve
             ? [event]
@@ -1057,21 +1270,27 @@ export const search = Effect.fn(function* (
               ? [event]
               : [];
         const emitted = made.filter((out) => out._tag !== "Undef");
-        entry.emitted.push({ view, tags: emitted.map((out) => tagOf(out) ?? "?") });
+        tags.push(...emitted.map((out) => tagOf(out) ?? "?"));
         for (const [nth, out] of emitted.entries()) {
-          const cls = out._tag === "Obj" ? out.brand?.cls : undefined;
+          const emittedClass = out._tag === "Obj" ? out.brand?.cls : undefined;
           for (const policy of policies)
-            if (policy.from === view.cls && policy.on.includes(cls))
+            if (policy.from === view.cls && policy.on.includes(emittedClass))
               sequence.queue.push({
                 policy,
-                instance: index,
+                source: ref,
+                id: key,
                 event: out,
                 parent: at,
                 state: after ?? Value.nil,
-                key: `${at}/${view.name}/${tag}/${nth}/${policy.name}`,
+                key: `${at}/${view.name}/${route ?? ""}/${tag}/${nth}/${policy.name}/${sequence.queue.length}`,
               });
+          for (const reader of located.views)
+            if (reader.sources.has(view.cls))
+              yield* fold(reader, view.cls, ref, after ?? Value.nil, out, at);
         }
-      });
+      }
+      entry.emitted.push({ view, tags });
+    });
 
     /**
      * Call an external system: the explorer does not know what it answers,
@@ -1107,10 +1326,14 @@ export const search = Effect.fn(function* (
         op: (cls as unknown as Readonly<Record<string, unknown>>)[op],
         answer: value,
         failed: picked !== 0,
-        again: delivering?.again === true,
+        again: scopeOf()?.again === true,
+        step: scopeOf()?.step,
       });
       sequence.ran.systems.add(cls.systemName);
-      if (delivering?.again) sequence.ran.repeated.add(`${call}, by ${reacting}`);
+      if (scopeOf()?.again)
+        sequence.ran.repeated.add(
+          `${call}, by ${reacting}${scopeOf()?.step === undefined ? "" : ` in its step ${scopeOf()?.step}`}`,
+        );
       return picked === 0
         ? Effect.succeed(value)
         : Effect.fail(new Value.Rejected({ rejection: value }));
@@ -1162,7 +1385,12 @@ export const search = Effect.fn(function* (
         const sent = {
           by: timer ? timer.by : reacting,
           after: timer?.after,
-          again: !timer && delivering?.again === true,
+          again: !timer && scopeOf()?.again === true,
+          step: timer ? undefined : scopeOf()?.step,
+          pending: sequence.timers.map((waiting) => ({
+            since: waiting.since,
+            millis: waiting.millis,
+          })),
         };
         const instance = sequence.instances[index]!;
         const step = yield* Paths.step(
@@ -1229,13 +1457,22 @@ export const search = Effect.fn(function* (
             if (policy.from === agg.cls && policy.on.includes(cls))
               sequence.queue.push({
                 policy,
-                instance: index,
+                source: Value.obj({ aggregate: Value.str(agg.name), id: instance.id }),
+                id: instance.id,
                 event,
                 parent: at,
                 key: `${at}/${nth}/${policy.name}`,
               });
           for (const view of located.views)
-            if (view.source === agg.cls) yield* fold(view, index, event, at);
+            if (view.sources.has(agg.cls))
+              yield* fold(
+                view,
+                agg.cls,
+                Value.obj({ aggregate: Value.str(agg.name), id: instance.id }),
+                Value.undef,
+                event,
+                at,
+              );
         }
         return applied;
       },
@@ -1314,8 +1551,8 @@ export const search = Effect.fn(function* (
         const index = resolve(agg, to.address, to.text);
         // A command's id comes from the delivery and its place in it: the instance that
         // took it once gives the same answer again, and does nothing more.
-        const slot =
-          delivering && !working ? `${delivering.key}#${delivering.ordinal++}` : undefined;
+        const scope = scopeOf();
+        const slot = scope ? `${scope.key}#${scope.ordinal++}` : undefined;
         const before = slot === undefined ? undefined : sequence.receipts.get(slot);
         const applied =
           before && before.instance === index
@@ -1330,7 +1567,7 @@ export const search = Effect.fn(function* (
         // refused is decided again, on the state the instance has by then.
         if (slot !== undefined && !before && applied._tag !== "Rejected")
           sequence.receipts.set(slot, { instance: index, applied });
-        if (delivering && applied._tag === "Rejected") delivering.refused = true;
+        if (scope && applied._tag === "Rejected") scope.refused = true;
         if (applied._tag === "Rejected")
           return yield* new Value.Rejected({ rejection: applied.rejection });
         return Value.obj({
@@ -1356,7 +1593,8 @@ export const search = Effect.fn(function* (
     ) {
       const to = yield* addressed(agg, target, command, site, "schedules");
       // The same arming again, by a policy handling its event again: it stays as it is.
-      const slot = delivering && !working ? `${delivering.key}#${delivering.ordinal++}` : undefined;
+      const scope = scopeOf();
+      const slot = scope ? `${scope.key}#${scope.ordinal++}` : undefined;
       const armed = slot === undefined ? undefined : sequence.armed.get(slot);
       if (armed) return armed;
       const fields = options?._tag === "Obj" ? options.fields : {};
@@ -1593,8 +1831,8 @@ export const search = Effect.fn(function* (
     };
 
     // An activity runs once: a run that goes on after a signal reads what it gave.
-    interpreter.hooks.models.set("effect/workflow:Activity.make", ([options], site) => {
-      const fields = options?._tag === "Obj" ? options.fields : undefined;
+    interpreter.hooks.models.set("effect/workflow:Activity.make", ([given], site) => {
+      const fields = given?._tag === "Obj" ? given.fields : undefined;
       const name = fields?.name;
       const execute = fields?.execute;
       if (!fields || name?._tag !== "Str" || execute?._tag !== "Effect")
@@ -1611,25 +1849,69 @@ export const search = Effect.fn(function* (
             return before._tag === "Success"
               ? Effect.succeed(before.value)
               : Effect.fail(new Value.Rejected({ rejection: before.rejection }));
-          return execute.run.pipe(
-            Effect.tap((value) =>
-              Effect.sync(() => {
-                frame.journal.set(name.value, { _tag: "Success", value });
+          /** Run the step once, with the ids its commands get from it. */
+          const once = (again: boolean) => {
+            const scope: Scope = {
+              key: `${frame.id}/${name.value}`,
+              again,
+              step: name.value,
+              ordinal: 0,
+              refused: false,
+            };
+            const asked = sequence.calls.length;
+            return Effect.suspend(() => {
+              stepping = scope;
+              return execute.run;
+            }).pipe(
+              Effect.result,
+              Effect.map((result) => {
+                stepping = undefined;
+                return {
+                  result,
+                  // Run again, it sends the same commands under the same ids, and each
+                  // instance that took one does nothing more. An external system that
+                  // answers something else, or a command refused the first time, changes that.
+                  differs: sequence.calls.length > asked || scope.refused,
+                };
               }),
-            ),
-            Effect.tapError((error) =>
-              Effect.sync(() => {
-                if (error._tag !== "Rejected" || error.rejection === SUSPENDED) return;
-                frame.journal.set(name.value, { _tag: "Failure", rejection: error.rejection });
-                if (declares) return;
+            );
+          };
+          return Effect.gen(function* () {
+            const first = yield* once(false);
+            const stopped =
+              Result.isFailure(first.result) &&
+              (first.result.failure._tag !== "Rejected" ||
+                first.result.failure.rejection === SUSPENDED);
+            // The step ran, and the saga stopped before what it gave was kept: it runs again.
+            const made =
+              options.faults.rerun &&
+              !stopped &&
+              first.differs &&
+              !sequence.reran &&
+              interpreter.current.run.choose(2) === 1
+                ? yield* Effect.suspend(() => {
+                    sequence.reran = true;
+                    return once(true);
+                  })
+                : first;
+            const result = made.result;
+            if (Result.isSuccess(result)) {
+              frame.journal.set(name.value, { _tag: "Success", value: result.success });
+              return result.success;
+            }
+            const error = result.failure;
+            if (error._tag === "Rejected" && error.rejection !== SUSPENDED) {
+              frame.journal.set(name.value, { _tag: "Failure", rejection: error.rejection });
+              if (!declares) {
                 frame.flagged.add(error.rejection);
                 sequence.failures.push({
                   policy: reacting ?? "a saga",
                   tag: `${tagOf(error.rejection) ?? "an error"} in the activity ${name.value}, which declares no error`,
                 });
-              }),
-            ),
-          );
+              }
+            }
+            return yield* error;
+          });
         }),
       );
     });
@@ -1666,6 +1948,12 @@ export const search = Effect.fn(function* (
     );
     // `Saga.withCompensation(undo)`: when the step it wraps has run and the saga then fails, `undo` runs.
     interpreter.hooks.host = (value, [compensate], site) => {
+      // `Account.ref(id)`: the address of an instance, as a view's `keyOf` gives it.
+      const addressed = aggs.find(
+        (agg) => (agg.cls as unknown as { readonly ref?: unknown }).ref === value,
+      );
+      if (addressed && compensate)
+        return Effect.succeed(Value.obj({ aggregate: Value.str(addressed.name), id: compensate }));
       if (!compensate || !sagas.some((saga) => saga.cls.withCompensation === value))
         return undefined;
       return Effect.succeed(
@@ -1704,6 +1992,7 @@ export const search = Effect.fn(function* (
       const saga = entry.saga;
       const site: Site = { module: saga.module, node: saga.node };
       const frame: NonNullable<typeof working> = {
+        id: `${saga.name}#${index}`,
         journal: new Map(entry.journal),
         signals: entry.signals,
         finalizers: [],
@@ -1824,9 +2113,8 @@ export const search = Effect.fn(function* (
           continue;
         }
         const site: Site = { module: policy.module, node: policy.node };
-        const instance = sequence.instances[trigger.instance]!;
         const parent = sequence.trail[trigger.parent]!;
-        const source = Value.obj({ aggregate: Value.str(instance.agg.name), id: instance.id });
+        const source = trigger.source;
         reacting = policy.name;
         const delivery = {
           key: trigger.key,
@@ -1850,7 +2138,7 @@ export const search = Effect.fn(function* (
                     event: trigger.event,
                     state: trigger.state ?? Value.undef,
                     envelope: Value.obj({
-                      id: instance.id,
+                      id: trigger.id,
                       at: parent.inputs.now,
                       commandId: parent.inputs.commandId,
                       correlationId: parent.inputs.commandId,
@@ -1911,8 +2199,13 @@ export const search = Effect.fn(function* (
         readonly at: number;
         readonly rule?: "invariant" | "eventually";
       }> = [];
-      /** Each view's real state, by view and instance. */
-      const seen = new Map<string, unknown>();
+      /** Each view's real state, by view and key. */
+      const seen = new Map<number, Map<string, unknown>>();
+      /** What each projection was really given, by projection. */
+      const given = new Map<
+        number,
+        Array<{ readonly id: string; readonly event: unknown; readonly state: unknown }>
+      >();
       const asked: Array<Asked & { readonly at: number }> = [];
       // A second delivery that sent nothing new changed nothing: what it asked is left out.
       const resent = played.trail.some((entry) => entry.again);
@@ -1927,6 +2220,7 @@ export const search = Effect.fn(function* (
           answer: "value" in built ? built.value : "an answer the explorer cannot show",
           failed: call.failed,
           again: call.again,
+          step: call.step,
         });
       }
       /** The calls made after a command, by what reacted to it or to one before it. */
@@ -1985,6 +2279,13 @@ export const search = Effect.fn(function* (
           after: entry.after,
           asked: after(at),
           again: entry.again,
+          step: entry.step,
+          late: entry.pending.some((waiting) => {
+            const since = model.get(waiting.since);
+            return (
+              typeof since === "number" && since + waiting.millis <= DateTime.toEpochMillis(now)
+            );
+          }),
         };
         if (prediction._tag === "Rejected") {
           story.push({
@@ -2016,59 +2317,119 @@ export const search = Effect.fn(function* (
         for (const [name, holds] of Object.entries(entry.agg.rules))
           if (holds(moved) !== true) breaks.push({ name: `${entry.agg.name}.${name}`, at });
         // The real views on the real events: they emit what the explorer read, or it is wrong.
-        const ref = Aggregate.makeRef(entry.agg.cls, slot.id as never);
-        for (const [index, view] of located.views.entries()) {
-          if (view.source !== entry.agg.cls) continue;
+        const commandId = (yield* build("commandId", entry.inputs.commandId)) as string;
+        const emitted = new Map<ViewImpl, Array<string>>();
+        const feed = (
+          view: ViewImpl,
+          index: number,
+          origin: unknown,
+          source: unknown,
+          state: unknown,
+          event: { readonly _tag: string },
+        ): void => {
+          const from = view.sources.get(origin);
+          if (from === undefined) return;
           const def = view.cls.definition;
-          const key = `${index}/${entry.instance}`;
-          const tags: Array<string> = [];
-          for (const [offset, event] of prediction.events.entries()) {
-            const pick = (map: Readonly<Record<string, unknown>> | undefined) =>
-              [map?.[event._tag], map?.[entry.agg.name]].find(
-                (handler): handler is RealHandler => typeof handler === "function",
-              );
-            const context = {
-              key: ref,
-              source: ref,
-              state: undefined,
-              envelope: {
-                id: slot.id,
-                stream: `${entry.agg.name}/${slot.id}`,
-                seq: slot.version - prediction.events.length + offset + 1,
-                at: now,
-                commandId: (yield* build("commandId", entry.inputs.commandId)) as string,
-              },
-              at: now,
-            };
-            const before = view.stateful ? (seen.get(key) ?? def.initial) : null;
-            const evolve = view.stateful ? pick(def.evolve) : undefined;
-            const emit = pick(def.emit);
-            const out = yield* Effect.try({
-              try: () => {
-                if (evolve) seen.set(key, evolve(before, event, context) ?? null);
-                const state = seen.get(key) ?? null;
-                return !view.declared
-                  ? evolve
+          if (
+            view.kind === "projection"
+              ? !view.on.some((cls) => (cls as { readonly tag?: unknown }).tag === event._tag)
+              : !(
+                  def.evolve?.[event._tag] ||
+                  def.evolve?.[from] ||
+                  def.emit?.[event._tag] ||
+                  def.emit?.[from] ||
+                  view.declared?.has(event._tag)
+                )
+          )
+            return;
+          const tags = emitted.get(view) ?? [];
+          emitted.set(view, tags);
+          const envelope = {
+            id: Aggregate.targetId(source),
+            stream: `${from}/${Aggregate.targetId(source)}`,
+            seq: slot.version,
+            at: now,
+            commandId,
+            correlationId: commandId,
+          };
+          const routing = { event, source, state, envelope };
+          const keyOf = def.keyOf as Readonly<Record<string, unknown>> | undefined;
+          const custom = keyOf?.[event._tag] ?? keyOf?.[from];
+          const routes: ReadonlyArray<{
+            readonly route: string | undefined;
+            readonly key: unknown;
+          }> =
+            typeof custom === "function"
+              ? [{ route: undefined, key: (custom as RealHandler)(routing) }]
+              : custom
+                ? Object.entries(custom as Readonly<Record<string, RealHandler | undefined>>).map(
+                    ([route, pick]) => ({ route, key: pick?.(routing) }),
+                  )
+                : [{ route: undefined, key: source }];
+          const pick = (map: Readonly<Record<string, unknown>> | undefined, route?: string) => {
+            const handler = map?.[event._tag] ?? map?.[from];
+            const found =
+              typeof handler === "function"
+                ? handler
+                : route !== undefined
+                  ? (handler as Readonly<Record<string, unknown>> | undefined)?.[route]
+                  : undefined;
+            return typeof found === "function" ? (found as RealHandler) : undefined;
+          };
+          for (const { route, key } of routes) {
+            if (key === undefined) continue;
+            const id = Aggregate.targetId(key);
+            const ref = Key.refOf(def.key as Key.Any, id);
+            if (view.kind === "projection") {
+              const rows = given.get(index) ?? [];
+              given.set(index, rows);
+              rows.push({ id, event, state });
+              tags.push(event._tag);
+              continue;
+            }
+            const states = seen.get(index) ?? new Map<string, unknown>();
+            seen.set(index, states);
+            const context = { key: ref, source, state, envelope, at: now };
+            const before = view.stateful ? (states.get(id) ?? def.initial) : null;
+            const evolve = view.stateful ? pick(def.evolve, route) : undefined;
+            if (evolve) states.set(id, evolve(before, event, context) ?? null);
+            const after = states.get(id) ?? null;
+            const emit = pick(def.emit, route);
+            const out = (
+              !view.declared
+                ? evolve
+                  ? [event]
+                  : []
+                : emit
+                  ? [emit(event, { ...context, before, after })].flat()
+                  : view.declared.has(event._tag)
                     ? [event]
                     : []
-                  : emit
-                    ? [emit(event, { ...context, before, after: state })].flat()
-                    : view.declared.has(event._tag)
-                      ? [event]
-                      : [];
-              },
+            ) as ReadonlyArray<{ readonly _tag: string } | undefined>;
+            for (const one of out) {
+              if (one === undefined) continue;
+              tags.push(one._tag);
+              for (const [next, reader] of located.views.entries())
+                feed(reader, next, view.cls, ref, after, one);
+            }
+          }
+        };
+        const ref = Aggregate.makeRef(entry.agg.cls, slot.id as never);
+        for (const event of prediction.events)
+          for (const [index, view] of located.views.entries())
+            yield* Effect.try({
+              try: () => feed(view, index, entry.agg.cls, ref, undefined, event),
               catch: (cause) =>
                 new Disagreement({
-                  reason: `the view ${view.name} fails on the real code at ${where}: ${String(cause)}`,
+                  reason: `${view.name} fails on the real code at ${where}: ${String(cause)}`,
                 }),
             });
-            for (const one of out as ReadonlyArray<{ readonly _tag: string } | undefined>)
-              if (one !== undefined) tags.push(one._tag);
-          }
+        for (const view of located.views) {
           const read = entry.emitted.flatMap((made) => (made.view === view ? made.tags : []));
+          const tags = emitted.get(view) ?? [];
           if (read.join(", ") !== tags.join(", "))
             return yield* new Disagreement({
-              reason: `the explorer read that ${view.name} emits [${read.join(", ")}] after ${where}, but the real view emits [${tags.join(", ")}]`,
+              reason: `the explorer read that ${view.name} ${view.kind === "view" ? "emits" : "is given"} [${read.join(", ")}] after ${where}, but the real one ${view.kind === "view" ? "emits" : "is given"} [${tags.join(", ")}]`,
             });
         }
       }
@@ -2078,10 +2439,11 @@ export const search = Effect.fn(function* (
           ...Object.fromEntries(
             located.views.map((view, index) => [
               view.name,
-              real.flatMap((slot, instance) => {
-                const state = seen.get(`${index}/${instance}`) ?? null;
-                return state === null ? [] : [{ id: slot.id, state }];
-              }),
+              view.kind === "projection"
+                ? (given.get(index) ?? [])
+                : [...(seen.get(index) ?? [])].flatMap(([id, state]) =>
+                    state === null ? [] : [{ id, state }],
+                  ),
             ]),
           ),
           ...Object.fromEntries(
@@ -2138,7 +2500,17 @@ export const search = Effect.fn(function* (
           ? [`(> (str.len ${name}) 0)`]
           : [],
       );
-      for (const wishes of [[...still, ...named], still]) {
+      // And a scheduled command runs when it is due, before anything sent after: a
+      // story's clock runs every one that is due at once.
+      const prompt = played.trail.flatMap((entry) =>
+        entry.pending.map(
+          (waiting) =>
+            `(< ${Smt.symbol(`${entry.label}now`)} (+ ${waiting.since} ${waiting.millis}))`,
+        ),
+      );
+      for (const wishes of prompt.length > 0
+        ? [[...still, ...named, ...prompt], [...still, ...prompt], still]
+        : [[...still, ...named], still]) {
         if (wishes.length === 0) continue;
         const again = yield* Check.solve(
           solver,
@@ -2320,11 +2692,18 @@ export const search = Effect.fn(function* (
             view.name,
             {
               _tag: "Arr",
-              items: played.views.flatMap((slot) =>
-                slot.view === view && slot.state
-                  ? [Value.obj({ id: played.instances[slot.instance]!.id, state: slot.state })]
-                  : [],
-              ),
+              items:
+                view.kind === "projection"
+                  ? played.fed.flatMap((fed) =>
+                      fed.view === view
+                        ? [Value.obj({ id: fed.key, event: fed.event, state: fed.state })]
+                        : [],
+                    )
+                  : played.views.flatMap((slot) =>
+                      slot.view === view && slot.state
+                        ? [Value.obj({ id: slot.key, state: slot.state })]
+                        : [],
+                    ),
             } satisfies V,
           ]),
         ),
@@ -2466,6 +2845,7 @@ export const search = Effect.fn(function* (
           trail: played.trail,
           instances: played.instances,
           views: played.views,
+          fed: played.fed,
           calls: played.calls,
           receipts: played.receipts,
           armed: played.armed,
@@ -2574,7 +2954,13 @@ export const search = Effect.fn(function* (
     // break is out of reach of the search above, and within reach of these.
     const random = mulberry(options.walks.seed);
     const pick = (of: number) => Math.floor(random() * of);
-    const walks = { seed: options.walks.seed, count: 0, commands: 0, longest: 0 };
+    const walks = {
+      seed: options.walks.seed,
+      count: 0,
+      commands: 0,
+      longest: 0,
+      stories: [] as Array<Story>,
+    };
     for (let walk = 0; walk < options.walks.count && !truncated; walk++) {
       let at = nothing;
       let sent = 0;
@@ -2591,6 +2977,14 @@ export const search = Effect.fn(function* (
         if (longer.length === 0) continue;
         at = longer[0]!;
         sent++;
+      }
+      // The walk with values for everything it left open, as the real code runs it.
+      if (sent > 0) {
+        const played = begin(at);
+        const answer = yield* values(played, at.run, "false");
+        const replayed =
+          answer._tag === "Sat" ? yield* attempt(played, at.run, answer.model) : undefined;
+        if (replayed) walks.stories.push(replayed.story);
       }
       walks.count++;
       walks.commands += sent;
@@ -2634,7 +3028,8 @@ export const search = Effect.fn(function* (
       reached: [...reached.values()],
       followed: [...followed],
       idle: policies.flatMap((policy) => (followed.has(policy.name) ? [] : [policy.name])),
-      views: located.views.map((view) => view.name),
+      views: located.views.flatMap((view) => (view.kind === "view" ? [view.name] : [])),
+      projections: located.views.flatMap((view) => (view.kind === "projection" ? [view.name] : [])),
       systems: [...called],
       faults: options.faults,
       walks,

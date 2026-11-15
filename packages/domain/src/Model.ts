@@ -102,12 +102,12 @@ export interface Members<
    * Rules that hold across the model's aggregates whenever nothing is left to
    * react: every policy has handled the events it reacts to and every saga
    * has finished or waits. Each is named and given every instance, with its
-   * state and the events it recorded, and every key of the model's views
-   * with its state: `true` while the rule holds. `Explore.check` looks for a
+   * state and the events it recorded, every key of the model's views with
+   * its state, and what each projection was given: `true` while the rule holds. `Explore.check` looks for a
    * sequence of commands that breaks one.
    */
   readonly invariants?: {
-    readonly [name: string]: (model: Instances<A> & Keys<V>) => boolean;
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
   };
   /**
    * Rules that hold once everything has run its course: nothing is left to
@@ -118,9 +118,22 @@ export interface Members<
    * one that ends without it.
    */
   readonly eventually?: {
-    readonly [name: string]: (model: Instances<A> & Keys<V>) => boolean;
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
   };
 }
+
+/**
+ * What each of a model's projections has been given, by projection name,
+ * oldest first: what a model invariant is given. A projection writes where
+ * the model cannot see, so what it was told is what a rule can speak of.
+ */
+export type Fed<J extends ReadonlyArray<Projection.Any>> = {
+  readonly [K in J[number] as K["projectionName"]]: ReadonlyArray<{
+    /** The id of the key the event was given under. */
+    readonly id: string;
+    readonly event: Aggregate.InstanceOf<K["definition"]["on"][number]>;
+  }>;
+};
 
 /** Every key of a model's views that has a state, by view name: what a model invariant is given. */
 export type Keys<V extends ReadonlyArray<View.Any>> = {

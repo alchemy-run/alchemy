@@ -171,7 +171,7 @@ More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-m
 
 A story checks one example. A rule says what is always true, and `Verify` looks for any state, input or sequence of commands that breaks it. Write a rule for each thing the business says can never happen.
 
-Rules go on the declaration. An aggregate has `invariants` (what no state may be) and `transitions` (what no command may do); a model has `invariants` (true whenever nothing is left to react) and `eventually` (true once every reaction and scheduled command has run).
+Rules go on the declaration. An aggregate has `invariants` (what no state may be) and `transitions` (what no command may do); a model has `invariants` (true whenever nothing is left to react) and `eventually` (true once every reaction and scheduled command has run). A model's rule is given every instance by aggregate name (`bank.Account`), every view key by view name (`bank.DailyOutflow`), and what each projection was given by projection name (`bank.Ledger`).
 
 ```ts
 export class Account extends Domain.Aggregate("Account", {
@@ -222,7 +222,7 @@ it.effect(
 Rules of thumb:
 
 - A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
-- `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, reactions reordered, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
+- `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, each saga step run twice, reactions reordered, schedules late, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
 - Keep numbers that are added or multiplied whole (`Schema.Int`, money in cents). Arithmetic JavaScript rounds is reported as not read.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.

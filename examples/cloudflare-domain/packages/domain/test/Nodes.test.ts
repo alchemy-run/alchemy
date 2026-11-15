@@ -2,6 +2,7 @@ import * as Explore from "@alchemy.run/domain/Explore";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { Mall, MallApi } from "./fixtures/Mall.model.ts";
 import { Shop, ShopApi } from "./fixtures/Shop.model.ts";
 
 // The explorer follows every kind of node a command's events reach: a view
@@ -71,5 +72,36 @@ it.effect(
       });
       expect(report.failures).toEqual([]);
     }),
+  60_000,
+);
+
+it.effect(
+  "a view that routes its events, a view of a view and a projection are all followed",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Explore.report(Mall, {
+        source: new URL("./fixtures/Mall.model.ts", import.meta.url),
+        apis: [MallApi],
+        depth: 2,
+      });
+      expect(report.views).toEqual(["Takings", "Best"]);
+      expect(report.projections).toEqual(["Receipts"]);
+      expect(report.skipped).toEqual([]);
+      const rule = (name: string) => report.rules.find((rule) => rule.name === name);
+      // Takings is keyed by the shop an event names, not by the sale that recorded it.
+      expect(rule("TakingsAreTheSales")).toMatchObject({ broken: undefined });
+      // Best reads what Takings emits.
+      expect(rule("BestIsAtLeastNow")).toMatchObject({ broken: undefined });
+      // Receipts is given every Sold.
+      expect(rule("EverySaleHasAReceipt")).toMatchObject({ broken: undefined });
+      for (const name of ["TakingsAreTheSales", "BestIsAtLeastNow", "EverySaleHasAReceipt"])
+        expect(rule(name)?.states).toBeGreaterThan(0);
+      // A refund takes a shop's takings below its best.
+      expect(
+        rule("TakingsNeverFall")?.broken?.map((step) => (step.command as { _tag: string })._tag),
+      ).toEqual(["Sell", "Refund"]);
+      expect(report.disagreements).toEqual([]);
+      expect(report.unread).toEqual([]);
+    }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );

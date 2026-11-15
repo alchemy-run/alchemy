@@ -95,6 +95,13 @@ export interface ModelOptions {
      * @default true
      */
     readonly reorder?: boolean;
+    /**
+     * Run a saga's step again, as when the saga stops after the step ran and
+     * before what it gave was kept. The commands a step sends get ids from
+     * the step, so an instance that took one does nothing the second time.
+     * @default true
+     */
+    readonly rerun?: boolean;
   };
   /**
    * Longer sequences to run after every short one: each a walk of commands
@@ -243,6 +250,7 @@ const reportModel = (
         faults: {
           redeliver: options.faults?.redeliver ?? true,
           reorder: options.faults?.reorder ?? true,
+          rerun: options.faults?.rerun ?? true,
         },
         walks: {
           count: options.walks?.count ?? 0,
@@ -475,6 +483,10 @@ const lines = (story: Story, indent: string): ReadonlyArray<string> => {
 
 const count = (n: number): string => n.toLocaleString("en-US");
 
+/** How a story says a policy or a saga did something a second time. */
+const secondTime = (sent: { readonly step: string | undefined }): string =>
+  sent.step === undefined ? "handling its event again" : `running its step ${sent.step} again`;
+
 /**
  * A model's story as text: each command a caller sends or a schedule that
  * comes due, then what the policies and sagas sent because of it.
@@ -491,7 +503,7 @@ const modelLines = (story: ModelSearch.Story, indent: string): ReadonlyArray<str
     ].join(" ");
     const asked = step.asked.map(
       (call) =>
-        `${indent}   ↳ ${call.by ?? "a caller"}${call.again ? ", handling its event again," : ""} asks ${call.call}  → ${call.failed ? "✗ " : ""}${Symbolic.show(call.answer)}`,
+        `${indent}   ↳ ${call.by ?? "a caller"}${call.again ? `, ${secondTime(call)},` : ""} asks ${call.call}  → ${call.failed ? "✗ " : ""}${Symbolic.show(call.answer)}`,
     );
     if (step.after !== undefined)
       return [
@@ -501,7 +513,7 @@ const modelLines = (story: ModelSearch.Story, indent: string): ReadonlyArray<str
     return [
       step.by === undefined
         ? `${indent}${++sent}. ${text}  → ${result(step)}`
-        : `${indent}   ↳ ${step.by}${step.again ? ", handling its event again" : ""}: ${text}  → ${result(step)}`,
+        : `${indent}   ↳ ${step.by}${step.again ? `, ${secondTime(step)}` : ""}: ${text}  → ${result(step)}`,
       ...asked,
     ];
   });
@@ -522,9 +534,12 @@ const renderModel = (report: ModelReport): string => {
     out.push(`Policies with no event to react to: ${report.idle.join(", ")}`);
   if (report.sagas.length > 0) out.push(`Sagas followed: ${report.sagas.join(", ")}`);
   if (report.views.length > 0) out.push(`Views followed: ${report.views.join(", ")}`);
+  if (report.projections.length > 0)
+    out.push(`Projections followed: ${report.projections.join(", ")}`);
   const faults = [
     ...(report.faults.redeliver ? ["each event delivered to each policy twice"] : []),
     ...(report.faults.reorder ? ["each reaction also run behind the others that wait"] : []),
+    ...(report.faults.rerun ? ["each step of a saga run twice"] : []),
   ];
   if (faults.length > 0) out.push(`Delivery: ${faults.join(", ")}`);
   if (report.walks.count > 0)

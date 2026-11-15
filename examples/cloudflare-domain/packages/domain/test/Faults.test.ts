@@ -2,6 +2,7 @@ import * as Explore from "@alchemy.run/domain/Explore";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { Booking, BookingApi } from "./fixtures/Booking.model.ts";
 import { Tally, TallyApi } from "./fixtures/Tally.model.ts";
 import { Tickets, TicketsApi } from "./fixtures/Ticket.model.ts";
 
@@ -83,6 +84,40 @@ it.effect(
       });
       expect(report.rules).toMatchObject([{ name: "AnOpenRoundScoresTwo", broken: undefined }]);
       expect(report.rules[0]?.states).toBeGreaterThan(0);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+const booking = (faults: { readonly rerun: boolean }) =>
+  Explore.report(Booking, {
+    source: new URL("./fixtures/Booking.model.ts", import.meta.url),
+    apis: [BookingApi],
+    depth: 1,
+    faults: { redeliver: false, reorder: false, ...faults },
+  });
+
+it.effect(
+  "a saga that stops after a step and before its result is kept runs the step again",
+  () =>
+    Effect.gen(function* () {
+      const once = yield* booking({ rerun: false });
+      expect(once.rules).toMatchObject([{ name: "OneTicketPerSeat", broken: undefined }]);
+      const twice = yield* booking({ rerun: true });
+      const story = twice.rules[0]?.broken;
+      expect(tags(story)).toEqual([
+        [undefined, "BookSeat"],
+        ["Ticketing", "IssueTicket"],
+        ["Ticketing", "IssueTicket"],
+      ]);
+      expect(story?.map((step) => [step.step, step.again])).toEqual([
+        [undefined, false],
+        ["issue", false],
+        ["issue", true],
+      ]);
+      expect(new Set(story?.slice(1).map((step) => step.id)).size).toBe(2);
+      expect(twice.repeated).toEqual(["Numbers.next, by Ticketing in its step issue"]);
+      expect(Explore.render(twice)).toContain("↳ Ticketing, running its step issue again: Ticket");
+      expect(twice.disagreements).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );

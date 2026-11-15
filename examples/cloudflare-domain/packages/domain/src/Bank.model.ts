@@ -79,6 +79,12 @@ export class Bank extends Domain.Model("Bank", {
     /** A transfer that may run has run: it completed or it failed. */
     NoTransferLeftPending: (bank) =>
       bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
+    /** The ledger is given every deposit the accounts record. */
+    LedgerIsGivenEveryDeposit: (bank) =>
+      bank.Ledger.filter((row) => row.event._tag === "MoneyDeposited").length ===
+      bank.Account.flatMap((account) => account.events).filter(
+        (event) => event._tag === "MoneyDeposited",
+      ).length,
   },
   eventually: {
     /** No transfer waits for ever: one nobody approves expires. */

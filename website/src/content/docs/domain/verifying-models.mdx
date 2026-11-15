@@ -77,7 +77,7 @@ export class Bank extends Domain.Model("Bank", {
 
 A model's invariant isn't true at every instant. A transfer is `Pending` while its saga moves the money. It's checked whenever nothing is left to react: every policy has handled its events and every saga has finished or waits.
 
-It can read a view too. Each key of a view is listed under the view's name, with the id of the instance it follows and its state. Here a shop keeps what each order came to in a `Spend` view, and says the view never disagrees with the order:
+It can read a view too. Each key of a view is listed under the view's name, with its id and its state. That holds for any view: one that routes events with `keyOf`, one keyed by a value, one that reads another view. Here a shop keeps what each order came to in a `Spend` view, and says the view never disagrees with the order:
 
 ```typescript title="packages/domain/src/Shop.model.ts"
 export class Shop extends Domain.Model("Shop", {
@@ -96,6 +96,23 @@ export class Shop extends Domain.Model("Shop", {
       ),
   },
 }) {}
+```
+
+A projection writes somewhere the model can't see, so a rule speaks of what the projection was given. Each event it handled is listed under the projection's name, oldest first, with the id of the key it was given under:
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+export class Bank extends Domain.Model("Bank", {
+  projections: [Ledger, AccountCards],
+  invariants: {
+    NoTransferLeftPending: (bank) =>
+      bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
++    /** The ledger is given every deposit the accounts record. */
++    LedgerIsGivenEveryDeposit: (bank) =>
++      bank.Ledger.filter((row) => row.event._tag === "MoneyDeposited").length ===
++      bank.Account.flatMap((account) => account.events).filter(
++        (event) => event._tag === "MoneyDeposited",
++      ).length,
+  },
 ```
 
 ## Say where everything ends up
@@ -160,7 +177,7 @@ console.log(Verify.render(report));
 ```
 
 ```text
-Bank: 48 outcomes, 6 policies, 1 saga, 1 view, 1 external system
+Bank: 48 outcomes, 6 policies, 1 saga, 1 view, 1 projection, 1 external system
 
 Proved: for every state and every input, after any number of commands
   ✓ Account.NeverOverdrawn
@@ -169,11 +186,12 @@ Proved: for every state and every input, after any number of commands
   ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
   ✓ Account.OnlyAnAgentChangesTheOwner
 
-Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait, every answer FraudCheck can give
-14,017 sequences, 6,110 states
+Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait, each step of a saga run twice, every answer FraudCheck can give
+19,641 sequences, 10,648 states
   ✓ Bank.TransfersLoseNoMoney
   ✓ Bank.NoTransferLeftPending
-  ✓ Bank.EveryTransferEnds  holds at the end of the 3,459 sequences that ran their course
+  ✓ Bank.LedgerIsGivenEveryDeposit
+  ✓ Bank.EveryTransferEnds  holds at the end of the 6,228 sequences that ran their course
 
 Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
   ✓ none breaks a rule
@@ -182,8 +200,7 @@ Assumed
   - whole numbers are exact: they stay within ±2^53
   - an external system answers what its schema allows, and nothing else
   - middleware lets every caller in: who sends a command is anyone its request context allows
-  - projections, streams and queries are not checked: they read what the model records, and send it nothing
-  - a saga's step runs once: one that stops halfway and runs again is not tried
+  - what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given
 ```
 
 **Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance.
@@ -295,11 +312,11 @@ it.effect(
 The report gains a section:
 
 ```text
-Run on the real model: 39 sequences the explorer found, as stories (3 more need an event delivered twice, which a story does not do)
+Run on the real model: 35 sequences the explorer found and 109 walks of commands picked at random, as stories (93 more need an event delivered twice, a step run twice or a schedule that runs late, which a story does not do)
   ✓ the model does what the explorer read in each
 ```
 
-Put the external systems the model calls in `stub`. The run then gives each call the answer the solver picked.
+The walks run there too, so the random commands go through the real aggregates, policies, sagas, views and projections. Put the external systems the model calls in `stub`. The run then gives each call the answer the solver picked.
 
 ## External systems answer anything
 
@@ -315,6 +332,19 @@ Each event is delivered to each policy twice. The commands a policy sends get id
 
 Reactions that wait at the same time run in no set order. After each command, each reaction that could write the same aggregate as another is also tried behind the others.
 
+A saga can stop after a step ran and before what it gave was kept. It then runs the step again. A step's commands get ids from the step, so they are safe, and what an external system answers the second time is not:
+
+```text
+✗ Booking.OneTicketPerSeat breaks
+    1. Seat "A" BookSeat  → SeatBooked
+       ↳ Ticketing asks Numbers.next  → { number: "C" }
+       ↳ Ticketing: Ticket "C" IssueTicket { seat: "A" }  → TicketIssued
+       ↳ Ticketing, running its step issue again, asks Numbers.next  → { number: "E" }
+       ↳ Ticketing, running its step issue again: Ticket "E" IssueTicket { seat: "A" }  → TicketIssued
+```
+
+A scheduled command can also run late. A platform runs each instance's schedule on its own, so a command sent after a deadline can arrive before the deadline's own command does. The search tries that too.
+
 A policy that calls an external system calls it again on a second delivery. The model can't tell whether that's safe, so the report lists each such call:
 
 ```text
@@ -328,13 +358,13 @@ Scoring twice is harmless. Refunding a payment twice is not: pass the vendor an 
 
 `depth` is the most commands callers send in a sequence. What policies, sagas and schedules do in reaction doesn't count, so two commands reach a long way. The default is 2.
 
-Each fault multiplies the sequences. On the example bank, the default run is 14,017 sequences, 200 walks and 39 stories, in about 30 seconds. Three commands with neither fault is 40,158 sequences in 75 seconds, and three with both is more than a test should wait for. Go deeper with the faults off:
+Each fault multiplies the sequences. On the example bank, the default run is 19,641 sequences, 200 walks and 144 stories, in about 45 seconds. Three commands with neither fault is 40,158 sequences in 75 seconds, and three with both is more than a test should wait for. Go deeper with the faults off:
 
 ```typescript title="packages/domain/test/Bank.verify.test.ts"
 Verify.model(Bank, {
   apis: [CustomerApi, SupportApi],
   depth: 3,
-  faults: { redeliver: false, reorder: false },
+  faults: { redeliver: false, reorder: false, rerun: false },
 });
 ```
 
@@ -427,7 +457,7 @@ Arithmetic on numbers that may not be whole isn't proved. A solver counts exactl
 
 `eventually` is checked on the sequences that run their course, not proved for all of them.
 
-Projections, streams and queries aren't checked. They read what the model records and send it nothing, so they can't break a rule about aggregates or views. Test them with [stories](/domain/testing-models).
+What a projection writes isn't checked, nor what a stream or a query gives. A rule can say what a projection is given, and a story runs its handler, but nothing compares the table it writes with the model. Test that with [stories](/domain/testing-models).
 
 Middleware isn't run. Who sends a command is anyone its request context's schema allows, so a rule is checked against every actor, including ones your middleware would turn away.
 

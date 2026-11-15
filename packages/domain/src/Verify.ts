@@ -114,7 +114,9 @@ export interface Report {
   readonly explored: Explore.ModelReport;
   /** The sequences run on the real model: empty without a `story` runner. */
   readonly runs: ReadonlyArray<Run>;
-  /** The sequences a story cannot run: they need an event delivered twice. */
+  /** How many of them are the walks of commands picked at random. */
+  readonly walked: number;
+  /** The sequences a story cannot run: they need an event delivered twice, a step run twice or a late schedule. */
   readonly unrun: number;
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
@@ -188,8 +190,7 @@ const ASSUMPTIONS = [
   "whole numbers are exact: they stay within ±2^53",
   "an external system answers what its schema allows, and nothing else",
   "middleware lets every caller in: who sends a command is anyone its request context allows",
-  "projections, streams and queries are not checked: they read what the model records, and send it nothing",
-  "a saga's step runs once: one that stops halfway and runs again is not tried",
+  "what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given",
 ];
 
 const count = (n: number): string => n.toLocaleString("en-US");
@@ -241,6 +242,23 @@ const storiesOf = (explored: Explore.ModelReport) => {
     );
   for (const ending of explored.endings) add(`${ending.saga} ${ending.ending}`, ending.story);
   return made;
+};
+
+/** Each walk of a report, as a sequence to run. */
+const walksOf = (explored: Explore.ModelReport) =>
+  explored.walks.stories.map((story, index) => ({
+    of: `walk ${index + 1} of ${explored.walks.stories.length}, seed ${explored.walks.seed}`,
+    story,
+    walk: true as const,
+  }));
+
+const foundIn = (explored: Explore.ModelReport) => {
+  const found: ReadonlyArray<{
+    readonly of: string;
+    readonly story: ModelSearch.Story;
+    readonly walk?: true;
+  }> = [...storiesOf(explored), ...walksOf(explored)];
+  return found;
 };
 
 /** A found sequence as the real steps of a `Story`, for the model's own classes. */
@@ -304,12 +322,13 @@ export const report = (
     }).pipe(Effect.mapError((error) => new VerifyError({ message: error.message })));
     const runs: Array<Run> = [];
     let unrun = 0;
+    let walked = 0;
     const story = options.story as
       | ((...steps: ReadonlyArray<unknown>) => Effect.Effect<void, unknown>)
       | undefined;
     if (story) {
       const ran = new Set<string>();
-      for (const found of storiesOf(explored)) {
+      for (const found of foundIn(explored)) {
         if (Script.redelivers(found.story)) {
           unrun++;
           continue;
@@ -321,6 +340,7 @@ export const report = (
         const result = yield* Effect.suspend(() => story(...stepsOf(model, found.story))).pipe(
           Effect.result,
         );
+        if (found.walk) walked++;
         runs.push({
           of: found.of,
           story: found.story,
@@ -335,6 +355,7 @@ export const report = (
       rules: rulesOf(explored),
       explored,
       runs,
+      walked,
       unrun,
       undone: Explore.undone(explored, options.allow ?? {}),
       assumptions: ASSUMPTIONS,
@@ -557,6 +578,7 @@ export const render = (report: Report | AggregateReport): string => {
     ...some(explored.followed.length + explored.idle.length, "policy", "policies"),
     ...some(explored.sagas.length + explored.unstarted.length, "saga", "sagas"),
     ...some(explored.views.length, "view", "views"),
+    ...some(explored.projections.length, "projection", "projections"),
     ...some(explored.systems.length, "external system", "external systems"),
   ];
   const out: Array<string> = [`${report.model}: ${parts.join(", ")}`, ""];
@@ -573,6 +595,9 @@ export const render = (report: Report | AggregateReport): string => {
   const faults = [
     ...(explored.faults.redeliver ? ["each event delivered twice"] : []),
     ...(explored.faults.reorder ? ["each reaction also run behind the others that wait"] : []),
+    ...(explored.faults.rerun && explored.sagas.length + explored.unstarted.length > 0
+      ? ["each step of a saga run twice"]
+      : []),
     ...(explored.systems.length > 0
       ? [`every answer ${explored.systems.join(" and ")} can give`]
       : []),
@@ -613,7 +638,7 @@ export const render = (report: Report | AggregateReport): string => {
     out.push(Explore.describe(rule.story, "    "), "");
     if (Script.redelivers(rule.story))
       out.push(
-        "    It needs an event delivered to a policy twice, which a platform does and a story does not.",
+        "    It needs an event delivered twice, a step run twice or a schedule that runs late: a platform does each, and a story does not.",
         "",
       );
     else
@@ -636,9 +661,11 @@ export const render = (report: Report | AggregateReport): string => {
   if (report.runs.length > 0) {
     const failed = report.runs.filter((run) => run.failure !== undefined);
     out.push(
-      `Run on the real model: ${count(report.runs.length)} sequences the explorer found, as stories${
+      `Run on the real model: ${count(report.runs.length - report.walked)} sequences the explorer found${
+        report.walked > 0 ? ` and ${count(report.walked)} walks of commands picked at random` : ""
+      }, as stories${
         report.unrun > 0
-          ? ` (${count(report.unrun)} more need an event delivered twice, which a story does not do)`
+          ? ` (${count(report.unrun)} more need an event delivered twice, a step run twice or a schedule that runs late, which a story does not do)`
           : ""
       }`,
       failed.length === 0

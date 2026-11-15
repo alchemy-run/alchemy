@@ -34,7 +34,7 @@ const bank = (depth: number) =>
     source: new URL("../src/Bank.model.ts", import.meta.url),
     apis: [CustomerApi, SupportApi],
     depth,
-    faults: { redeliver: false, reorder: false },
+    faults: { redeliver: false, reorder: false, rerun: false },
   });
 
 it.effect(
@@ -80,6 +80,7 @@ it.effect(
       expect(report.rules.map((rule) => [rule.name, rule.broken])).toEqual([
         ["TransfersLoseNoMoney", undefined],
         ["NoTransferLeftPending", undefined],
+        ["LedgerIsGivenEveryDeposit", undefined],
       ]);
       expect(report.failures).toEqual([]);
       expect(report.unsettled).toBe(0);
@@ -120,7 +121,7 @@ it.effect(
       expect(report.disagreements).toEqual([]);
       expect(report.unread).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
-  120_000,
+  300_000,
 );
 
 it.effect(
@@ -132,7 +133,7 @@ it.effect(
         apis: [CustomerApi],
         instances: 1,
         depth: 3,
-        faults: { redeliver: false, reorder: false },
+        faults: { redeliver: false, reorder: false, rerun: false },
       };
       const report = yield* Explore.report(Careless, options);
       const broken = (name: string) => report.rules.find((rule) => rule.name === name)?.broken;
