@@ -4,13 +4,15 @@
  * its own, unique to the run, so a retried or repeated run starts fresh.
  */
 import { expect } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import { ConformanceApi } from "./model.ts";
+import { ConformanceApi, SECRET } from "./model.ts";
 
 type TestFn = (
   name: string,
@@ -49,6 +51,39 @@ export const waitForReady = (url: string) =>
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 60 }),
     Effect.ignore,
   );
+
+/**
+ * The first frame a live read's WebSocket receives, opened by hand at an
+ * Api's URL: what any caller sees, cursor included, without the client.
+ */
+export const liveFrame = (
+  api: string,
+  read: { readonly tag: string; readonly key: string; readonly cursor?: number },
+) =>
+  Effect.gen(function* () {
+    const request = {
+      id: 1,
+      tag: read.tag,
+      payload: { key: read.key },
+      ...(read.cursor === undefined ? {} : { cursor: read.cursor }),
+    };
+    const socket = yield* Socket.makeWebSocket(
+      `${api.replace(/^http/, "ws")}?read=${encodeURIComponent(JSON.stringify(request))}`,
+    );
+    const pull = yield* Socket.readerString(socket);
+    for (;;) {
+      const [text] = yield* pull;
+      if (text !== undefined) return JSON.parse(text) as Record<string, unknown>;
+    }
+  }).pipe(
+    Effect.scoped,
+    // A read that stays open says nothing: the case expects a frame.
+    Effect.timeout("10 seconds"),
+    Effect.provide(Socket.layerWebSocketConstructorGlobal),
+  );
+
+/** How long a refused read may take: well under a read's wait for `atLeast`. */
+const AT_ONCE = "5 seconds";
 
 export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOptions) => {
   const options = { timeout: 120_000, tags: [kind] };
@@ -95,6 +130,75 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const totals = [...(yield* Fiber.join(watched))];
       expect(totals.at(-1)).toBe(5);
       expect(totals).toEqual([...totals].sort((a, b) => a - b));
+    }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
+    options,
+  );
+
+  test(
+    "a refused read looks the same for a key with history and one without",
+    Effect.gen(function* () {
+      const has = fresh("hidden");
+      const none = fresh("never");
+      yield* call(`/increment/${has}?by=1`);
+      yield* call(`/hidden/${has}?version=1`);
+      const base = yield* url;
+      const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
+      for (const key of [has, none]) {
+        // A version neither key has reached: the read is refused before it waits.
+        const atLeast = { stream: `Counter/${key}`, version: 5 };
+        const refusals = yield* Effect.all([
+          api.HiddenTotal.get(key, { atLeast }).pipe(Effect.flip),
+          api.HiddenTotal.snapshot(key, { atLeast }).pipe(Effect.flip),
+          api.HiddenTotal.list(key, { atLeast }).pipe(Effect.flip),
+          api.HiddenTotal.events(key).pipe(Stream.runHead, Effect.flip),
+          api.HiddenTotal.events(key, { after: 5 }).pipe(Stream.runHead, Effect.flip),
+          api.HiddenTotal.watch(key).pipe(Stream.runHead, Effect.flip),
+        ]).pipe(Effect.timeout(AT_ONCE));
+        expect(refusals.map((refusal) => refusal._tag)).toEqual(Array(6).fill("Hidden"));
+      }
+    }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
+    options,
+  );
+
+  test(
+    "a refused live read carries nothing of the key's state",
+    Effect.gen(function* () {
+      const has = fresh("hidden");
+      const none = fresh("never");
+      for (const by of [1, 2]) yield* call(`/increment/${has}?by=${by}`);
+      yield* call(`/hidden/${has}?version=2`);
+      const api = `${yield* url}/api`;
+      for (const read of [
+        { tag: "HiddenTotal.watch" },
+        // A resume cursor is no shortcut past `validate`.
+        { tag: "HiddenTotal.watch", cursor: 0 },
+        { tag: "HiddenTotal.events" },
+        { tag: "HiddenTotal.events", cursor: 5 },
+      ]) {
+        const [withHistory, withNone] = yield* Effect.all([
+          liveFrame(api, { ...read, key: has }),
+          liveFrame(api, { ...read, key: none }),
+        ]);
+        expect(withHistory._tag).toBe("Exit");
+        // The same refusal, and the cursor the caller sent: never the key's.
+        expect(withHistory).toEqual(withNone);
+      }
+    }),
+    options,
+  );
+
+  test(
+    "a defect reaches the client as a generic error",
+    Effect.gen(function* () {
+      const base = yield* url;
+      const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
+      const exit = yield* api.Explode(fresh("explode")).pipe(Effect.exit);
+      if (!Exit.isFailure(exit)) return yield* Effect.die("Explode committed");
+      expect(Cause.hasDies(exit.cause)).toBe(true);
+      expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
+        "Internal server error",
+      );
+      expect(Cause.pretty(exit.cause)).not.toContain(SECRET);
     }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
     options,
   );
@@ -267,6 +371,19 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
         (view) => view.increments >= 3,
       );
       expect(total).toEqual({ total: 6, increments: 3 });
+    }),
+    options,
+  );
+
+  test(
+    "caughtUp waits for a projection fed by a view",
+    Effect.gen(function* () {
+      const id = fresh("record");
+      // The route reads the projection's stream right after caughtUp: each
+      // total is there only if caughtUp waited for the view, then for the
+      // projection, which takes a second over each batch.
+      expect(yield* call(`/record/${id}?by=2`)).toEqual([2]);
+      expect(yield* call(`/record/${id}?by=3`)).toEqual([2, 5]);
     }),
     options,
   );

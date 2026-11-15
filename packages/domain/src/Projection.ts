@@ -112,7 +112,9 @@ export interface Progress {
   readonly history: Effect.Effect<View.History>;
   /**
    * Wait until the projection has handled every event of a command that it
-   * consumes, so a read of your store sees that write. Without `events` (a
+   * consumes, so a read of your store sees that write. For a projection that
+   * reads a view, those are what the view emitted for the command: it waits
+   * for the view to apply the command first. Without `events` (a
    * client's receipt carries only `stream` and `version`), the command's
    * events are read from its aggregate.
    */

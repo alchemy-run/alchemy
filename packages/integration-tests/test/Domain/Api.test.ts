@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -10,11 +11,15 @@ import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiError from "effect/http-api/HttpApiError";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as OpenApi from "effect/http-api/OpenApi";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
+import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
@@ -426,6 +431,87 @@ describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
         ),
       ),
     ),
+  );
+});
+
+// ---------------------------------------------------------------- defects
+
+/** What a session adapter's defect says: a client must never receive it. */
+const SESSION_SECRET = "secret: session store at 10.0.0.7 refused SELECT";
+/** A session middleware whose adapter dies. */
+const CrashingSession = Layer.succeed(AuthorSession, () => Effect.die(new Error(SESSION_SECRET)));
+const CrashingWorld = Layer.mergeAll(Notes.layer(NoteViewLive), CrashingSession).pipe(
+  Layer.provideMerge(InMemory),
+);
+
+/** The Api served over HTTP (RPC and live reads) on a real port, with a client for each protocol. */
+const Served = Layer.unwrap(Effect.map(NotesApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+  Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: "200 millis" })),
+  Layer.provideMerge(CrashingWorld),
+);
+const clientOver = (protocol: "http" | "webSocket") =>
+  Effect.gen(function* () {
+    const server = yield* HttpServer.HttpServer;
+    const port = "port" in server.address ? server.address.port : 0;
+    const url = `http://127.0.0.1:${port}`;
+    return yield* NotesApi.client.pipe(
+      Effect.provide(
+        (protocol === "http" ? Domain.protocolHttp(url) : Domain.protocolWebSocket(url)).pipe(
+          Layer.provide(
+            Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal),
+          ),
+        ),
+      ),
+    );
+  });
+
+/** A client's view of a call that died: one generic defect, and nothing of the cause. */
+const expectGenericDefect = (exit: Exit.Exit<unknown, unknown>) => {
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (!Exit.isFailure(exit)) return;
+  expect(Cause.hasDies(exit.cause)).toBe(true);
+  expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
+    "Internal server error",
+  );
+  expect(Cause.pretty(exit.cause)).not.toContain(SESSION_SECRET);
+};
+
+describe("Domain Api defects", { tags: ["unit", "local"] }, () => {
+  it.live("a middleware's defect reaches an in-process client as a generic error", () =>
+    Effect.gen(function* () {
+      const notes = yield* NotesApi.clientInProcess;
+      expectGenericDefect(yield* notes.Write("d-1", { text: "hi" }).pipe(Effect.exit));
+      expectGenericDefect(yield* notes.NoteView.get("d-1").pipe(Effect.exit));
+    }).pipe(Effect.scoped, Effect.provide(CrashingWorld)),
+  );
+
+  it.live("a middleware's defect reaches a client over HTTP as a generic error", () =>
+    Effect.gen(function* () {
+      const notes = yield* clientOver("http");
+      expectGenericDefect(yield* notes.Write("d-2", { text: "hi" }).pipe(Effect.exit));
+      expectGenericDefect(yield* notes.NoteView.get("d-2").pipe(Effect.exit));
+      expectGenericDefect(yield* notes.NoteView.events("d-2").pipe(Stream.runHead, Effect.exit));
+    }).pipe(Effect.scoped, Effect.provide(Served)),
+  );
+
+  it.live("a middleware's defect ends a live read over a WebSocket with a generic error", () =>
+    Effect.gen(function* () {
+      const notes = yield* clientOver("webSocket");
+      expectGenericDefect(
+        yield* notes.NoteView.watch("d-3").pipe(
+          Stream.runHead,
+          Effect.timeout("5 seconds"),
+          Effect.exit,
+        ),
+      );
+      expectGenericDefect(
+        yield* notes.NoteView.events("d-3").pipe(
+          Stream.runHead,
+          Effect.timeout("5 seconds"),
+          Effect.exit,
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(Served)),
   );
 });
 

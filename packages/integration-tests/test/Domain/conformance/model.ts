@@ -1,10 +1,11 @@
 /**
  * The model every Domain platform runs for the conformance suite: an
- * aggregate that rejects, a view, a policy that starts a saga, a saga that
- * writes to another aggregate, a policy that schedules and cancels a
- * command, and a decision that commits across two instances. Between them
- * the platform hosts every kind of object, runs its workflow engine and its
- * durable timers, and commits atomically across instances.
+ * aggregate that rejects, a view, a projection fed by that view, a policy
+ * that starts a saga, a saga that writes to another aggregate, a policy that
+ * schedules and cancels a command, and a decision that commits across two
+ * instances, plus a view that refuses every reader and a command that dies.
+ * Between them the platform hosts every kind of object, runs its workflow
+ * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
@@ -35,15 +36,25 @@ export class Give extends Domain.Command("Give", {
   reply: { total: Schema.Int },
 }) {}
 
+/** A command whose handler dies, with internals in the defect a client must never see. */
+export class Explode extends Domain.Command("Explode", {
+  target: Schema.String,
+  events: [Incremented],
+}) {}
+
+/** What the defect {@link Explode} dies with says: a client must never receive it. */
+export const SECRET = "secret: SELECT * FROM accounts";
+
 export class Counter extends Domain.Aggregate("Counter", {
   id: Schema.String,
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
-  commands: [Increment],
+  commands: [Increment, Explode],
   events: [Taken, Received],
   decide: {
     Increment: (_, command) =>
       command.by > 10 ? new TooBig({ max: 10 }) : [new Incremented({ by: command.by })],
+    Explode: () => Effect.die(new Error(SECRET)),
   },
   evolve: {
     Incremented: (state, event) => ({ total: state.total + event.by }),
@@ -100,6 +111,59 @@ export class CounterTotal extends Domain.View("CounterTotal", {
     Received: (view, event) => ({ ...view, total: view.total + event.by }),
   },
 }) {}
+
+export class Hidden extends Domain.Rejection("Hidden") {}
+
+/** A counter's total no caller may read: `validate` refuses everyone. */
+export class HiddenTotal extends Domain.View("HiddenTotal", {
+  from: [Counter],
+  key: Counter,
+  rejects: [Hidden],
+  state: Schema.Struct({ total: Schema.Int }),
+  initial: { total: 0 },
+  evolve: {
+    Incremented: (view, event) => ({ total: view.total + event.by }),
+  },
+}) {}
+
+const HiddenTotalLive = HiddenTotal.toLayer(
+  Effect.succeed(
+    Effect.fn(function* () {
+      return yield* new Hidden();
+    }),
+  ),
+);
+
+export class TotalRecorded extends Domain.Event("TotalRecorded", { total: Schema.Int }) {}
+
+/** Each counter's totals, as its projection recorded them. */
+export class Recorded extends Domain.Stream("Recorded", {
+  key: Counter,
+  entries: [TotalRecorded],
+}) {}
+
+/** Records each counter's total from the view, not the aggregate. */
+export class TotalWriter extends Domain.Projection("TotalWriter", {
+  from: [CounterTotal],
+  key: Counter,
+  on: [Incremented],
+  writes: [Recorded],
+}) {}
+
+/** How long the projection takes over each batch, as a write to a real store does. */
+export const RECORD_DELAY = "1 second";
+
+const TotalWriterLive = TotalWriter.toLayer(
+  Effect.gen(function* () {
+    const recorded = yield* Recorded;
+    return Effect.fn(function* (batch) {
+      yield* Effect.sleep(RECORD_DELAY);
+      for (const input of batch) {
+        yield* recorded.append(input, new TotalRecorded({ total: input.state?.total ?? 0 }));
+      }
+    });
+  }),
+);
 
 /** Mirrors a counter's first increment onto its Echo; one run per counter. */
 export class MirrorFirst extends Domain.Saga("MirrorFirst", {
@@ -201,7 +265,9 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold],
   decisions: [Giving],
-  views: [CounterTotal],
+  views: [CounterTotal, HiddenTotal],
+  projections: [TotalWriter],
+  streams: [Recorded],
   policies: [StartMirror, HoldDeadline],
   sagas: [MirrorFirst],
 }) {}
@@ -209,11 +275,17 @@ export class Conformance extends Domain.Model("Conformance", {
 /** The model's Api: its counter and view, served at the front's `/api`. */
 export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
-  commands: ["Increment", "Give"],
-  views: ["CounterTotal"],
+  commands: ["Increment", "Explode", "Give"],
+  views: ["CounterTotal", "HiddenTotal"],
 }) {}
 
 /** The model's Layer, given the platform it runs on. */
 export const ConformanceLive = Conformance.layer(
-  Layer.mergeAll(StartMirrorLive, MirrorFirstLive, HoldDeadlineLive),
+  Layer.mergeAll(
+    StartMirrorLive,
+    MirrorFirstLive,
+    HoldDeadlineLive,
+    HiddenTotalLive,
+    TotalWriterLive,
+  ),
 );

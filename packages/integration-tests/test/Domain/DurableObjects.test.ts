@@ -137,6 +137,47 @@ const sendOne = Effect.gen(function* () {
   return { ledger, receipt };
 });
 
+// ---------------------------------------------------------------- a projection fed by a view
+
+class Milestone extends Domain.Event("Milestone", { n: Schema.Number }) {}
+
+/** Emits only every tenth booking: most commands become nothing here. */
+class Milestones extends Domain.View("Milestones", {
+  from: [Ledger],
+  key: Ledger,
+  events: [Milestone],
+  emit: { Booked: (e) => (e.n % 10 === 0 ? new Milestone({ n: e.n }) : undefined) },
+}) {}
+
+class MilestoneLog extends Domain.Stream("MilestoneLog", { key: Ledger, entries: [Milestone] }) {}
+class MilestoneWriter extends Domain.Projection("MilestoneWriter", {
+  from: [Milestones],
+  key: Ledger,
+  on: [Milestone],
+  writes: [MilestoneLog],
+}) {}
+const MilestoneWriterLive = MilestoneWriter.toLayer(
+  Effect.gen(function* () {
+    const log = yield* MilestoneLog;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) yield* log.append(input, input.event);
+    });
+  }),
+);
+
+class Milestoned extends Domain.Model("Milestoned", {
+  aggregates: [Ledger],
+  views: [Milestones],
+  projections: [MilestoneWriter],
+  streams: [MilestoneLog],
+}) {}
+
+const milestonesOnSimHost = (stats: Stats, disk: Disk) =>
+  Milestoned.layer(MilestoneWriterLive).pipe(
+    Layer.provideMerge(DurableObjects.makePlatform(simHost(stats, { disk }).host)),
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
+  );
+
 /** Rows `read` takes from storage. */
 const rowsReadBy = <A, E, R>(stats: Stats, read: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -345,6 +386,67 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
     },
     { timeout: 90_000 },
   );
+  it.live(
+    "caughtUp through a view reads the command's entries, not the view's history",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        const log = yield* MilestoneLog;
+        const ledger = Ledger.ref("main");
+        const book = (count: number) => ledgers.send(ledger, new BookMany({ count }));
+        const logged = Effect.map(log.list(ledger), (page) => page.entries.map((e) => e.event.n));
+        const milestones = yield* Milestones;
+        /** Wait for the view to apply a command. */
+        const applied = (receipt: { readonly stream: string; readonly version: number }) =>
+          milestones.get(ledger, {
+            atLeast: { stream: receipt.stream, version: receipt.version },
+          });
+        /** Drop each view key's record of what commands became, as snapshots before it had. */
+        const stripRecords = Effect.sync(() => {
+          for (const { data } of disk.objects.values()) {
+            const snapshot = data.get("snapshot") as { emitted?: unknown } | undefined;
+            if (snapshot?.emitted === undefined) continue;
+            const { emitted: _, ...older } = snapshot;
+            data.set("snapshot", older);
+          }
+        });
+        // A hundred milestones in the view's history.
+        for (let i = 0; i < 100; i++) yield* MilestoneWriter.caughtUp(yield* book(10));
+        expect((yield* logged).length).toBe(100);
+
+        // Three bookings and no milestone. Once the view has applied them, its
+        // key's snapshot says they emitted nothing: no entry is read.
+        const quiet = yield* book(3);
+        yield* applied(quiet);
+        const recorded = yield* rowsReadBy(stats, MilestoneWriter.caughtUp(quiet));
+        expect(recorded.rows).toBeLessThan(5);
+        // Without the record, as written before it existed, the view's history is searched.
+        yield* stripRecords;
+        const searched = yield* rowsReadBy(stats, MilestoneWriter.caughtUp(quiet));
+        expect(searched.rows).toBeGreaterThanOrEqual(100);
+
+        // A later command reached the view first: found by the command's id.
+        const earlier = yield* book(7);
+        const later = yield* book(10);
+        yield* applied(later);
+        yield* MilestoneWriter.caughtUp(earlier);
+        expect(yield* logged).toContain(1010);
+        yield* MilestoneWriter.caughtUp(later);
+        expect((yield* logged).slice(-2)).toEqual([1010, 1020]);
+
+        // A snapshot written before the record existed: found by the command's id.
+        const legacy = yield* book(10);
+        yield* applied(legacy);
+        yield* stripRecords;
+        yield* MilestoneWriter.caughtUp(legacy);
+        expect((yield* logged).at(-1)).toBe(1030);
+      }).pipe(Effect.scoped, Effect.provide(milestonesOnSimHost(stats, disk)));
+    },
+    { timeout: 60_000 },
+  );
+
   it.live(
     "a command commits on a host with an input gate, as Rivet runs one",
     () => {
