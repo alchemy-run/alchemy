@@ -17,7 +17,7 @@ import {
  * @module
  */
 import type { HttpEffect } from "alchemy/Http";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -539,16 +539,16 @@ const backfillRuntime = (
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const context = yield* captureContext<ObjectState | RuntimeContext>();
-    // What the caller's fiber has wins: inside a transaction, a host can keep it
-    // there (Rivet's storage writes through the transaction it finds), and the
-    // backfill's writes must commit with it rather than wait for it.
+    // Only these two services: a whole captured context would also carry
+    // construction's references, such as the call an input gate (Rivet's)
+    // tells calls apart by. Storage a commit's transaction reaches through a
+    // job would then wait on the gate that transaction holds.
+    const context = Context.make(ObjectState, state).pipe(
+      Context.add(RuntimeContext, yield* RuntimeContext),
+    );
     const provide = <A, E>(
       effect: Effect.Effect<A, E, ObjectState | RuntimeContext>,
-    ): Effect.Effect<A, E> =>
-      effect.pipe(
-        Effect.updateContext((current: Context.Context<never>) => Context.merge(context, current)),
-      ) as Effect.Effect<A, E>;
+    ): Effect.Effect<A, E> => Effect.provide(effect, context);
     const storage: Backfill.Storage = {
       get: <A>(key: string) => provide(state.storage.get<A>(key)),
       put: (entries) =>
@@ -1791,6 +1791,12 @@ export const makePlatform = <R>(
               ref.source,
               ref.generation ?? viewGenerations.get(ref.source) ?? 0,
             );
+            // A view this code hosts, or one named by its generation, is never an
+            // aggregate. Ask for its class first: a host whose `lookup` reaches any
+            // class name (one class multiplexing them all) can't tell them apart.
+            if (ref.generation !== undefined || viewGenerations.has(ref.source)) {
+              return sources.get(view) ?? bound(view);
+            }
             return (
               sources.get(`${ref.source}Aggregate`) ??
               bound(`${ref.source}Aggregate`) ??

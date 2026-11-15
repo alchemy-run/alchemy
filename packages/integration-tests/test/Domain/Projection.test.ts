@@ -1,9 +1,11 @@
 import * as Domain from "@alchemy.run/domain";
+import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -263,6 +265,84 @@ const handlers = (options?: Domain.Projection.Options) =>
     LatestBalanceLive,
   );
 
+// ---------------------------------------------------------------- projections fed by views
+
+/** A wallet's balance, from its deposits. */
+class WalletBalance extends Domain.View("WalletBalance", {
+  from: [Wallet],
+  key: Wallet,
+  state: Schema.Number,
+  initial: 0,
+  evolve: { Deposited: (_, event) => event.balance },
+}) {}
+
+/** A view over a view: how many deposits reached each wallet's balance. */
+class WalletDeposits extends Domain.View("WalletDeposits", {
+  from: [WalletBalance],
+  key: Wallet,
+  state: Schema.Number,
+  initial: 0,
+  evolve: { Deposited: (count) => count + 1 },
+}) {}
+
+class BalanceRows extends Domain.Projection("BalanceRows", {
+  from: [WalletBalance],
+  key: Wallet,
+  on: [Deposited],
+}) {}
+
+class DepositRows extends Domain.Projection("DepositRows", {
+  from: [WalletDeposits],
+  key: Wallet,
+  on: [Deposited],
+}) {}
+
+/** The last balance and deposit count each projection stored, per wallet. */
+class Tables extends Context.Service<
+  Tables,
+  {
+    readonly set: (table: string, wallet: string, value: number) => Effect.Effect<void>;
+    readonly get: (table: string, wallet: string) => Effect.Effect<number | undefined>;
+  }
+>()("Test/Tables") {
+  static readonly memory = Layer.effect(
+    Tables,
+    Effect.map(Ref.make(new Map<string, number>()), (table) => ({
+      set: (name, wallet, value) =>
+        Ref.update(table, (map) => new Map(map).set(`${name}/${wallet}`, value)),
+      get: (name, wallet) => Effect.map(Ref.get(table), (map) => map.get(`${name}/${wallet}`)),
+    })),
+  );
+}
+
+/** Each handler takes a moment, as a write to a real store does. */
+const BalanceRowsLive = BalanceRows.toLayer(
+  Effect.gen(function* () {
+    const tables = yield* Tables;
+    return Effect.fn(function* (batch) {
+      yield* Effect.sleep("25 millis");
+      for (const input of batch) yield* tables.set("balance", input.key.id, input.event.balance);
+    });
+  }),
+);
+const DepositRowsLive = DepositRows.toLayer(
+  Effect.gen(function* () {
+    const tables = yield* Tables;
+    return Effect.fn(function* (batch) {
+      yield* Effect.sleep("25 millis");
+      for (const input of batch) yield* tables.set("deposits", input.key.id, input.state ?? 0);
+    });
+  }),
+);
+
+class Balances extends Domain.Model("Balances", {
+  aggregates: [Wallet],
+  views: [WalletBalance, WalletDeposits],
+  projections: [BalanceRows, DepositRows],
+}) {}
+
+const balances = Balances.layer(Layer.mergeAll(BalanceRowsLive, DepositRowsLive));
+
 const story = Story.make(Wallets, { layer: handlers() });
 const sam = Wallet.ref("sam-1");
 const kim = Wallet.ref("kim-1");
@@ -395,6 +475,61 @@ describe("Domain Projection", { tags: ["unit", "local"] }, () => {
       ),
     ),
   );
+
+  it.live("caughtUp waits for a projection fed by a view, and by a view over a view", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const tables = yield* Tables;
+      const first = yield* wallets.send(sam, new Deposit({ amount: 23 }));
+      yield* BalanceRows.caughtUp(first);
+      expect(yield* tables.get("balance", "sam-1")).toBe(23);
+      yield* DepositRows.caughtUp(first);
+      expect(yield* tables.get("deposits", "sam-1")).toBe(1);
+      // A client's receipt carries no events: they are read from the aggregate.
+      const second = yield* wallets.send(sam, new Deposit({ amount: 7 }));
+      yield* DepositRows.caughtUp({ stream: second.stream, version: second.version });
+      expect(yield* tables.get("deposits", "sam-1")).toBe(2);
+      yield* BalanceRows.caughtUp({ stream: second.stream, version: second.version });
+      expect(yield* tables.get("balance", "sam-1")).toBe(30);
+    }).pipe(
+      Effect.provide(balances.pipe(Layer.provideMerge(Layer.mergeAll(InMemory, Tables.memory)))),
+    ),
+  );
+
+  it.live("caughtUp on the story platform waits until the view's delivery has run", () => {
+    const hosted = InMemoryPlatform.make({ manual: true });
+    // Deliver everything queued, and wait for the projection runs it forks.
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const tables = yield* Tables;
+      const receipt = yield* wallets.send(sam, new Deposit({ amount: 23 }));
+      // Nothing is delivered until the platform drains: the view hasn't applied it.
+      const early = yield* BalanceRows.caughtUp(receipt, { timeout: "200 millis" }).pipe(
+        Effect.flip,
+      );
+      expect(early).toMatchObject({ _tag: "ConsistencyTimeout", view: "WalletBalance" });
+      expect(yield* tables.get("balance", "sam-1")).toBeUndefined();
+      const waiting = yield* DepositRows.caughtUp(receipt, { timeout: "5 seconds" }).pipe(
+        Effect.forkChild,
+      );
+      yield* settle;
+      yield* Fiber.join(waiting);
+      expect(yield* tables.get("deposits", "sam-1")).toBe(1);
+      yield* BalanceRows.caughtUp(receipt, { timeout: "5 seconds" });
+      expect(yield* tables.get("balance", "sam-1")).toBe(23);
+    }).pipe(
+      Effect.provide(
+        balances.pipe(Layer.provideMerge(Layer.mergeAll(hosted.layer, Tables.memory))),
+      ),
+    );
+  });
 
   it("refuses a second writer for one stream", () => {
     class AlsoCards extends Domain.Projection("AlsoCards", {
