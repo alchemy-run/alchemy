@@ -1,7 +1,7 @@
 # @distilled.cloud/vendor-workers-shared
 
 Private workspace package vendoring raw TypeScript source from
-[`@cloudflare/workers-shared`](https://github.com/cloudflare/workers-sdk/tree/3b1b40832ac323de709001d9cc3823517b988985/packages/workers-shared).
+[`@cloudflare/workers-shared`](https://github.com/cloudflare/workers-sdk/tree/4bca70b301302b018ca28c53af0813de430bedd6/packages/workers-shared).
 This package does not bundle or publish; consumer packages in this monorepo
 import the `.ts` files directly and apply their own bundling.
 
@@ -28,7 +28,7 @@ project references:
 ## Provenance
 
 Sourced from [`cloudflare/workers-sdk`](https://github.com/cloudflare/workers-sdk)
-at commit [`3b1b40832ac323de709001d9cc3823517b988985`](https://github.com/cloudflare/workers-sdk/commit/3b1b40832ac323de709001d9cc3823517b988985) (path:
+at commit [`4bca70b301302b018ca28c53af0813de430bedd6`](https://github.com/cloudflare/workers-sdk/commit/4bca70b301302b018ca28c53af0813de430bedd6) (path:
 `packages/workers-shared`). Upstream license: MIT OR Apache-2.0.
 
 | Upstream path                                                                                         | Vendored path                                      |

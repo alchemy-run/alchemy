@@ -87,7 +87,7 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
    * @default "platform-proxy"
    */
   readonly name?: string;
-  /** @default "2026-11-13" */
+  /** @default "2026-11-15" */
   readonly compatibilityDate?: string;
   readonly compatibilityFlags?: Array<string>;
   /**

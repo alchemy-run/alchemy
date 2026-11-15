@@ -30,7 +30,7 @@ export interface EdgeSessionOptions {
   readonly files: ReadonlyArray<File>;
   /** Remote bindings attached to the preview worker. */
   readonly bindings: ReadonlyArray<EdgeBinding>;
-  /** @default "2026-11-13" */
+  /** @default "2026-11-15" */
   readonly compatibilityDate?: string;
   /**
    * Serve the preview on a custom domain or route host in a zone instead of

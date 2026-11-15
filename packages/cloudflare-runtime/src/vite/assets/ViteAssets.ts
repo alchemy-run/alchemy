@@ -108,7 +108,7 @@ export const ViteAssetsLive = (
                 name: "assets:vite",
                 worker: {
                   compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-                  // Node.js compatibility is supplied by the 2026-11-13
+                  // Node.js compatibility is supplied by the 2026-11-15
                   // internal compatibility date.
                   bindings: [
                     {

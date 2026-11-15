@@ -1422,9 +1422,10 @@ export const Worker_Module_Which = {
   OBSOLETE_PYTHON_REQUIREMENT: 8,
   /**
    * An ES module whose source is bundled with workerd, by name: `/workerd/kv.js`, the KV
-   * Worker, `/workerd/cron.js`, cron triggers, or `/workerd/queues.js`, the Queues Worker
-   * (see each one's header for the config it takes). Unlike built-in modules such as
-   * `node:` ones, user code cannot import it; it is a Worker's source. Experimental.
+   * Worker, `/workerd/cron.js`, cron triggers, `/workerd/queues.js`, the Queues Worker, or
+   * `/workerd/workflows.js`, a Workflows engine (see each one's header for the config it
+   * takes). Unlike built-in modules such as `node:` ones, user code cannot import it; it is a
+   * Worker's source. Experimental.
    *
    */
   BUNDLED: 9,
@@ -1626,9 +1627,10 @@ export class Worker_Module extends $.Struct {
   }
   /**
    * An ES module whose source is bundled with workerd, by name: `/workerd/kv.js`, the KV
-   * Worker, `/workerd/cron.js`, cron triggers, or `/workerd/queues.js`, the Queues Worker
-   * (see each one's header for the config it takes). Unlike built-in modules such as
-   * `node:` ones, user code cannot import it; it is a Worker's source. Experimental.
+   * Worker, `/workerd/cron.js`, cron triggers, `/workerd/queues.js`, the Queues Worker, or
+   * `/workerd/workflows.js`, a Workflows engine (see each one's header for the config it
+   * takes). Unlike built-in modules such as `node:` ones, user code cannot import it; it is a
+   * Worker's source. Experimental.
    *
    */
   get bundled(): string {
