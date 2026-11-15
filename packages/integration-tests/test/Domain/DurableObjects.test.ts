@@ -227,12 +227,13 @@ const simHost = (
       );
     }
   });
-  const evict = Effect.gen(function* () {
+  /** Stop every object on this host: its code no longer runs them, and their storage and alarms stay. */
+  const stop = Effect.gen(function* () {
     for (const scope of scopes.values()) yield* Scope.close(scope, Exit.void);
     scopes.clear();
     instances.clear();
-    yield* wake;
   });
+  const evict = Effect.andThen(stop, wake);
   const host: DurableObjects.Host = {
     declare: (model, cls, impl) =>
       Effect.sync(() => {
@@ -243,7 +244,7 @@ const simHost = (
     lookup: (model, cls) => namespace(DurableObjects.className(model.modelName, cls)),
     claimKey: Effect.sync(() => ({})),
   };
-  return { host, evict, wake, disk };
+  return { host, evict, stop, wake, disk };
 };
 
 // ---------------------------------------------------------------- a ledger with a view and a stream
@@ -581,7 +582,9 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         yield* eventually(() => before.state.attempts > 0);
         yield* Effect.sleep("200 millis");
         expect(before.listed).toEqual([]);
-        // The projection is deployed: its run lists a directory the instance isn't in.
+        // The projection is deployed: the objects move to its code (one runs one code at a
+        // time), and its run lists a directory the instance isn't in.
+        yield* first.stop;
         yield* Effect.gen(function* () {
           yield* second.wake;
           const lines = yield* Lines;
