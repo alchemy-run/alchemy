@@ -65,9 +65,11 @@ const codecsOf = (rpc: Rpc.Any): Codecs => {
   return codecs;
 };
 
-/** Encode a read's refusal (a middleware error) as the `Exit` that ends it. */
-export const refuse = (rpc: Rpc.Any, error: unknown): Effect.Effect<Json, Schema.SchemaError> =>
-  codecsOf(rpc).exit(Exit.fail(error));
+/** Encode a read's refusal (a middleware error, or a redacted defect) as the `Exit` that ends it. */
+export const refuse = (
+  rpc: Rpc.Any,
+  exit: Exit.Exit<void, unknown>,
+): Effect.Effect<Json, Schema.SchemaError> => codecsOf(rpc).exit(exit);
 
 type Validate = (request: Read.Request<unknown>, state: unknown) => Effect.Effect<void, unknown>;
 

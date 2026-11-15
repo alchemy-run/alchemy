@@ -32,6 +32,7 @@ import type { Annotations } from "./Annotations.ts";
 import * as Command from "./Command.ts";
 import { DefinitionError, NotInModel, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
+import { internalError, redactCause } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
@@ -474,39 +475,73 @@ const rpcsOf = (entry: Servable): ReadonlyArray<Rpc.Any> =>
 
 // ---------------------------------------------------------------- handlers
 
-/** The message of the one defect a client receives, whatever went wrong. */
-const INTERNAL_ERROR = "Internal server error";
-
 /**
  * Only an entry's declared errors are public. Anything else (a defect, an
  * infrastructure error, an undeclared rejection) is logged here, with its
- * full cause, and reaches the client as one generic defect: its text can
- * hold stacks, file paths and nested errors (an adapter's SQL error).
+ * full cause, and reaches the client as one generic defect.
  */
 const declaredOnly = (rpc: Rpc.Any) => {
   const props = rpc as Rpc.AnyWithProps;
   const isDeclared = Schema.is(props.errorSchema);
   const success = props.successSchema as Schema.Top & { readonly error?: Schema.Top };
   const isDeclaredInStream = success.error ? Schema.is(success.error) : isDeclared;
-  const redact =
-    (declared: (error: unknown) => boolean) =>
-    <E>(cause: Cause.Cause<E>): Effect.Effect<never, E> =>
-      cause.reasons.every(
-        (reason) =>
-          Cause.isInterruptReason(reason) || (Cause.isFailReason(reason) && declared(reason.error)),
-      )
-        ? Effect.failCause(cause)
-        : Effect.logError("Domain.Api: a request failed with an undeclared error", cause).pipe(
-            Effect.annotateLogs({ "domain.rpc": props._tag }),
-            Effect.andThen(Effect.die(new Error(INTERNAL_ERROR))),
-          );
-  const redactEffect = redact(isDeclared);
-  const redactStream = redact(isDeclaredInStream);
+  const redactEffect = redactCause(isDeclared, props._tag);
+  const redactStream = redactCause(isDeclaredInStream, props._tag);
   return {
     effect: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.catchCause(effect, redactEffect),
     stream: <A, E, R>(stream: Stream.Stream<A, E, R>) =>
       Stream.catchCause(stream, (cause) => cause.pipe(redactStream, Stream.fromEffect)),
   };
+};
+
+/** Whether an error is one a call may fail with: its own, its stream's, or its middleware's. */
+const declaredByCall = new WeakMap<Rpc.AnyWithProps, (error: unknown) => boolean>();
+const declaredBy = (rpc: Rpc.AnyWithProps) => {
+  const cached = declaredByCall.get(rpc);
+  if (cached) return cached;
+  const success = rpc.successSchema as Schema.Top & { readonly error?: Schema.Top };
+  const errors = [
+    rpc.errorSchema,
+    ...(success.error ? [success.error] : []),
+    ...[...rpc.middlewares].map((middleware) => middleware.error as Schema.Top),
+  ];
+  const declared = Schema.is(Schema.Union(errors));
+  declaredByCall.set(rpc, declared);
+  return declared;
+};
+
+type MiddlewareFn = (
+  effect: Effect.Effect<unknown, unknown>,
+  options: { readonly rpc: Rpc.AnyWithProps },
+) => Effect.Effect<unknown, unknown>;
+
+/**
+ * The group's middleware services in `context`, each wrapped so that what it
+ * fails or dies with reaches the client only as a declared error or one
+ * generic defect: a middleware's defect (an auth adapter's) is logged, never
+ * sent. Middleware runs outside each handler's own redaction.
+ */
+const redactMiddleware = (
+  group: RpcGroup.RpcGroup<Rpc.Any>,
+  context: Context.Context<never>,
+): Context.Context<never> => {
+  const services = new Set<Context.Key<any, any>>();
+  for (const rpc of group.requests.values()) {
+    for (const middleware of (rpc as Rpc.AnyWithProps).middlewares) services.add(middleware);
+  }
+  let redacted = Context.empty();
+  for (const key of services) {
+    const service = Context.getOption(context, key);
+    if (Option.isNone(service)) continue;
+    const run = service.value as MiddlewareFn;
+    const wrapped: MiddlewareFn = (effect, options) =>
+      Effect.catchCause(
+        run(effect, options),
+        redactCause(declaredBy(options.rpc), options.rpc._tag),
+      );
+    redacted = Context.add(redacted, key, wrapped);
+  }
+  return redacted;
 };
 
 /** The wire payload of a command: its target, an optional command id, and its input. */
@@ -932,8 +967,15 @@ const liveReads = (
     };
     const judged = yield* authorized.pipe(
       Effect.map((context): Subscription => ({ ...subscription, context })),
-      Effect.catch((error) =>
-        Watch.refuse(read.rpc, error).pipe(
+      // A refusal, or a defect (already logged and redacted by the middleware), ends the read.
+      Effect.catchCause((cause) =>
+        Watch.refuse(
+          read.rpc,
+          Option.match(Cause.findErrorOption(cause), {
+            onSome: (error) => Exit.fail(error),
+            onNone: () => Exit.die(internalError()),
+          }),
+        ).pipe(
           Effect.orDie,
           Effect.map((refused): Subscription => ({ ...subscription, refused })),
         ),
@@ -1084,11 +1126,13 @@ const makeProtocolInProcess = (
       });
       const handlers = yield* handlersOf(model, entries, unresolved);
       // The middleware services in the caller's scope run for every request.
+      const middleware = redactMiddleware(group, yield* captureContext());
       yield* RpcServer.make(group).pipe(
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(RpcServer.Protocol, server),
             group.toLayer(handlers as never) as Layer.Layer<never>,
+            Layer.succeedContext(middleware),
           ),
         ),
         Effect.forkScoped,
@@ -1132,7 +1176,7 @@ const build = (
   const serve = Effect.gen(function* () {
     const handlers = yield* handlersOf(model, entries, unresolved);
     // The middleware services (declared in the Api's requirements), for every request.
-    const middleware = yield* captureContext();
+    const middleware = redactMiddleware(group, yield* captureContext());
     const layer = Layer.mergeAll(
       group.toLayer(handlers as never),
       RpcSerialization.layerNdjson,
