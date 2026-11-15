@@ -2,7 +2,11 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isSelfUrl } from "./Worker.ts";
 import { isContainerDecl } from "./WorkerAsyncBindings.ts";
-import { isWorkerLoader } from "./WorkerLoader.ts";
+
+const isBindingMarker = (value: unknown): boolean =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  "~alchemy/Kind" in value;
 
 /**
  * Resolve `props.env` to the literal values a build inlines (vite's
@@ -27,11 +31,14 @@ export const resolveBuildEnv = (
       // `Worker.URL` (bare tag or called). The bare tag is Effect-shaped,
       // so check before `Effect.isEffect`.
       if (isSelfUrl(value)) return [key, selfUrl];
-      // A `WorkerLoader` and a `Cloudflare.Container` declaration are
-      // Effect-shaped bindings, not env values: yielding a Container would
-      // resolve the started-instance tag, which only exists inside a Durable
-      // Object (#997).
-      if (isWorkerLoader(value) || isContainerDecl(value)) return [key, undefined];
+      // Effect-shaped bindings are not env values. Their Effects only run
+      // while the Worker binds them: `S3Credentials` needs the Worker's
+      // `WorkerEnvironment`, and a Container would resolve the
+      // started-instance tag, which only exists inside a Durable Object
+      // (#997). Other Effect-shaped bindings (`WorkerLoader`,
+      // `S3Credentials`) carry the `~alchemy/Kind` marker, the same marker
+      // `isYieldableEffectLike` excludes.
+      if (isContainerDecl(value) || isBindingMarker(value)) return [key, undefined];
       if (Effect.isEffect(value)) {
         const resolved: unknown = yield* value as any as Effect.Effect<any>;
         return [
