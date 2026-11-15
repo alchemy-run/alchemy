@@ -191,7 +191,7 @@ test.provider.skipIf(!!process.env.FAST)(
           return yield* GCP.Compute.Instance("Vm", {
             instanceName: created.instanceName,
             zone: "us-central1-a",
-            machineType: "e2-micro",
+            machineType: "e2-small",
             labels: { env: "prod", role: "web" },
             tags: ["alchemy-prod"],
             metadata: { role: "prod" },
@@ -214,6 +214,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       expect(updated.instanceName).toEqual(created.instanceName);
       expect(updated.instanceId).toEqual(created.instanceId);
+      expect(updated.machineType).toEqual("e2-small");
       expect(updated.labels).toMatchObject({ env: "prod", role: "web" });
       expect(updated.tags).toEqual(["alchemy-prod"]);
       expect(updated.metadata).toMatchObject({ role: "prod" });
@@ -226,6 +227,8 @@ test.provider.skipIf(!!process.env.FAST)(
         instance: created.instanceName,
       });
       expect(refetched.id).toEqual(created.instanceId);
+      expect(refetched.machineType).toMatch(/\/machineTypes\/e2-small$/);
+      expect(refetched.status).toEqual("RUNNING");
       expect(refetched.scheduling?.automaticRestart).toEqual(false);
       expect(refetched.description).toEqual("alchemy instance update");
 

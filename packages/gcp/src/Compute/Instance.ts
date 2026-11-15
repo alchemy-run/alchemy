@@ -52,8 +52,9 @@ export type InstanceProps = {
    */
   zone?: string;
   /**
-   * Machine type short name (`e2-micro`) or partial/full URL. Immutable —
-   * changing it replaces the instance.
+   * Machine type short name (`e2-micro`) or partial/full URL. Changing it
+   * stops a running instance, sets the new type and starts it again; a
+   * stopped instance stays stopped.
    * @default "e2-micro"
    */
   machineType?: string;
@@ -676,8 +677,8 @@ export const InstanceProvider = () =>
       }
       // A machine type change is applied in place by reconcile (stop, set the
       // type, start), so a deletion-protected VM and its attached disks survive.
-      // setServiceAccount and updateShieldedInstanceConfig are only permitted
-      // on a TERMINATED VM, and we never stop a user's VM, so these replace.
+      // setServiceAccount and updateShieldedInstanceConfig are also only
+      // permitted on a TERMINATED VM, but they still replace.
       // When the previous props never declared them, diff against the
       // observed VM instead so spelling out what already runs is a no-op.
       const serviceAccountChanged =
@@ -803,6 +804,7 @@ export const InstanceProvider = () =>
 
       const desiredType = lastSegment(news.machineType ?? DEFAULT_MACHINE_TYPE);
       if (lastSegment(current.machineType ?? DEFAULT_MACHINE_TYPE) !== desiredType) {
+        current = yield* waitUntilSettled(env.project, zone, instanceName);
         const running = current.status === "RUNNING";
         if (running)
           yield* applyZoneOp(
