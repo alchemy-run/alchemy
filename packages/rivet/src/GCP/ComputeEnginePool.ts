@@ -167,7 +167,7 @@ start() {
   fi
   # --init forwards SIGTERM to the node whatever its image runs as PID 1.
   docker run -d --name rivet-node --restart always --network host --init \\
-    --stop-timeout ${options.stopTimeout} --env-file ${APP_PATH}/env.list "\${SECRET_ARGS[@]}"${
+    --stop-timeout ${options.stopTimeout} --env-file ${APP_PATH}/env.list \${SECRET_ARGS[@]+"\${SECRET_ARGS[@]}"}${
       options.image
         ? ""
         : ` \\
