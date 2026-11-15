@@ -231,7 +231,7 @@ export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) 
 });
 ```
 
-`caughtUp` waits until the projection has handled every event of the command that it consumes directly from that aggregate. A client's receipt carries only `stream` and `version`; given that, `caughtUp` reads the command's events back from the aggregate. That's how a [query](/domain/query) waits for its caller's write: `atLeast: receipt`.
+`caughtUp` waits until the projection has handled every event of the command that it consumes. For a projection that reads a [view](/domain/view), that means the events the view emitted for the command: `caughtUp` waits for the view to apply the command, then for the projection to handle what the view emitted. A client's receipt carries only `stream` and `version`; given that, `caughtUp` reads the command's events back from the aggregate. That's how a [query](/domain/query) waits for its caller's write: `atLeast: receipt`.
 
 ## Serve it with a query
 

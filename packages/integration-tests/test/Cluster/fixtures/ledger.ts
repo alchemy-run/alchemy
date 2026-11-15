@@ -19,4 +19,14 @@ export class Ledgers extends Cluster.Entity<Ledgers>()("Ledger", [
   Rpc.make("Recall", { success: Schema.Int }),
   /** Keeps the instance running past its idle time. */
   Rpc.make("Pin"),
+  /** How many times this id's instance has been built by the process answering. */
+  Rpc.make("Builds", { success: Schema.Int }),
+  /** When the instance answering was built (epoch milliseconds). */
+  Rpc.make("BuiltAt", { success: Schema.Number }),
+  /** A persisted message as large as its `text`; answers with its length. */
+  Rpc.make("Note", {
+    payload: { txId: Schema.String, text: Schema.String },
+    primaryKey: ({ txId }) => txId,
+    success: Schema.Int,
+  }).annotate(ClusterSchema.Persisted, true),
 ]) {}

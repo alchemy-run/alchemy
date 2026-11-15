@@ -11,6 +11,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
@@ -22,12 +23,21 @@ class Deposit extends Domain.Command("Deposit", {
   input: { amount: Schema.Number },
   events: [Deposited],
 }) {}
+/** A command whose handler dies with internals (an adapter's SQL error) in its defect. */
+class Audit extends Domain.Command("Audit", {
+  target: Schema.String,
+  events: [Deposited],
+}) {}
+const SECRET = "secret: SELECT * FROM wallets";
 class Wallet extends Domain.Aggregate("Wallet", {
   id: Schema.String,
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
-  commands: [Deposit],
-  decide: { Deposit: (_, { amount }) => [new Deposited({ amount })] },
+  commands: [Deposit, Audit],
+  decide: {
+    Deposit: (_, { amount }) => [new Deposited({ amount })],
+    Audit: () => Effect.die(new Error(SECRET)),
+  },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 
@@ -112,7 +122,7 @@ class Bank extends Domain.Model("Bank", {
 
 class BankApi extends Domain.Api("BankApi", {
   model: Bank,
-  commands: ["Deposit", "Ship"],
+  commands: ["Deposit", "Ship", "Audit"],
   views: ["Bookings", "Deposits", "Shipments"],
 }) {}
 
@@ -129,6 +139,30 @@ const Wire = Domain.protocolHttp("").pipe(
 );
 
 describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
+  it.live("a defect reaches the client as a generic error, its cause only in the log", () => {
+    const logged: Array<string> = [];
+    const capture = Logger.make(({ cause }) => {
+      logged.push(Cause.pretty(cause));
+    });
+    return Effect.gen(function* () {
+      const bank = yield* BankApi.client;
+      const exit = yield* bank.Audit("w-audit").pipe(Effect.exit);
+      if (!Exit.isFailure(exit)) return yield* Effect.die("Audit committed");
+      expect(Cause.hasDies(exit.cause)).toBe(true);
+      expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
+        "Internal server error",
+      );
+      expect(Cause.pretty(exit.cause)).not.toContain(SECRET);
+      // The server keeps the whole cause for its own logs.
+      expect(logged.some((text) => text.includes(SECRET))).toBe(true);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wire.pipe(Layer.provide(Logger.layer([capture], { mergeWithExisting: true }))),
+      ),
+    );
+  });
+
   it.live("an input may name its fields target and commandId", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;

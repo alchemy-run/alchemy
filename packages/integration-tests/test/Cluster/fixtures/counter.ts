@@ -54,4 +54,21 @@ export class Counters extends Cluster.Entity<Counters>()("Counter", [
   /** Never answers; records that it was interrupted. */
   Rpc.make("Hang", { success: Schema.String }),
   Rpc.make("WasInterrupted", { success: Schema.Boolean }),
+  /** Takes two seconds, and finishes even if its caller stops waiting. */
+  Rpc.make("Settle", { success: Schema.String }),
+  Rpc.make("Settled", { success: Schema.Boolean }),
+  /** Records that it ran. */
+  Rpc.make("Mark"),
+  Rpc.make("Marked", { success: Schema.Boolean }),
+  /** Counts to `n`, one value every `everyMillis`, once per `operationId`. */
+  Rpc.make("Countdown", {
+    payload: { operationId: Schema.String, n: Schema.Int, everyMillis: Schema.Int },
+    primaryKey: ({ operationId }) => operationId,
+    success: Schema.Int,
+    stream: true,
+  }).annotate(ClusterSchema.Persisted, true),
+  /** How many times `Countdown`'s handler has run. */
+  Rpc.make("CountdownRuns", { success: Schema.Int }),
+  /** When `AddLater` last ran (epoch milliseconds), or 0. */
+  Rpc.make("RanAt", { success: Schema.Number }),
 ]) {}

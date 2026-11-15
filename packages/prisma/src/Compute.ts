@@ -938,9 +938,12 @@ export const Compute: Platform<
       serve,
       exports: Effect.sync(() => ({
         default: Effect.forEach(
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
           [...runners],
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
           (effect) =>
             Effect.forever(
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
               effect.pipe(
                 Effect.tapError((error) => Effect.logError(error)),
                 Effect.ignore,

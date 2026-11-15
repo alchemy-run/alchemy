@@ -17,7 +17,7 @@ import {
  * @module
  */
 import type { HttpEffect } from "alchemy/Http";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -48,7 +48,9 @@ import {
   emptyStreamMeta,
   type HostedModel,
   hostedModels,
+  inRange,
   type Json,
+  type ListRange,
   type ModelHost,
   Platform,
   type PolicyKit,
@@ -80,6 +82,8 @@ export interface ListOptions {
   readonly end?: string;
   /** At most this many entries. */
   readonly limit?: number;
+  /** Keys in descending order: `limit` counts from the end. */
+  readonly reverse?: boolean;
 }
 
 /**
@@ -199,6 +203,19 @@ export interface Host<R = never> {
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
+
+/** The storage list that reads exactly the `entry:` rows in `range`. */
+const entryRange = (range: ListRange | undefined): ListOptions => {
+  const limit = range?.limit === undefined ? {} : { limit: Math.max(0, range.limit) };
+  return range?.order === "desc"
+    ? {
+        prefix: "entry:",
+        ...(range.after === undefined ? {} : { end: `entry:${pad(range.after)}` }),
+        reverse: true,
+        ...limit,
+      }
+    : { prefix: "entry:", start: `entry:${pad((range?.after ?? 0) + 1)}`, ...limit };
+};
 
 const DefectTag = "alchemy/Domain/Defect";
 
@@ -506,7 +523,13 @@ const backfillRuntime = (
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const context = yield* captureContext<ObjectState | RuntimeContext>();
+    // Only these two services: a whole captured context would also carry
+    // construction's references, such as the call an input gate (Rivet's)
+    // tells calls apart by. Storage a commit's transaction reaches through a
+    // job would then wait on the gate that transaction holds.
+    const context = Context.make(ObjectState, state).pipe(
+      Context.add(RuntimeContext, yield* RuntimeContext),
+    );
     const provide = <A, E>(
       effect: Effect.Effect<A, E, ObjectState | RuntimeContext>,
     ): Effect.Effect<A, E> => Effect.provide(effect, context);
@@ -719,9 +742,12 @@ const REGISTER_RETRY_MS = 2_000;
 /** The id an instance was listed under, saved so jobs that fire later find it. */
 const ID_KEY = "bf:id";
 
+/** The job that lists an instance in the directory, after its first commit. */
+const REGISTER_JOB = "bf-register";
+
 /**
- * List an instance in the directory before its first commit, so every
- * instance with an event can be reached when a consumer is added later.
+ * List an instance in the directory, so every instance with an event can be
+ * reached when a consumer is added later.
  */
 const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
   Effect.gen(function* () {
@@ -730,6 +756,40 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
     yield* net.node.register(Backfill.leafOf(ref), ref);
     yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
   });
+
+/**
+ * Note, in the storage write of an instance's commit, that it still has to be
+ * listed in the directory. The first commit doesn't wait for the directory
+ * (which may have to link new nodes up to its root): the {@link REGISTER_JOB}
+ * lists the instance after the call returns, and is retried until it does.
+ * Every instance that has committed can still be found, as the job is stored
+ * with the commit and survives an eviction or a restart.
+ *
+ * Call it inside the commit's transaction.
+ */
+const listAfterCommit = (jobs: Backfill.Jobs, id: string) =>
+  Effect.gen(function* () {
+    const state = yield* ObjectState;
+    if (yield* state.storage.get<boolean>("registered")) return;
+    yield* state.storage.put({ [ID_KEY]: id });
+    yield* jobs.schedule(REGISTER_JOB, 0);
+  });
+
+/**
+ * The register job: list the instance in the directory, then ask for a reader
+ * for each consumer it is behind (one deployed between its commit and now, that
+ * the run which listed the directory didn't find it for). A failure tries again.
+ */
+const registerJob = (
+  net: Backfill.Network,
+  ref: Backfill.SourceRef,
+  source: Backfill.Source,
+  jobs: Backfill.Jobs,
+) =>
+  ensureRegistered(net, ref).pipe(
+    Effect.andThen(source.catchUp),
+    Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
+  );
 
 const aggregateObject = (
   kit: AggregateKit,
@@ -751,18 +811,30 @@ const aggregateObject = (
 
     // This instance as a backfill source: consumers added later pull its events.
     let source: Backfill.Source | undefined;
-    const runtime = yield* backfillRuntime(random, (id) =>
-      id === "bf-flush"
-        ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
-            stored === undefined ? Effect.void : sourceFor(stored).flush,
-          )
-        : Effect.void,
+    const runtime = yield* backfillRuntime(
+      random,
+      (id): Effect.Effect<void, never, ObjectState | RuntimeContext> =>
+        id === "bf-flush" || id === REGISTER_JOB
+          ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
+              stored === undefined
+                ? Effect.void
+                : id === REGISTER_JOB
+                  ? registerJob(
+                      net,
+                      { source: kit.name, id: stored },
+                      sourceFor(stored),
+                      runtime.jobs,
+                    )
+                  : sourceFor(stored).flush,
+            )
+          : Effect.void,
     );
     const sourceFor = (id: string): Backfill.Source =>
       (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
         ref: { source: kit.name, id },
         singleSource: (target) => planOf(target)?.singleSource === true,
         model,
+        targets: () => kit.targets,
         log: (after, limit) =>
           runtime.provide(
             state.storage
@@ -819,6 +891,8 @@ const aggregateObject = (
               version: result.version,
             });
             yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+            // Listed in the directory after the call returns, not before it commits.
+            yield* listAfterCommit(runtime.jobs, id);
             // Live to caught-up consumers; through the backfill to lagging ones.
             const live = yield* Backfill.routeCommit(
               sourceFor(id),
@@ -837,7 +911,6 @@ const aggregateObject = (
       });
     const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
-        yield* ensureRegistered(net, { source: kit.name, id });
         const { sent, kick } = yield* exclusively(commit(id, command, meta));
         if (kick) yield* outbox.kick;
         return sent;
@@ -865,7 +938,6 @@ const aggregateObject = (
       }) =>
         Effect.gen(function* () {
           const key = `scheduled:${job.name ?? job.meta.commandId}`;
-          yield* ensureRegistered(net, { source: kit.name, id: job.id });
           const kick = yield* exclusively(
             Effect.gen(function* () {
               // A job scheduled before tokens existed has none, and runs.
@@ -963,6 +1035,16 @@ const viewObject = (
                 .pipe(Effect.map((rows) => [...rows.values()])),
         ),
       );
+    const entriesIn = (range: ListRange | undefined) =>
+      stored.pipe(
+        Effect.flatMap((snapshot) =>
+          stale(snapshot)
+            ? Effect.succeed([])
+            : state.storage
+                .list<ViewEntry>(entryRange(range))
+                .pipe(Effect.map((rows) => [...rows.values()])),
+        ),
+      );
     const target = kit.target;
     // Pushes and sends an apply leaves for after its transaction commits.
     let after: Array<Effect.Effect<void, never, ObjectState | RuntimeContext>> = [];
@@ -1032,9 +1114,11 @@ const viewObject = (
           if (id.startsWith("drive:")) return runFor().run(id);
           if (key === undefined) return Effect.void;
           if (id === "bf-flush") return sourceFor(key).flush;
+          if (id === REGISTER_JOB)
+            return registerJob(net, { source: kit.name, id: key }, sourceFor(key), runtime.jobs);
           if (id.startsWith("bf-merge:"))
-            // Listed before its first entry, as on the live path, but here in the key's
-            // own job: its sources' messages don't wait on the directory.
+            // Listed before the merge writes its first entry, in the key's own job: its
+            // sources' messages don't wait on the directory.
             return ensureRegistered(net, { source: kit.name, id: key }).pipe(
               Effect.andThen(consumerFor(key).merge(id.slice("bf-merge:".length))),
               Effect.catchCause(() => runtime.jobs.schedule(id, REGISTER_RETRY_MS)),
@@ -1075,6 +1159,7 @@ const viewObject = (
         },
         singleSource: (target) => planOf(target)?.singleSource === true,
         model,
+        targets: () => kit.targets,
         log: (after, limit) =>
           runtime.provide(
             state.storage
@@ -1112,15 +1197,23 @@ const viewObject = (
       receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
         reportDefects(
           Effect.gen(function* () {
-            yield* ensureRegistered(net, { source: kit.name, id: key });
+            // Saved before anything else: the key's backfill jobs find it by this id.
+            if ((yield* state.storage.get<string>(ID_KEY)) === undefined)
+              yield* state.storage.put({ [ID_KEY]: key });
             // While a backfill runs, the key buffers deliveries and merges them in order.
             if (!(yield* consumerFor(key).admit(target, deliveries))) return;
-            yield* exclusively(state.storage.transaction(apply(key, deliveries)));
+            // Listed in the directory after the call returns, not before its first entry.
+            yield* exclusively(
+              state.storage.transaction(
+                Effect.andThen(listAfterCommit(runtime.jobs, key), apply(key, deliveries)),
+              ),
+            );
             yield* flushAfter;
           }),
         ),
       read: () => reportDefects(read),
       after: (after: number) => reportDefects(entriesAfter(after)),
+      page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
       // The backfill protocol, as a source, a consumer and a scanner.
       ...scannerRpc(() => scannerFor()),
       ...runRpc(relay, runFor),
@@ -1439,6 +1532,10 @@ const streamObject = (kit: StreamKit) =>
       state.storage
         .list<StreamEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
         .pipe(Effect.map((rows) => [...rows.values()]));
+    const entriesIn = (range: ListRange | undefined) =>
+      state.storage
+        .list<StreamEntry>(entryRange(range))
+        .pipe(Effect.map((rows) => [...rows.values()]));
     const latest = (meta: StreamMeta) =>
       meta.seq === 0 ? Effect.undefined : state.storage.get<StreamEntry>(`entry:${pad(meta.seq)}`);
     return {
@@ -1497,6 +1594,7 @@ const streamObject = (kit: StreamKit) =>
         }).pipe(exclusively, reportDefects),
       read: () => reportDefects(readMeta),
       after: (after: number) => reportDefects(entriesAfter(after)),
+      page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
       // A live read of this key: accept its WebSocket, then push on every append.
       fetch: accept((key, subscription) =>
         Effect.gen(function* () {
@@ -1634,6 +1732,12 @@ export const makePlatform = <R>(
               ref.source,
               ref.generation ?? viewGenerations.get(ref.source) ?? 0,
             );
+            // A view this code hosts, or one named by its generation, is never an
+            // aggregate. Ask for its class first: a host whose `lookup` reaches any
+            // class name (one class multiplexing them all) can't tell them apart.
+            if (ref.generation !== undefined || viewGenerations.has(ref.source)) {
+              return sources.get(view) ?? bound(view);
+            }
             return (
               sources.get(`${ref.source}Aggregate`) ??
               bound(`${ref.source}Aggregate`) ??
@@ -1956,7 +2060,14 @@ export const makePlatform = <R>(
                       Stream.fromEffectSchedule(read(key), POLL).pipe(
                         Stream.changesWith((a, b) => a.version === b.version),
                       ),
-                    list: (key) => after(key, 0),
+                    list: (key, range) =>
+                      orComputed(
+                        unwrapDefects<ReadonlyArray<ViewEntry>>(
+                          namespace.getByName(key).page(range),
+                        ),
+                        (result) => inRange(result.entries, range),
+                        key,
+                      ),
                     ...(connect === undefined
                       ? {}
                       : {
@@ -2023,7 +2134,10 @@ export const makePlatform = <R>(
                       Stream.fromEffectSchedule(read(key), POLL).pipe(
                         Stream.changesWith((a, b) => a.seq === b.seq),
                       ),
-                    list: (key) => after(key, 0),
+                    list: (key, range) =>
+                      unwrapDefects<ReadonlyArray<StreamEntry>>(
+                        namespace.getByName(key).page(range),
+                      ),
                     tail: (key, from) =>
                       pollAfter(
                         from,
