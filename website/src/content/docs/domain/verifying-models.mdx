@@ -176,10 +176,11 @@ Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, 
   ✓ Bank.EveryTransferEnds  holds at the end of the 2,327 sequences that ran their course
 
 Assumed
-  - numbers are exact: integers stay within ±2^53
+  - whole numbers are exact: they stay within ±2^53
   - an external system answers what its schema allows, and nothing else
   - middleware lets every caller in: who sends a command is anyone its request context allows
   - projections, streams and queries are not checked: they read what the model records, and send it nothing
+  - a saga's step runs once: one that stops halfway and runs again is not tried
 ```
 
 **Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance.
@@ -390,7 +391,25 @@ An outcome no sequence reaches is worth a look. It's either out of reach in two 
 
 A proof is about one aggregate. A rule across instances is checked in the sequences that were run, up to `depth` commands, and a longer sequence could still break it.
 
-An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. When a proof fails on such a state, add the invariant that rules it out: the rule that was true all along but that nobody had written down.
+An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. This escrow reserves money before it captures it, and `Reserve` checks there is enough, so the balance never goes below zero:
+
+```text
+Checked: in every sequence of up to 3 commands on a new instance
+  ✓ NeverOverdrawn
+      not proved: Capture breaks it from { balance: 0, reserved: 1 }, a state the rules allow
+      No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved.
+```
+
+Nothing says the reserved amount is covered, so the proof starts from a state where it isn't. Write that rule down, and both are proved:
+
+```typescript title="packages/domain/src/Escrow.aggregate.ts"
+invariants: {
+  NeverOverdrawn: (escrow) => escrow.balance >= 0,
+  ReservedIsCovered: (escrow) => escrow.reserved >= 0 && escrow.reserved <= escrow.balance,
+},
+```
+
+Arithmetic on numbers that may not be whole isn't proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Code that adds, subtracts or multiplies such numbers is reported as not read. Keep money in whole cents, which is exact.
 
 `eventually` is checked on the sequences that run their course, not proved for all of them.
 

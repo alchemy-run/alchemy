@@ -85,7 +85,7 @@ export interface Report {
 }
 
 const ASSUMPTIONS = [
-  "numbers are exact: integers stay within ±2^53",
+  "whole numbers are exact: they stay within ±2^53",
   "an event or rejection whose fields fail its schema crashes the command, and nothing is committed",
   "of the state's schema, the prover reads types, integers and bounds: a check of another kind is not proved kept",
 ];

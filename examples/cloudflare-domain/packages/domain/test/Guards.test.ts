@@ -8,6 +8,7 @@ import { CustomerApi } from "../src/CustomerApi.api.ts";
 import { SupportApi } from "../src/SupportApi.api.ts";
 import { Aside } from "./fixtures/Aside.aggregate.ts";
 import { Deny } from "./fixtures/Deny.aggregate.ts";
+import { Drift } from "./fixtures/Drift.aggregate.ts";
 import { Gap } from "./fixtures/Gap.aggregate.ts";
 import { Outlet, OutletApi } from "./fixtures/Outlet.model.ts";
 import { Parity } from "./fixtures/Parity.aggregate.ts";
@@ -148,6 +149,25 @@ it.effect(
         allow: { truncated: true },
       });
       expect(report.truncated).toBe(true);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+it.effect(
+  "arithmetic JavaScript rounds is not proved as if it were exact",
+  () =>
+    Effect.gen(function* () {
+      // A tenth and two tenths are three tenths to a solver, and not to JavaScript:
+      // the real aggregate records Rounded, which the rule says never happens.
+      const failed = yield* Prove.invariants(Drift, source("Drift")).pipe(Effect.flip);
+      expect(failed._tag).toBe("InvariantsNotProved");
+      if (failed._tag !== "InvariantsNotProved") return;
+      expect(failed.report.invariants[0]?.commands[0]?.verdict).toMatchObject({
+        _tag: "NotTranslated",
+        reason: expect.stringContaining("JavaScript rounds"),
+      });
+      const exploring = yield* Explore.check(Drift, source("Drift")).pipe(Effect.flip);
+      expect(exploring._tag).toBe("Incomplete");
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );

@@ -29,6 +29,7 @@ import type * as ModelSearch from "./Explore/internal/ModelSearch.ts";
 import * as Script from "./Explore/internal/Script.ts";
 import type * as Model from "./Model.ts";
 import * as Prove from "./Prove.ts";
+import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import { Story } from "./Story.ts";
 
 export interface Options {
@@ -178,10 +179,11 @@ const OWN = (() => {
 })();
 
 const ASSUMPTIONS = [
-  "numbers are exact: integers stay within ±2^53",
+  "whole numbers are exact: they stay within ±2^53",
   "an external system answers what its schema allows, and nothing else",
   "middleware lets every caller in: who sends a command is anyone its request context allows",
   "projections, streams and queries are not checked: they read what the model records, and send it nothing",
+  "a saga's step runs once: one that stops halfway and runs again is not tried",
 ];
 
 const count = (n: number): string => n.toLocaleString("en-US");
@@ -397,10 +399,25 @@ export interface AggregateOptions {
   readonly allow?: Explore.Options["allow"];
 }
 
+/** Why a rule no sequence breaks is not proved. */
+export interface Unproved {
+  readonly command: string;
+  readonly verdict: Prove.Verdict;
+}
+
 export interface AggregateReport {
   readonly aggregate: string;
   /** Its invariants and transitions, and how far each is known to hold. */
-  readonly rules: ReadonlyArray<Omit<Rule, "story">>;
+  readonly rules: ReadonlyArray<
+    Omit<Rule, "story"> & {
+      /**
+       * For a rule that is checked and not proved: the command the proof
+       * fails on. A proof starts from any state the rules allow, so it can
+       * fail on a state no sequence of commands reaches.
+       */
+      readonly unproved: Unproved | undefined;
+    }
+  >;
   readonly proof: Prove.Report;
   readonly explored: Explore.Report;
   /** Each part of the check that was not done. */
@@ -429,7 +446,22 @@ const renderAggregate = (report: AggregateReport): string => {
   if (checked.length > 0)
     out.push(
       `Checked: in every sequence of up to ${report.explored.depth} commands on a new instance`,
-      ...checked.map((rule) => `  ✓ ${rule.name}`),
+      ...checked.flatMap((rule) => {
+        const why = rule.unproved;
+        if (!why) return [`  ✓ ${rule.name}`];
+        const verdict = why.verdict;
+        return [
+          `  ✓ ${rule.name}`,
+          ...(verdict._tag === "Violated"
+            ? [
+                `      not proved: ${Symbolic.show(verdict.counterexample.command)} breaks it from ${Symbolic.show(verdict.counterexample.state)}, a state the rules allow`,
+                "      No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved.",
+              ]
+            : [
+                `      not proved for ${why.command}: ${verdict._tag === "Proved" ? "" : "reason" in verdict ? verdict.reason : ""}`,
+              ]),
+        ];
+      }),
       "",
     );
   const broken = report.rules.filter((rule) => rule.standing === "broken");
@@ -472,18 +504,28 @@ export const aggregate = (
     }).pipe(Effect.mapError(failed));
     const made: AggregateReport = {
       aggregate: target.aggregateName,
-      rules: explored.invariants.map((rule) => ({
-        name: rule.name,
-        kind: rule.kind,
-        standing: rule.broken
-          ? "broken"
-          : rule.proved
-            ? "proved"
-            : rule.states > 0
-              ? "checked"
-              : "unseen",
-        seen: rule.states,
-      })),
+      rules: explored.invariants.map((rule) => {
+        const verdicts = [...proof.invariants, ...proof.transitions].find(
+          (proved) => proved.name === rule.name,
+        )?.commands;
+        const failing = verdicts?.find((command) => command.verdict._tag !== "Proved");
+        return {
+          name: rule.name,
+          kind: rule.kind,
+          standing: rule.broken
+            ? "broken"
+            : rule.proved
+              ? "proved"
+              : rule.states > 0
+                ? "checked"
+                : "unseen",
+          seen: rule.states,
+          unproved:
+            rule.broken || rule.proved || !failing
+              ? undefined
+              : { command: failing.command, verdict: failing.verdict },
+        };
+      }),
       proof,
       explored,
       undone: Explore.undone(explored, options.allow ?? {}),
@@ -498,7 +540,8 @@ const indent = (text: string, by: string): ReadonlyArray<string> =>
   text.split("\n").map((line) => `${by}${line}`);
 
 /** A report as text: what is proved, what is checked, what is broken and what is assumed. */
-export const render = (report: Report): string => {
+export const render = (report: Report | AggregateReport): string => {
+  if ("aggregate" in report) return renderAggregate(report);
   const explored = report.explored;
   const some = (n: number, one: string, many: string) =>
     n === 0 ? [] : [`${n} ${n === 1 ? one : many}`];

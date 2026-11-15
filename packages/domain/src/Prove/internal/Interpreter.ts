@@ -614,6 +614,13 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       if (operator === "/" || operator === "%")
         return fail(site, `divides with ${operator}, which the prover does not translate`);
       const [l, r] = Library.promote(x, y);
+      // A solver counts exactly, and JavaScript rounds: a tenth and two tenths are not
+      // three tenths there. Whole numbers agree, and so does comparing any two numbers.
+      if (l.sort === "Real" && (operator === "+" || operator === "-" || operator === "*"))
+        return fail(
+          site,
+          `applies ${operator} to numbers that may not be whole, which JavaScript rounds and the prover does not`,
+        );
       const text = `(${operator} ${l.text} ${r.text})`;
       return Effect.succeed(
         operator === "+" || operator === "-" || operator === "*"

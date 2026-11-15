@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Chores, ChoresApi, GiveUpLive, ReminderLive } from "./fixtures/Chore.model.ts";
 import { Counter } from "./fixtures/Counter.aggregate.ts";
+import { Covered, Escrow } from "./fixtures/Escrow.aggregate.ts";
 import {
   Order,
   Review,
@@ -121,6 +122,36 @@ it.effect(
       const failed = yield* Verify.aggregate(Counter).pipe(Effect.flip);
       expect(failed._tag).toBe("NotVerified");
       expect(failed.message).toContain("✗ NeverGoesDown");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+it.effect(
+  "a rule that is true and not proved says which state the proof started from",
+  () =>
+    Effect.gen(function* () {
+      // Reserve checks the balance, so no sequence overdraws. Nothing says the reserved
+      // amount is covered, so the proof starts Capture from a state that is never reached.
+      const report = yield* Verify.aggregate(Escrow);
+      expect(report.rules).toMatchObject([
+        {
+          name: "NeverOverdrawn",
+          standing: "checked",
+          unproved: {
+            command: "Capture",
+            verdict: { _tag: "Violated", counterexample: { state: { balance: 0, reserved: 1 } } },
+          },
+        },
+      ]);
+      expect(Verify.render(report)).toContain(
+        "not proved: Capture breaks it from { balance: 0, reserved: 1 }, a state the rules allow",
+      );
+      // With the rule that rules that state out written down, both are proved.
+      const covered = yield* Verify.aggregate(Covered);
+      expect(covered.rules.map((rule) => [rule.name, rule.standing])).toEqual([
+        ["NeverOverdrawn", "proved"],
+        ["ReservedIsCovered", "proved"],
+      ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );
