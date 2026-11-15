@@ -4265,6 +4265,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../../packages/docker
+      '@alchemy.run/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@alchemy.run/effect-cluster':
         specifier: workspace:*
         version: link:../../packages/effect-cluster

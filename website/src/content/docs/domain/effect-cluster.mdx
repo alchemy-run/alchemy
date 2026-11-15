@@ -44,6 +44,7 @@ Provide `BankLive` wherever you serve the Api: a container, a Lambda, a Cloudfla
 ```typescript
 // packages/server/src/BankApi.ts
 import * as Docker from "@alchemy.run/docker";
+import * as DomainEffectCluster from "@alchemy.run/domain/EffectCluster";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
@@ -84,7 +85,11 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "ClusterDomainExample",
   {
-    providers: Layer.mergeAll(Docker.providers(), Cluster.providers()),
+    providers: Layer.mergeAll(
+      Docker.providers(),
+      Cluster.providers(),
+      DomainEffectCluster.providers(),
+    ),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

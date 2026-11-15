@@ -1,4 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import * as Rivet from "@alchemy.run/rivet";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -10,7 +11,9 @@ import { conformance, waitForReady } from "../Domain/conformance/conformance.ts"
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain-cluster.ts";
 import DomainFront from "./fixtures/domain-front.ts";
 
-const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
+const testOptions = {
+  providers: Layer.mergeAll(Docker.providers(), Rivet.providers(), DomainRivet.providers()),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 // File-backed scratch state: the leading `destroy()` drains whatever a
 // previous (interrupted or NO_DESTROY) run left behind.

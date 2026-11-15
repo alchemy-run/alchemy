@@ -1,4 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
+import * as DomainEffectCluster from "@alchemy.run/domain/EffectCluster";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -10,7 +11,13 @@ import { conformance, waitForReady } from "../Domain/conformance/conformance.ts"
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
 import DomainFront from "./fixtures/domain/front.ts";
 
-const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
+const testOptions = {
+  providers: Layer.mergeAll(
+    Docker.providers(),
+    Cluster.providers(),
+    DomainEffectCluster.providers(),
+  ),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const stack = Core.scratchStack(testOptions, "ClusterDomain", import.meta.url);
 

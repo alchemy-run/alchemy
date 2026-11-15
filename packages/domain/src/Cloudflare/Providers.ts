@@ -1,8 +1,8 @@
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
+import { Revision, RevisionProvider } from "../Revision.ts";
 import { Backfill, BackfillProvider } from "./Backfill.ts";
-import { Revision, RevisionProvider } from "./Revision.ts";
 
 /** Service tag bundling the providers of Domain models hosted on Cloudflare. */
 export class Providers extends Provider.ProviderCollection<Providers>()("Domain.Cloudflare") {}

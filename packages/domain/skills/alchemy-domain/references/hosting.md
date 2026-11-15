@@ -163,7 +163,7 @@ More: [Observability](https://alchemy.run/domain/observability).
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
 - Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
-- A Stack that deploys a model on Cloudflare registers `DomainCloudflare.providers()` next to `Cloudflare.providers()`; without it the deploy fails with no provider for `Cloudflare.Domain.Backfill`.
+- A Stack that deploys a model on Cloudflare registers `DomainCloudflare.providers()` next to `Cloudflare.providers()`; without it the deploy fails with no provider for `Cloudflare.Domain.Backfill`. On Rivet or Effect Cluster, it registers `DomainRivet.providers()` or `DomainEffectCluster.providers()` next to the host's own, for the `Domain.Revision` each deploy counts.
 - Deploys keep data from before Domain version 0 by renaming each class with `renamedFrom`. Upgrading models that shared a class fails with `DurableObjectRenameConflict` until all but one set `legacyData: false` on their `layer`.
 
 More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).

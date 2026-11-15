@@ -17,6 +17,7 @@ import {
   Workflow,
   type WorkflowImpl,
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
+import * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
@@ -53,9 +54,9 @@ import {
   unwrapDefects,
 } from "../DurableObjects.ts";
 import { type Platform, type Subscription } from "../Platform.ts";
+import { Revision } from "../Revision.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
 import type { Providers } from "./Providers.ts";
-import { Revision } from "./Revision.ts";
 import { DeployVersion } from "./Version.ts";
 
 export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
@@ -304,11 +305,14 @@ const cloudflareHost = (
           deploy: ({ modelName }, consumers) =>
             Effect.gen(function* () {
               const worker = yield* CloudflareWorker;
-              const revision = yield* Revision(named(modelName, "DomainRevision"), {
-                consumers: [...consumers],
-              });
+              const revision = yield* Revision(named(modelName, "DomainRevision"), {});
+              yield* revision.bind`${modelName}`({ model: modelName, consumers: [...consumers] });
               yield* worker.bind`${revision}`({
-                env: { [revisionVariable(modelName)]: revision.revision },
+                env: {
+                  [revisionVariable(modelName)]: revision.models.pipe(
+                    Output.map((models) => models[modelName]?.revision),
+                  ),
+                },
               });
             }) as unknown as Effect.Effect<void, never, Worker>,
           current: ({ modelName }) => {

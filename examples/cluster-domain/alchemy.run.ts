@@ -1,6 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Docker from "@alchemy.run/docker";
+import * as DomainEffectCluster from "@alchemy.run/domain/EffectCluster";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import AwsBankApi from "@cluster-bank/server/AWS/BankApi";
 import CloudflareBankApi from "@cluster-bank/server/Cloudflare/BankApi";
@@ -29,6 +30,7 @@ export default Alchemy.Stack(
       Cloudflare.providers(),
       Docker.providers(),
       Cluster.providers(),
+      DomainEffectCluster.providers(),
     ),
     state: Alchemy.localState(),
   },
