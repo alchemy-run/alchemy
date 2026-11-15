@@ -211,6 +211,8 @@ const REDIRECTS: Record<string, string> = {
   "/archil/compute/services": "/archil/compute/programs",
   "/e2b/concepts": "/e2b/what-is-e2b",
   "/providers/archil/reference/service": "/providers/archil/reference/sandbox",
+  "/providers/prisma/app": "/providers/prisma/computeservice",
+  "/providers/prisma/deployment": "/providers/prisma/computeversion",
   "/hetzner/frontend": "/hetzner/frontend/websites",
   "/hetzner/websites": "/hetzner/frontend/websites",
   "/neon/branching": "/neon/data/branching",

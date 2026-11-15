@@ -120,12 +120,12 @@ provisioning; use `domain.dnsRecords` to configure DNS and inspect
 
 ```typescript
 const domain = yield* Prisma.CustomDomain("api-domain", {
-  app,
+  service: app,
   hostname: "api.example.com",
 });
 ```
 
-Changing the hostname or app in place is intentionally rejected.
+Changing the hostname or service in place is intentionally rejected.
 Create a second domain, verify DNS and TLS, cut traffic over, and then
 remove the old resource.
 
