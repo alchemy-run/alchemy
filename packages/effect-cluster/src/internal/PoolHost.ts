@@ -22,7 +22,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { Database, type DatabaseShape } from "../Database.ts";
+import { DATABASE_MAX_CONNECTIONS, Database, type DatabaseShape } from "../Database.ts";
 import { shardGroupKey, type Entity } from "../Entity.ts";
 import { Pool, type PoolEntity } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
@@ -74,7 +74,22 @@ export interface PoolSettings {
    * @default ["default"]
    */
   shardGroups?: string[];
+  /**
+   * At most how many connections each runner holds in each of its pools to
+   * the cluster's database: the cluster's own, and a Domain model's storage
+   * when the runner hosts one. Every runner, old and new, holds its pools
+   * during a rollout, so keep `2 × replicas × 2 × databaseConnections` (for
+   * every pool on the database) under the database's `max_connections`.
+   * @default 10 (the Postgres client's default)
+   */
+  databaseConnections?: number;
 }
+
+/** The variables a pool's settings give every runner it starts. */
+export const settingsEnvironment = (settings: PoolSettings): Record<string, string> =>
+  settings.databaseConnections === undefined
+    ? {}
+    : { [DATABASE_MAX_CONNECTIONS]: String(settings.databaseConnections) };
 
 /** What a host needs to declare the service that runs the pool. */
 export interface PoolNodes<Network, Gateway extends PoolGateway = PoolGateway> {
@@ -214,6 +229,7 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
                 ...Object.fromEntries(
                   Object.entries(values).map(([key, value]) => [key, String(value)]),
                 ),
+                ...settingsEnvironment(options.settings),
                 ALCHEMY_STACK_NAME: stack.name,
                 ALCHEMY_STAGE: stack.stage,
                 ALCHEMY_PHASE: "runtime",
