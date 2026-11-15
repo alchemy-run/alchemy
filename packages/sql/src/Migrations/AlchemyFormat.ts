@@ -3,6 +3,7 @@ import {
   convertedRowInsertSql,
   findForeignHistory,
   matchForeignRows,
+  readDrizzleV0Rows,
   toTimestampString,
 } from "./Convert.ts";
 import {
@@ -107,16 +108,26 @@ const renameSql = (from: string, to: string, dialect: MigrationDialect): string 
  * matching local file is a hard error — mirrors the same rule conversion
  * applies (see `matchForeignRows`).
  */
-const rebuildInPlace = (options: {
-  executor: SqlExecutor;
-  table: string;
-  records: ReadonlyArray<MigrationRecord>;
-  /** SQL expression yielding the migration name from the old table. */
-  nameExpr: string;
-  tool: "legacy-alchemy" | "wrangler";
-}) =>
+const rebuildInPlace = (
+  options:
+    | {
+        executor: SqlExecutor;
+        table: string;
+        records: ReadonlyArray<MigrationRecord>;
+        /** SQL expression yielding the migration name from the old table. */
+        nameExpr: string;
+        tool: "legacy-alchemy" | "wrangler";
+      }
+    | {
+        executor: SqlExecutor;
+        table: string;
+        records: ReadonlyArray<MigrationRecord>;
+        /** A drizzle-orm 0.x table records no name: its rows are named first. */
+        tool: "drizzle";
+      },
+) =>
   Effect.gen(function* () {
-    const { executor, table, records, nameExpr } = options;
+    const { executor, table, records } = options;
     if (executor.transactionalDdl === false) {
       return yield* new MigrationError({
         message: `Cannot automatically rebuild migration history in "${table}" on a target without transactional DDL. Convert the history explicitly before deploying.`,
@@ -124,22 +135,21 @@ const rebuildInPlace = (options: {
     }
     const dialect = executor.dialect;
     const quoted = quoteIdentifier(table, dialect);
-    const rows = yield* executor.query(
-      `SELECT ${nameExpr} AS name, applied_at FROM ${quoted} ORDER BY id;`,
-    );
+    const rows =
+      options.tool === "drizzle"
+        ? yield* readDrizzleV0Rows({ executor, from: quoted, records })
+        : (yield* executor.query(
+            `SELECT ${options.nameExpr} AS name, applied_at FROM ${quoted} ORDER BY id;`,
+          ))
+            .filter((row) => row.name !== null && row.name !== undefined)
+            .map((row) => ({
+              name: String(row.name),
+              hash: undefined,
+              createdAtMillis: undefined,
+              appliedAt: toTimestampString(row.applied_at),
+            }));
     const matched = yield* matchForeignRows({
-      history: {
-        tool: options.tool,
-        source: table,
-        rows: rows
-          .filter((row) => row.name !== null && row.name !== undefined)
-          .map((row) => ({
-            name: String(row.name),
-            hash: undefined,
-            createdAtMillis: undefined,
-            appliedAt: toTimestampString(row.applied_at),
-          })),
-      },
+      history: { tool: options.tool, source: table, rows },
       records,
     });
 
@@ -169,7 +179,7 @@ const ensureTable = (options: {
         // Greenfield for us — but possibly not for the database. Adopt any
         // history the previous tool (drizzle-kit / prisma / wrangler) left
         // behind: copy it into our table ONCE and freeze theirs. One-way.
-        const history = yield* findForeignHistory({ executor, table });
+        const history = yield* findForeignHistory({ executor, table, records });
         const converted = history ? yield* matchForeignRows({ history, records }) : [];
         if (converted.length > 0 && executor.transactionalDdl === false) {
           return yield* new MigrationError({
@@ -182,6 +192,12 @@ const ensureTable = (options: {
         ]);
         return;
       }
+      case "drizzle-v0":
+        // drizzle-orm 0.x's table at OUR resolved table name (a drizzle user's
+        // `__drizzle_migrations` adopted under an explicit `table:`): convert
+        // it in place, naming its rows as drizzle-orm 1.0 does.
+        yield* rebuildInPlace({ executor, table, records, tool: "drizzle" });
+        return;
       case "drizzle-shaped":
         // Already our column shape (shared with drizzle v1) — including
         // the case where the user pointed `table` straight at an existing

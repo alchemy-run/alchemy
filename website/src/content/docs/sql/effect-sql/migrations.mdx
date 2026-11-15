@@ -160,13 +160,30 @@ running its migrate command.
 
 Two guard rails:
 
-- Every recorded row must match a local migration file by name and
-  content hash. An orphaned row fails conversion with
-  `MigrationHistoryConflictError`. After conversion, the
+- Every recorded row must match a local migration file by name, and by
+  content hash where the old tool recorded one (wrangler doesn't). An
+  orphaned row fails conversion with `MigrationHistoryConflictError`. After conversion, the
   [history rules](#change-migration-history-safely) apply.
 - A **failed** Prisma migration (`finished_at` NULL) blocks adoption
   until repaired with `prisma migrate resolve`; rolled-back rows are
   skipped.
+
+A wrangler-migrated directory that drizzle-kit 0.x generates keeps its
+journal in `meta/_journal.json`, a layout Alchemy refuses
+(`DrizzleV0LayoutError`). Run `drizzle-kit up` and deploy:
+
+```sh
+pnpm exec drizzle-kit up
+```
+
+`drizzle-kit up` moves each file to `<timestamp>_<name>/migration.sql`,
+unchanged and in the same order. wrangler's rows (and those of Alchemy
+releases before `__alchemy_migrations`) still name the old files
+(`0000_init.sql`), and the conversion follows drizzle-kit's rename, so
+`0000_init.sql` is recorded as `<timestamp>_init` and only the files
+wrangler never applied run. A file renamed before wrangler applied it
+can't be followed, so the conversion stops with
+`MigrationHistoryConflictError`.
 
 Databases migrated by older versions of Alchemy are upgraded to the
 current table shape in place, at whatever table name their state
@@ -285,6 +302,12 @@ git diff -- drizzle
 git add drizzle
 git commit -m "Upgrade Drizzle migration layout"
 ```
+
+`drizzle-kit up` converts the files and leaves the database alone: a database
+drizzle-orm 0.x migrated keeps its `__drizzle_migrations` table, which
+records no migration names. The first deploy converts it, matching each
+row to a migration by its timestamp and then its hash, as drizzle-orm 1.0
+does.
 
 See the [Drizzle guide](/sql/drizzle/migrations#durable-object-migrations)
 or [runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-durable-object-sql)
