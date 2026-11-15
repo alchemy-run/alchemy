@@ -310,6 +310,27 @@ export interface ViewSnapshot {
   readonly seq: number;
   /** The view's generation the key was built by: an earlier one is stale and starts over. */
   readonly generation?: number;
+  /**
+   * Per source, what the last command to reach the key from it became: see
+   * {@link EmittedRange}. A reader finds a command's emissions with it instead
+   * of scanning entries. Absent from snapshots written before it existed, and
+   * for a source until the key next applies a delivery from it.
+   */
+  readonly emitted?: Readonly<Record<string, EmittedRange>>;
+}
+
+/**
+ * The entries a view key emitted for one command's deliveries from one source.
+ */
+export interface EmittedRange {
+  /** The command the deliveries came from. */
+  readonly commandId: string;
+  /** The last of its deliveries' `seq` (on the source) the key applied. */
+  readonly sourceSeq: number;
+  /** The key's `seq` before the first of them: its entries are those after it… */
+  readonly after: number;
+  /** …through this one (`after` itself when they emitted nothing). */
+  readonly through: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
@@ -720,3 +741,17 @@ export const hostedModels = ({
         }),
     );
 };
+
+/**
+ * How a platform counts a run that waits for another run's work: a read
+ * `atLeast` a write that polls until its view or projection has it. The
+ * manual in-memory platform (a story) runs one queued item at a time, until
+ * every run it started is finished or waiting; it provides this so a poll is
+ * waiting and the run it waits for can start. Other platforms run their work
+ * concurrently and leave it as is.
+ *
+ * @internal
+ */
+export const RunWait = Context.Reference<
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+>("alchemy/Domain/Platform/RunWait", { defaultValue: () => (effect) => effect });

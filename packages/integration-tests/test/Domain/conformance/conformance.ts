@@ -284,6 +284,19 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "caughtUp waits for a projection fed by a view",
+    Effect.gen(function* () {
+      const id = fresh("record");
+      // The route reads the projection's stream right after caughtUp: each
+      // total is there only if caughtUp waited for the view, then for the
+      // projection, which takes a second over each batch.
+      expect(yield* call(`/record/${id}?by=2`)).toEqual([2]);
+      expect(yield* call(`/record/${id}?by=3`)).toEqual([2, 5]);
+    }),
+    options,
+  );
+
+  test(
     "a policy starts a saga, and the saga's step commits",
     Effect.gen(function* () {
       const id = fresh("saga");

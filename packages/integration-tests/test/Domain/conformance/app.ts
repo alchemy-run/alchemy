@@ -8,6 +8,7 @@
  * - `/counter/:id`, `/echo/:id`, `/total/:id` read the counter, what the saga wrote, the view
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
+ * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  */
@@ -24,7 +25,9 @@ import {
   Hold,
   Increment,
   PlaceHold,
+  Recorded,
   ReleaseHold,
+  TotalWriter,
 } from "./model.ts";
 
 /** The front's `fetch`, built once the model's services are provided. */
@@ -35,6 +38,8 @@ export const app = Effect.gen(function* () {
   const holds = yield* Hold;
   const hidden = yield* HiddenTotal;
   const api = yield* ConformanceApi;
+  const recorded = yield* Recorded;
+  const progress = yield* TotalWriter.Progress;
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://front");
@@ -88,6 +93,13 @@ export const app = Effect.gen(function* () {
           .get(Counter.ref(id), { atLeast: { stream: `Counter/${id}`, version } })
           .pipe(Effect.orDie);
         return yield* HttpServerResponse.json(Option.getOrElse(total, () => ({ total: 0 })));
+      }
+      case "record": {
+        const receipt = yield* counters.send(id, new Increment({ by })).pipe(Effect.orDie);
+        // Read straight after caughtUp, without polling: the projection is fed by the view.
+        yield* progress.caughtUp(receipt, { timeout: "60 seconds" }).pipe(Effect.orDie);
+        const { entries } = yield* recorded.list(Counter.ref(id));
+        return yield* HttpServerResponse.json(entries.map((entry) => entry.event.total));
       }
       case "place":
         yield* holds.send(id, new PlaceHold());
