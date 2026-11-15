@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -14,14 +15,14 @@ export interface RandomProps {
   /**
    * Use an existing secret on the first deployment rather than generating one.
    * Once stored, the original value takes precedence even if this input changes
-   * or is removed. Supply a Redacted value, or an optional Redacted config
-   * (`Config.option(Config.Redacted("EXISTING_KEY"))`) when migrating from
-   * an environment variable that may be removed after the initial deployment.
+   * or is removed. A required `Config.Redacted("EXISTING_KEY")` is evaluated
+   * only when initially creating the resource; after that the variable may
+   * be removed. Use `Config.option` to allow generation when it was never set.
    * Like generated secrets, imported values are persisted in the state backend.
    * Protect access to that backend.
    *
    * @example
-   * initial: Config.option(Config.Redacted("EXISTING_KEY"))
+   * initial: Config.Redacted("EXISTING_KEY")
    */
   initial?: Redacted.Redacted<string> | Option.Option<Redacted.Redacted<string>>;
 }
@@ -43,7 +44,17 @@ export const makeRandom = (id: string, props?: PropsInput<RandomProps>) =>
  * The value is generated once on create and then persisted in state so
  * subsequent deploys keep the same secret unless the resource is replaced.
  */
-export const Random = Resource<Random>("Alchemy.Random");
+export const Random = Resource<Random>("Alchemy.Random", {
+  // Config would be eagerly resolved by the planner even when a secret is
+  // already stored. Option is an opaque leaf and defers resolution to create.
+  normalizeProps: (props) =>
+    props !== null &&
+    typeof props === "object" &&
+    "initial" in props &&
+    Config.isConfig(props.initial)
+      ? { ...props, initial: Option.some(props.initial) }
+      : props,
+});
 
 export const RandomProvider = () =>
   Provider.succeed(Random, {
@@ -51,7 +62,7 @@ export const RandomProvider = () =>
     // Changing initial/bytes after creation must not produce a phantom update.
     diff: ({ output }) => Effect.succeed(output?.text ? { action: "noop" as const } : undefined),
     reconcile: ({ news = {}, output }) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         // Observe — there is no remote state. The cached `output.text` is
         // the authoritative current value; once minted it is preserved
         // across reconciles to keep the secret stable.
@@ -62,11 +73,19 @@ export const RandomProvider = () =>
         // Ensure — no observed value: import the caller's existing secret
         // when provided, or mint a fresh one. Neither a changed seed nor an
         // absent optional config can rotate a persisted output.
-        if (Redacted.isRedacted(news.initial)) {
-          return { text: news.initial };
-        }
-        if (news.initial !== undefined && Option.isSome(news.initial)) {
-          return { text: news.initial.value };
+        const deferred = Option.isOption(news.initial)
+          ? Option.getOrUndefined(news.initial)
+          : news.initial;
+        const initial: unknown = Config.isConfig(deferred) ? yield* deferred : deferred;
+        const value = Option.isOption(initial) ? Option.getOrUndefined(initial) : initial;
+        if (value !== undefined) {
+          if (!Redacted.isRedacted(value) || typeof Redacted.value(value) !== "string") {
+            return yield* Effect.fail({
+              _tag: "InvalidRandomInitial",
+              message: "Random.initial must resolve to a Redacted<string>",
+            });
+          }
+          return { text: value as Redacted.Redacted<string> };
         }
 
         const byteLength = news.bytes ?? 32;

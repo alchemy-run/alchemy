@@ -254,6 +254,12 @@ type AttrOutput<A> = [A] extends [
 
 export interface ResourceOptions {
   /**
+   * Synchronously normalize registration props before the planner resolves
+   * Config and Output inputs. Applied to both plain and Effect-valued props,
+   * including constructors obtained with `yield* ResourceClass`.
+   */
+  normalizeProps?: (props: unknown) => unknown;
+  /**
    * Default removal policy for this resource type when the caller has not
    * explicitly provided one via `RemovalPolicy` / `destroy()` / `retain()`.
    *
@@ -615,7 +621,7 @@ export function Resource<R extends ResourceLike>(
             ? t[prop as keyof typeof t]
             : new Output.PropExpr<any, string>(Output.of(Resource), prop),
       })) as R;
-      Resource.Props = Effect.isEffect(props)
+      const resolvedProps = Effect.isEffect(props)
         ? // @effect-diagnostics-next-line anyUnknownInErrorContext:off
           yield* props.pipe(
             Effect.provide(
@@ -630,6 +636,9 @@ export function Resource<R extends ResourceLike>(
           props === undefined && !options?.requiresImplementation
           ? ({} as Props)
           : props;
+      Resource.Props = options?.normalizeProps
+        ? (options.normalizeProps(resolvedProps) as R["Props"])
+        : resolvedProps;
       return Resource;
     });
 

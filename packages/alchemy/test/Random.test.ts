@@ -128,6 +128,137 @@ describe("Alchemy.Random", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  test.provider("ignores a required Config.Redacted after the secret has been adopted", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const input = Random("required-config-stable", {
+        initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+      });
+      const configured = ConfigProvider.fromEnv({
+        env: { MIGRATED_RANDOM_SECRET: "must-not-be-rotated" },
+      });
+      const removed = ConfigProvider.fromEnv({ env: {} });
+
+      const first = yield* stack
+        .deploy(input)
+        .pipe(Effect.provideService(ConfigProvider.ConfigProvider, configured));
+      expect(Redacted.value(first.text)).toBe("must-not-be-rotated");
+
+      const plan = yield* stack
+        .plan(input)
+        .pipe(Effect.provideService(ConfigProvider.ConfigProvider, removed));
+      expect(plan.resources["required-config-stable"]?.action).toBe("noop");
+
+      const redeployed = yield* stack
+        .deploy(input)
+        .pipe(Effect.provideService(ConfigProvider.ConfigProvider, removed));
+      expect(Redacted.value(redeployed.text)).toBe("must-not-be-rotated");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("defers Config.Redacted inside Effect-valued resource props", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const random = Random(
+        "effect-props-config",
+        Effect.succeed({ initial: Config.Redacted("MIGRATED_RANDOM_SECRET") }),
+      );
+      const first = yield* stack
+        .deploy(random)
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({ env: { MIGRATED_RANDOM_SECRET: "seeded-through-props" } }),
+          ),
+        );
+      expect(Redacted.value(first.text)).toBe("seeded-through-props");
+
+      const saved = yield* stack
+        .deploy(random)
+        .pipe(
+          Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env: {} })),
+        );
+      expect(Redacted.value(saved.text)).toBe("seeded-through-props");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("does not generate when a required Config.Redacted is initially missing", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const random = Random("required-missing-key", {
+        initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+      });
+      const missing = yield* Effect.result(
+        stack
+          .deploy(random)
+          .pipe(
+            Effect.provideService(
+              ConfigProvider.ConfigProvider,
+              ConfigProvider.fromEnv({ env: {} }),
+            ),
+          ),
+      );
+      expect(missing._tag).toBe("Failure");
+
+      const adopted = yield* stack
+        .deploy(random)
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({ env: { MIGRATED_RANDOM_SECRET: "recovered-seed" } }),
+          ),
+        );
+      expect(Redacted.value(adopted.text)).toBe("recovered-seed");
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("supports required seeds through the yielded Resource constructor", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const make = yield* Random;
+        return yield* make("yielded-config-stable", {
+          initial: Config.Redacted("MIGRATED_RANDOM_SECRET"),
+        });
+      });
+      const first = yield* stack
+        .deploy(program)
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({ env: { MIGRATED_RANDOM_SECRET: "yielded-key" } }),
+          ),
+        );
+      expect(Redacted.value(first.text)).toBe("yielded-key");
+
+      const plan = yield* stack
+        .plan(program)
+        .pipe(
+          Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env: {} })),
+        );
+      expect(plan.resources["yielded-config-stable"]?.action).toBe("noop");
+
+      const next = yield* stack
+        .deploy(program)
+        .pipe(
+          Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv({ env: {} })),
+        );
+      expect(Redacted.value(next.text)).toBe("yielded-key");
+
+      yield* stack.destroy();
+    }),
+  );
+
   test.provider("generates when the optional Config.Redacted seed is missing", (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
