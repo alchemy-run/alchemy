@@ -30,7 +30,7 @@ So an aggregate isn't a table or an entity with getters and setters. It's a rule
 
 ## Give it an identity
 
-An aggregate type has many instances, and each is addressed by an id. The account's id is an `AccountId`, the same schema its commands use as their `target`.
+An aggregate type has many instances, and each is addressed by an id. The account's id is an `AccountId`, and each of its commands carries one in its input.
 
 ```typescript title="src/Account.aggregate.ts"
 export class Account extends Domain.Aggregate("Account", {
@@ -316,7 +316,7 @@ Inside a hosted model, the aggregate is a service. `yield* Account` gives you it
 
 ```typescript title="src/MainAccountProvisioning.policy.ts"
 yield* accounts
-  .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+  .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 

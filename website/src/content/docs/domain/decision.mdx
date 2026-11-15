@@ -32,9 +32,9 @@ Without a decision, a rule about two instances becomes a conversation between th
 
 A decision has no in-between. Use one when the rule should be answered at once and should never be half done.
 
-## Declare a command with no target
+## Declare the command
 
-A command an aggregate implements names one instance as its `target`. A command a decision implements has no target. Its input names every instance it involves.
+A command's input names every instance it involves. A transfer involves two accounts, so it has a `from` and a `to`.
 
 ```typescript title="src/Account/TransferMoney.command.ts"
 import * as Domain from "@alchemy.run/domain";
@@ -82,6 +82,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [DepositMoney],
+  target: { DepositMoney: (cmd) => cmd.accountId },
   events: [TransferSent, TransferReceived],
   decide: {
     DepositMoney: (_, cmd) => [new MoneyDeposited({ amount: cmd.amount })],
@@ -353,7 +354,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
 }) {}
 ```
 
-Its client method takes the input and no target: `bank.TransferMoney({ from, to, amount: 900 })`. The same holds over plain HTTP, the CLI and MCP, where the command has no `target` field.
+Its client method takes the input, like any command's: `bank.TransferMoney({ from, to, amount: 900 })`. The same holds over plain HTTP, the CLI and MCP.
 
 ## How it commits
 
@@ -430,7 +431,7 @@ const a2 = AccountId.make("a-2");
 it.effect("a transfer is recorded on both accounts", () =>
   story(
     Story.given(Account.ref("a-1"), new MoneyDeposited({ amount: 1000 })),
-    Story.when(Transfer, new TransferMoney({ from: a1, to: a2, amount: 900 })),
+    Story.when(new TransferMoney({ from: a1, to: a2, amount: 900 })),
     Story.then(Account.ref("a-1"), new TransferSent({ to: a2, amount: 900 })),
     Story.then(Account.ref("a-2"), new TransferReceived({ from: a1, amount: 900 })),
   ),
@@ -439,7 +440,7 @@ it.effect("a transfer is recorded on both accounts", () =>
 it.effect("an overdraft is refused, and neither account changes", () =>
   story(
     Story.given(Account.ref("a-1"), new MoneyDeposited({ amount: 100 })),
-    Story.when(Transfer, new TransferMoney({ from: a1, to: a2, amount: 900 })),
+    Story.when(new TransferMoney({ from: a1, to: a2, amount: 900 })),
     Story.rejected(new InsufficientFunds({ balance: 100 })),
     Story.then(Account.ref("a-1")),
     Story.then(Account.ref("a-2")),

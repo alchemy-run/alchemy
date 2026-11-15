@@ -909,7 +909,7 @@ interface StoryOptions<Policies, LE, LR, Systems> {
  *   story(
  *     Story.given(a1, new AccountOpened({ ... }), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
  *     Story.provide(CurrentActor, sam),
- *     Story.when(a1, new WithdrawMoney({ amount: 30 })),
+ *     Story.when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
  *     Story.then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
  *     Story.replied({ balance: 70 }),
  *   ),
@@ -1054,15 +1054,18 @@ const make =
     LE = never,
     LR = never,
     Systems extends ExternalSystem.Any = never,
-    Parts extends Model.Servable = Model.Servable,
+    Cmds extends Command.Any = never,
   >(
-    domain: Model.ModelClass<Name, Provided, Policies, Parts>,
+    // The model's command classes: each `when` is checked against the one with its tag.
+    domain: Model.ModelClass<Name, Provided, Policies> & {
+      readonly commands: ReadonlyArray<Cmds>;
+    },
     ...[options = {}]: [Policies] extends [never]
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
       : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
   <const S extends ReadonlyArray<Step>>(
-    ...steps: S & Checked<S, Parts["commands"][number]>
+    ...steps: S & Checked<S, Cmds>
   ): Effect.Effect<
     void,
     StoryFailure | LE,
@@ -1861,10 +1864,10 @@ const make =
  * it.effect("withdraws within the balance, and refuses beyond it", () =>
  *   story(
  *     Story.given(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
- *     Story.when(account, new WithdrawMoney({ amount: 30 })),
+ *     Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
  *     Story.then(account, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
  *     Story.replied({ balance: 70 }),
- *     Story.when(account, new WithdrawMoney({ amount: 100 })),
+ *     Story.when(new WithdrawMoney({ accountId: account.id, amount: 100 })),
  *     Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
  *   ),
  * );
@@ -1917,7 +1920,7 @@ const make =
  * const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });
  *
  * story(
- *   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+ *   Story.when(new RecordSettlement({ accountId: account.id, settlementId: "st_1", amount: 500 })),
  *   Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
  *   Story.returned(Payments.refund, { refundId: "re_st_1" }),
  * ).pipe(Effect.provide(StripePayments));

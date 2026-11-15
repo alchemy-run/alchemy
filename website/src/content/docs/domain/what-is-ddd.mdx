@@ -57,8 +57,7 @@ A command is only a request. It can be refused: a withdrawal from an account tha
 
 ```typescript title="src/WithdrawMoney.command.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, InsufficientFunds],
   reply: { balance: Schema.Int },
@@ -117,6 +116,11 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],
+  target: {
+    OpenAccount: (cmd) => cmd.accountId,
+    DepositMoney: (cmd) => cmd.accountId,
+    WithdrawMoney: (cmd) => cmd.accountId,
+  },
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -262,7 +266,7 @@ A client calls a query like a command, and usually gets what the store holds now
 ```typescript
 const page = yield* bank.AccountLedger({ account: accountId }); // what the store holds now
 
-const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
+const receipt = yield* bank.DepositMoney({ accountId, amount: 100 });
 const fresh = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt }); // includes the deposit
 ```
 
@@ -300,7 +304,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;
     return Effect.fn(function* ({ source }) {
       yield* accounts
-        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+        .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
     });
   }),
@@ -343,7 +347,7 @@ it.effect("refuses to withdraw more than the balance", () =>
       new AccountOpened({ owner: "sam" }),
       new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
     ),
-    Story.when(account, new WithdrawMoney({ amount: 150 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 150 })),
     Story.rejected(new InsufficientFunds({ balance: 100, requested: 150 })),
   ),
 );

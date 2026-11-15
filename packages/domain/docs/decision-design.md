@@ -58,7 +58,7 @@ export class Transfer extends Domain.Decision(TransferMoney, {
 
 Three things change around it:
 
-- **A command's `target` is optional.** A command with a target belongs to one aggregate. One without is implemented by a decision and names its instances in its input. Each is a type error in the other's place.
+- **A command has no `target`.** Its input names every instance it involves. An aggregate that implements it says which field is its instance, in a `target` map; a decision names them in `reads`. So an implementation can move from an aggregate to a decision without changing the command or its callers.
 - **An aggregate lists `events` it folds but doesn't decide.** `evolve` covers them. An aggregate that only takes part in decisions leaves out `commands` and `decide`.
 - **A model lists `decisions`.** Every command has exactly one implementation. A second one is a type error on its entry in the model (`"OpenBoth is already implemented by Door"`) and a `DefinitionError` (`ImplementedTwice`) from `Domain.verify`.
 
@@ -73,7 +73,7 @@ A decision could have declared its own input and rejections. Keeping the command
 
 ### What a caller sees
 
-`yield* Transfer` gives a client with `send(command, options)`. An Api client method takes the input with no target: `bank.TransferMoney({ from, to, amount })`. The receipt names every stream the decision read:
+`yield* Transfer` gives a client with `send(command, options)`. An Api client method takes the input, as for any command: `bank.TransferMoney({ from, to, amount })`. The receipt names every stream the decision read:
 
 ```ts
 interface Receipt<Ev, Reply> {
@@ -84,6 +84,8 @@ interface Receipt<Ev, Reply> {
 ```
 
 Each entry of `commits` is what a read takes as `atLeast`.
+
+Over an Api every command answers the same shape, whichever way it is implemented: `{ reply, stream, version, commits }`. `stream` and `version` are the first commit, so a command an aggregate implements reads as it always did.
 
 ## Atomicity
 
@@ -157,7 +159,6 @@ The one worth building next is for Effect Cluster, whose instances share one Pos
 
 ## Not done
 
-- **`target` is optional, not removed.** Removing it makes every command take its ids in its input, so an implementation can move between an aggregate and a decision without changing callers. It changes every command's call signature across the Api client, CLI, HTTP, MCP and Foldkit, and every example and doc, so it is a separate change.
 - **Scheduling.** A decision's command can't be scheduled with `schedule`.
 - **`predict`.** An aggregate predicts its own commands for optimistic updates. A decision has no `predict` yet: it would need each instance's state on the client.
 - **A late prepare.** A prepare that arrives after its attempt was undone by its sender (not by the deadline) is accepted, and holds the instance until the deadline frees it. It can't commit, so only liveness is affected.

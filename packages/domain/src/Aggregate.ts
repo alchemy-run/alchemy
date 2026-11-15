@@ -681,6 +681,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *     state: Schema.Struct({ balance: Schema.Int }),
  *     initial: { balance: 0 },
  *     commands: [DepositMoney],
+ *     target: { DepositMoney: (cmd) => cmd.accountId },
  *     decide: { DepositMoney: (account, cmd) => [new MoneyDeposited({ balanceAfter: account.balance + cmd.amount })] },
  *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
  *   },

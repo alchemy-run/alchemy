@@ -70,7 +70,7 @@ Each published call becomes one endpoint, by one rule:
 
 | Call                           | Endpoint                    | Input                                                    |
 | ------------------------------ | --------------------------- | -------------------------------------------------------- |
-| A command                      | `POST /<Command>`           | A JSON body: `target` (absent for a [decision](/domain/decision)'s command), an optional `commandId`, and the input |
+| A command                      | `POST /<Command>`           | A JSON body: an optional `commandId`, and the input      |
 | A query                        | `QUERY /<Query>`            | A JSON body: the `input`, and an optional `atLeast`, `after` and `take` |
 | A view's or aggregate's `get`, a stream's `peek` | `GET /<Name>/{key}`        | `?stream=&version=` (from a receipt) waits for that write |
 | A view's `snapshot`            | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for that write               |
@@ -96,7 +96,7 @@ Use `public` only when the answer is the same for every caller. A shared cache d
 ```shellsession
 $ curl -X POST https://bank.example.com/DepositMoney \
     -H 'content-type: application/json' -H 'cookie: session=…' \
-    -d '{"target":"c-1-main","input":{"amount":500}}'
+    -d '{"input":{"accountId":"c-1-main","amount":500}}'
 {"reply":{"balance":1500},"stream":"Account/c-1-main","version":3}
 ```
 

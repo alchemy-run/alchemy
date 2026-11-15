@@ -81,7 +81,7 @@ A command that involves several instances names them all in its input. A [decisi
 In the bank, a deposit names the account it's for, so two deposits into `a-1` queue while a deposit into `a-2` runs alongside them:
 
 ```typescript title="src/depositAndRead.ts"
-const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
 ```
 
 ## The aggregate decides, and everything commits at once
@@ -330,7 +330,7 @@ export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.I
 
 ## Call it from your code
 
-Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the target id and the command.
+Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the command, which names the account it is for.
 
 ```typescript
 // src/depositAndRead.ts
@@ -344,7 +344,7 @@ export const depositAndRead = Effect.gen(function* () {
   const accounts = yield* Account;
   const summaries = yield* AccountSummary;
   const accountId = AccountId.make("a-1");
-  const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+  const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
   return yield* summaries.get(Account.ref(accountId), { atLeast: receipt });
 });
 ```

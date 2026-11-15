@@ -39,7 +39,7 @@ It has no commands of its own. It only folds `UsernameClaimed`, which the regist
 
 ## Declare the registration
 
-Registering involves two instances, the customer and the username, so the command has no `target`. Its input names both.
+Registering involves two instances, the customer and the username. The command's input names both.
 
 ```typescript title="packages/domain/src/Customer/RegisterCustomer.command.ts"
 import * as Domain from "@alchemy.run/domain";
@@ -163,7 +163,7 @@ const c2 = CustomerId.make("c-2");
 it.effect("registering claims the username with it, then opens a main account", () =>
   story(
     Story.provide(CurrentActor, customer("c-1")),
-    Story.when(Registration, new RegisterCustomer({ customerId: c1, name: "sam", username: sam })),
+    Story.when(new RegisterCustomer({ customerId: Registration.id, customerId: c1, name: "sam", username: sam })),
     Story.then(Customer.ref("c-1"), new CustomerRegistered({ name: "sam", username: sam })),
     Story.then(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1 })),
     Story.then(Account.ref(mainAccountId(c1)), new AccountOpened({ customerId: c1, owner: "sam" })),
@@ -174,7 +174,7 @@ it.effect("a taken username rejects the registration, and nothing is recorded", 
   story(
     Story.given(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1 })),
     Story.provide(CurrentActor, customer("c-2")),
-    Story.when(Registration, new RegisterCustomer({ customerId: c2, name: "alex", username: sam })),
+    Story.when(new RegisterCustomer({ customerId: Registration.id, customerId: c2, name: "alex", username: sam })),
     Story.rejected(new UsernameTaken()),
     Story.then(Customer.ref("c-2")),
   ),

@@ -1278,7 +1278,7 @@ const build = (
  * **Example:** A typed client
  * ```typescript
  * const bank = yield* CustomerApi.client;
- * const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
+ * const { reply } = yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId);
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach(({ state }) => Effect.log(state?.balance)),
@@ -1296,7 +1296,7 @@ const build = (
  *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
  * );
  * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
- * yield* bank.DepositMoney(accountId, { amount: 1_000 });
+ * yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * ```
  *
  * ### Annotating Apis

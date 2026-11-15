@@ -70,8 +70,7 @@ export class AccountOpened extends Domain.Event("AccountOpened", { owner: Schema
 export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}
 +
 +export class OpenAccount extends Domain.Command("OpenAccount", {
-+  target: AccountId,
-+  input: { owner: Schema.String },
++  input: { accountId: AccountId, owner: Schema.String },
 +  events: [AccountOpened],
 +  rejects: [AlreadyOpen],
 +}) {}
@@ -99,6 +98,9 @@ export class Account extends Domain.Aggregate("Account", {
   state: State,
   initial: { _tag: "Unopened" },
   commands: [OpenAccount],
+  target: {
+    OpenAccount: (cmd) => cmd.accountId,
+  },
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -109,7 +111,7 @@ export class Account extends Domain.Aggregate("Account", {
 }) {}
 ```
 
-The account is an aggregate. `decide` takes a command and the current state, and returns events or a rejection. `evolve` folds each event into the next state.
+The account is an aggregate. `target` says which account a command is for. `decide` takes a command and that account's current state, and returns events or a rejection. `evolve` folds each event into the next state.
 
 ## Group it in a model
 
@@ -140,7 +142,7 @@ const account = Account.ref("a-1");
 
 it.effect("opens an account", () =>
   story(
-    Story.when(account, new OpenAccount({ owner: "sam" })),
+    Story.when(new OpenAccount({ accountId: account.id, owner: "sam" })),
     Story.then(account, new AccountOpened({ owner: "sam" })),
   ),
 );
@@ -148,7 +150,7 @@ it.effect("opens an account", () =>
 it.effect("refuses to open an account twice", () =>
   story(
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new OpenAccount({ owner: "sam" })),
+    Story.when(new OpenAccount({ accountId: account.id, owner: "sam" })),
     Story.rejected(new AlreadyOpen()),
   ),
 );
@@ -203,8 +205,7 @@ export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 }) {}
 +
 +export class DepositMoney extends Domain.Command("DepositMoney", {
-+  target: AccountId,
-+  input: { amount: Schema.Int },
++  input: { accountId: AccountId, amount: Schema.Int },
 +  events: [MoneyDeposited],
 +  rejects: [NotOpen],
 +  reply: { balance: Schema.Int },
@@ -231,6 +232,10 @@ export class Account extends Domain.Aggregate("Account", {
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount],
 +  commands: [OpenAccount, DepositMoney],
+  target: {
+    OpenAccount: (cmd) => cmd.accountId,
++    DepositMoney: (cmd) => cmd.accountId,
+  },
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -268,14 +273,14 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 +it.effect("deposits into an open account and replies with the balance", () =>
 +  story(
 +    Story.given(account, new AccountOpened({ owner: "sam" })),
-+    Story.when(account, new DepositMoney({ amount: 100 })),
++    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
 +    Story.then(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
 +    Story.replied({ balance: 100 }),
 +  ),
 +);
 +
 +it.effect("refuses a deposit into an account that isn't open", () =>
-+  story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
++  story(Story.when(new DepositMoney({ accountId: account.id, amount: 100 })), Story.rejected(new NotOpen())),
 +);
 ```
 
@@ -301,8 +306,7 @@ export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
 }) {}
 
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, InsufficientFunds],
   reply: { balance: Schema.Int },
@@ -329,6 +333,11 @@ export class Account extends Domain.Aggregate("Account", {
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount, DepositMoney],
 +  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+  target: {
+    OpenAccount: (cmd) => cmd.accountId,
+    DepositMoney: (cmd) => cmd.accountId,
++    WithdrawMoney: (cmd) => cmd.accountId,
+  },
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -367,7 +376,7 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 
 const story = Story.make(Bank);
   // ...
-  story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
+  story(Story.when(new DepositMoney({ accountId: account.id, amount: 100 })), Story.rejected(new NotOpen())),
 );
 +
 +it.effect("refuses to withdraw more than the balance", () =>
@@ -377,7 +386,7 @@ const story = Story.make(Bank);
 +      new AccountOpened({ owner: "sam" }),
 +      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
 +    ),
-+    Story.when(account, new WithdrawMoney({ amount: 150 })),
++    Story.when(new WithdrawMoney({ accountId: account.id, amount: 150 })),
 +    Story.rejected(new InsufficientFunds({ balance: 100, requested: 150 })),
 +  ),
 +);

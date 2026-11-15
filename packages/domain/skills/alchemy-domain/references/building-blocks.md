@@ -36,9 +36,8 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 /** Take money out of an account, within the balance and the daily limit. */
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,                       // the id schema of its aggregate, exactly
   middleware: [Session, MfaChallenge],     // authenticate; provide context to decide
-  input: { amount: Cents },
+  input: { accountId: AccountId, amount: Cents },  // includes the id of the instance it is for
   events: [MoneyWithdrawn],                // every event it may record
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
@@ -67,6 +66,11 @@ export class Account extends Domain.Aggregate("Account", {
   state: AccountState,                    // a Schema, usually a TaggedStruct union
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],  // events derive from the commands
+  target: {
+    OpenAccount: (cmd) => cmd.accountId,
+    DepositMoney: (cmd) => cmd.accountId,
+    WithdrawMoney: (cmd) => cmd.accountId,
+  },
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -114,12 +118,12 @@ More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggre
 
 ## Decision
 
-A command that involves several aggregate instances has no `target`: its input names them. A decision implements it. It reads the instances, decides against all their states, and records events on them; all commit, or none.
+A command that involves several aggregate instances names each in its input. A decision implements it. It reads the instances, decides against all their states, and records events on them; all commit, or none.
 
 ```ts
 // Customer/RegisterCustomer.command.ts
 export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
-  input: { customerId: CustomerId, name: Schema.String, username: Username },   // no target
+  input: { customerId: CustomerId, name: Schema.String, username: Username },
   events: [CustomerRegistered, UsernameClaimed],
   rejects: [AlreadyRegistered, UsernameTaken],
 }) {}
@@ -162,7 +166,7 @@ yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", usernam
 - **`decide` follows an aggregate's rules:** events, `[]`, or a declared rejection; pure, or an `Effect.fn` that reads only middleware context. A command with a `reply` needs the decision's `reply`, from each instance's state after the events.
 - **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.
 - **The receipt has `commits`**, one `{ stream, version }` per instance read: pass one as a view's `atLeast`.
-- **An Api client takes its input with no target:** `bank.RegisterCustomer({ customerId, name, username })`. In a story: `Story.when(Registration, command)`.
+- **Send it like any command:** `bank.RegisterCustomer({ customerId, name, username })` from an Api client, `Story.when(command)` in a story.
 - **Use a saga instead** when the process waits, takes time, or calls an external system.
 
 More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Unique values](https://alchemy.run/domain/unique-values).
@@ -256,14 +260,14 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;   // resolve clients once
     return Effect.fn(function* ({ source, event }) {
       yield* accounts
-        .send(mainAccountId(source.id), new OpenAccount({ customerId: source.id, owner: event.name }))
+        .send(new OpenAccount({ accountId: mainAccountId(source.id), customerId: source.id, owner: event.name }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));   // handle every rejection
     });
   }),
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(new ExpireTransfer({ transferId: ref.id }), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
 
 More: [Policy](https://alchemy.run/domain/policy).
 
@@ -288,14 +292,14 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
       yield* Activity.make({
         name: "debit",
         error: Schema.Union([NotOpen, InsufficientFunds]),
-        execute: accounts.send(from, new DebitTransfer({ transferId: key, amount, requestedBy })),
+        execute: accounts.send(new DebitTransfer({ accountId: from, transferId: key, amount, requestedBy })),
       }).pipe(
         ExecuteTransfer.withCompensation(() =>
-          Activity.make({ name: "refund", execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })) }),
+          Activity.make({ name: "refund", execute: accounts.send(new RefundTransfer({ accountId: from, transferId: key, amount })) }),
         ),
       );
       yield* Activity.make({ name: "credit", error: DestinationClosed, execute: /* ... */ });
-      yield* Activity.make({ name: "complete", execute: transfers.send(key, new CompleteTransfer()) });
+      yield* Activity.make({ name: "complete", execute: transfers.send(new CompleteTransfer({ transferId: key })) });
     });
   }),
 );
@@ -438,7 +442,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
 // A kind left out is served whole; `[]` serves none. An aggregate's state is never served.
 ```
 
-Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
+Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
 

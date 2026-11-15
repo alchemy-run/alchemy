@@ -60,8 +60,7 @@ const deposit = (model: Model): Update.Return<Model, Message, typeof CustomerApi
     model: modifyFields(model, { commandIds: () => allocation.commandIds }),
     commands: [Command.mapMessage(
       Bank.DepositMoney({
-        target: model.accountId,
-        input: { amount: 1_000 },
+        input: { accountId: model.accountId, amount: 1_000 },
         commandId: allocation.commandId,
       }),
       (result) => Message.ReceivedBankResult({ result }),

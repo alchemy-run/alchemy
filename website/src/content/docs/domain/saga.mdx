@@ -114,7 +114,7 @@ yield* Activity.make({
   name: "credit",
   error: DestinationClosed,
   execute: accounts
-    .send(to, new CreditTransfer({ transferId: key, amount }))
+    .send(new CreditTransfer({ accountId: to, transferId: key, amount }))
     .pipe(Effect.catchTag("NotOpen", () => Effect.fail(new DestinationClosed()))),
 });
 ```
@@ -131,12 +131,12 @@ A step can carry a compensation: what to do if the run fails after the step succ
 yield* Activity.make({
   name: "debit",
   error: Schema.Union([NotOpen, NotOwner, Frozen, InsufficientFunds]),
-  execute: accounts.send(from, new DebitTransfer({ transferId: key, amount, requestedBy })),
+  execute: accounts.send(new DebitTransfer({ accountId: from, transferId: key, amount, requestedBy })),
 }).pipe(
   ExecuteTransfer.withCompensation(() =>
     Activity.make({
       name: "refund",
-      execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })),
+      execute: accounts.send(new RefundTransfer({ accountId: from, transferId: key, amount })),
     }),
   ),
 );
@@ -169,7 +169,7 @@ The Transfer aggregate shows where every transfer stands, so the saga reports ba
 ```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 yield* Activity.make({
   name: "complete",
-  execute: transfers.send(key, new CompleteTransfer()),
+  execute: transfers.send(new CompleteTransfer({ transferId: key })),
 });
 ```
 
@@ -181,7 +181,7 @@ yield* Workflow.addFinalizer((exit) =>
     ? Effect.void
     : Activity.make({
         name: "record-failure",
-        execute: transfers.send(key, new FailTransfer({ reason: reasonOf(exit.cause) })),
+        execute: transfers.send(new FailTransfer({ transferId: key, reason: reasonOf(exit.cause) })),
       }).pipe(Effect.orDie),
 );
 ```

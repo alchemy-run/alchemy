@@ -23,7 +23,7 @@ import { TransferId } from "./Transfer.id.ts";
  * was approved in time.
  */
 export class ExpireTransfer extends Domain.Command("ExpireTransfer", {
-  target: TransferId,
+  input: { transferId: TransferId },
   events: [TransferFailed],
 }) {}
 ```
@@ -58,7 +58,7 @@ export const TransferApprovalDeadlineLive = TransferApprovalDeadline.toLayer(
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ source, event }) {
       if (!event.needsApproval) return;
-      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
+      yield* transfers.schedule(new ExpireTransfer({ transferId: source.id }), { after: APPROVAL_WINDOW });
     });
   }),
 );
@@ -115,7 +115,7 @@ When the deadline no longer applies, cancel it. Schedule the command with a comm
 
 ```typescript
 // when the waiting starts
-yield* transfers.schedule(source, new ExpireTransfer(), {
+yield* transfers.schedule(new ExpireTransfer({ transferId: source.id }), {
   after: APPROVAL_WINDOW,
   commandId: `expire:${source.id}`,
 });
@@ -141,7 +141,7 @@ yield* transfers.unschedule(source, `expire:${source.id}`).pipe(
 A deadline can need to start over. A ticket stalls an hour after it opens or resumes, unless it's paused first. Arm the stall timer under one id per ticket, from both events:
 
 ```typescript
-yield* tickets.schedule(source, new MarkStalled(), {
+yield* tickets.schedule(new MarkStalled({ ticketId: source.id }), {
   after: "1 hour",
   commandId: `stall:${source.id}`,
 });
@@ -162,7 +162,7 @@ Story.clock("2026-01-02T09:00:00Z"),
 Story.then(transfer, new TransferFailed({ transferId: transfer.id, reason: "not approved in time" })),
 // Approval now comes too late.
 Story.provide(CurrentActor, agent("support-7")),
-Story.when(transfer, new ApproveTransfer()),
+Story.when(new ApproveTransfer({ transferId: transfer.id })),
 Story.rejected(new NotAwaitingApproval()),
 ```
 

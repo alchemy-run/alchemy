@@ -33,8 +33,7 @@ export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
 export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
 
 export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
-  target: CustomerId,
-  input: { name: Schema.String },
+  input: { customerId: CustomerId, name: Schema.String },
   events: [CustomerRegistered],
   rejects: [AlreadyRegistered],
 }) {}
@@ -56,6 +55,7 @@ export class Customer extends Domain.Aggregate("Customer", {
   state: Schema.Struct({ name: Schema.NullOr(Schema.String) }),
   initial: { name: null },
   commands: [RegisterCustomer],
+  target: { RegisterCustomer: (cmd) => cmd.customerId },
   decide: {
     RegisterCustomer: (customer, cmd) =>
       customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
@@ -104,7 +104,7 @@ import { CustomerRegistered } from "./RegisterCustomer.command.ts";
 +    const accounts = yield* Account;
 +    return Effect.fn(function* ({ source }) {
 +      yield* accounts
-+        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
++        .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
 +        .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 +    });
 +  }),
@@ -197,7 +197,7 @@ const samsAccount = Account.ref("c-1-main");
 
 it.effect("registering opens a main account", () =>
   story(
-    Story.when(sam, new RegisterCustomer({ name: "sam" })),
+    Story.when(new RegisterCustomer({ customerId: sam.id, name: "sam" })),
     Story.then(sam, new CustomerRegistered({ name: "sam" })),
     Story.then(samsAccount, new AccountOpened({ owner: "c-1" })),
     Story.view(AccountSummary, samsAccount, { owner: "c-1", balance: 0 }),

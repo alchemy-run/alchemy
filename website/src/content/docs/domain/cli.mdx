@@ -70,7 +70,7 @@ A declaration without a description gets a generated sentence, like `statement` 
 Each command is a subcommand in kebab-case, and its payload and input fields are flags. It prints the receipt as JSON:
 
 ```sh
-$ bank deposit-money --target a-1 --amount 1000
+$ bank deposit-money --account-id a-1 --amount 1000
 {
   "reply": { "balance": 1000 },
   "stream": "Account/a-1",
@@ -81,13 +81,13 @@ $ bank deposit-money --target a-1 --amount 1000
 `--json` takes the same fields as one object, and any flag you also give wins over it:
 
 ```sh
-$ bank deposit-money --json '{"target":"a-1","amount":1000}' --amount 50
+$ bank deposit-money --json '{"accountId":"a-1","amount":1000}' --amount 50
 ```
 
 It also takes the call's own wire payload, with the input nested, as the HTTP API and MCP tools take it:
 
 ```sh
-$ bank deposit-money --json '{"target":"a-1","input":{"amount":1000}}'
+$ bank deposit-money --json '{"input":{"accountId":"a-1","amount":1000}}'
 ```
 
 ## Read a view
@@ -124,9 +124,7 @@ A string, a number, a boolean or a set of string literals takes a typed flag. An
 $ bank account-summary get --key a-1 --at-least '{"stream":"Account/a-1","version":1}'
 ```
 
-A command whose input has a field named like a payload field, such as its own `target`, takes its whole input as `--input` JSON instead.
-
-A command a [decision](/domain/decision) implements has no `--target`: its input's fields name the instances it involves.
+A command whose input has a field named like a payload field, such as its own `commandId`, takes its whole input as `--input` JSON instead.
 
 ## Read failures
 
@@ -134,13 +132,13 @@ The CLI decodes the input against the call's schema before it sends anything, so
 
 ```sh
 $ bank deposit-money --amount 1000   # exit code 1, nothing sent
-# stderr: Invalid input for deposit-money, naming the missing `target`
+# stderr: Invalid input for deposit-money, naming the missing `accountId`
 ```
 
 A rejection, or an error of the call's middleware, goes to stderr as its wire JSON, and the run fails with `CallRejected`, exiting with code 1:
 
 ```sh
-$ bank withdraw-money --target a-1 --amount 5000   # exit code 1
+$ bank withdraw-money --account-id a-1 --amount 5000   # exit code 1
 { "_tag": "InsufficientFunds", "balance": 1000, "requested": 5000 }
 ```
 
@@ -150,8 +148,7 @@ Every run dies with a `DefinitionError` when two things the Api serves get one c
 
 ```typescript
 class Reserved extends Domain.Command("Reserved", {
-  target: AccountId,
-  input: { json: Schema.String },
+  input: { accountId: AccountId, json: Schema.String },
 }) {}
 // bank reserved ... -> DefinitionError: field `json` would be the flag --json, which the CLI reserves
 ```
