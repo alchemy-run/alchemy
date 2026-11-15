@@ -455,6 +455,72 @@ describe("Domain backfill (simulated)", { tags: ["unit", "local"] }, () => {
       }),
   );
 
+  /**
+   * A new instance on older code lists itself after the run read its leaf: what it
+   * keeps, and the marks the run left in the directory.
+   */
+  const listLate = (sim: Sim) =>
+    Effect.gen(function* () {
+      for (const commit of history(sim, 4, 12, 3)) yield* commit();
+      sim.holdListing = true;
+      yield* sim.deploy();
+      sim.now += 1;
+      yield* sim.commit("A/late", ["k0"], sim.now + 60_000);
+      yield* sim.run();
+      yield* sim.list("A/late");
+      const source = sim.sources.get("A/late")!;
+      const marks = [...sim.nodes.values()].flatMap((node) =>
+        [...node.object.data.entries()]
+          .filter(([key]) => key.startsWith("m:"))
+          .map(([, mark]) => mark),
+      );
+      return {
+        source,
+        marks,
+        waiting: source.object.data.get("bf:marks"),
+        retrying: source.object.jobs.has("bf-register"),
+      };
+    });
+
+  it.effect(
+    "an instance on older code keeps a newer mark and tries again until it runs newer code",
+    () =>
+      Effect.gen(function* () {
+        const sim = new Sim(1, TARGET);
+        const { source, waiting, retrying } = yield* listLate(sim);
+        expect(waiting).toEqual([{ target: TARGET, revision: 1 }]);
+        expect(retrying).toBe(true);
+        // Its retries run once it has moved to the deployed code.
+        yield* sim.run();
+        expect(source.object.data.has("bf:marks")).toBe(false);
+        expect(source.object.jobs.has("bf-register")).toBe(false);
+        expect(sim.keys.get("k0")!.applied.map((a) => a.delivery.source)).toContain("A/late");
+      }),
+  );
+
+  it.effect("an instance on code that doesn't know its revision never waits on a mark", () =>
+    Effect.gen(function* () {
+      const sim = new Sim(1, TARGET);
+      sim.unversioned.add("A/late");
+      const { marks, waiting, retrying } = yield* listLate(sim);
+      expect(marks).toContainEqual({ target: TARGET, revision: 1 });
+      expect(waiting).toBeUndefined();
+      expect(retrying).toBe(false);
+    }),
+  );
+
+  it.effect("a mark from a run on code that doesn't know its revision is never waited on", () =>
+    Effect.gen(function* () {
+      const sim = new Sim(1, TARGET);
+      sim.unversionedRuns = true;
+      const { marks, waiting, retrying } = yield* listLate(sim);
+      expect(marks.length).toBeGreaterThan(0);
+      expect(marks).not.toContainEqual(expect.objectContaining({ revision: expect.anything() }));
+      expect(waiting).toBeUndefined();
+      expect(retrying).toBe(false);
+    }),
+  );
+
   it.effect("a mark of a consumer removed since is not waited on", () =>
     Effect.gen(function* () {
       const sim = new Sim(1, TARGET);

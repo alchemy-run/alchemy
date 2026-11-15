@@ -289,6 +289,12 @@ export class Sim {
   get revision() {
     return this.removed ? 2 : this.deployed ? 1 : 0;
   }
+
+  /** Runs on code that doesn't know its revision: their marks carry none. */
+  unversionedRuns = false;
+
+  /** Instances whose code doesn't know its revision, by stream. */
+  readonly unversioned = new Set<string>();
   calls = 0;
   failures = 0;
 
@@ -494,7 +500,7 @@ export class Sim {
   }
 
   readonly net: Backfill.Network = {
-    revision: () => this.revision,
+    revision: () => (this.unversionedRuns ? undefined : this.revision),
     node: {
       register: (path, ref) =>
         this.call(
@@ -752,7 +758,7 @@ export class Sim {
           ref,
           model: () => (knows() && !this.removed ? this.targets : []),
           targets: () => (knows() && !this.removed ? this.targets : []),
-          revision: () => (knows() ? this.revision : 0),
+          revision: () => (this.unversioned.has(id) ? undefined : knows() ? this.revision : 0),
           singleSource: () => this.singleSource,
           log: (after, limit) =>
             Effect.sync(() => data.events.filter((event) => event.seq > after).slice(0, limit)),
