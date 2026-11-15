@@ -292,6 +292,26 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     test(
+      "getByKey reaches the instance with that whole key, and getByName is its one-part key",
+      Effect.gen(function* () {
+        const name = crypto.randomUUID();
+        const client = yield* HttpClient.HttpClient;
+        const body = (yield* client.get(`${baseUrl}/keyed/${name}`).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        )) as {
+          multi: { name: string; key: ReadonlyArray<string> };
+          single: { name: string; key: ReadonlyArray<string> };
+          count: number;
+        };
+        expect(body.multi).toEqual({ name, key: [name, "a,b", "", "c\\d"] });
+        expect(body.single).toEqual({ name, key: [name] });
+        expect(body.count).toBe(1);
+      }),
+      { timeout: 120_000 },
+    );
+
+    test(
       "a second class on the same pool calls the first through the gateway",
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;

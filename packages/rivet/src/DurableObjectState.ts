@@ -128,8 +128,10 @@ export interface DurableObjectStorage {
 
 /** The instance a Durable Object's methods run against. */
 export interface DurableObjectStateShape {
-  /** The name the instance was addressed by (`getByName(name)`). */
+  /** The name the instance was addressed by (`getByName(name)`): the first part of its key. */
   readonly id: { readonly name: string; toString(): string };
+  /** The whole key the instance was addressed by (`getByKey(key)`). */
+  readonly key: ReadonlyArray<string>;
   readonly storage: DurableObjectStorage;
   /** Keep the instance awake until `effect` completes. */
   waitUntil<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, never, R>;
@@ -497,6 +499,7 @@ export const makeDurableObjectState = (
 
   return {
     id: { name, toString: () => name },
+    key: c.key,
     storage,
     getWebSockets: (tag) => Effect.sync(() => sockets.all(tag)),
     // As on Cloudflare: the work runs with the caller's context and a scope
