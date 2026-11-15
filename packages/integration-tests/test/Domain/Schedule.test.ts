@@ -1,5 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
-import { InMemory } from "@alchemy.run/domain/InMemory";
+import { InMemory, make as makeInMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { Activity } from "effect/workflow";
 
 // A hold that expires an hour after it is placed, unless it is released first.
@@ -373,6 +374,33 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(ArmingLive)),
   );
 });
+
+describe(
+  "Domain schedule, on a platform clock that lags the sleep",
+  { tags: ["unit", "local"] },
+  () => {
+    // `now` is the platform's clock and the TestClock drives the timer's sleep,
+    // so the sleep can end while `now` is still short of the due time, as Node's
+    // timers do against `Date.now()` (#3342).
+    it.effect("a timer that wakes before it is due sleeps again and fires", () => {
+      let platformNow = 0;
+      const live = Holds.layer(HoldDeadlineLive).pipe(
+        Layer.provide(Layer.suspend(() => makeInMemory({ now: () => platformNow }).layer)),
+      );
+      return Effect.gen(function* () {
+        const holds = yield* Hold;
+        yield* holds.schedule("h-13", new ExpireHold(), { after: "1 second", commandId: "x" });
+        // the sleep ends 1ms before the platform's clock reaches the due time
+        platformNow = 999;
+        yield* TestClock.adjust("1 second");
+        expect((yield* holds.get("h-13")).status).toBe("none");
+        platformNow = 1_000;
+        yield* TestClock.adjust("1 millis");
+        expect((yield* holds.get("h-13")).status).toBe("expired");
+      }).pipe(Effect.provide(live));
+    });
+  },
+);
 
 describe("Domain schedule, armed again under the same id", { tags: ["unit", "local"] }, () => {
   it.effect("a timer that fired as a no-op fires again once armed again", () =>

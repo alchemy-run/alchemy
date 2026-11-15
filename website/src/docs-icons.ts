@@ -61,6 +61,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   // The Sandboxes dropdown's link to the AWS hub's Nitro Sandboxes page.
   "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
+  DigitalOcean: b("digitalocean"),
   // Brand-colored prism for marketing surfaces.
   PrismaColor: b("prisma-color"),
   Axiom: b("axiom"),
@@ -167,6 +168,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: b("prisma"),
+  DigitalOcean: b("digitalocean"),
   Axiom: b("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
