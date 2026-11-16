@@ -107,6 +107,6 @@ const rooms = Rivet.Node.connect(connection)(Room);
 yield* rooms.getByName("lobby").join();
 ```
 
-Each class's outer Effect runs once, in `serve`, with the context it's given, so provide the services the classes yield. The third argument sets RivetKit's `registry` settings, actor `options` by class, the `shutdown` grace period, and a `connected` Effect that runs once the node has registered. The process owns its signals: interrupt `serve` to stop the node. `connect` takes `headers`, computed for each call, such as the caller's trace.
+Each class's outer Effect runs once, in `serve`, with the context it's given, so provide the services the classes yield. A class runs with the [`actorOptions`](/rivet/durable-objects#tune-when-it-sleeps) it declares. The third argument sets RivetKit's `registry` settings, actor `options` by class, which win over a class's own one option at a time, the `shutdown` grace period, and a `connected` Effect that runs once the node has registered. The process owns its signals: interrupt `serve` to stop the node. `connect` takes `headers`, computed for each call, such as the caller's trace.
 
 Next, choose a platform: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner), [Railway](/rivet/railway) or [Rivet Cloud](/rivet/rivet-cloud).

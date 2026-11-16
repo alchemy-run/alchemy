@@ -14,6 +14,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import NodeEcho from "./fixtures/node-echo.ts";
+import NodeSleepy, { slept } from "./fixtures/node-sleepy.ts";
 
 const CONTROL_PLANE_PORT = 16470;
 const POOL = "node-test";
@@ -26,14 +27,15 @@ const Cluster = RivetDocker.SwarmControlPlane("RivetNode", { port: CONTROL_PLANE
 
 let connection: Rivet.Node.NodeConnection;
 
-/** Host `NodeEcho` in this process until the test's scope closes. */
-const serving = Effect.gen(function* () {
-  const connected = yield* Deferred.make<void>();
-  const node = yield* Rivet.Node.serve([NodeEcho], connection, {
-    connected: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
-  }).pipe(Effect.forkScoped);
-  yield* Effect.raceFirst(Deferred.await(connected), Fiber.join(node));
-});
+/** Host `classes` in this process until the test's scope closes. */
+const serving = (classes: Parameters<typeof Rivet.Node.serve>[0] = [NodeEcho]) =>
+  Effect.gen(function* () {
+    const connected = yield* Deferred.make<void>();
+    const node = yield* Rivet.Node.serve(classes, connection, {
+      connected: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
+    }).pipe(Effect.forkScoped);
+    yield* Effect.raceFirst(Deferred.await(connected), Fiber.join(node));
+  });
 
 // Retried while the control plane routes the first call to the new node.
 const settled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -71,7 +73,7 @@ describe.skipIf(!!process.env.FAST)(
       "serve hosts a class in this process, and connect calls its instances",
       Effect.scoped(
         Effect.gen(function* () {
-          yield* serving;
+          yield* serving();
           const echoes = Rivet.Node.connect(connection)(NodeEcho);
           const first = yield* settled(echoes.getByName("a").increment());
           expect(yield* echoes.getByName("a").increment()).toBe(first + 1);
@@ -85,7 +87,7 @@ describe.skipIf(!!process.env.FAST)(
       "connect adds its headers to every call, and a caller's own header wins",
       Effect.scoped(
         Effect.gen(function* () {
-          yield* serving;
+          yield* serving();
           const traced = Rivet.Node.connect({
             ...connection,
             headers: () => [["x-trace", "from-connection"]],
@@ -112,6 +114,24 @@ describe.skipIf(!!process.env.FAST)(
           expect(
             yield* read(new Request("http://node/", { headers: { "x-trace": "from-caller" } })),
           ).toEqual({ name: "traced", trace: "from-caller" });
+        }),
+      ),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "a class runs with the actorOptions it declares",
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* serving([NodeSleepy]);
+          const sleepy = Rivet.Node.connect(connection)(NodeSleepy).getByName("idle");
+          expect(yield* settled(sleepy.ping())).toBe("pong");
+          // It declares a sleepTimeout of 1 second, so it sleeps long before
+          // RivetKit's default of 30 seconds.
+          yield* Effect.suspend(() =>
+            slept.includes("idle") ? Effect.void : Effect.fail("still awake"),
+          ).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }));
+          expect(slept).toContain("idle");
         }),
       ),
       { timeout: 120_000 },

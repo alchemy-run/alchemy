@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import {
+  checkActorOptions,
   DurableObjectHasNoPool,
   namespaceAt,
   PlatformDeclaration,
@@ -46,7 +47,8 @@ export interface ServeOptions {
   readonly registry?: Readonly<Record<string, unknown>>;
   /**
    * RivetKit actor options by class (its `LogicalId`), such as
-   * `sleepGracePeriod`. A class not listed runs with RivetKit's defaults.
+   * `sleepGracePeriod`, over the `actorOptions` the class declares,
+   * option by option. A class with neither runs with RivetKit's defaults.
    */
   readonly options?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   /**
@@ -73,10 +75,15 @@ const host = (classes: ReadonlyArray<DurableObjectClass<unknown>>) =>
       const context = yield* Layer.build(
         Option.isSome(stack) ? entry : entry.pipe(Layer.provide(stackConstant("rivet", "node"))),
       );
-      const runtime = Context.get(context, entrypointTag)
-        .RuntimeContext as DurableObjectRuntimeContext;
+      const self = Context.get(context, entrypointTag);
+      const runtime = self.RuntimeContext as DurableObjectRuntimeContext;
       const built = runtime.hosted();
-      if (built !== undefined) return built;
+      if (built !== undefined) {
+        return {
+          built,
+          options: yield* checkActorOptions(runtime.id, self.Props?.actorOptions),
+        };
+      }
       return yield* Effect.die(
         new DurableObjectHasNoPool({
           message: `Rivet.DurableObject '${runtime.id}' did not finish its class phase.`,
@@ -98,16 +105,24 @@ export const serve = (
   Effect.gen(function* () {
     globalThis.__ALCHEMY_RUNTIME__ = true;
     const hosted = yield* host(classes);
-    return yield* runDurableObjects(hosted, {
-      endpoint: connection.endpoint,
-      token: Redacted.value(connection.token),
-      namespace: connection.namespace,
-      pool: connection.pool,
-      registry: options.registry,
-      options: options.options,
-      shutdown: options.shutdown,
-      connected: options.connected,
-    });
+    return yield* runDurableObjects(
+      hosted.map(({ built }) => built),
+      Object.fromEntries(
+        hosted.flatMap(({ built, options: declared }) => {
+          const merged = { ...declared, ...options.options?.[built.name] };
+          return Object.keys(merged).length === 0 ? [] : [[built.name, merged]];
+        }),
+      ),
+      {
+        endpoint: connection.endpoint,
+        token: Redacted.value(connection.token),
+        namespace: connection.namespace,
+        pool: connection.pool,
+        registry: options.registry,
+        shutdown: options.shutdown,
+        connected: options.connected,
+      },
+    );
   }) as Effect.Effect<never, never, Scope.Scope>;
 
 /** Reach the instances of any Durable Object class through the gateway. */

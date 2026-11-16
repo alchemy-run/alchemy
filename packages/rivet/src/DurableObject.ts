@@ -50,7 +50,80 @@ export interface DurableObjectProps extends PlatformProps {
    * @default "default"
    */
   handler?: string;
+  /**
+   * RivetKit actor options every instance of this class runs with, on each
+   * node that hosts it. A pool records them when it deploys and its nodes
+   * run with what it recorded; `Rivet.Node.serve` reads them from the class.
+   * Unset options keep RivetKit's defaults.
+   */
+  actorOptions?: DurableObjectActorOptions;
 }
+
+/**
+ * The RivetKit actor options that change how a Durable Object instance runs,
+ * each in milliseconds.
+ */
+export interface DurableObjectActorOptions {
+  /**
+   * How long an instance stays awake with nothing to do before it sleeps.
+   * @default 30000
+   */
+  sleepTimeout?: number;
+  /**
+   * How long an instance has to wind down when it sleeps or is destroyed:
+   * `onSleep` or `onDestroy`, and work it keeps awake, must finish within it.
+   * @default 15000
+   */
+  sleepGracePeriod?: number;
+  /**
+   * How long an instance's storage may take to migrate when it wakes.
+   * @default 30000
+   */
+  onMigrateTimeout?: number;
+}
+
+const ACTOR_OPTIONS: ReadonlyArray<string> = [
+  "sleepTimeout",
+  "sleepGracePeriod",
+  "onMigrateTimeout",
+];
+
+/** A class's `actorOptions` name an option RivetKit doesn't take, or a value it rejects. */
+export class InvalidActorOptions extends Data.TaggedError("Rivet.InvalidActorOptions")<{
+  readonly message: string;
+}> {}
+
+/**
+ * The `actorOptions` of class `id`, checked: each one a supported option set
+ * to a whole number of milliseconds above 0. Unset options are dropped, and
+ * a class that sets none has none.
+ * @internal
+ */
+export const checkActorOptions = (
+  id: string,
+  options: unknown,
+): Effect.Effect<DurableObjectActorOptions | undefined> => {
+  const invalid = (reason: string) =>
+    Effect.die(
+      new InvalidActorOptions({
+        message: `Rivet.DurableObject '${id}' has invalid actorOptions: ${reason}`,
+      }),
+    );
+  if (options === undefined) return Effect.undefined;
+  if (typeof options !== "object" || options === null || Output.isOutput(options)) {
+    return invalid("they must be an object of plain numbers.");
+  }
+  const set = Object.entries(options).filter(([, value]) => value !== undefined);
+  for (const [name, value] of set) {
+    if (!ACTOR_OPTIONS.includes(name)) {
+      return invalid(`'${name}' is not one of ${ACTOR_OPTIONS.join(", ")}.`);
+    }
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+      return invalid(`'${name}' must be a whole number of milliseconds above 0.`);
+    }
+  }
+  return Effect.succeed(set.length === 0 ? undefined : Object.fromEntries(set));
+};
 
 export interface DurableObjectAttributes {
   /** The actor name the control plane knows this class by. */

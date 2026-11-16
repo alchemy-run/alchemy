@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import type { DurableObjectActorOptions } from "./DurableObject.ts";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -74,6 +75,8 @@ export interface PoolDurableObject {
    * `Rivet.DurableObject`. It owns the pool's nodes.
    */
   external?: boolean;
+  /** The RivetKit actor options the pool's nodes host it with. */
+  options?: DurableObjectActorOptions;
 }
 
 /** Data the Durable Objects a pool hosts bind onto it. */
