@@ -555,10 +555,11 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         const second = yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: 1 }));
         expect(second.version).toBe(2);
         expect(directory.listed).toEqual([]);
-        // It is listed once the directory answers, with no further command.
-        yield* eventually(() => directory.state.attempts > 0);
+        // It is listed once the directory answers, with no further command. Its
+        // Totals view lists its own row too, after its delivery: wait for both.
+        yield* eventually(() => directory.state.attempts >= 2);
         yield* Deferred.succeed(directory.state.gate!, undefined);
-        yield* eventually(() => directory.listed.length > 0);
+        yield* eventually(() => directory.listed.length >= 2);
         expect(directory.listed).toContain("main");
         // It is listed once: nothing is pending afterwards.
         const attempts = directory.state.attempts;
