@@ -340,14 +340,21 @@ export interface ComputeServiceLookup {
  * Console or through its API, serves a kept version again within seconds. The
  * next deploy promotes the declared version again.
  *
- * **Example:** Roll the service back to the version it served before
+ * **Example:** Roll the service back to the newest version it does not serve
  * ```typescript
- * import { createServiceRollback } from "@distilled.cloud/prisma/management";
+ * import {
+ *   createServiceRollback,
+ *   getService,
+ *   getServiceDeployments,
+ * } from "@distilled.cloud/prisma/management";
  *
- * yield* createServiceRollback({
- *   serviceId: service.serviceId,
- *   deploymentId: previousVersionId,
- * });
+ * const serviceId = "cps_cmabc123def456ghi789jkl0";
+ * const { data: live } = yield* getService({ serviceId });
+ * const { data: versions } = yield* getServiceDeployments({ serviceId });
+ * const previous = versions
+ *   .filter((version) => version.id !== live.latestDeploymentId)
+ *   .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]!;
+ * yield* createServiceRollback({ serviceId, deploymentId: previous.id });
  * ```
  *
  * ### Looking up an existing Service

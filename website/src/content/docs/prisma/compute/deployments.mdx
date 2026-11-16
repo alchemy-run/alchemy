@@ -69,8 +69,8 @@ const version = yield* Prisma.ComputeVersion("web-version", {
 });
 ```
 
-A version that fails its check is deleted, and the service keeps serving
-what it served.
+A new version that fails its check is deleted, and the service keeps
+serving what it served. A version that already existed is left as it is.
 
 After promoting, the service checks its stable URL:
 
@@ -121,18 +121,9 @@ on a machine that never built it, such as a CI runner.
 ## Roll back
 
 The replaced version is kept. Roll the service back to it in the Prisma
-Console, or through the API:
-
-```typescript
-import { createServiceRollback } from "@distilled.cloud/prisma/management";
-
-yield* createServiceRollback({
-  serviceId: service.serviceId,
-  deploymentId: previousVersionId,
-});
-```
-
-The stable URL serves the kept version within seconds. The next deploy
+Console, or call the Management API's `createServiceRollback` from
+`@distilled.cloud/prisma/management` with the service's ID and the kept
+version's ID, which `getServiceDeployments` lists. The stable URL serves the kept version within seconds. The next deploy
 promotes the declared version again.
 
 ## Delete replaced versions
@@ -224,9 +215,11 @@ changes nothing. Removing the Compute from the program, or `alchemy destroy`,
 applies the run's other changes and leaves the old service as it is.
 
 To keep the stack as it is, use the last release before this change. To move
-to a new service with a new URL, forget the old one:
+to a new service with a new URL, forget the old one with the
+`alchemy state delete` command the error prints. It names the Compute's
+full address, such as:
 
-<PackageManagers run="alchemy state delete <stack>/<stage>/<id>" />
+<PackageManagers run="alchemy state delete MyStack/dev/Site/api" />
 
 If the Compute sets `serviceName`, change it: a Branch cannot hold two
 services with one name. Then deploy with `--adopt`, so the new environment
@@ -234,7 +227,7 @@ variables take over the old service's variables of the same key. The old
 service keeps running with its URL and versions: move its custom domains to
 the new service, and delete it in the Prisma Console when nothing uses it.
 
-To destroy the stack instead, run the same `alchemy state delete`, then
+To destroy the stack instead, run the same `alchemy state delete` command, then
 `alchemy destroy`, and delete the old service in the Prisma Console.
 
 ## Where next
