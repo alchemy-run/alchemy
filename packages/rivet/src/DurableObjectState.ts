@@ -164,20 +164,29 @@ const ALARM_KEY = "alarm";
 
 /**
  * The alarm that's set: its RivetKit schedule (absent until a transaction
- * that set it commits), when, the token it fires with, and how many times
- * its handler has failed and been retried.
+ * that set it commits), when, the token it fires with, how many times its
+ * handler has failed and been retried, and the activation running its
+ * handler, if one is.
  */
 interface StoredAlarm {
   readonly id?: string;
   readonly at: number;
   readonly token: string;
   readonly retries?: number;
+  readonly running?: string;
 }
 
 /** A failed alarm is retried this many times, as on Cloudflare. */
 const ALARM_RETRIES = 6;
 /** The first retry's delay; each one after doubles it. */
 const ALARM_RETRY_DELAY = 2_000;
+/**
+ * RivetKit drops a schedule as it fires it, so an alarm whose handler is
+ * running keeps a schedule of its own due this long after: renewed while
+ * the handler runs, and firing on the next activation if the node dies
+ * before it finishes, which runs the handler again.
+ */
+const ALARM_LEASE = 30_000;
 
 const TRANSACTION_TIMEOUT: Duration.Input = "30 seconds";
 /** RivetKit's own transaction timeout trails ours, so ours ends it first. */
@@ -287,12 +296,35 @@ const beginTransaction = (db: ActorDatabase, timeout: number) =>
     });
   });
 
-const readAlarm = (c: ActorContextLike) =>
+/** The stored alarm, and the row it was read from. */
+const readAlarmRow = (c: ActorContextLike) =>
   query<{ value: string }>(c, `SELECT value FROM ${META_TABLE} WHERE key = ?`, ALARM_KEY).pipe(
     Effect.map((rows) =>
-      rows[0] === undefined ? undefined : (JSON.parse(rows[0].value) as StoredAlarm),
+      rows[0] === undefined
+        ? undefined
+        : { raw: rows[0].value, alarm: JSON.parse(rows[0].value) as StoredAlarm },
     ),
   );
+
+const readAlarm = (c: ActorContextLike) => Effect.map(readAlarmRow(c), (row) => row?.alarm);
+
+/** Replace the alarm stored as `raw` with `alarm`, or delete it; false if it changed since. */
+const swapAlarm = (c: ActorContextLike, raw: string, alarm: StoredAlarm | undefined) =>
+  (alarm === undefined
+    ? query(
+        c,
+        `DELETE FROM ${META_TABLE} WHERE key = ? AND value = ? RETURNING key`,
+        ALARM_KEY,
+        raw,
+      )
+    : query(
+        c,
+        `UPDATE ${META_TABLE} SET value = ? WHERE key = ? AND value = ? RETURNING key`,
+        JSON.stringify(alarm),
+        ALARM_KEY,
+        raw,
+      )
+  ).pipe(Effect.map((rows) => rows.length > 0));
 
 const writeAlarm = (c: ActorContextLike, alarm: StoredAlarm) =>
   query(
@@ -422,7 +454,13 @@ export const makeDurableObjectState = (
     },
     setAlarm: (scheduledTime) =>
       setAlarm(c, typeof scheduledTime === "number" ? scheduledTime : scheduledTime.getTime()),
-    getAlarm: () => readAlarm(c).pipe(Effect.map((alarm) => alarm?.at ?? null)),
+    // A running alarm isn't set any more, as on Cloudflare.
+    getAlarm: () =>
+      readAlarm(c).pipe(
+        Effect.map((alarm) =>
+          alarm === undefined || alarm.running !== undefined ? null : alarm.at,
+        ),
+      ),
     deleteAlarm: () =>
       Effect.gen(function* () {
         const existing = yield* readAlarm(c);
@@ -526,63 +564,91 @@ export const makeDurableObjectState = (
 };
 
 /**
- * Claim a fired alarm: clear it, so `getAlarm` reports `null` while the
- * handler runs (as on Cloudflare), and return it if it's still the alarm
- * that's set. One replaced or deleted after RivetKit started firing it
- * leaves the newer alarm alone and doesn't run the handler. Goes through
- * the input gate, so it can't land inside a call's `setAlarm`.
+ * Claim a fired alarm for `activation` and return it, or `undefined` when
+ * its handler shouldn't run here: it was replaced or deleted after RivetKit
+ * started firing it, or this is its lease coming due while the handler
+ * still runs, which renews the lease. A lease that comes due on a later
+ * activation means the handler never finished: it runs again, counted as a
+ * retry. The claimed alarm reads as `null` from `getAlarm` while its
+ * handler runs, as on Cloudflare. Goes through the input gate, so it can't
+ * land inside a call's `setAlarm`.
  */
-const claimFiredAlarm = (c: ActorContextLike, token: unknown) =>
+const claimFiredAlarm = (c: ActorContextLike, activation: Activation, token: unknown) =>
   gateStorage(
     Effect.gen(function* () {
-      const rows = yield* query<{ value: string }>(
-        c,
-        `SELECT value FROM ${META_TABLE} WHERE key = ?`,
-        ALARM_KEY,
+      const row = yield* readAlarmRow(c);
+      if (row === undefined || row.alarm.token !== token) return undefined;
+      const { alarm } = row;
+      const renewing = alarm.running === activation.id;
+      const retries =
+        alarm.running === undefined || renewing ? alarm.retries : (alarm.retries ?? 0) + 1;
+      if (retries !== undefined && retries > ALARM_RETRIES) {
+        yield* Effect.logError(
+          `Durable Object alarm did not finish ${ALARM_RETRIES + 1} times; giving up`,
+        );
+        yield* swapAlarm(c, row.raw, undefined);
+        return undefined;
+      }
+      const now = yield* Clock.currentTimeMillis;
+      const lease = yield* Effect.promise(() =>
+        c.schedule.at(now + ALARM_LEASE, ALARM_ACTION, token),
       );
-      const stored = rows[0];
-      if (stored === undefined) return undefined;
-      const alarm = JSON.parse(stored.value) as StoredAlarm;
-      if (alarm.token !== token) return undefined;
-      yield* query(
-        c,
-        `DELETE FROM ${META_TABLE} WHERE key = ? AND value = ?`,
-        ALARM_KEY,
-        stored.value,
-      );
-      return alarm;
+      const claimed: StoredAlarm = { ...alarm, id: lease, retries, running: activation.id };
+      if (!(yield* swapAlarm(c, row.raw, claimed))) {
+        yield* cancelSchedule(c, claimed);
+        return undefined;
+      }
+      return renewing ? undefined : claimed;
     }),
   );
 
 /**
  * Run the handler of the alarm that fired with `token`, if it's still the
- * one set. A handler that fails is retried, as on Cloudflare: up to six
- * times, two seconds after the first failure and twice as long after each
- * one since, unless it set a new alarm itself. @internal
+ * one set. A handler that fails, or whose node died while it ran, is
+ * retried, as on Cloudflare: up to six times, two seconds after the first
+ * failure and twice as long after each one since, unless it set a new
+ * alarm itself. @internal
  */
 export const runFiredAlarm = (
   c: ActorContextLike,
+  activation: Activation,
   token: unknown,
   handler: Effect.Effect<void, unknown> | undefined,
 ) =>
   Effect.gen(function* () {
-    const fired = yield* claimFiredAlarm(c, token);
-    if (fired === undefined || handler === undefined) return;
-    const exit = yield* Effect.exit(handler);
-    if (Exit.isSuccess(exit)) return;
+    const fired = yield* claimFiredAlarm(c, activation, token);
+    if (fired === undefined) return;
+    const exit = yield* Effect.exit(handler ?? Effect.void);
     const retries = fired.retries ?? 0;
-    yield* Effect.logError(
-      retries < ALARM_RETRIES
-        ? `Durable Object alarm failed; retry ${retries + 1} of ${ALARM_RETRIES}`
-        : `Durable Object alarm failed ${ALARM_RETRIES + 1} times; giving up`,
-      exit.cause,
-    );
-    if (retries >= ALARM_RETRIES) return;
+    if (Exit.isFailure(exit)) {
+      yield* Effect.logError(
+        retries < ALARM_RETRIES
+          ? `Durable Object alarm failed; retry ${retries + 1} of ${ALARM_RETRIES}`
+          : `Durable Object alarm failed ${ALARM_RETRIES + 1} times; giving up`,
+        exit.cause,
+      );
+    }
+    const retry = Exit.isFailure(exit) && retries < ALARM_RETRIES;
     yield* gateStorage(
       Effect.gen(function* () {
-        if ((yield* readAlarm(c)) !== undefined) return;
-        const now = yield* Clock.currentTimeMillis;
-        yield* setAlarm(c, now + ALARM_RETRY_DELAY * 2 ** retries, retries + 1);
+        // Until it's settled: a lease renewed meanwhile changes the row.
+        while (true) {
+          const row = yield* readAlarmRow(c);
+          // The handler set a new alarm, which stands.
+          if (
+            row !== undefined &&
+            (row.alarm.token !== fired.token || row.alarm.running !== activation.id)
+          ) {
+            return;
+          }
+          if (retry) {
+            const now = yield* Clock.currentTimeMillis;
+            // Replaces the claimed alarm and cancels its lease.
+            return yield* setAlarm(c, now + ALARM_RETRY_DELAY * 2 ** retries, retries + 1);
+          }
+          if (row === undefined) return;
+          if (yield* swapAlarm(c, row.raw, undefined)) return yield* cancelSchedule(c, row.alarm);
+        }
       }),
     );
   });

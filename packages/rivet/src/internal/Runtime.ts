@@ -336,10 +336,12 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           // wait out a transaction before its handler runs as long as it
           // takes: the action only starts it, kept awake until it's done.
           [ALARM_ACTION]: (c: ActivationContext, token: unknown) => {
+            const { instance, activation } = instanceOf(c);
             void c.keepAwake(
-              instanceOf(c).instance.execute((shape) =>
+              instance.execute((shape) =>
                 runFiredAlarm(
                   c,
+                  activation,
                   token,
                   typeof shape.alarm === "function"
                     ? Effect.suspend(() => (shape.alarm as () => Effect.Effect<void>)())
