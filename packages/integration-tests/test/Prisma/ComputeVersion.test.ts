@@ -311,7 +311,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { service: "service-1", artifactPath: fixtureArtifactPath },
+            news: { service: "service-1", artifactPath: fixtureArtifactPath, start: false },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -377,7 +377,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { service: "service-1", artifactPath: fixtureArtifactPath },
+            news: { service: "service-1", artifactPath: fixtureArtifactPath, start: false },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -611,7 +611,7 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          news: { service: "service-1", artifactPath },
+          news: { service: "service-1", artifactPath, start: false },
           olds: undefined,
           output: undefined,
           session: undefined as never,
@@ -671,7 +671,7 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "service-1" },
+          olds: { service: "service-1", start: false },
           output: {
             versionId: "version-1",
             serviceId: "service-1",
@@ -710,7 +710,7 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "app-1" },
+          olds: { service: "app-1", start: false },
           output: undefined,
         });
 
@@ -762,7 +762,7 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "service-from-olds" },
+          olds: { service: "service-from-olds", start: false },
           output: {
             versionId: "version-1",
             serviceId: "service-from-output",
@@ -833,7 +833,7 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "service-from-olds" },
+          olds: { service: "service-from-olds", start: false },
           output: {
             versionId: "version-old",
             serviceId: "service-from-output",
@@ -903,7 +903,7 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "app-1" },
+          olds: { service: "app-1", start: false },
           output: {
             versionId: "deployment-missing",
             serviceId: "app-1",
@@ -939,8 +939,8 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "service-1", artifactPath },
-          news: { service: "service-1", artifactPath },
+          olds: { service: "service-1", artifactPath, start: false },
+          news: { service: "service-1", artifactPath, start: false },
           oldBindings: [],
           newBindings: [],
           output: {
@@ -981,8 +981,8 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "service-1", artifactPath },
-          news: { service: Output.asOutput("service-1"), artifactPath },
+          olds: { service: "service-1", artifactPath, start: false },
+          news: { service: Output.asOutput("service-1"), artifactPath, start: false },
           oldBindings: [],
           newBindings: [],
           output: {
@@ -1064,7 +1064,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { service: "service-1", skipCodeUpload: true },
+            news: { service: "service-1", skipCodeUpload: true, start: false },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -1096,8 +1096,12 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: Output.asOutput("app-old"), artifactPath: sameArtifactPath },
-          news: { service: "app-new", artifactPath: sameArtifactPath },
+          olds: {
+            service: Output.asOutput("app-old"),
+            artifactPath: sameArtifactPath,
+            start: false,
+          },
+          news: { service: "app-new", artifactPath: sameArtifactPath, start: false },
           oldBindings: [],
           newBindings: [],
           output: {
@@ -1136,8 +1140,8 @@ describe(
           id: "Version",
           fqn: "Version",
           instanceId: "00000000000000000000000000000000",
-          olds: { service: "service-1", artifactPath: sameArtifactPath },
-          news: { service: "service-1", artifactPath: sameArtifactPath },
+          olds: { service: "service-1", artifactPath: sameArtifactPath, start: false },
+          news: { service: "service-1", artifactPath: sameArtifactPath, start: false },
           oldBindings: [],
           newBindings: [],
           output: {
@@ -1385,7 +1389,7 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            olds: { service: "service-1", skipCodeUpload: true },
+            olds: { service: "service-1", skipCodeUpload: true, start: false },
             output: {
               versionId: "version-old",
               serviceId: "service-1",
@@ -1419,7 +1423,7 @@ describe(
       );
     });
 
-    it.effect("rejects a health check on a version that is not started", () => {
+    it.effect("rejects a health check on a version declared with start: false", () => {
       const client = {} as PrismaManagementClient;
 
       return Effect.gen(function* () {
@@ -1429,7 +1433,12 @@ describe(
             id: "Version",
             fqn: "Version",
             instanceId: "00000000000000000000000000000000",
-            news: { service: "service-1", skipCodeUpload: true, healthCheck: { path: "/health" } },
+            news: {
+              service: "service-1",
+              skipCodeUpload: true,
+              start: false,
+              healthCheck: { path: "/health" },
+            },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -1438,7 +1447,7 @@ describe(
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("healthCheck requires start: true");
+        expect(error.message).toContain("healthCheck cannot be combined with start: false");
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
@@ -1458,7 +1467,7 @@ describe(
               id: "Deployment",
               fqn: "Deployment",
               instanceId: "00000000000000000000000000000000",
-              news: { service: "app-1", skipCodeUpload: true, portMapping: { http } },
+              news: { service: "app-1", skipCodeUpload: true, portMapping: { http }, start: false },
               olds: undefined,
               output: undefined,
               session: undefined as never,
@@ -1510,7 +1519,12 @@ describe(
           id: "Deployment",
           fqn: "Deployment",
           instanceId: "00000000000000000000000000000000",
-          news: { service: "app-1", skipCodeUpload: true, portMapping: { http: null } },
+          news: {
+            service: "app-1",
+            skipCodeUpload: true,
+            portMapping: { http: null },
+            start: false,
+          },
           olds: undefined,
           output: undefined,
           session: undefined as never,
@@ -1560,13 +1574,13 @@ describe(
         } as never);
         const savedWithPromote = yield* provider.diff!({
           ...base,
-          olds: { service: "app-1", skipCodeUpload: true, promote: true },
+          olds: { service: "app-1", skipCodeUpload: true, promote: true, start: false },
           news: { service: "app-1", skipCodeUpload: true, start: true },
         } as never);
         const notStarted = yield* provider.diff!({
           ...base,
-          olds: { service: "app-1", skipCodeUpload: true },
-          news: { service: "app-1", skipCodeUpload: true },
+          olds: { service: "app-1", skipCodeUpload: true, start: false },
+          news: { service: "app-1", skipCodeUpload: true, start: false },
         } as never);
 
         expect(start).toEqual({ action: "update" });
@@ -1590,7 +1604,7 @@ describe(
             id: "Deployment",
             fqn: "Deployment",
             instanceId: "00000000000000000000000000000000",
-            news: { service: "app-1" },
+            news: { service: "app-1", start: false },
             olds: undefined,
             output: undefined,
             session: undefined as never,
@@ -1752,6 +1766,7 @@ describe(
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
+            start: false,
           },
           olds: undefined,
           output: undefined,
@@ -1772,11 +1787,13 @@ describe(
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
+            start: false,
           },
           news: {
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
+            start: false,
           },
         } as never);
         const changed = yield* provider.diff!({
@@ -1785,11 +1802,13 @@ describe(
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(secret) },
+            start: false,
           },
           news: {
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
+            start: false,
           },
         } as never);
 
@@ -1810,8 +1829,18 @@ describe(
         const provider = yield* PrismaDeployment.Provider;
         const diff = yield* provider.diff!({
           ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
-          olds: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "off" } },
-          news: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
+          olds: {
+            service: "app-1",
+            skipCodeUpload: true,
+            triggers: { FEATURE_FLAG: "off" },
+            start: false,
+          },
+          news: {
+            service: "app-1",
+            skipCodeUpload: true,
+            triggers: { FEATURE_FLAG: "on" },
+            start: false,
+          },
         } as never);
 
         expect(diff).toEqual({ action: "replace" });
@@ -1830,8 +1859,18 @@ describe(
         const provider = yield* PrismaDeployment.Provider;
         const diff = yield* provider.diff!({
           ...triggersDiffBase(undefined),
-          olds: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
-          news: { service: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
+          olds: {
+            service: "app-1",
+            skipCodeUpload: true,
+            triggers: { FEATURE_FLAG: "on" },
+            start: false,
+          },
+          news: {
+            service: "app-1",
+            skipCodeUpload: true,
+            triggers: { FEATURE_FLAG: "on" },
+            start: false,
+          },
         } as never);
 
         expect(diff).toBeUndefined();
@@ -1854,11 +1893,13 @@ describe(
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: "postgres://old" },
+            start: false,
           },
           news: {
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
+            start: false,
           },
         } as never);
         const neverRecorded = yield* provider.diff!({
@@ -1867,11 +1908,13 @@ describe(
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: "postgres://old" },
+            start: false,
           },
           news: {
             service: "app-1",
             skipCodeUpload: true,
             triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
+            start: false,
           },
         } as never);
 

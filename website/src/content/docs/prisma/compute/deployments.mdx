@@ -101,7 +101,6 @@ const version = yield* Prisma.ComputeVersion("web", {
   service: service.serviceId,
   artifactPath: "./dist/app.tar.gz",
   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
-  start: true,
 });
 yield* Prisma.activateVersion(service, version);
 ```

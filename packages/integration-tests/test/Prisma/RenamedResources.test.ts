@@ -256,6 +256,7 @@ const program = (options: { revision: string }) =>
     const version = yield* PrismaComputeVersion("Version", {
       service: service.serviceId,
       skipCodeUpload: true,
+      start: false,
       triggers: { REVISION: options.revision },
     });
     const domain = yield* PrismaCustomDomain("Domain", {

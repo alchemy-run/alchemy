@@ -103,22 +103,23 @@ export interface ComputeVersionProps {
   /**
    * Start the version after it is created. A version must be running before
    * it can become a service's active version (see `Prisma.activateVersion`).
+   * Set `false` to create a version that is not started.
    *
-   * @default false
+   * @default true
    */
   start?: boolean;
   /**
    * After the version starts, wait until its preview URL answers on Prisma's
    * edge. With `healthCheck`, also wait until that path returns an accepted
    * status. A version this deploy created is deleted when the check fails.
-   * Has no effect unless `start` is true.
+   * Has no effect with `start: false`.
    *
    * @default true
    */
   verifyUrl?: boolean;
   /**
    * Application path probed on the version's preview URL after it starts.
-   * Requires `start: true` and cannot be combined with `verifyUrl: false`.
+   * Cannot be combined with `start: false` or `verifyUrl: false`.
    *
    * @example
    * ```typescript
@@ -177,7 +178,6 @@ export interface ComputeVersionProps {
    *   service,
    *   artifactPath: "./dist/app.tar.gz",
    *   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
-   *   start: true,
    * });
    * ```
    */
@@ -273,7 +273,6 @@ export interface ComputeVersion extends Resource<
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
  *   artifactContentType: "application/gzip",
- *   start: true,
  * });
  * yield* Prisma.activateVersion(service, version);
  * ```
@@ -283,7 +282,6 @@ export interface ComputeVersion extends Resource<
  * const version = yield* Prisma.ComputeVersion("web-fork", {
  *   service: service.serviceId,
  *   skipCodeUpload: true,
- *   start: true,
  * });
  * ```
  *
@@ -293,7 +291,6 @@ export interface ComputeVersion extends Resource<
  * const version = yield* Prisma.ComputeVersion("web-version", {
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
- *   start: true,
  *   healthCheck: { path: "/api/health" },
  * });
  * ```
@@ -304,7 +301,6 @@ export interface ComputeVersion extends Resource<
  * const version = yield* Prisma.ComputeVersion("web-version", {
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
- *   start: true,
  * }).pipe(RemovalPolicy.destroy());
  * ```
  *
@@ -665,12 +661,12 @@ const ProviderLive = () =>
               return { action: "replace" } as const;
             }
             if (!isResolved(news.start)) return undefined;
-            if (news.start ?? false) {
+            if (news.start ?? true) {
               // Reconcile asserts the running state on every deploy, so an
               // external stop is repaired.
               return { action: "update" } as const;
             }
-            if (olds.start ?? false) return { action: "update" } as const;
+            if (olds.start ?? true) return { action: "update" } as const;
             return undefined;
           },
           (effect, { output: saved }) =>
@@ -726,9 +722,9 @@ const ProviderLive = () =>
               message: "skipCodeUpload cannot be combined with artifactPath.",
             });
           }
-          if (news.healthCheck !== undefined && news.start !== true) {
+          if (news.healthCheck !== undefined && news.start === false) {
             return yield* new ComputeVersionInvalidProps({
-              message: "healthCheck requires start: true.",
+              message: "healthCheck cannot be combined with start: false.",
             });
           }
           const artifact = yield* readUploadArtifact({
@@ -834,7 +830,7 @@ const ProviderLive = () =>
             });
           }
 
-          if (news.start ?? false) {
+          if (news.start ?? true) {
             const currentDeployment = deployment;
             const currentDeploymentId = currentDeployment.id;
             deployment = yield* Effect.gen(function* () {

@@ -1908,6 +1908,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             service: service.serviceId,
             portMapping: { http: 3000 },
             skipCodeUpload: true,
+            start: false,
           }),
         );
         const env = yield* envProvider.reconcile(
