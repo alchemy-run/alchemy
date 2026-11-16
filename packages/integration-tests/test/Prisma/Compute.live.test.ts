@@ -2,7 +2,12 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { getProject, getService } from "@distilled.cloud/prisma/management";
+import {
+  createServiceRollback,
+  getDeployment,
+  getProject,
+  getService,
+} from "@distilled.cloud/prisma/management";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -14,6 +19,7 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import EffectNativeCompute from "./fixtures/effect-native-compute.ts";
 import TracedCompute from "./fixtures/traced-compute.ts";
 
 const { test } = Test.make({
@@ -342,7 +348,7 @@ test.provider(
 );
 
 test.provider(
-  "live rolls a Prisma App back to an existing deployment",
+  "live deploys a changed source as a new version, keeps the first, and the platform rolls back to it",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -350,76 +356,69 @@ test.provider(
       const appDir = yield* fs.makeTempDirectory({
         prefix: "alchemy-prisma-rollback-",
       });
-      yield* fs.writeFileString(
-        path.join(appDir, "package.json"),
-        ["{", '  "type": "module",', '  "main": "server.ts"', "}", ""].join("\n"),
-      );
-      yield* fs.writeFileString(
-        path.join(appDir, "server.ts"),
-        [
-          'const port = Number(process.env["PORT"] ?? "8080");',
-          "const server = Bun.serve({",
-          "  port,",
-          "  routes: {",
-          '    "/": new Response(process.env["GREETING"] ?? "missing"),',
-          '    "/health": Response.json({ ok: true }),',
-          "  },",
-          "});",
-          "console.log(`Listening on ${server.url}`);",
-          "export {};",
-          "",
-        ].join("\n"),
-      );
+      const writeServer = (text: string) =>
+        fs.writeFileString(
+          path.join(appDir, "server.ts"),
+          [
+            'const port = Number(process.env["PORT"] ?? "8080");',
+            "const server = Bun.serve({",
+            "  port,",
+            "  routes: {",
+            `    "/": new Response(${JSON.stringify(text)} + " " + (process.env["GREETING"] ?? "missing")),`,
+            '    "/health": Response.json({ ok: true }),',
+            "  },",
+            "});",
+            "console.log(`Listening on ${server.url}`);",
+            "export {};",
+            "",
+          ].join("\n"),
+        );
+      const program = Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", {
+          createDatabase: false,
+        });
+        const app = yield* Prisma.Compute("App", {
+          project: project.projectId,
+          path: appDir,
+          entrypoint: "server.ts",
+          port: 8080,
+          env: { GREETING: "hello" },
+          timeoutSeconds: 240,
+        });
+        return { project, app };
+      });
 
       yield* stack.destroy();
 
       yield* Effect.gen(function* () {
-        const output = yield* stack.deploy(
-          Effect.gen(function* () {
-            const project = yield* Prisma.Project("Project", {
-              createDatabase: false,
-            });
-            const app = yield* Prisma.Compute("App", {
-              project: project.projectId,
-              path: appDir,
-              entrypoint: "server.ts",
-              port: 8080,
-              env: { GREETING: "rollback target" },
-              timeoutSeconds: 240,
-              destroyOldDeployment: false,
-            });
-            return { project, app };
-          }),
-        );
+        yield* writeServer("first");
+        const first = yield* stack.deploy(program);
+        expect(first.app.activeVersionId).toBe(first.app.versionId);
+        expect(yield* fetchUntil(`${first.app.url}/`, "first hello")).toBe("first hello");
 
-        const serviceId = output.app.serviceId;
-        const versionId = output.app.versionId;
-        expect(serviceId).toBeDefined();
-        expect(versionId).toBeDefined();
+        yield* writeServer("second");
+        const second = yield* stack.deploy(program);
+        expect(second.app.serviceId).toBe(first.app.serviceId);
+        expect(second.app.url).toBe(first.app.url);
+        expect(second.app.versionId).not.toBe(first.app.versionId);
+        expect(yield* fetchUntil(`${second.app.url}/`, "second hello")).toBe("second hello");
+        const kept = yield* getDeployment({ deploymentId: first.app.versionId! });
+        expect(kept.data.serviceId).toBe(first.app.serviceId);
 
-        // Roll the App back to its currently-live deployment. The control
-        // plane accepts a roll to the live deployment (roll-forward / drift
-        // heal) and returns the stable App endpoint plus the number of custom
-        // domains reassigned (0 here, since none are attached). This drives
-        // the canonical POST /v1/apps/{id}/rollback contract.
-        const result = yield* Prisma.rollbackApp(serviceId, {
-          deploymentId: versionId!,
+        yield* createServiceRollback({
+          serviceId: first.app.serviceId,
+          deploymentId: first.app.versionId!,
         });
-        expect(typeof result.appEndpointDomain).toBe("string");
-        expect(result.appEndpointDomain.length).toBeGreaterThan(0);
-        expect(result.reassignedDomains).toBe(0);
-
-        const text = yield* fetchText(`${output.app.url}/`);
-        expect(text).toBe("rollback target");
+        expect(yield* fetchUntil(`${first.app.url}/`, "first hello")).toBe("first hello");
 
         yield* stack.destroy();
         const projectGone = yield* getProject({
-          id: output.project.projectId,
+          id: first.project.projectId,
         }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );
-        const appGone = yield* getService({ serviceId: serviceId }).pipe(
+        const appGone = yield* getService({ serviceId: first.app.serviceId }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );
@@ -433,6 +432,29 @@ test.provider(
           }),
         ),
       );
+    }).pipe(logLevel),
+  {
+    tags: ["provider:prisma", "provider:prisma:compute", "provider:prisma:project", "live"],
+    timeout: 900_000,
+  },
+);
+
+test.provider(
+  "live serves an Effect-native Compute whose init binds a variable",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = yield* stack.deploy(EffectNativeCompute);
+      expect(app.environmentKeys).toEqual(["GREETING"]);
+      expect(yield* fetchUntil(`${app.url}/`, "from a binding")).toBe("from a binding");
+
+      yield* stack.destroy();
+      const appGone = yield* getService({ serviceId: app.serviceId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+      );
+      expect(appGone).toBe(true);
+      yield* expectGone("Prisma project", Prisma.getProject(app.projectId));
     }).pipe(logLevel),
   {
     tags: ["provider:prisma", "provider:prisma:compute", "provider:prisma:project", "live"],
@@ -490,6 +512,20 @@ const fetchText = (url: string) =>
       schedule: Schedule.max([Schedule.exponential(Duration.seconds(1)), Schedule.recurs(8)]),
     }),
   );
+
+/** Poll a URL until it answers `expected`, for at most about two minutes. */
+const fetchUntil = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const http = yield* HttpClient.HttpClient;
+    const response = yield* http.execute(HttpClientRequest.get(url));
+    const text = yield* response.text;
+    if (response.status !== 200 || text !== expected) {
+      return yield* Effect.fail(
+        new Error(`${url} answered HTTP ${response.status} '${text.slice(0, 80)}'`),
+      );
+    }
+    return text;
+  }).pipe(Effect.retry({ schedule: Schedule.spaced(Duration.seconds(3)), times: 40 }));
 
 const expectGone = <A, E, R>(label: string, effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
