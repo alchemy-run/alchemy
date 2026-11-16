@@ -1526,6 +1526,7 @@ import {
 import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServiceAccount.ts";
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
+import { Role as IamRole, RoleProvider as IamRoleProvider } from "./IAM/Role.ts";
 import {
   ServiceAccount as IamServiceAccount,
   ServiceAccountProvider as IamServiceAccountProvider,
@@ -3612,6 +3613,7 @@ const makeProviders = () =>
           WorkloadIdentityPool,
           WorkloadIdentityProvider,
           ProjectService,
+          IamRole,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       return {
@@ -4740,6 +4742,7 @@ const makeProviders = () =>
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
+                IamRoleProvider(),
               ),
             ),
           ),
