@@ -3,6 +3,7 @@ import * as Run from "@alchemy.run/gcp/Run";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import type { ClusterNetwork, ClusterShape } from "../Cluster.ts";
 import {
   isImageProgram,
   makePoolLayer,
@@ -67,6 +68,14 @@ export interface CloudRunPoolOptions extends PoolSettings {
    */
   subnetwork?: Input<string>;
   /**
+   * Send the nodes' private traffic through the control plane's GCP network
+   * (a `Rivet.ControlPlane` given `network` of kind `gcp`), so they reach
+   * its `nodeEndpoint`. `network` and `subnetwork` set here win over its own.
+   * A cluster on no GCP network fails the deploy.
+   * @default false
+   */
+  clusterNetwork?: boolean;
+  /**
    * RivetKit release the nodes run a TypeScript program with. Nodes speak
    * the control plane protocol of their release: a 3.0 node works with a
    * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one.
@@ -95,27 +104,54 @@ export const nodeTemplate = (
     readonly serviceAccount?: Input<string>;
     readonly secretEnv?: Array<Input<Run.WorkerPoolEnvVar>>;
   } = {},
-) => ({
-  ...(identity.serviceAccount === undefined ? {} : { serviceAccount: identity.serviceAccount }),
-  ...(options.network === undefined && options.subnetwork === undefined
-    ? {}
-    : {
-        vpcAccess: {
-          egress: "PRIVATE_RANGES_ONLY",
-          networkInterfaces: [{ network: options.network, subnetwork: options.subnetwork }],
+  cluster?: ClusterNetwork | { readonly kind: "none" },
+) => {
+  // With `clusterNetwork`, the control plane's network and subnetwork fill
+  // in what the pool doesn't name; a pool that names its own network takes
+  // none of the control plane's.
+  const joined = options.clusterNetwork === true && cluster?.kind === "gcp" ? cluster : undefined;
+  const network = options.network ?? joined?.network;
+  const subnetwork =
+    options.subnetwork ?? (options.network === undefined ? joined?.subnetwork : undefined);
+  return {
+    ...(identity.serviceAccount === undefined ? {} : { serviceAccount: identity.serviceAccount }),
+    ...(network === undefined && subnetwork === undefined
+      ? {}
+      : {
+          vpcAccess: {
+            egress: "PRIVATE_RANGES_ONLY",
+            networkInterfaces: [{ network, subnetwork }],
+          },
+        }),
+    containers: [
+      {
+        resources: {
+          limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "1Gi" },
         },
-      }),
-  containers: [
-    {
-      resources: {
-        limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "1Gi" },
+        ...(identity.secretEnv === undefined || identity.secretEnv.length === 0
+          ? {}
+          : { env: identity.secretEnv }),
       },
-      ...(identity.secretEnv === undefined || identity.secretEnv.length === 0
-        ? {}
-        : { env: identity.secretEnv }),
-    },
-  ],
-});
+    ],
+  };
+};
+
+/**
+ * The network a pool's nodes are on, as `makePoolLayer` compares it with
+ * the cluster's: only the cluster's own network gets its `nodeEndpoint`.
+ * Worker pools reach the internet without a VPC of their own, so a pool
+ * that doesn't join a GCP control plane's network gets a copy of it, which
+ * still gives the region, and its nodes connect to the public endpoint.
+ * @internal
+ */
+export const nodesNetwork = (
+  options: Pick<CloudRunPoolOptions, "clusterNetwork">,
+  cluster: Pick<ClusterShape, "network">,
+) => {
+  if (options.clusterNetwork) return cluster.network?.kind === "gcp" ? cluster.network : undefined;
+  if (cluster.network?.kind === "gcp") return { ...cluster.network };
+  return cluster.network ?? { kind: "none" as const };
+};
 
 /**
  * Run a pool's nodes on a Cloud Run worker pool: a pool on the control
@@ -159,6 +195,24 @@ export const nodeTemplate = (
  * }).pipe(Layer.provide(Cluster));
  * ```
  *
+ * **Example:** Nodes on the network of a control plane with a private address
+ * ```typescript
+ * export const Cluster = Rivet.ControlPlane("Rivet", {
+ *   endpoint: "https://rivet.example.com",
+ *   token: Config.Redacted("RIVET_TOKEN"),
+ *   nodeEndpoint: "http://10.0.0.2:6420",
+ *   network: {
+ *     kind: "gcp",
+ *     network: "rivet",
+ *     subnetwork: "rivet-us-central1",
+ *     region: "us-central1",
+ *   },
+ * });
+ * export const Default = RivetGCP.CloudRunPool("Default", { clusterNetwork: true }).pipe(
+ *   Layer.provide(Cluster),
+ * );
+ * ```
+ *
  * @primitive
  */
 export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
@@ -166,9 +220,10 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
     label: "RivetGCP.CloudRunPool",
     id,
     settings: options,
-    expected: "a reachable control plane",
-    // Worker pools reach the internet without a VPC of their own.
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    expected: options.clusterNetwork
+      ? "the control plane's GCP network"
+      : "a reachable control plane",
+    network: (cluster) => nodesNetwork(options, cluster),
     nodes: (nodes) =>
       Effect.gen(function* () {
         const location =
@@ -220,7 +275,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
               }),
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
-          template: nodeTemplate(options, { serviceAccount, secretEnv }),
+          template: nodeTemplate(options, { serviceAccount, secretEnv }, nodes.network),
           env: Output.all(nodeEnvironment(nodes), own).pipe(
             Output.map(([env, extra]) =>
               Object.fromEntries(

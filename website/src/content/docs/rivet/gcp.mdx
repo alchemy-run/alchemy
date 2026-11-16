@@ -54,6 +54,16 @@ export const Default = RivetGCP.CloudRunPool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
+When the control plane is a [`Rivet.ControlPlane`](/rivet/control-planes#use-one-you-already-run) given a `nodeEndpoint` and a `gcp` `network`, set `clusterNetwork` instead: the nodes send private traffic through that network and connect to `nodeEndpoint`, with no `RIVET_ENDPOINT` of your own. A `network` or `subnetwork` you set still wins:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetGCP.CloudRunPool("Default", { clusterNetwork: true }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+Without `clusterNetwork`, a `CloudRunPool` connects its nodes to the control plane's `endpoint`, as it always has.
+
 ## On Compute Engine
 
 `ComputeEnginePool` runs one Compute Engine instance per node:

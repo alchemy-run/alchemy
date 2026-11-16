@@ -34,6 +34,32 @@ describe("RivetGCP.CloudRunPool worker pool", { tags: ["unit"] }, () => {
       containers: [{ resources: { limits: { cpu: "1", memory: "1Gi" } }, env: secretEnv }],
     });
   });
+
+  test("a pool joins its control plane's GCP network only when told to, and its own network wins", () => {
+    const cluster = {
+      kind: "gcp",
+      network: "rivet",
+      subnetwork: "rivet-us",
+      region: "us-central1",
+    } as const;
+    const vpc = (network: string | undefined, subnetwork: string | undefined) => ({
+      vpcAccess: { egress: "PRIVATE_RANGES_ONLY", networkInterfaces: [{ network, subnetwork }] },
+    });
+    // Without clusterNetwork, the control plane's network changes nothing.
+    expect(nodeTemplate({}, {}, cluster)).toEqual(nodeTemplate({}));
+    expect(nodeTemplate({ clusterNetwork: false }, {}, cluster)).toEqual(nodeTemplate({}));
+    expect(nodeTemplate({ clusterNetwork: true }, {}, cluster)).toMatchObject(
+      vpc("rivet", "rivet-us"),
+    );
+    expect(
+      nodeTemplate({ clusterNetwork: true, subnetwork: "other-us" }, {}, cluster),
+    ).toMatchObject(vpc("rivet", "other-us"));
+    // A network of its own takes none of the control plane's.
+    expect(nodeTemplate({ clusterNetwork: true, network: "other" }, {}, cluster)).toMatchObject(
+      vpc("other", undefined),
+    );
+    expect(nodeTemplate({ clusterNetwork: true }, {}, { kind: "none" })).toEqual(nodeTemplate({}));
+  });
 });
 
 describe("Rivet node RivetKit release", { tags: ["unit"] }, () => {
