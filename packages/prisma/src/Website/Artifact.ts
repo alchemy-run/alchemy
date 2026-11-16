@@ -1,10 +1,13 @@
 import { createRequire } from "node:module";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import { hashDirectory } from "alchemy/Command/Memo";
+import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { initialCwd } from "alchemy/Util/Node";
+import { sha256Object } from "alchemy/Util/sha256";
 import { loadFrontendCore } from "alchemy/Website/FrontendCore";
 import { packSiteExtraFiles } from "alchemy/Website/packExtraFiles";
 import * as Data from "effect/Data";
@@ -13,6 +16,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { createComputeArchive } from "../ComputeArchive.ts";
+import { storeArtifact } from "../internal/ArtifactStore.ts";
 
 export class ArtifactOperationFailed extends Data.TaggedError("ArtifactOperationFailed")<{
   readonly message: string;
@@ -53,6 +57,8 @@ export interface WebsiteArtifact extends Resource<
     artifactPath: string;
     /** SHA-256 of the tarball uploaded by Compute. */
     hash: string;
+    /** SHA-256 of the inputs the tarball was staged from; unchanged inputs skip staging. */
+    inputHash?: string;
   }
 > {}
 
@@ -336,6 +342,21 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
   };
 });
 
+/**
+ * Hash what staging reads: the application root's files that git does not
+ * ignore, the nearest lockfile, every file of the build output, and the props.
+ * Traced runtime packages are covered by the lockfile.
+ */
+const websiteInputsHash = Effect.fn(function* (props: WebsiteArtifactProps) {
+  const path = yield* Path.Path;
+  const root = yield* hashDirectory({ cwd: path.resolve(initialCwd, props.root) });
+  const dist = yield* hashDirectory({
+    cwd: path.resolve(initialCwd, props.distDir),
+    memo: { include: ["**/*"], exclude: [".alchemy", "**/.alchemy"], lockfile: false },
+  });
+  return yield* sha256Object({ props, root, dist });
+});
+
 export const WebsiteArtifactProvider = () =>
   Provider.effect(
     WebsiteArtifact,
@@ -345,9 +366,20 @@ export const WebsiteArtifactProvider = () =>
       const dotAlchemy = yield* dotAlchemyDirectory;
       return {
         list: () => Effect.succeed([]),
-        // Traced dependencies can change independently of the framework's hash.
-        diff: () => Effect.succeed({ action: "update" as const }),
-        reconcile: Effect.fn(function* ({ id, news }) {
+        // A changed source, build output or lockfile restages the artifact;
+        // an unchanged one keeps `artifactPath`, so its version is not replaced.
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!output?.inputHash || !isResolved(news)) return { action: "update" } as const;
+          if (!(yield* fs.exists(output.artifactPath))) return { action: "update" } as const;
+          return (yield* websiteInputsHash(news)) === output.inputHash
+            ? ({ action: "noop" } as const)
+            : ({ action: "update" } as const);
+        }),
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const inputHash = yield* websiteInputsHash(news);
+          if (output?.inputHash === inputHash && (yield* fs.exists(output.artifactPath))) {
+            return output;
+          }
           const name = yield* createPhysicalName({ id, maxLength: 80 });
           const directory = path.join(dotAlchemy, "prisma-websites", name);
           return yield* Effect.scoped(
@@ -357,19 +389,10 @@ export const WebsiteArtifactProvider = () =>
                 ...staged,
                 output: "file",
               });
-              return yield* Effect.gen(function* () {
-                yield* fs.makeDirectory(directory, { recursive: true });
-                const artifactPath = path.join(directory, `${archive.sha256}.tar.gz`);
-                yield* fs.copyFile(archive.path, artifactPath);
-                for (const old of yield* fs.readDirectory(directory)) {
-                  if (old !== path.basename(artifactPath) && /^[a-f0-9]{64}\.tar\.gz$/.test(old)) {
-                    yield* fs.remove(path.join(directory, old), {
-                      force: true,
-                    });
-                  }
-                }
-                return { directory, artifactPath, hash: archive.sha256 };
-              }).pipe(Effect.ensuring(archive.cleanup));
+              const artifactPath = yield* storeArtifact(directory, archive).pipe(
+                Effect.ensuring(archive.cleanup),
+              );
+              return { directory, artifactPath, hash: archive.sha256, inputHash };
             }),
           );
         }),
