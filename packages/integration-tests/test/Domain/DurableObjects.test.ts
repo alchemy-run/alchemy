@@ -125,6 +125,8 @@ const simHost = (
     readonly intercept?: Intercept;
     /** Give each instance Rivet's input gate: construction and each call are calls of their own. */
     readonly inputGate?: boolean;
+    /** Reset an object instead of giving it its lock, as Cloudflare does past 30 seconds. */
+    readonly resetOnLock?: (object: string) => boolean;
   } = {},
 ) => {
   const disk = options.disk ?? { objects: new Map() };
@@ -184,6 +186,7 @@ const simHost = (
             exclusive: (effect) =>
               Effect.suspend(() => {
                 stats.locks?.set(id, (stats.locks.get(id) ?? 0) + 1);
+                if (options.resetOnLock?.(id)) return Effect.die(new Error(`${id} was reset`));
                 return gate.withPermits(1)(effect);
               }),
             waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)),
@@ -815,19 +818,34 @@ class LedgerSummed extends Domain.Aggregate("Ledger", {
   evolve: { Booked: (s, e) => ({ count: s.count + e.n }) },
   version: 1,
 }) {}
+/** The ledger summing twice its bookings, at version 2. */
+class LedgerDoubled extends Domain.Aggregate("Ledger", {
+  id: Schema.String,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  commands: [BookMany],
+  decide: {
+    BookMany: (ledger, { count }) =>
+      Array.from({ length: count }, (_, i) => new Booked({ n: ledger.count + i + 1 })),
+  },
+  evolve: { Booked: (s, e) => ({ count: s.count + 2 * e.n }) },
+  version: 2,
+}) {}
 class LedgersV0 extends Domain.Model("Ledgers", { aggregates: [Ledger] }) {}
 class LedgersV1 extends Domain.Model("Ledgers", { aggregates: [LedgerSummed] }) {}
+class LedgersV2 extends Domain.Model("Ledgers", { aggregates: [LedgerDoubled] }) {}
 
 /** Host `model` on a new sim host over `disk`, as a deploy of new code over old storage does. */
 const deployedOn = (
   stats: Stats,
   disk: Disk,
   model: { readonly layer: (policies: any) => Layer.Layer<any, any, any> },
+  options: { readonly resetOnLock?: (object: string) => boolean } = {},
 ) =>
   model
     .layer(Layer.empty)
     .pipe(
-      Layer.provideMerge(DurableObjects.makePlatform(simHost(stats, { disk }).host)),
+      Layer.provideMerge(DurableObjects.makePlatform(simHost(stats, { disk, ...options }).host)),
       Layer.provideMerge(SecureRandom.layerWebCrypto),
     );
 
@@ -841,6 +859,29 @@ const instanceRows = (disk: Disk, aggregate: string, id: string) => {
     events: [...data.keys()].filter((key) => key.startsWith("event:")).length,
     meta: data.get("meta") as { readonly version: number; readonly generation?: number },
   };
+};
+
+/** A fold cut short on one aggregate instance on `disk`, if one is saved. */
+const savedFold = (disk: Disk, aggregate: string, id: string) =>
+  [...disk.objects.values()]
+    .find((saved) => saved.name === id && saved.cls.endsWith(`${aggregate}Aggregate`))
+    ?.data.get("fold") as { readonly generation: number; readonly after: number } | undefined;
+
+/** A stream longer than one section of the fold (4,096 events). */
+const LONG = 5_000;
+/** 1 + 2 + ... + `n`: the summed ledger's count after `n` bookings. */
+const sumTo = (n: number) => (n * (n + 1)) / 2;
+
+/** Book {@link LONG} lines on the ledger `main` at version 0. */
+const bookedLong = (stats: Stats, disk: Disk) =>
+  Effect.gen(function* () {
+    yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: LONG }));
+  }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV0)));
+
+/** Reset the ledger `main` on the `nth` lock it takes, once. */
+const resetOnNthLock = (nth: number) => {
+  let taken = 0;
+  return (object: string) => object.endsWith("LedgerAggregate/main") && ++taken === nth;
 };
 
 /** The times `read` made the aggregate instance `aggregate`/`id` take its lock. */
@@ -972,6 +1013,125 @@ describe("Domain aggregate versions on Durable Objects", { tags: ["unit"] }, () 
             locks: 0,
           });
         }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a stream longer than a section is folded in short locks, and keeps no place afterwards",
+    () => {
+      const stats: Stats = { rowsRead: 0, locks: new Map() };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        yield* Effect.gen(function* () {
+          const read = (yield* LedgerSummed).get(LedgerSummed.ref("main"));
+          // Two sections: 4,096 events, then the other 904.
+          expect(yield* locksTakenBy(stats, "Ledger", "main", read)).toEqual({
+            result: { count: sumTo(LONG) },
+            locks: 2,
+          });
+          expect(yield* locksTakenBy(stats, "Ledger", "main", read)).toEqual({
+            result: { count: sumTo(LONG) },
+            locks: 0,
+          });
+          expect(savedFold(disk, "Ledger", "main")).toBeUndefined();
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a fold cut short carries on from where it stopped",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        yield* Effect.gen(function* () {
+          const read = (yield* LedgerSummed).get(LedgerSummed.ref("main"));
+          // Reset before its second section: the old state stays, and the place is saved.
+          expect(Exit.isFailure(yield* Effect.exit(read))).toBe(true);
+          expect(instanceRows(disk, "Ledger", "main").meta).toEqual({
+            version: LONG,
+            state: { count: LONG },
+          });
+          expect(savedFold(disk, "Ledger", "main")).toEqual({
+            generation: 1,
+            after: 4_096,
+            state: { count: sumTo(4_096) },
+          });
+          // The next read folds only the other 904 events.
+          const next = yield* rowsReadBy(stats, read);
+          expect(next.result).toEqual({ count: sumTo(LONG) });
+          expect(next.rows).toBeLessThan(1_100);
+          expect(savedFold(disk, "Ledger", "main")).toBeUndefined();
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(deployedOn(stats, disk, LedgersV1, { resetOnLock: resetOnNthLock(2) })),
+        );
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a command sent to a stale instance with a long stream decides on the folded state",
+    () => {
+      const stats: Stats = { rowsRead: 0, locks: new Map() };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        yield* Effect.gen(function* () {
+          const ledgers = yield* LedgerSummed;
+          const sent = yield* locksTakenBy(
+            stats,
+            "Ledger",
+            "main",
+            ledgers.send(LedgerSummed.ref("main"), new BookMany({ count: 1 })),
+          );
+          // Two sections of the fold, then the commit.
+          expect(sent.locks).toBe(3);
+          expect(sent.result.version).toBe(LONG + 1);
+          // Booked as n = sumTo(LONG) + 1, on the folded count.
+          expect(yield* ledgers.get(LedgerSummed.ref("main"))).toEqual({
+            count: 2 * sumTo(LONG) + 1,
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a place saved by an earlier version is not used",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        // Version 1's fold is cut short after one section.
+        yield* Effect.gen(function* () {
+          const read = (yield* LedgerSummed).get(LedgerSummed.ref("main"));
+          expect(Exit.isFailure(yield* Effect.exit(read))).toBe(true);
+          expect(savedFold(disk, "Ledger", "main")?.generation).toBe(1);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(deployedOn(stats, disk, LedgersV1, { resetOnLock: resetOnNthLock(2) })),
+        );
+        // Version 2 folds every event with its own code.
+        yield* Effect.gen(function* () {
+          const read = yield* rowsReadBy(
+            stats,
+            (yield* LedgerDoubled).get(LedgerDoubled.ref("main")),
+          );
+          expect(read.result).toEqual({ count: 2 * sumTo(LONG) });
+          expect(read.rows).toBeGreaterThanOrEqual(LONG);
+          expect(instanceRows(disk, "Ledger", "main").meta.generation).toBe(2);
+          expect(savedFold(disk, "Ledger", "main")).toBeUndefined();
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV2)));
       });
     },
     { timeout: 60_000 },

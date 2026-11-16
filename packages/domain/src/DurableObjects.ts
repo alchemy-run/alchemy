@@ -793,6 +793,19 @@ const registerJob = (
 
 /** How many events an instance reads at once when it folds its state again. */
 const REFOLD_PAGE = 128;
+/**
+ * How many pages one exclusive section of a fold reads (4,096 events), so no
+ * section comes near the 30-second limit on `blockConcurrencyWhile`.
+ */
+const REFOLD_SECTION = 32;
+
+/** A fold cut short between sections: where it stopped, and the state folded so far. */
+interface AggregateFold {
+  readonly generation: number;
+  /** The sequence number of the last event folded. */
+  readonly after: number;
+  readonly state: Json;
+}
 
 /** What an instance saves as `meta`: its state, its stream version, and the generation that wrote it. */
 interface AggregateMeta {
@@ -819,14 +832,19 @@ const aggregateObject = (
     // Folded by an earlier generation of the aggregate.
     const stale = (meta: AggregateMeta) =>
       meta.version > 0 && (meta.generation ?? 0) < kit.generation;
-    // A stale state is folded again from its events, page by page, and saved.
-    // Callers run it `exclusively`; it reads `meta` again inside the lock.
-    const fresh = Effect.gen(function* () {
+    // One section of folding a stale state again from its events: up to
+    // REFOLD_SECTION pages, from where the last section stopped. It saves the
+    // place in `fold` and returns undefined, or saves `meta` once it reaches the
+    // stream's version. Run `exclusively`; it reads `meta` again inside the lock.
+    const section = Effect.gen(function* () {
       const meta = yield* currentMeta;
       if (!stale(meta)) return meta;
-      let folded: Json = null;
-      let after = 0;
-      while (after < meta.version) {
+      const saved = yield* state.storage.get<AggregateFold>("fold");
+      // A place saved by an earlier generation is folded by the old code: start again.
+      const from = saved?.generation === kit.generation ? saved : undefined;
+      let folded: Json = from?.state ?? null;
+      let after = from?.after ?? 0;
+      for (let page = 0; page < REFOLD_SECTION && after < meta.version; page++) {
         const rows = yield* state.storage.list<StoredEvent>({
           prefix: "event:",
           start: `event:${pad(after + 1)}`,
@@ -842,9 +860,29 @@ const aggregateObject = (
         folded = yield* kit.fold({ state: folded, events });
         after = events[events.length - 1]!.envelope.seq;
       }
+      if (after < meta.version) {
+        yield* state.storage.put("fold", {
+          generation: kit.generation,
+          after,
+          state: folded,
+        } satisfies AggregateFold);
+        return undefined;
+      }
       const next: AggregateMeta = { state: folded, version: meta.version, ...generation };
       yield* state.storage.put("meta", next);
+      yield* state.storage.delete("fold");
       return next;
+    });
+    // The instance's state, folded again first if it is stale: one short lock per
+    // section, so other calls get in between. None acts on the stale state, as
+    // each finishes the fold first. An up-to-date state takes no lock.
+    const refolded = Effect.gen(function* () {
+      const meta = yield* currentMeta;
+      if (!stale(meta)) return meta;
+      while (true) {
+        const done = yield* exclusively(section);
+        if (done !== undefined) return done;
+      }
     });
     const eventsAfter = (after: number) =>
       state.storage
@@ -895,12 +933,18 @@ const aggregateObject = (
           ),
       }));
 
-    // Callers run it `exclusively`.
+    // Callers run `refolded` first, then this `exclusively`.
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         if (duplicate) return { sent: duplicate, kick: false };
-        const current = yield* fresh;
+        const current = yield* currentMeta;
+        // A command decided on a stale state would build on the old code's fold.
+        if (stale(current)) {
+          return yield* Effect.die(
+            new Error(`${kit.name}/${id} was sent a command before its state was folded again`),
+          );
+        }
         const result = yield* kit.handle({
           id,
           state: current.state,
@@ -954,6 +998,7 @@ const aggregateObject = (
       });
     const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
+        yield* refolded;
         const { sent, kick } = yield* exclusively(commit(id, command, meta));
         if (kick) yield* outbox.kick;
         return sent;
@@ -981,6 +1026,7 @@ const aggregateObject = (
       }) =>
         Effect.gen(function* () {
           const key = `scheduled:${job.name ?? job.meta.commandId}`;
+          yield* refolded;
           const kick = yield* exclusively(
             Effect.gen(function* () {
               // A job scheduled before tokens existed has none, and runs.
@@ -1035,12 +1081,7 @@ const aggregateObject = (
         }).pipe(exclusively, reportDefects),
       // Takes the lock only to fold a stale state.
       state: () =>
-        reportDefects(
-          currentMeta.pipe(
-            Effect.flatMap((meta) => (stale(meta) ? exclusively(fresh) : Effect.succeed(meta))),
-            Effect.map(({ state, version }) => ({ state, version })),
-          ),
-        ),
+        reportDefects(refolded.pipe(Effect.map(({ state, version }) => ({ state, version })))),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // The backfill protocol, as a source.
       // Any code answers these: a run reads its log, and routes it with its own code.
