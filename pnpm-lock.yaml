@@ -472,8 +472,8 @@ catalogs:
       specifier: ^1.7.5
       version: 1.7.7
     capnp-es:
-      specifier: ^0.0.16
-      version: 0.0.16
+      specifier: ^0.0.17
+      version: 0.0.17
     capnweb:
       specifier: ^0.12.0
       version: 0.12.0
@@ -9315,7 +9315,7 @@ importers:
         version: 3.2.4(yauzl@3.4.0)
       capnp-es:
         specifier: 'catalog:'
-        version: 0.0.16(typescript@7.1.0-dev.20261105.1)
+        version: 0.0.17(typescript@7.1.0-dev.20261105.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4
@@ -23160,8 +23160,8 @@ packages:
       typescript:
         optional: true
 
-  capnp-es@0.0.16:
-    resolution: {integrity: sha512-pqhhnRqGfDdgHa+rz4JVO9j1jnkyqsHRYrD4RBtIwxCknYSRG7Mjs+x3IRfd20u+ZGS0IhW2L7cDv9ZcIkCYhQ==}
+  capnp-es@0.0.17:
+    resolution: {integrity: sha512-uIm/Aju0TNUkL51aBbhPl/2fWsSMiqDjnTnPYyx6oCAQReGCRDl7kZPDNZFer2WhOwR9+B/72olbxUV1GgoKbw==}
     hasBin: true
     peerDependencies:
       typescript: ^5.7.3 || ^6.0.0
@@ -42738,7 +42738,7 @@ snapshots:
     optionalDependencies:
       typescript: 7.1.0-dev.20261105.1
 
-  capnp-es@0.0.16(typescript@7.1.0-dev.20261105.1):
+  capnp-es@0.0.17(typescript@7.1.0-dev.20261105.1):
     optionalDependencies:
       typescript: 7.1.0-dev.20261105.1
 
