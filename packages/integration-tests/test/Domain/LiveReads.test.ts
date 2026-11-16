@@ -366,7 +366,7 @@ describe("Domain live reads reauthorized", { tags: ["unit", "local"] }, () => {
       const api = yield* TickerApi.Client;
       yield* api.Tick("t-1", { by: 1 });
       yield* api.TickTotals.get("t-1", { atLeast: { stream: "Ticker/t-1", version: 1 } });
-      const seen = yield* Queue.unbounded<{ readonly state: { readonly total: number } }>();
+      const seen = yield* Queue.unbounded<{ readonly state: { readonly total: number } | null }>();
       const read = yield* api.TickTotals.watch("t-1").pipe(
         Stream.runForEach((value) => Queue.offer(seen, value)),
         Effect.flip,
