@@ -2,6 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -126,5 +127,51 @@ test.provider(
   {
     tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
     timeout: 90_000,
+  },
+);
+
+test.provider(
+  "create a policy on a log-based metric created in the same deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { metric, policy } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const metric = yield* GCP.Logging.Metric("AlertErrors", {
+            filter: "severity>=ERROR",
+          });
+          const policy = yield* GCP.Monitoring.AlertPolicy("AlertOnErrors", {
+            combiner: "OR",
+            conditions: [
+              {
+                displayName: "Any error",
+                conditionThreshold: {
+                  filter: Output.interpolate`resource.type = "global" AND metric.type = "logging.googleapis.com/user/${metric.metricId}"`,
+                  comparison: "COMPARISON_GT",
+                  thresholdValue: 0,
+                  duration: "0s",
+                  aggregations: [{ alignmentPeriod: "60s", perSeriesAligner: "ALIGN_COUNT" }],
+                },
+              },
+            ],
+          });
+          return { metric, policy };
+        }),
+      );
+
+      const fetched = yield* monitoring.getProjectsAlertPolicies({ name: policy.name });
+      expect(fetched.conditions?.[0]?.conditionThreshold?.filter).toContain(
+        `logging.googleapis.com/user/${metric.metricId}`,
+      );
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(policy.name);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+    timeout: 900_000,
   },
 );
