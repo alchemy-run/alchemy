@@ -217,6 +217,12 @@ export const makeComputeCloud = () => {
       const service = services.get(id);
       if (!service) return notFound();
       if (tail === undefined && request.method === "GET") return data(service);
+      if (tail === undefined && request.method === "PATCH") {
+        if (typeof body?.displayName === "string") service.name = body.displayName;
+        if (typeof body?.branchId === "string") service.branchId = body.branchId;
+        if (typeof body?.logicalId === "string") service.logicalId = body.logicalId;
+        return data(service);
+      }
       if (tail === undefined && request.method === "DELETE") {
         services.delete(id);
         // The platform deletes a service's versions with it.

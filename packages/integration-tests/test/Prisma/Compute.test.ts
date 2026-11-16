@@ -525,6 +525,63 @@ reader.test.provider(
   { tags },
 );
 
+const invalid = harness();
+invalid.test.provider(
+  "rejects props that cannot be combined before anything is created",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = invalid;
+      yield* stack.destroy();
+      const failure = (props: Parameters<typeof Compute>[1]) =>
+        stack.deploy(Compute("api", props)).pipe(Effect.flip, Effect.map(String));
+
+      expect(
+        yield* failure({
+          ...base,
+          artifactPath: artifactV1,
+          skipPromote: true,
+          destroyOldDeployment: true,
+        }),
+      ).toContain("destroyOldDeployment cannot be combined with skipPromote");
+      expect(yield* failure({ ...base, artifactPath: artifactV1, start: false })).toContain(
+        "start: false requires skipPromote: true",
+      );
+      expect(
+        yield* failure({ service: "svc-x", project: "project-1", artifactPath: artifactV1 }),
+      ).toContain("cannot also set project");
+      expect(yield* failure({ service: "svc-x", artifactPath: artifactV1 })).toContain(
+        "requires skipPromote: true",
+      );
+      expect(yield* failure({ artifactPath: artifactV1 })).toContain(
+        "requires project, or service",
+      );
+      expect(
+        yield* failure({ ...base, artifactPath: artifactV1, env: { "bad-key": "x" } }),
+      ).toContain("POSIX env-var key shape");
+      expect(cloud.fake.captured).toEqual([]);
+    }),
+  { tags },
+);
+
+const branchChange = harness();
+branchChange.test.provider(
+  "creates a new version when the service moves to another Branch",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const first = yield* stack.deploy(Compute("api", { ...base, artifactPath: artifactV1 }));
+      const moved = yield* stack.deploy(
+        Compute("api", { ...base, branchId: "branch-2", artifactPath: artifactV1 }),
+      );
+      expect(moved.serviceId).toBe(first.serviceId);
+      expect(moved.versionId).not.toBe(first.versionId);
+      expect(branchChange.cloud.services.get(first.serviceId)?.branchId).toBe("branch-2");
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
 const domain = harness();
 domain.test.provider(
   "attaches a custom domain to the Compute's service",
