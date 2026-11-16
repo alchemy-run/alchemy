@@ -41,7 +41,6 @@ import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
@@ -60,6 +59,11 @@ import {
   type FunctionImageSource,
   makeFunctionImage,
 } from "./FunctionImage.ts";
+import {
+  functionBindingStatements,
+  functionLogGroupGuard,
+  renderFunctionPolicy,
+} from "./FunctionPolicy.ts";
 import {
   isResponseStreaming,
   makeFunctionHttpHandler,
@@ -951,6 +955,11 @@ export const normalizeFunctionUrl = (
  * execution role and applies bindings; image mode additionally owns the
  * private ECR repository and Lambda pull policy.
  *
+ * Resolved binding grants are compacted without widening any action/resource
+ * pair, and the binding policy plus the log-group guard share a conservative
+ * 10,240-byte inline-policy budget checked before the role's policies are
+ * written.
+ *
  * Zip-packaged functions can be defined in two ways:
  *
  * - **Async** — plain handler export, no Effect runtime in the bundle.
@@ -1712,7 +1721,7 @@ export const FunctionProvider = () =>
         roleName,
         policyName,
         // functionArn,
-        // functionName,
+        functionName,
         bindings,
         destinations,
       }: {
@@ -1731,12 +1740,11 @@ export const FunctionProvider = () =>
         const env = activeBindings
           .map((binding) => binding?.data?.env)
           .reduce((acc, env) => ({ ...acc, ...env }), {});
-        const policyStatements = activeBindings.flatMap(
-          (binding) =>
-            binding?.data?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
-              ...stmt,
-              Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
-            })) ?? [],
+        const { accountId, region } = yield* AWSEnvironment.current;
+        const { document } = yield* renderFunctionPolicy(
+          roleName,
+          functionBindingStatements(bindings),
+          functionLogGroupGuard(region, accountId, functionName),
         );
         policyStatements.push(
           ...destinations
@@ -1767,14 +1775,11 @@ export const FunctionProvider = () =>
           ).values(),
         ];
 
-        if (policyStatements.length > 0) {
+        if (document !== undefined) {
           yield* iam.putRolePolicy({
             RoleName: roleName,
             PolicyName: policyName,
-            PolicyDocument: JSON.stringify({
-              Version: "2012-10-17",
-              Statement: policyStatements,
-            } satisfies IAM.PolicyDocument),
+            PolicyDocument: document,
           });
         } else {
           yield* iam
@@ -1905,16 +1910,7 @@ export const FunctionProvider = () =>
         functionName: string;
       }) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        const document = JSON.stringify({
-          Version: "2012-10-17",
-          Statement: [
-            {
-              Effect: "Deny",
-              Action: "logs:CreateLogGroup",
-              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
-            },
-          ],
-        });
+        const document = functionLogGroupGuard(region, accountId, functionName);
         const observed = yield* iam
           .getRolePolicy({ RoleName: roleName, PolicyName: logGroupGuardPolicyName })
           .pipe(
@@ -3234,6 +3230,16 @@ export const FunctionProvider = () =>
           const roleName = output?.roleName ?? generated.roleName;
           const functionArn = output?.functionArn ?? generated.functionArn;
           const policyName = generated.policyName;
+
+          // The binding policy and the log-group guard share the execution
+          // role's inline-policy budget, so reject an oversized grant set
+          // before the first IAM write instead of failing part-way through.
+          const { accountId, region } = yield* AWSEnvironment.current;
+          yield* renderFunctionPolicy(
+            roleName,
+            functionBindingStatements(bindings),
+            functionLogGroupGuard(region, accountId, functionName),
+          );
 
           // State is only a cache: the execution role may have been removed
           // out-of-band (or by a previously interrupted cleanup) while the
