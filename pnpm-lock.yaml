@@ -11530,7 +11530,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
       rivetkit:
-        specifier: 3.0.0
+        specifier: ~3.0.0
         version: 3.0.0(82462c9445c0341d5345a768232a7db9)
     devDependencies:
       '@alchemy.run/aws':
