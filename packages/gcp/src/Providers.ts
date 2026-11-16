@@ -2276,6 +2276,7 @@ import { AccessSecretVersionHttp } from "./SecretManager/AccessSecretVersionHttp
 import { AddSecretVersionHttp } from "./SecretManager/AddSecretVersionHttp.ts";
 import { LocationsSecret, LocationsSecretProvider } from "./SecretManager/LocationsSecret.ts";
 import { Secret, SecretProvider } from "./SecretManager/Secret.ts";
+import { SecretVersion, SecretVersionProvider } from "./SecretManager/SecretVersion.ts";
 import {
   RepositoriesBranchRule,
   RepositoriesBranchRuleProvider,
@@ -3613,6 +3614,7 @@ const makeProviders = () =>
           WorkloadIdentityPool,
           WorkloadIdentityProvider,
           ProjectService,
+          SecretVersion,
           IamRole,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -4742,6 +4744,7 @@ const makeProviders = () =>
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
+                SecretVersionProvider(),
                 IamRoleProvider(),
               ),
             ),
