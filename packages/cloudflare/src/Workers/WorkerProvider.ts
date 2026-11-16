@@ -143,6 +143,25 @@ export class DurableObjectRenameConflict extends Data.TaggedError("DurableObject
 }
 
 /**
+ * An in-place Worker update would remove inline Durable Object storage while
+ * protected. Deleting a class can destroy its namespace and every stored
+ * object, even though the Worker resource itself survives the update.
+ *
+ * Deploy the Worker without protection successfully first, then delete the
+ * class in a subsequent deployment. A declared rename preserves its identity.
+ */
+export class ProtectedDurableObjectClassDeletion extends Data.TaggedError(
+  "ProtectedDurableObjectClassDeletion",
+)<{ scriptName: string; classNames: string[] }> {
+  override get message() {
+    return (
+      `Refusing to delete Durable Object class(es) ${this.classNames.map((name) => `'${name}'`).join(", ")} from protected Worker '${this.scriptName}'. ` +
+      "Deploy without RemovalPolicy.protect() successfully first, then remove these classes in a later deployment."
+    );
+  }
+}
+
+/**
  * Resolve the Workers for Platforms dispatch-namespace *name* from a resolved
  * `namespace` prop or persisted attribute. The engine resolves a passed
  * {@link DispatchNamespace} resource to its Attributes object (see
@@ -3345,6 +3364,7 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
         session: ScopedPlanStatusSession,
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
+        protectedFromDeletion = false,
       ) {
         news = newsWithBoundEnv(news, bindings).news;
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -3461,78 +3481,6 @@ export const LiveWorkerProvider = () =>
           metadataBindings,
           name,
         );
-        let metadataAssets: workers.PutScriptRequest["metadata"]["assets"] | undefined;
-        let keepAssets = false;
-        if (prebuiltAssets?.skip) {
-          // Hash matched what's already on Cloudflare: keep the
-          // existing asset manifest and skip the upload session.
-          yield* Effect.logInfo(
-            `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
-          );
-          keepAssets = true;
-          // `keepAssets` only preserves the uploaded files — the PUT
-          // replaces the asset config wholesale. The skip path never
-          // walked the directory, so read just `_headers`/`_redirects`
-          // here or a no-op deploy would wipe their rules.
-          metadataAssets = {
-            config: mergeAssetsConfigFiles(
-              prebuiltAssets.config,
-              yield* readAssetsConfigFiles(prebuiltAssets.directory),
-            ),
-          };
-          metadataBindings.push({ type: "assets", name: "ASSETS" });
-        } else if (assets) {
-          // We had to read the directory. Even after the read, the
-          // computed hash may match what's already deployed (e.g.
-          // legacy `string` / `AssetsProps` shapes that don't carry a
-          // precomputed hash, or a precomputed hash that disagreed with
-          // disk). In that case still keep the existing manifest and
-          // skip the upload session — Cloudflare's content-addressed
-          // session would no-op on every byte anyway.
-          if (assets.hash === prebuiltAssets?.hash) {
-            yield* Effect.logInfo(
-              `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
-            );
-            keepAssets = true;
-            // Fold the build-emitted `_headers`/`_redirects` into the PUT
-            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
-            // files and carry them on the read result, but only `readAssets`
-            // pre-merges them — without this, framework header/redirect
-            // rules never reach Cloudflare. Idempotent for pre-merged
-            // configs (explicit config wins).
-            metadataAssets = { config: mergeAssetsConfigFiles(assets.config, assets) };
-          } else {
-            yield* Effect.logInfo(
-              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
-            );
-            const { jwt } = yield* uploadAssets(
-              accountId,
-              name,
-              assets,
-              session,
-              dispatchNamespace,
-            );
-            metadataAssets = {
-              jwt,
-              // Same `_headers`/`_redirects` fold as the keep path above.
-              config: mergeAssetsConfigFiles(assets.config, assets),
-            };
-          }
-          metadataBindings.push({ type: "assets", name: "ASSETS" });
-        }
-        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
-        yield* Effect.logInfo(
-          `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
-        );
-        const size =
-          bundle.files
-            ?.filter((file) => !file.name.endsWith(".map"))
-            .reduce((acc, file) => acc + file.size, 0) ?? 0;
-        const sizeKB = size / 1024;
-        const sizeMB = sizeKB / 1024;
-        const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
-        yield* session.note(`Uploading worker (${bundleSize}) ...`, { kind: "status" });
-
         // Read existing worker settings for migration tracking
         const oldSettings =
           existingSettings ??
@@ -3780,6 +3728,89 @@ export const LiveWorkerProvider = () =>
             targetScriptName,
           });
         }
+
+        // A regular Worker update can destroy inline DO data through the
+        // deleted_classes migration without deleting the Worker resource.
+        // Check the *actual* deletions after renames and transfers have been
+        // reconciled, before any upload or asset session is started.
+        if (protectedFromDeletion && deletedClasses.length > 0) {
+          return yield* new ProtectedDurableObjectClassDeletion({
+            scriptName: name,
+            classNames: [...deletedClasses].sort(),
+          });
+        }
+
+        let metadataAssets: workers.PutScriptRequest["metadata"]["assets"] | undefined;
+        let keepAssets = false;
+        if (prebuiltAssets?.skip) {
+          // Hash matched what's already on Cloudflare: keep the
+          // existing asset manifest and skip the upload session.
+          yield* Effect.logInfo(
+            `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+          );
+          keepAssets = true;
+          // `keepAssets` only preserves the uploaded files — the PUT
+          // replaces the asset config wholesale. The skip path never
+          // walked the directory, so read just `_headers`/`_redirects`
+          // here or a no-op deploy would wipe their rules.
+          metadataAssets = {
+            config: mergeAssetsConfigFiles(
+              prebuiltAssets.config,
+              yield* readAssetsConfigFiles(prebuiltAssets.directory),
+            ),
+          };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        } else if (assets) {
+          // We had to read the directory. Even after the read, the
+          // computed hash may match what's already deployed (e.g.
+          // legacy `string` / `AssetsProps` shapes that don't carry a
+          // precomputed hash, or a precomputed hash that disagreed with
+          // disk). In that case still keep the existing manifest and
+          // skip the upload session — Cloudflare's content-addressed
+          // session would no-op on every byte anyway.
+          if (assets.hash === prebuiltAssets?.hash) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+            );
+            keepAssets = true;
+            // Fold the build-emitted `_headers`/`_redirects` into the PUT
+            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
+            // files and carry them on the read result, but only `readAssets`
+            // pre-merges them — without this, framework header/redirect
+            // rules never reach Cloudflare. Idempotent for pre-merged
+            // configs (explicit config wins).
+            metadataAssets = { config: mergeAssetsConfigFiles(assets.config, assets) };
+          } else {
+            yield* Effect.logInfo(
+              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
+            );
+            const { jwt } = yield* uploadAssets(
+              accountId,
+              name,
+              assets,
+              session,
+              dispatchNamespace,
+            );
+            metadataAssets = {
+              jwt,
+              // Same `_headers`/`_redirects` fold as the keep path above.
+              config: mergeAssetsConfigFiles(assets.config, assets),
+            };
+          }
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
+        yield* Effect.logInfo(
+          `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
+        );
+        const size =
+          bundle.files
+            ?.filter((file) => !file.name.endsWith(".map"))
+            .reduce((acc, file) => acc + file.size, 0) ?? 0;
+        const sizeKB = size / 1024;
+        const sizeMB = sizeKB / 1024;
+        const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
+        yield* session.note(`Uploading worker (${bundleSize}) ...`, { kind: "status" });
 
         // Collect container-backed classes so we can send container metadata.
         // A Durable Object-managed class merges the images of every bound
@@ -4729,7 +4760,16 @@ export const LiveWorkerProvider = () =>
               ),
             );
           }),
-        diff: Effect.fn(function* ({ id, fqn, news: desired, olds, output, newBindings }) {
+        diff: Effect.fn(function* ({
+          id,
+          fqn,
+          news: desired,
+          olds,
+          output,
+          oldBindings,
+          newBindings,
+          protected: protectedFromDeletion,
+        }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Effect-valued `env` entries (tagged Worker classes / resource
           // Effects — the circular-bindings pattern) never resolve at plan
@@ -4741,6 +4781,33 @@ export const LiveWorkerProvider = () =>
           // form against the stripped stored props and re-plans an update
           // forever (#874).
           const news = stripEffects(desired);
+          // Run the data-loss guard before unrelated unresolved props can
+          // defer the normal diff. Do not require the entire Worker to resolve
+          // to inspect its literal Durable Object declarations.
+          if (
+            protectedFromDeletion &&
+            olds !== undefined &&
+            output !== undefined &&
+            Array.isArray(newBindings) &&
+            // stripEffects removes unresolved exports, which is not proof
+            // their classes were deleted. Reconcile checks after resolution.
+            isResolved((desired as WorkerProps).exports)
+          ) {
+            const removed = removedDeclaredDurableObjectClasses({
+              workerName: output.workerName,
+              olds,
+              news: news as WorkerProps,
+              oldBindings,
+              newBindings: newBindings as ResourceBinding<Worker["Binding"]>[],
+              output,
+            });
+            if (removed.length > 0) {
+              return yield* new ProtectedDurableObjectClassDeletion({
+                scriptName: output.workerName,
+                classNames: removed,
+              });
+            }
+          }
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -5532,7 +5599,16 @@ export const LiveWorkerProvider = () =>
               }),
             ),
         ),
-        reconcile: Effect.fn(function* ({ id, fqn, news, olds, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          fqn,
+          news,
+          olds,
+          bindings,
+          output,
+          session,
+          protected: protectedFromDeletion,
+        }) {
           yield* assertCloudflareTelemetryCompatibility(news, bindings);
           if (news.preview?.of != null && news.version?.parent != null) {
             return yield* new WorkerPreviewConfigError({
@@ -5606,7 +5682,17 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
-          return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
+          return yield* putWorker(
+            id,
+            fqn,
+            news,
+            bindings,
+            olds,
+            output,
+            session,
+            existingSettings,
+            protectedFromDeletion,
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           // Version workers own a version, not the script — `workerName` is
@@ -6257,6 +6343,98 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
     }),
   );
 }
+
+/**
+ * Conservatively detect a protected Worker's loss of previously declared
+ * locally hosted Durable Object classes during planning.
+ *
+ * Use previous ownership tags and binding records, not only live namespace
+ * ids. Both Effect-native `exports` and env-registered classes are counted.
+ * A declared rename keeps the same namespace, while a cross-script binding
+ * hands off safety verification to the reconciler's namespace-transfer check.
+ *
+ * If a binding is itself unresolved, defer the decision to reconciliation:
+ * absence from a partial input does not prove that a class was removed.
+ */
+const removedDeclaredDurableObjectClasses = ({
+  workerName,
+  olds,
+  news,
+  oldBindings,
+  newBindings,
+  output,
+}: {
+  workerName: string;
+  olds: WorkerProps;
+  news: WorkerProps;
+  oldBindings: ReadonlyArray<ResourceBinding>;
+  newBindings: ReadonlyArray<ResourceBinding>;
+  output: Worker["Attributes"];
+}): string[] => {
+  if (
+    newBindings.some(
+      (binding) =>
+        typeof binding !== "object" ||
+        binding === null ||
+        !("data" in binding) ||
+        typeof binding.data !== "object" ||
+        binding.data === null ||
+        !isResolved(binding.data),
+    )
+  ) {
+    return [];
+  }
+  const exported = (props: WorkerProps) =>
+    Object.entries(props.exports ?? {})
+      .filter(([, value]) => isDurableObjectExport(value))
+      .map(([name]) => name);
+  const priorClassesByLogicalId = new Map(
+    Object.entries(getDurableObjectTagMap(output.tags ?? [])),
+  );
+  const oldHosted = getDurableObjectBindings(oldBindings, workerName);
+  for (const binding of oldHosted) {
+    if (!priorClassesByLogicalId.has(binding.logicalId)) {
+      priorClassesByLogicalId.set(binding.logicalId, binding.className);
+    }
+  }
+  const previous = new Set([
+    ...priorClassesByLogicalId.values(),
+    ...oldHosted.map((binding) => binding.className),
+    ...exported(olds),
+  ]);
+  const current = getDurableObjectBindings(newBindings, workerName);
+  const retained = new Set([
+    ...current.map((binding) => binding.className),
+    // An unchanged logical binding id carries its namespace through an
+    // implicit class-name rename; the reconciler emits renamed_classes.
+    ...current.flatMap((binding) => {
+      const former = priorClassesByLogicalId.get(binding.logicalId);
+      return former === undefined ? [] : [former];
+    }),
+    ...current.flatMap((binding) =>
+      typeof binding.renamedFrom === "string" ? [binding.renamedFrom] : [],
+    ),
+    ...exported(news),
+  ]);
+  // Rebinding a class to another script is not, by itself, proof of data loss.
+  // Reconcile verifies the actual namespace was transferred before deleting.
+  for (const binding of newBindings) {
+    for (const entry of binding.data.bindings ?? []) {
+      if (
+        entry.type === "durable_object_namespace" &&
+        "className" in entry &&
+        typeof entry.className === "string" &&
+        entry.scriptName !== undefined &&
+        entry.scriptName !== workerName
+      ) {
+        retained.add(entry.className);
+      }
+    }
+  }
+  return [...previous]
+    .filter((className) => !retained.has(className))
+    .sort((a, b) => a.localeCompare(b));
+};
 
 /**
  * Cloudflare Worker script-tag limits, verified empirically against the live

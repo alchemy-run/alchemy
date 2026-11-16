@@ -45,6 +45,7 @@ import {
   tryFindProviderByType,
 } from "./Provider.ts";
 import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
+import { isProtectedResourceState } from "./RemovalPolicy.ts";
 import { resourceSession } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { ResourceContext } from "./ResourceContext.ts";
@@ -992,6 +993,7 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1116,6 +1118,8 @@ const executeNode = (
           session: scopedSession,
           olds: previousProps,
           output: node.state.attr,
+          protected:
+            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1436,6 +1440,7 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1811,6 +1816,8 @@ const converge = Effect.fn(function* (
           session: scopedSession,
           olds: oldProps,
           output: tracker[fqn].output,
+          protected:
+            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 

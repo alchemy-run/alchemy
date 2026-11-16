@@ -47,7 +47,7 @@ import {
   type ProviderService,
 } from "./Provider.ts";
 import { defaultProviderMode, stampedMode, type ProviderMode } from "./ProviderMode.ts";
-import { ProtectedResource } from "./RemovalPolicy.ts";
+import { isProtectedResourceState, ProtectedResource } from "./RemovalPolicy.ts";
 import {
   isResource,
   LookupOfManagedResourceError,
@@ -916,6 +916,8 @@ const makePlan = <A>(
                 output: oldState.attr,
                 oldBindings,
                 newBindings,
+                protected:
+                  resource.RemovalPolicy === "protect" || isProtectedResourceState(oldState),
               })
               .pipe(providePlanScope(resource, oldState.instanceId))
           : Effect.undefined;
@@ -1978,6 +1980,8 @@ const makePlan = <A>(
                 news,
                 oldBindings,
                 newBindings,
+                protected:
+                  resource.RemovalPolicy === "protect" || isProtectedResourceState(oldState),
               })
               .pipe(providePlanScope(resource, oldState.instanceId)),
           ).pipe(
@@ -2673,9 +2677,6 @@ const makePlan = <A>(
     // in the same deploy as the replacement is refused too. An `updating` row
     // carries the declared policy of an update that may have failed, so the
     // last successful deploy's policy on `old` counts as well.
-    const isProtected = (row: ResourceState | undefined) =>
-      row?.removalPolicy === "protect" ||
-      (row?.status === "updating" && row.old?.removalPolicy === "protect");
     yield* Effect.forEach(
       // An Action declared at a protected resource's FQN would overwrite its
       // row without ever planning a delete, abandoning the resource.
@@ -2691,15 +2692,15 @@ const makePlan = <A>(
             // Finishing a `replaced` row's drain only deletes an old generation
             // the dependents already left; the current one is untouched.
             !(node.state.status === "replaced" && !node.restart) &&
-            (node.resource.RemovalPolicy === "protect" || isProtected(node.state))
+            (node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state))
               ? [{ fqn, action: "replace" as const }]
               : [],
           ),
           ...Object.entries(deletions).flatMap(([fqn, node]) =>
-            isProtected(node?.state) ? [{ fqn, action: "delete" as const }] : [],
+            isProtectedResourceState(node?.state) ? [{ fqn, action: "delete" as const }] : [],
           ),
           ...takenOverByActions.flatMap(([fqn, row]) =>
-            !isActionState(row) && isProtected(row as ResourceState | undefined)
+            !isActionState(row) && isProtectedResourceState(row as ResourceState | undefined)
               ? [{ fqn, action: "delete" as const }]
               : [],
           ),

@@ -1,6 +1,19 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { ResourceState } from "./State/ResourceState.ts";
+
+/**
+ * Whether a persisted resource is still protected from destructive changes.
+ *
+ * An interrupted unprotect update does not release the policy of the last
+ * successful deployment (the `old` snapshot on an `updating` row).
+ *
+ * @internal
+ */
+export const isProtectedResourceState = (state: ResourceState | undefined): boolean =>
+  state?.removalPolicy === "protect" ||
+  (state?.status === "updating" && state.old?.removalPolicy === "protect");
 
 /**
  * What the engine does with a resource's **physical** cloud object when the
@@ -117,6 +130,13 @@ export const destroy: {
  * The policy is persisted on the state row, so removing the declaration is
  * refused too. To replace or delete the resource on purpose, deploy it with
  * another policy first (e.g. drop `protect()`), then make the change.
+ *
+ * A provider may also reject destructive operations *inside* a resource
+ * update. For `Cloudflare.Worker`, this protects the stored data of inline
+ * Durable Object classes: removing a class is refused even when the Worker
+ * itself is not replaced. A successful deploy removing protection must
+ * precede the deploy that removes the class. Renaming a class with
+ * `renamedFrom` is data-preserving and remains allowed.
  *
  * Applies to every resource declared inside the piped effect, so it can
  * decorate a single resource or a whole scope.

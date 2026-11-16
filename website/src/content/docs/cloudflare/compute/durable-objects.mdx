@@ -685,6 +685,32 @@ nothing, so it can stay. Only one class can take over a class: two
 classes renamed from the same one fail the deploy with
 `DurableObjectRenameConflict` before anything is uploaded.
 
+## Protect stored objects from accidental class deletion
+
+A Worker can update without being replaced, but removing a hosted Durable
+Object class during that update may delete its namespace and stored data.
+Protect the Worker to refuse those deletions during both planning and
+deployment:
+
+```typescript
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+
+const worker = yield* Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  env: { Counter: Cloudflare.DurableObject("Counter") },
+}).pipe(RemovalPolicy.protect());
+```
+
+To remove the `Counter` class intentionally, first deploy the unchanged
+Worker **without** `RemovalPolicy.protect()` and let that deployment
+succeed. Remove the class in a **subsequent** deployment. Removing the
+protection and the class in the same deploy is refused, including after an
+interrupted unprotect update. Explicit `renamedFrom` migrations keep the
+existing namespace and are permitted while protected. For transfers between
+Workers, Alchemy separately verifies that the namespace reaches its new host
+before deleting it from the former host.
+
 ## Adopt a Worker deployed by Wrangler
 
 Alchemy deploys Durable Object classes with Cloudflare's declarative
