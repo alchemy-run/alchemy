@@ -28,18 +28,21 @@ import {
   type DurableObjectRuntimeContext,
 } from "../DurableObject.ts";
 import { PoolHost } from "../Host.ts";
-import { Pool, type PoolDurableObject } from "../Pool.ts";
+import { Pool, type PoolDurableObject, type PoolProps } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */
 export const RIVETKIT_VERSION = "3.0.0";
 
-/** A node image environment: bun with RivetKit installed. */
-export const NODE_DOCKERFILE = `FROM oven/bun:1
+/** A node image environment: bun with RivetKit `version` installed. */
+export const nodeDockerfile = (version: string) => `FROM oven/bun:1
 WORKDIR /app
-RUN bun add rivetkit@${RIVETKIT_VERSION}
+RUN bun add rivetkit@${version}
 `;
+
+/** A node image environment: bun with RivetKit installed. */
+export const NODE_DOCKERFILE = nodeDockerfile(RIVETKIT_VERSION);
 
 /** Packages the node image provides, kept out of the node bundle. */
 const EXTERNAL = ["rivetkit", /^rivetkit\//, /^@rivetkit\//];
@@ -101,7 +104,10 @@ export class ClusterNetworkMismatch extends Data.TaggedError("Rivet.ClusterNetwo
   readonly message: string;
 }> {}
 
-export interface PoolSettings {
+export interface PoolSettings extends Pick<
+  PoolProps,
+  "drainOnVersionUpgrade" | "actorEvictionDelay" | "actorEvictionPeriod" | "actorEvictionRate"
+> {
   /**
    * Pool name on the control plane.
    * @default ${stack}-${stage}-${id}
@@ -217,6 +223,10 @@ const makeHost = <Network, Req>(options: {
         token: cluster.token,
         namespace: cluster.namespace,
         name,
+        drainOnVersionUpgrade: options.settings.drainOnVersionUpgrade,
+        actorEvictionDelay: options.settings.actorEvictionDelay,
+        actorEvictionPeriod: options.settings.actorEvictionPeriod,
+        actorEvictionRate: options.settings.actorEvictionRate,
       });
       yield* pool.bind`${object.name}`({ durableObjects: [object], env });
       yield* bindCaller;
