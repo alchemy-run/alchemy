@@ -89,6 +89,19 @@ const makeComputeCloud = () => {
       .slice(1);
     const body = request.bodyJson as Record<string, unknown> | undefined;
 
+    if (head === "branches" && id !== undefined && request.method === "GET") {
+      return data({
+        id,
+        type: "branch",
+        url: "",
+        gitName: id,
+        isDefault: true,
+        role: "production",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        project: { id: "project-1", url: "", name: "project-1" },
+      });
+    }
     if (head === "services" && id === undefined && request.method === "GET") {
       const query = new URLSearchParams(request.search);
       return page(

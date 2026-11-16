@@ -1,3 +1,6 @@
+import { PrismaApiError, type PrismaManagementClient } from "@alchemy.run/prisma/Client";
+import type { CustomDomain as ApiCustomDomain } from "@alchemy.run/prisma/Types";
+import * as Effect from "effect/Effect";
 import {
   type Captured,
   data,
@@ -37,6 +40,20 @@ export interface WireDeployment {
   createdAt: string;
 }
 
+export interface WireEnvironmentVariable {
+  id: string;
+  type: string;
+  url: string;
+  projectId: string;
+  branchId: string | null;
+  class: "production" | "preview";
+  key: string;
+  valueKid: string;
+  isManagedBySystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Answers Prisma's edge gives for a host with no live service. */
 const edgeServiceNotFound = () => new Response("There is no service on this URL", { status: 404 });
 
@@ -49,8 +66,20 @@ const edgeServiceNotFound = () => new Response("There is no service on this URL"
 export const makeComputeCloud = () => {
   const services = new Map<string, WireService>();
   const deployments = new Map<string, WireDeployment>();
+  const variables = new Map<string, WireEnvironmentVariable>();
+  /** Plain values of the variables, which the real API never returns. */
+  const values = new Map<string, string>();
+  /** Role of each Branch; a Branch not listed is a production Branch. */
+  const branchRoles = new Map<string, "production" | "preview">();
+  /** The variables each version was created with, as the platform copies them in. */
+  const versionEnvironment = new Map<string, Record<string, string | undefined>>();
+  const environment = () =>
+    Object.fromEntries(
+      [...variables.values()].map((variable) => [variable.key, values.get(variable.id)]),
+    );
   let nextService = 1;
   let nextDeployment = 1;
+  let nextVariable = 1;
 
   const knobs = {
     /** Preview domains that never answer, so the version's own check fails. */
@@ -86,6 +115,75 @@ export const makeComputeCloud = () => {
       .slice(1);
     const body = request.bodyJson as Record<string, unknown> | undefined;
 
+    if (head === "branches" && id !== undefined && request.method === "GET") {
+      return data({
+        id,
+        type: "branch",
+        url: "",
+        gitName: id,
+        isDefault: true,
+        role: branchRoles.get(id) ?? "production",
+        createdAt,
+        updatedAt: createdAt,
+        project: { id: "project-1", url: "", name: "project-1" },
+      });
+    }
+    if (head === "environment-variables" && id === undefined && request.method === "GET") {
+      const query = new URLSearchParams(request.search);
+      return page(
+        [...variables.values()].filter(
+          (variable) =>
+            (!query.has("projectId") || variable.projectId === query.get("projectId")) &&
+            (!query.has("class") || variable.class === query.get("class")) &&
+            (!query.has("key") || variable.key === query.get("key")) &&
+            (!query.has("branchId") || variable.branchId === query.get("branchId")),
+        ),
+      );
+    }
+    if (head === "environment-variables" && id === undefined && request.method === "POST") {
+      const projectId = String(body?.projectId);
+      const branchId = (body?.branchId as string | undefined) ?? null;
+      const cls = body?.class as "production" | "preview";
+      const key = String(body?.key);
+      const taken = [...variables.values()].some(
+        (variable) =>
+          variable.projectId === projectId &&
+          variable.branchId === branchId &&
+          variable.class === cls &&
+          variable.key === key,
+      );
+      if (taken) return failure(409, "conflict", `variable '${key}' already exists`);
+      const variable: WireEnvironmentVariable = {
+        id: `env-${nextVariable++}`,
+        type: "environment_variable",
+        url: "",
+        projectId,
+        branchId,
+        class: cls,
+        key,
+        valueKid: "kid-1",
+        isManagedBySystem: false,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      variables.set(variable.id, variable);
+      values.set(variable.id, String(body?.value));
+      return data(variable);
+    }
+    if (head === "environment-variables" && id !== undefined) {
+      const variable = variables.get(id);
+      if (!variable) return notFound();
+      if (request.method === "GET") return data(variable);
+      if (request.method === "PATCH") {
+        values.set(id, String(body?.value));
+        return data(variable);
+      }
+      if (request.method === "DELETE") {
+        variables.delete(id);
+        values.delete(id);
+        return noContent();
+      }
+    }
     if (head === "services" && id === undefined && request.method === "GET") {
       const query = new URLSearchParams(request.search);
       return page(
@@ -143,6 +241,7 @@ export const makeComputeCloud = () => {
           createdAt,
         };
         deployments.set(deployment.id, deployment);
+        versionEnvironment.set(deployment.id, environment());
         return data({
           ...deployment,
           uploadUrl:
@@ -180,12 +279,67 @@ export const makeComputeCloud = () => {
     return unhandled(request);
   };
 
+  const domains = new Map<string, ApiCustomDomain>();
+  /** `Prisma.CustomDomain` reaches custom domains through the hand-written client. */
+  const domainClient = {
+    listAppDomains: (serviceId: string) =>
+      Effect.sync(() => [...domains.values()].filter((domain) => domain.appId === serviceId)),
+    getCustomDomain: (id: string) =>
+      Effect.suspend(() => {
+        const domain = domains.get(id);
+        return domain
+          ? Effect.succeed(domain)
+          : Effect.fail(
+              new PrismaApiError({
+                method: "GET",
+                path: `/v1/domains/${id}`,
+                status: 404,
+                message: "not found",
+              }),
+            );
+      }),
+    createAppDomain: (serviceId: string, input: { hostname: string }) =>
+      Effect.sync(() => {
+        const id = `domain-${domains.size + 1}`;
+        const domain: ApiCustomDomain = {
+          id,
+          type: "custom-domain",
+          url: "",
+          hostname: input.hostname,
+          appId: serviceId,
+          status: "active",
+          foundryStatus: "active",
+          failureReason: null,
+          failureCategory: null,
+          certExpiresAt: null,
+          dnsRecords: [],
+          createdAt,
+          updatedAt: createdAt,
+        };
+        domains.set(id, domain);
+        return { status: 201 as const, domain };
+      }),
+    retryCustomDomain: (id: string) => Effect.sync(() => domains.get(id)!),
+    deleteCustomDomain: (id: string) =>
+      Effect.sync(() => {
+        domains.delete(id);
+      }),
+  } as unknown as PrismaManagementClient;
+
   const fake = makeFakeManagementApi(respond);
   return {
     fake,
+    domains,
+    domainClient,
     services,
     deployments,
+    variables,
+    values,
+    branchRoles,
     knobs,
+    versionEnvironment,
+    /** Plain value of each variable by key, as the platform would hand a new version. */
+    environment,
     /** `METHOD /path` of every Management API call that changes something. */
     writes: () =>
       fake.captured

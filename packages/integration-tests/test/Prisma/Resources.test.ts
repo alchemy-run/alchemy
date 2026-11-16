@@ -413,6 +413,25 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 // that does not declare them sees empty lists.
 const emptyList = () => Effect.succeed([]);
 
+// A service reads its Branch's role; a suite that declares no Branch reads a
+// production one.
+const productionBranch = (id: string) =>
+  Effect.succeed({
+    id,
+    type: "branch",
+    url: `https://api.prisma.test/v1/branches/${id}`,
+    gitName: id,
+    isDefault: true,
+    role: "production",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    project: {
+      id: "project-1",
+      url: "https://api.prisma.test/v1/projects/project-1",
+      name: "project-1",
+    },
+  });
+
 const dispatchManagement = (client: any, request: Captured): Response => {
   {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
@@ -596,7 +615,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
     }
 
     if (head === "branches" && id !== undefined) {
-      if (request.method === "GET") return call(client.getBranch, [id]);
+      if (request.method === "GET") return call(client.getBranch ?? productionBranch, [id]);
       if (request.method === "PATCH") return call(client.updateBranch, [id, body]);
       if (request.method === "DELETE") {
         return callVoid(client.deleteBranch, [id]);
@@ -856,7 +875,10 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               ? undefined
               : (JSON.parse(value) as string);
 
-        expect(stack.bindings[app.FQN]).toBeUndefined();
+        // The only binding on the host is the one its children report through.
+        expect(stack.bindings[app.FQN]?.map((binding) => binding.sid)).toEqual([
+          "Prisma.Compute.Composition",
+        ]);
         expect(Object.keys(env)).toEqual(expect.arrayContaining(Object.values(keys)));
         expect(unpack(env[keys.connectionId])).toBe("connection-1");
         expect(unpack(env[keys.databaseId])).toBe("database-1");
@@ -1640,6 +1662,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           "GET /v1/services",
           "GET /v1/services",
           "GET /v1/projects/project-1/branches",
+          // The service reads its Branch, whose role is the class of its variables.
+          "GET /v1/branches/branch-1",
           "GET /v1/deployments/version-1",
           "GET /v1/services/service-1/deployments",
           "GET /v1/environment-variables",
@@ -1953,6 +1977,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           "GET /v1/projects/project-1/branches",
           "POST /v1/services",
           "GET /v1/projects/project-1/branches",
+          "GET /v1/branches/branch-1",
           "GET /v1/services/service-1",
           "POST /v1/services/service-1/deployments",
           "GET /v1/deployments/version-1",
@@ -2001,6 +2026,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             },
           ],
           ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
+          ["getBranch", "branch-1"],
           ["getApp", "service-1"],
           [
             "createAppDeployment",
@@ -3228,6 +3254,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               projectId: "project-1",
               regionId: "us-east-1",
               branchId: null,
+              branchRole: null,
               activeVersionId: null,
               serviceEndpointDomain: "service-1.prisma.build",
               url: "https://service-1.prisma.build",
@@ -3304,6 +3331,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             },
           ],
           ["updateApp", { id: "service-1", input: { logicalId: "App" } }],
+          ["getBranch", "branch-1"],
           ["getEnvironmentVariable", "env-1"],
           ["updateEnvironmentVariable", { id: "env-1", input: { value: "new-secret" } }],
         ]);
@@ -3448,6 +3476,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               projectId: "project-1",
               regionId: "us-east-1",
               branchId: "branch-main",
+              branchRole: "production",
               activeVersionId: null,
               serviceEndpointDomain: "service-1.prisma.build",
               url: "https://service-1.prisma.build",

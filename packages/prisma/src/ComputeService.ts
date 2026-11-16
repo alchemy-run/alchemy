@@ -1,6 +1,7 @@
 import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServicesResponse,
+  getBranch,
   getServices,
   getService,
   updateService,
@@ -209,6 +210,11 @@ export interface ComputeService extends Resource<
      */
     branchId: string | null;
     /**
+     * Role of the attached Branch, which is the class of the environment
+     * variables the service's versions read, or null when unassigned.
+     */
+    branchRole: "production" | "preview" | null;
+    /**
      * ID of the version the service serves on its stable endpoint, as the
      * platform reports it, or null before any version was promoted.
      */
@@ -414,12 +420,26 @@ const logicalIdTaken = (logicalId: string, branchId: string, projectId: string, 
     cause,
   });
 
-const attrsFrom = (app: ObservedApp): ComputeService["Attributes"] => ({
+/** The role of the service's Branch, read because the service reports only its ID. */
+const branchRoleOf = (app: ObservedApp) =>
+  app.branchId === null
+    ? Effect.succeed(null)
+    : getBranch({ branchId: app.branchId }).pipe(Effect.map((response) => response.data.role));
+
+const attrsFrom = Effect.fn(function* (app: ObservedApp) {
+  return attrsWithRole(app, yield* branchRoleOf(app));
+});
+
+const attrsWithRole = (
+  app: ObservedApp,
+  branchRole: ComputeService["Attributes"]["branchRole"],
+): ComputeService["Attributes"] => ({
   serviceId: app.id,
   name: app.name,
   projectId: app.projectId,
   regionId: app.region.id,
   branchId: app.branchId,
+  branchRole,
   activeVersionId: app.latestDeploymentId,
   serviceEndpointDomain: app.appEndpointDomain,
   url: toComputeUrl(app.appEndpointDomain) ?? app.appEndpointDomain,
@@ -748,7 +768,9 @@ const ProviderLive = () =>
     Effect.gen(function* () {
       return {
         stables: ["serviceId"],
-        list: () => listApps().pipe(Effect.map((apps) => apps.map(attrsFrom))),
+        // Teardown enumeration needs only identity, so it reads no Branch.
+        list: () =>
+          listApps().pipe(Effect.map((apps) => apps.map((app) => attrsWithRole(app, null)))),
         diff: Effect.fn(
           function* ({ id, fqn, olds, news, output: saved }) {
             if (!isInputObject(news)) return undefined;
@@ -813,13 +835,26 @@ const ProviderLive = () =>
               ? ({ action: "update" } as const)
               : undefined;
           },
-          (effect, { id, output: saved, newBindings }) =>
+          (effect, { id, news, output: saved, newBindings }) =>
             Effect.gen(function* () {
               yield* refuseSecondActiveVersion(id, newBindings);
               const diff = yield* effect;
               // The service promotes its attached version on every deploy. Its
               // ID and URL survive that; `activeVersionId` must be re-read, or a
               // resource reading it keeps the old version.
+              // With no change to its own props its name and Branch survive
+              // too, so the environment variables scoped by them stay known.
+              const branchKept =
+                diff === undefined &&
+                saved !== undefined &&
+                "branchRole" in saved &&
+                isInputObject(news) &&
+                isResolved({
+                  displayName: news.displayName,
+                  branchId: news.branchId,
+                  branchGitName: news.branchGitName,
+                  logicalId: news.logicalId,
+                });
               const planned =
                 activeVersionSids(newBindings).length === 0 || diff?.action === "replace"
                   ? diff
@@ -832,6 +867,7 @@ const ProviderLive = () =>
                         "projectId",
                         "regionId",
                         "createdAt",
+                        ...(branchKept ? ["name", "branchId", "branchRole", "logicalId"] : []),
                       ],
                     };
               return updateRowSavedBeforeRename(isLegacyAttributes(saved), planned);
@@ -842,7 +878,7 @@ const ProviderLive = () =>
             Effect.map((response) => response.data),
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
-          return app ? attrsFrom(app) : undefined;
+          return app ? yield* attrsFrom(app) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, fqn, output: saved, olds }) {
@@ -857,14 +893,14 @@ const ProviderLive = () =>
           const app = found?.app;
           const provenOwned = found?.provenOwned ?? false;
           if (!app) return undefined;
-          const attrs = attrsFrom(app);
+          const attrs = yield* attrsFrom(app);
           return serviceId || provenOwned ? attrs : Unowned(attrs);
         }),
         observe: Effect.fn(function* ({ id, fqn, news }) {
           if (!isResolved(news)) return Unresolved;
           const found = yield* findServiceInProject(id, fqn, news);
           if (!found) return undefined;
-          const attrs = attrsFrom(found.app);
+          const attrs = yield* attrsFrom(found.app);
           return found.provenOwned ? attrs : Unowned(attrs);
         }),
         // A service and its active version need each other's IDs. The engine
@@ -885,14 +921,14 @@ const ProviderLive = () =>
             output: undefined,
             admitted: found?.app,
           });
-          return attrsFrom(app);
+          return yield* attrsFrom(app);
         }),
         reconcile: Effect.fn(function* ({ id, fqn, news, output: saved, bindings }) {
           const output = saved && currentAttributes(saved);
           yield* refuseSecondActiveVersion(id, bindings);
           const app = yield* ensureService({ id, fqn, news, output });
           const versionId = activeVersionOf(bindings);
-          return attrsFrom(
+          return yield* attrsFrom(
             versionId === undefined
               ? app
               : yield* serveActiveVersion(app, versionId, output?.activeVersionId, news),
@@ -927,6 +963,7 @@ const ProviderLocal = () =>
       projectId: attrOrString(news.project, "projectId"),
       regionId: news.regionId ?? "us-east-1",
       branchId: news.branchId ?? null,
+      branchRole: "production",
       activeVersionId:
         attrOrString(
           bindings.find((binding) => binding.sid.startsWith(ACTIVE_VERSION_SID_PREFIX))?.data,
