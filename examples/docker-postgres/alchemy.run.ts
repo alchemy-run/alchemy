@@ -3,7 +3,6 @@ import * as Alchemy from "alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 
 const POSTGRES_PORT = 15432;
 const POSTGRES_CONTAINER = "alchemy-example-postgres";
@@ -15,10 +14,9 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const configuredPassword = yield* Config.Redacted("POSTGRES_PASSWORD").pipe(Config.option);
-    const password = yield* Option.match(configuredPassword, {
-      onSome: Effect.succeed,
-      onNone: () => Alchemy.makeRandom("PostgresPassword", { bytes: 16 }),
+    const password = yield* Alchemy.makeRandom("PostgresPassword", {
+      bytes: 16,
+      initial: Config.option(Config.Redacted("POSTGRES_PASSWORD")),
     });
 
     const image = yield* Docker.RemoteImage("postgres-image", {

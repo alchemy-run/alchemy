@@ -37,14 +37,53 @@ export type Random = Resource<
   }
 >;
 
+/**
+ * Return a persisted random secret directly as `Redacted<string>`.
+ *
+ * The same `initial` input as {@link Random} may import an existing secret
+ * on first creation; the saved value remains authoritative afterward.
+ *
+ * @example
+ * const password = yield* makeRandom("DatabasePassword", {
+ *   bytes: 16,
+ *   initial: Config.option(Config.Redacted("EXISTING_DATABASE_PASSWORD")),
+ * });
+ */
 export const makeRandom = (id: string, props?: PropsInput<RandomProps>) =>
   Random(id, props).pipe(Effect.map((rand) => rand.text));
 
 /**
- * A deterministic-in-state random secret generator.
+ * Generate a random secret or adopt an existing secret on first creation.
  *
- * The value is generated once on create and then persisted in state so
- * subsequent deploys keep the same secret unless the resource is replaced.
+ * The value is persisted in Alchemy state and remains unchanged on later
+ * deployments, even if `initial` or `bytes` changes. If `initial` is a
+ * required config that is missing on the first deployment, creation fails
+ * rather than generating a new key. A missing optional config instead
+ * generates a new secret.
+ *
+ * ### Adopt an existing secret
+ *
+ * ```typescript
+ * const secret = yield* Random("EncryptionKey", {
+ *   initial: Config.Redacted("EXISTING_ENCRYPTION_KEY"),
+ * });
+ * // The environment variable is not required after the first deployment.
+ * ```
+ *
+ * ### Generate when no existing secret is configured
+ *
+ * ```typescript
+ * const secret = yield* Random("SigningKey", {
+ *   bytes: 32,
+ *   initial: Config.option(Config.Redacted("EXISTING_SIGNING_KEY")),
+ * });
+ * // secret.text: Redacted<string>
+ * ```
+ *
+ * `Redacted` protects ordinary output formatting; the state backend must
+ * still protect persisted secrets.
+ *
+ * @resource
  */
 export const Random = Resource<Random>("Alchemy.Random", {
   // One-shot inputs must not be retained alongside the secret in state.
