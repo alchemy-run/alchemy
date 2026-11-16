@@ -4,6 +4,7 @@ import {
   type DurableObjectGetDurableObjectOptions,
   type DurableObjectJurisdiction,
   type DurableObjectLocationHint,
+  type DurableObjectTransferSource,
   type InlineDurableObjectProps,
 } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
@@ -98,7 +99,55 @@ const declare = CloudflareDurableObject as unknown as (
 interface Placement {
   readonly jurisdiction: DurableObjectJurisdiction | undefined;
   readonly locationHint: DurableObjectLocationHint | undefined;
+  /** The Worker that hosted the model's classes before this one. */
+  readonly transferredFrom:
+    | DurableObjectTransferSource
+    | readonly DurableObjectTransferSource[]
+    | undefined;
+  /** The model the classes belonged to on that Worker, when they move under a new model name. */
+  readonly formerModel: string | undefined;
 }
+
+/**
+ * The Durable Object props that move a class's objects from the Worker that
+ * hosted it before, when the placement names one.
+ */
+const transferOf = (placement: Placement, formerClass?: string): InlineDurableObjectProps =>
+  placement.transferredFrom === undefined
+    ? {}
+    : ({
+        transferredFrom: placement.transferredFrom,
+        ...(formerClass === undefined ? {} : { transferredClassName: formerClass }),
+      } as InlineDurableObjectProps);
+
+/**
+ * How one of the model's classes reaches this Worker: from the former host, under the former model's class of the
+ * same name when the model moved under a new name. Then the directory is the exception: the former model keeps its
+ * own for the classes it still hosts, and each instance that moved lists itself in this model's new one.
+ */
+const movedFrom = (
+  placement: Placement,
+  name: string,
+  formerClass: string | undefined,
+): InlineDurableObjectProps =>
+  formerClass === undefined
+    ? transferOf(placement)
+    : name === "DomainDirectory"
+      ? {}
+      : transferOf(placement, formerClass);
+
+/** Keys for transfer sources that aren't strings or Workers, by identity. */
+const transferIds = new WeakMap<object, string>();
+
+/** A transfer source as a cache key: a script name or logical id as is, a Worker by its logical id. */
+const transferKey = (source: DurableObjectTransferSource): string => {
+  if (typeof source === "string") return source;
+  const logicalId = (source as { LogicalId?: unknown }).LogicalId;
+  if (typeof logicalId === "string") return logicalId;
+  let id = transferIds.get(source);
+  if (id === undefined) transferIds.set(source, (id = `#${crypto.randomUUID()}`));
+  return id;
+};
 
 /**
  * A namespace whose objects live in the platform's jurisdiction and are
@@ -273,7 +322,16 @@ const cloudflareHost = (
           Effect.map(
             declare(
               named(modelName, name),
-              renamedFrom(version, legacyData, name),
+              {
+                ...renamedFrom(version, legacyData, name),
+                ...movedFrom(
+                  placement,
+                  name,
+                  placement.formerModel === undefined
+                    ? undefined
+                    : named(placement.formerModel, name),
+                ),
+              },
               onCloudflare(impl),
             ),
             (namespace) => placed(namespace, placement),
@@ -286,14 +344,17 @@ const cloudflareHost = (
             for (const saga of model.sagas) {
               if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
               else
-                sagaRenames.set(
-                  className(model.modelName, `${saga}Workflow`),
-                  renamedFrom(
+                sagaRenames.set(className(model.modelName, `${saga}Workflow`), {
+                  ...renamedFrom(
                     version,
                     model.legacyData,
                     `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
                   ),
-                );
+                  // Its runs move with the model, from the class the former model named.
+                  ...(placement.transferredFrom !== undefined && placement.formerModel !== undefined
+                    ? { transferredClassName: className(placement.formerModel, `${saga}Workflow`) }
+                    : {}),
+                } as InlineDurableObjectProps);
             }
           }),
         connect: connectTo,
@@ -506,6 +567,8 @@ export function layerDurableObjects({
   jurisdiction,
   locationHint,
   backfillTimeout,
+  transferredFrom,
+  formerModel,
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
@@ -515,8 +578,12 @@ export function layerDurableObjects({
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}`;
-  const placement: Placement = { jurisdiction, locationHint };
+  const transfer =
+    transferredFrom === undefined
+      ? ""
+      : [transferredFrom as DurableObjectTransferSource].flat().map(transferKey).join(",");
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}|${transfer}|${formerModel ?? ""}`;
+  const placement: Placement = { jurisdiction, locationHint, transferredFrom, formerModel };
   let platform = platforms.get(key);
   if (platform === undefined)
     platforms.set(
@@ -554,7 +621,11 @@ const sagaEngine = (
   makeDurableObjectEngine({
     declare: (name, impl) =>
       Effect.map(
-        declare(name, sagaRenames.get(name) ?? {}, impl as unknown as CloudflareImpl),
+        declare(
+          name,
+          { ...sagaRenames.get(name), ...transferOf(placement) },
+          impl as unknown as CloudflareImpl,
+        ),
         (namespace) => placed(namespace, placement),
       ),
     state: DurableObjectState,
@@ -638,6 +709,32 @@ export interface DurableObjectsOptions {
    * @default "30 minutes"
    */
   readonly backfillTimeout?: Duration.Input;
+  /**
+   * The Worker that hosted the model's Durable Objects before this one: its
+   * logical id in this stack, its script name, or the Worker itself. Use it
+   * to rename the Worker that hosts a model, or to move a model to another
+   * Worker. On this Worker's next deploy each of the model's classes
+   * (aggregates, views, policies, projections, streams and saga runs) that
+   * the former host still holds moves here with its objects, as
+   * Cloudflare's `transferred_classes` migration; a class it doesn't hold is
+   * created empty. Once the move is done the option does nothing, so it is
+   * safe to leave in place.
+   *
+   * @default undefined (the classes are new to this Worker)
+   */
+  readonly transferredFrom?: DurableObjectTransferSource | readonly DurableObjectTransferSource[];
+  /**
+   * The model whose classes these were on the former host, when they move
+   * under a new model name: `"Platform"` for a `Tenancy` model whose
+   * aggregates, views, policies and sagas used to be part of `Platform`.
+   * Each class moves from the former model's class of the same kind and
+   * name (`Platform.StorefrontAggregate` becomes
+   * `Tenancy.StorefrontAggregate`), with its objects. A class the former
+   * host doesn't hold is created empty. Only used with `transferredFrom`.
+   *
+   * @default undefined (the classes keep their model's name)
+   */
+  readonly formerModel?: string;
 }
 
 const platforms = new Map<

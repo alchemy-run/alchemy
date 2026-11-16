@@ -66,6 +66,11 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
 > & {
   transferredFrom?: string | string[];
   /**
+   * The class's name on its former host when the transfer also renames it;
+   * alchemy-only, never uploaded.
+   */
+  transferredClassName?: string;
+  /**
    * The class this one was called before on the same Worker, for a
    * data-preserving `renamed_classes` migration; alchemy-only, never uploaded.
    */

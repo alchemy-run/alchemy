@@ -746,15 +746,19 @@ const ID_KEY = "bf:id";
 const REGISTER_JOB = "bf-register";
 
 /**
- * List an instance in the directory, so every instance with an event can be
- * reached when a consumer is added later.
+ * List an instance in its model's directory, so every instance with an event
+ * can be reached when a consumer is added later. The instance remembers which
+ * model's directory it is listed in: one whose class moved to another model
+ * (see `formerModel` on the Cloudflare host) lists itself again in its new
+ * model's directory. Listing is idempotent, so an instance listed before the
+ * model was recorded lists itself once more.
  */
-const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
+const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef, listedIn: string) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    if (yield* state.storage.get<boolean>("registered")) return;
+    if ((yield* state.storage.get<string | boolean>("registered")) === listedIn) return;
     yield* net.node.register(Backfill.leafOf(ref), ref);
-    yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
+    yield* state.storage.put({ registered: listedIn, [ID_KEY]: ref.id });
   });
 
 /**
@@ -767,11 +771,26 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
  *
  * Call it inside the commit's transaction.
  */
-const listAfterCommit = (jobs: Backfill.Jobs, id: string) =>
+const listAfterCommit = (jobs: Backfill.Jobs, id: string, listedIn: string) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    if (yield* state.storage.get<boolean>("registered")) return;
+    if ((yield* state.storage.get<string | boolean>("registered")) === listedIn) return;
     yield* state.storage.put({ [ID_KEY]: id });
+    yield* jobs.schedule(REGISTER_JOB, 0);
+  });
+
+/**
+ * An aggregate instance listed in another model's directory lists itself in
+ * this one's when it is read, so an instance that moved with its class and
+ * never changes again is still reached by consumers this model adds later.
+ * The {@link REGISTER_JOB} does the listing, so the read doesn't wait on it.
+ */
+const relistOnRead = (jobs: Backfill.Jobs, listedIn: string) =>
+  Effect.gen(function* () {
+    const state = yield* ObjectState;
+    const listed = yield* state.storage.get<string | boolean>("registered");
+    if (listed === undefined || listed === listedIn) return;
+    if ((yield* state.storage.get<string>(ID_KEY)) === undefined) return;
     yield* jobs.schedule(REGISTER_JOB, 0);
   });
 
@@ -785,8 +804,9 @@ const registerJob = (
   ref: Backfill.SourceRef,
   source: Backfill.Source,
   jobs: Backfill.Jobs,
+  listedIn: string,
 ) =>
-  ensureRegistered(net, ref).pipe(
+  ensureRegistered(net, ref, listedIn).pipe(
     Effect.andThen(source.catchUp),
     Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
   );
@@ -797,6 +817,7 @@ const aggregateObject = (
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
   random: Random,
+  listedIn: string,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
@@ -824,6 +845,7 @@ const aggregateObject = (
                       { source: kit.name, id: stored },
                       sourceFor(stored),
                       runtime.jobs,
+                      listedIn,
                     )
                   : sourceFor(stored).flush,
             )
@@ -892,7 +914,7 @@ const aggregateObject = (
             });
             yield* state.storage.put(`receipt:${meta.commandId}`, sent);
             // Listed in the directory after the call returns, not before it commits.
-            yield* listAfterCommit(runtime.jobs, id);
+            yield* listAfterCommit(runtime.jobs, id, listedIn);
             // Live to caught-up consumers; through the backfill to lagging ones.
             const live = yield* Backfill.routeCommit(
               sourceFor(id),
@@ -990,7 +1012,7 @@ const aggregateObject = (
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
-      state: () => reportDefects(currentMeta),
+      state: () => reportDefects(Effect.andThen(relistOnRead(runtime.jobs, listedIn), currentMeta)),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // The backfill protocol, as a source.
       // Any code answers these: a run reads its log, and routes it with its own code.
@@ -1010,6 +1032,7 @@ const viewObject = (
   model: () => ReadonlyArray<string>,
   planOf: PlanOf,
   random: Random,
+  listedIn: string,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
@@ -1115,11 +1138,17 @@ const viewObject = (
           if (key === undefined) return Effect.void;
           if (id === "bf-flush") return sourceFor(key).flush;
           if (id === REGISTER_JOB)
-            return registerJob(net, { source: kit.name, id: key }, sourceFor(key), runtime.jobs);
+            return registerJob(
+              net,
+              { source: kit.name, id: key },
+              sourceFor(key),
+              runtime.jobs,
+              listedIn,
+            );
           if (id.startsWith("bf-merge:"))
             // Listed before the merge writes its first entry, in the key's own job: its
             // sources' messages don't wait on the directory.
-            return ensureRegistered(net, { source: kit.name, id: key }).pipe(
+            return ensureRegistered(net, { source: kit.name, id: key }, listedIn).pipe(
               Effect.andThen(consumerFor(key).merge(id.slice("bf-merge:".length))),
               Effect.catchCause(() => runtime.jobs.schedule(id, REGISTER_RETRY_MS)),
             );
@@ -1205,7 +1234,10 @@ const viewObject = (
             // Listed in the directory after the call returns, not before its first entry.
             yield* exclusively(
               state.storage.transaction(
-                Effect.andThen(listAfterCommit(runtime.jobs, key), apply(key, deliveries)),
+                Effect.andThen(
+                  listAfterCommit(runtime.jobs, key, listedIn),
+                  apply(key, deliveries),
+                ),
               ),
             );
             yield* flushAfter;
@@ -1894,7 +1926,7 @@ export const makePlatform = <R>(
                   const name = `${aggregate.aggregateName}Aggregate`;
                   const namespace = yield* object(
                     name,
-                    aggregateObject(kit, net, current, consumerPlans, random),
+                    aggregateObject(kit, net, current, consumerPlans, random, hosted.modelName),
                   );
                   sources.set(name, namespace);
                   return {
@@ -1967,7 +1999,7 @@ export const makePlatform = <R>(
                   const cls = consumerClass("view", view.viewName, kit.classGeneration);
                   const namespace = yield* object(
                     cls,
-                    viewObject(kit, net, current, consumerPlans, random),
+                    viewObject(kit, net, current, consumerPlans, random, hosted.modelName),
                   );
                   sources.set(cls, namespace);
                   viewGenerations.set(view.viewName, kit.classGeneration);
@@ -1976,7 +2008,7 @@ export const makePlatform = <R>(
                     runClass(cls),
                     yield* object(
                       runClass(cls),
-                      viewObject(kit, net, current, consumerPlans, random),
+                      viewObject(kit, net, current, consumerPlans, random, hosted.modelName),
                     ),
                   );
                   const target = kit.target;

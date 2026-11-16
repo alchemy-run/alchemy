@@ -174,6 +174,38 @@ Each model's Durable Object classes are named after the model: `Billing.AccountA
 
 Renaming a model renames its classes, and the model starts empty under the new names.
 
+## Move a model to another Worker
+
+A Worker's name is part of its Durable Objects: renaming the Worker that hosts a model, or moving the model to another Worker, gives it new, empty classes unless you say where they lived before. Name the former host in `transferredFrom`, by its logical id in this stack, its script name, or the Worker itself:
+
+```typescript
+const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects({ transferredFrom: "BankWorker" })),
+);
+```
+
+On the new Worker's deploy, every class of the model that the former host still holds moves to it with its objects, saga runs included, as the Durable Object's [`transferredFrom`](/providers/cloudflare/workers/durableobject) does for one class. A class the former host doesn't hold is created empty. Once the classes have moved, `transferredFrom` does nothing, and you can leave it in place.
+
+### Split a model out under a new name
+
+To split part of a large model into a model of its own on another Worker, define the new model with the definitions that move, and name the model they belonged to in `formerModel`:
+
+```typescript
+// Storefront and Domain used to be part of Platform, on PlatformWorker.
+const TenancyLive = Tenancy.layer(TenancyHandlers).pipe(
+  Layer.provide(
+    DomainCloudflare.layerDurableObjects({
+      transferredFrom: "PlatformWorker",
+      formerModel: "Platform",
+    }),
+  ),
+);
+```
+
+Each class moves from the former model's class of the same kind and name, `Platform.StorefrontAggregate` to `Tenancy.StorefrontAggregate`, with its objects. The new model gets a directory of its own, and the former model keeps its directory for the classes it still hosts. An instance that moved lists itself in the new directory the next time it is read or changes, so a view or policy the new model adds later reaches it then.
+
+Deploy the new Worker before the former host drops the classes from its own code: Cloudflare points the former host's bindings at the moved classes, so it keeps working until its next deploy.
+
 ## Upgrade without losing data
 
 Models deployed before Domain version 0 named classes after the definition alone, like `AccountAggregate`. The next deploy renames each to the model's class with the Durable Object's [`renamedFrom`](/providers/cloudflare/workers/durableobject), so every aggregate, view row and running saga carries over.

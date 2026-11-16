@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { Activity, DurableDeferred } from "effect/workflow";
-import { Account, Open, Owners } from "./isolation.ts";
+import { Account, Open, Opened, Owners } from "./isolation.ts";
 
 /** The approval a run of {@link Approve} waits for. */
 export const Approval = DurableDeferred.make("approval", { success: Schema.String });
@@ -42,12 +42,43 @@ export class Billing extends Domain.Model("Billing", {
 export class Audit extends Domain.Model("Audit", { aggregates: [Account], views: [Owners] }) {}
 
 /**
+ * Every account's holder in one row, `all`, added after the accounts moved.
+ * It isn't keyed by the account, so it can only find them in the directory.
+ */
+export class Holders extends Domain.View("Holders", {
+  from: [Account],
+  key: Schema.String,
+  keyOf: { Account: () => "all" },
+  state: Schema.Struct({ holders: Schema.Record(Schema.String, Schema.String) }),
+  initial: { holders: {} },
+  evolve: {
+    Opened: (view, { owner }: Opened, { source }) => ({
+      holders: { ...view.holders, [source.id]: owner },
+    }),
+  },
+}) {}
+
+/** Billing's definitions under a new model name. */
+export class Ledger extends Domain.Model("Ledger", {
+  aggregates: [Account],
+  views: [Owners],
+  sagas: [Approve],
+}) {}
+/** {@link Ledger} with {@link Holders} added. */
+export class LedgerWithHolders extends Domain.Model("Ledger", {
+  aggregates: [Account],
+  views: [Owners, Holders],
+  sagas: [Approve],
+}) {}
+
+/**
  * `POST /<model>/open/<id>/<owner>`, `GET /<model>/state/<id>`,
- * `GET /<model>/owners/<id>`, `POST /saga/<key>/<owner>` (starts a run),
+ * `GET /<model>/owners/<id>`, `GET /Billing/holders/all` (with `holders`),
+ * `POST /saga/<key>/<owner>` (starts a run),
  * `GET /saga/<key>` (its status), `POST /approve/<key>/<by>` and
  * `GET /version`.
  */
-const ROUTE = /^\/(Billing|Audit)\/(open|state|owners)\/([^/]+)(?:\/([^/]+))?$/;
+const ROUTE = /^\/(Billing|Audit)\/(open|state|owners|holders)\/([^/]+)(?:\/([^/]+))?$/;
 const SAGA = /^\/(saga|approve)\/([^/]+)(?:\/([^/]+))?$/;
 
 /**
@@ -55,25 +86,49 @@ const SAGA = /^\/(saga|approve)\/([^/]+)(?:\/([^/]+))?$/;
  * version `version` lays them out: `undefined` for the layout from before
  * versions existed. `legacyData` names the model that keeps a class the two
  * shared; the other sets `legacyData: false`. Unset, both take it over.
+ * `ledger` hosts Billing's definitions as the {@link Ledger} model instead,
+ * with {@link Holders} when `ledger` is `"holders"`; the routes still say
+ * `Billing`.
  */
 export const upgradeWorker = ({
   version,
   audit,
   legacyData,
+  transferredFrom,
+  formerModel,
+  ledger,
 }: {
   readonly version: number | undefined;
   readonly audit: boolean;
   readonly legacyData?: "Billing" | "Audit";
+  /** The Worker that hosted the models before this one. */
+  readonly transferredFrom?: string;
+  /** The model whose classes these were on that Worker. */
+  readonly formerModel?: string;
+  readonly ledger?: "ledger" | "holders";
 }) =>
   Effect.gen(function* () {
-    const Platform = DomainCloudflare.layerDurableObjects();
-    const billing = yield* Effect.all({ accounts: Account, owners: Owners, runs: Approve }).pipe(
-      Effect.provide(
-        Billing.layer(ApproveLive, legacyData === "Audit" ? { legacyData: false } : {}).pipe(
-          Layer.provide(Platform),
-        ),
-      ),
-    );
+    const Platform = DomainCloudflare.layerDurableObjects({
+      ...(transferredFrom === undefined ? {} : { transferredFrom }),
+      ...(formerModel === undefined ? {} : { formerModel }),
+    });
+    const parts = { accounts: Account, owners: Owners, runs: Approve };
+    const { holders, ...billing } =
+      ledger === "holders"
+        ? yield* Effect.all({ ...parts, holders: Holders }).pipe(
+            Effect.provide(LedgerWithHolders.layer(ApproveLive).pipe(Layer.provide(Platform))),
+          )
+        : {
+            holders: undefined,
+            ...(yield* Effect.all(parts).pipe(
+              Effect.provide(
+                (ledger === "ledger"
+                  ? Ledger.layer(ApproveLive)
+                  : Billing.layer(ApproveLive, legacyData === "Audit" ? { legacyData: false } : {})
+                ).pipe(Layer.provide(Platform)),
+              ),
+            )),
+          };
     const models = {
       Billing: billing,
       Audit: audit
@@ -113,6 +168,12 @@ export const upgradeWorker = ({
           const receipt = yield* model.accounts.send(id, new Open({ owner: route[4]! }));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
+        if (route[2] === "holders")
+          return holders === undefined
+            ? HttpServerResponse.text("Not Found", { status: 404 })
+            : yield* HttpServerResponse.json(
+                Option.getOrNull(yield* holders.get(id).pipe(Effect.orDie)),
+              );
         if (route[2] === "owners")
           return yield* HttpServerResponse.json(
             Option.getOrNull(yield* model.owners.get(Account.ref(id)).pipe(Effect.orDie)),
