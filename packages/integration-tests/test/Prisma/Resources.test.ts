@@ -1952,6 +1952,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           "GET /v1/projects/project-1/branches",
           "POST /v1/services",
           "GET /v1/projects/project-1/branches",
+          "GET /v1/services/service-1",
           "POST /v1/services/service-1/deployments",
           "GET /v1/deployments/version-1",
           "POST /v1/environment-variables",
@@ -1999,6 +2000,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             },
           ],
           ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
+          ["getApp", "service-1"],
           [
             "createAppDeployment",
             { appId: "service-1", input: { portMapping: { http: 3000 }, skipCodeUpload: true } },
@@ -2331,7 +2333,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     () => {
       const calls: Call[] = [];
       let status = "new";
-      let latestDeploymentId: string | null = null;
+      const latestDeploymentId = "version-0";
       const client = {
         createAppDeployment: (appId: string, input: unknown) =>
           Effect.sync(() => {
@@ -2380,12 +2382,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               createdAt,
             };
           }),
-        promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
-          Effect.sync(() => {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            latestDeploymentId = deploymentId;
-            return { appEndpointDomain: "api.prisma.build" };
-          }),
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
@@ -2395,14 +2391,15 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             service: "service-1",
             skipCodeUpload: true,
             start: true,
-            promote: true,
+            verifyUrl: false,
           }),
         );
 
         expect(output.status).toBe("running");
         expect(output.previewDomain).toBe("version-1.preview.prisma.build");
-        expect(output.serviceEndpointDomain).toBe("api.prisma.build");
+        expect(output.url).toBe("https://version-1.preview.prisma.build");
         expect(calls).toEqual([
+          ["getApp", "service-1"],
           [
             "createAppDeployment",
             { appId: "service-1", input: { portMapping: undefined, skipCodeUpload: true } },
@@ -2410,8 +2407,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           ["getDeployment", "version-1"],
           ["startDeployment", "version-1"],
           ["getDeployment", "version-1"],
-          ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
-          ["getApp", "service-1"],
         ]);
       }).pipe(
         Effect.provide(providerLayer(client)),

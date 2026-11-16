@@ -109,7 +109,8 @@ const makeComputeCloud = () => {
         region: { id: "us-east-1", name: "us-east-1" },
         projectId: String(body?.projectId),
         branchId: (body?.branchId as string | undefined) ?? null,
-        latestDeploymentId: null,
+        // Each version in these tests copies the promoted artifact.
+        latestDeploymentId: "dep-promoted",
         appEndpointDomain: `svc-${services.size + 1}.prisma.build`,
         createdAt,
         logicalId: (body?.logicalId as string | undefined) ?? null,
@@ -123,6 +124,10 @@ const makeComputeCloud = () => {
       if (tail === undefined && request.method === "GET") return data(service);
       if (tail === undefined && request.method === "DELETE") {
         services.delete(id);
+        // The platform deletes a service's versions with it.
+        for (const deployment of [...deployments.values()]) {
+          if (deployment.serviceId === id) deployments.delete(deployment.id);
+        }
         return noContent();
       }
       if (tail === "deployments" && request.method === "GET") {
@@ -404,12 +409,15 @@ replaced.test.provider(
       cloud.fake.captured.length = 0;
       const second = yield* stack.deploy(program({ revision: "2" }));
 
+      // The old version is retained, not deleted: a version's default
+      // removal policy keeps it on the platform for a rollback.
       expect(routesOf(cloud.fake.captured).filter((route) => !route.startsWith("GET "))).toEqual([
         `POST /v1/services/${first.service.serviceId}/deployments`,
-        `DELETE /v1/deployments/${first.version.versionId}`,
       ]);
       expect(cloud.domainWrites).toEqual([`createAppDomain ${first.service.serviceId}`]);
-      expect([...cloud.deployments.keys()]).toEqual([second.version.versionId]);
+      expect([...cloud.deployments.keys()].sort()).toEqual(
+        [first.version.versionId, second.version.versionId].sort(),
+      );
       expect(second.version.versionId).not.toBe(first.version.versionId);
       expect(second.version.serviceId).toBe(first.service.serviceId);
       expect(second.service.serviceId).toBe(first.service.serviceId);

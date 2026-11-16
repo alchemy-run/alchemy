@@ -3,6 +3,7 @@ import {
   type GetServiceDeploymentsResponse,
   getServiceDeployments,
   createServiceDeployment,
+  getService,
 } from "@distilled.cloud/prisma/management";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -17,6 +18,7 @@ import * as Stream from "effect/Stream";
 import {
   destroyComputeVersion,
   PrismaComputeVersionWaitTimeout,
+  toComputeUrl,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
 import type { ComputeService } from "./ComputeService.ts";
@@ -40,7 +42,7 @@ import {
   unresolvedServiceIdOf,
 } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
-import { promoteVersionObserved } from "./internal/ServicePromotion.ts";
+import { type ComputeHealthCheck, waitForComputeUrl } from "./internal/UrlCheck.ts";
 import { ensureVersionMembership } from "./internal/VersionIdentity.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Providers } from "./Providers.ts";
@@ -99,18 +101,49 @@ export interface ComputeVersionProps {
    */
   artifactContentType?: string;
   /**
-   * Start the version after it is created.
+   * Start the version after it is created. A version must be running before
+   * it can become a service's active version (see `Prisma.activateVersion`).
    *
    * @default false
    */
   start?: boolean;
   /**
-   * Promote the version to the service's stable endpoint after start.
-   * If `start` is omitted, enabling promotion starts the version first.
+   * After the version starts, wait until its preview URL answers on Prisma's
+   * edge. With `healthCheck`, also wait until that path returns an accepted
+   * status. A version this deploy created is deleted when the check fails.
+   * Has no effect unless `start` is true.
    *
-   * @default false
+   * @default true
    */
-  promote?: boolean;
+  verifyUrl?: boolean;
+  /**
+   * Application path probed on the version's preview URL after it starts.
+   * Requires `start: true` and cannot be combined with `verifyUrl: false`.
+   *
+   * @example
+   * ```typescript
+   * healthCheck: { path: "/api/health", statusCodes: [200] }
+   * ```
+   */
+  healthCheck?: ComputeHealthCheck;
+  /**
+   * Maximum seconds to wait for the preview URL to answer.
+   *
+   * @default 60
+   */
+  urlReadinessTimeoutSeconds?: number;
+  /**
+   * Maximum seconds to wait for the version to report `running`.
+   *
+   * @default 120
+   */
+  timeoutSeconds?: number;
+  /**
+   * Milliseconds between status and URL probes.
+   *
+   * @default 1000
+   */
+  pollIntervalMs?: number;
   /**
    * Opaque key/value map; when any resolved value changes, a replacement
    * deployment is planned (create-before-delete) even if the artifact is
@@ -145,7 +178,6 @@ export interface ComputeVersionProps {
    *   artifactPath: "./dist/app.tar.gz",
    *   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
    *   start: true,
-   *   promote: true,
    * });
    * ```
    */
@@ -188,9 +220,9 @@ export interface ComputeVersion extends Resource<
      */
     triggersHash?: Redacted.Redacted<string>;
     /**
-     * Stable endpoint domain of the service after promotion.
+     * HTTPS URL of the version's preview endpoint, when it has one.
      */
-    serviceEndpointDomain: string | undefined;
+    url: string | undefined;
     /**
      * ISO timestamp when the deployment was created, when observed.
      */
@@ -204,10 +236,24 @@ export interface ComputeVersion extends Resource<
  * A version of a Prisma Compute service: one uploaded or reused artifact. The
  * Management API calls a version a deployment.
  *
- * This is the low-level resource: it can upload or reuse an artifact, start it,
- * and promote it, but it does not provide `Prisma.Compute`'s preview/stable
- * health checks or automatic rollback. Prefer `Prisma.Compute` for production
- * application deployments.
+ * A version is immutable. Changing its artifact, `artifactPath`,
+ * `artifactContentType`, `portMapping`, `skipCodeUpload` or `triggers`
+ * creates a new version. An `artifactPath` that another resource produces in
+ * the same deploy also creates a new version, because the new artifact is not
+ * known while the deploy is planned.
+ *
+ * A version does not make itself live. Attach it to its service with
+ * `Prisma.activateVersion`; the service then promotes it and checks its
+ * stable endpoint. Prefer `Prisma.Compute` for production application
+ * deployments.
+ *
+ * :::caution
+ * A replaced version is kept on the platform, and so is a version removed
+ * from the program or left behind by `alchemy destroy`: Alchemy forgets it
+ * without deleting it, so the platform can roll the service back to it. The
+ * service's own delete removes its versions. Pipe `RemovalPolicy.destroy()`
+ * onto the resource to delete superseded versions instead.
+ * :::
  *
  * Prisma's create-deployment API currently exposes neither an idempotency key
  * nor a caller-defined natural key. After a crash that loses state immediately
@@ -220,25 +266,46 @@ export interface ComputeVersion extends Resource<
  * still read, and is rewritten under the new type on the next deploy.
  *
  * ### Creating a Version
- * **Example:** Fork the currently promoted artifact
+ * **Example:** Upload a prebuilt artifact and make it the active version
  * ```typescript
- * const version = yield* Prisma.ComputeVersion("web-v2", {
- *   service: service.serviceId,
- *   skipCodeUpload: true,
- *   start: true,
- *   promote: true,
- * });
- * ```
- *
- * **Example:** Upload a prebuilt artifact
- * ```typescript
- * const version = yield* Prisma.ComputeVersion("web-v3", {
+ * const service = yield* Prisma.ComputeService("web", { project });
+ * const version = yield* Prisma.ComputeVersion("web-version", {
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
  *   artifactContentType: "application/gzip",
  *   start: true,
- *   promote: true,
  * });
+ * yield* Prisma.activateVersion(service, version);
+ * ```
+ *
+ * **Example:** Fork the currently promoted artifact
+ * ```typescript
+ * const version = yield* Prisma.ComputeVersion("web-fork", {
+ *   service: service.serviceId,
+ *   skipCodeUpload: true,
+ *   start: true,
+ * });
+ * ```
+ *
+ * ### Checking the Version
+ * **Example:** Wait for a health route on the preview URL
+ * ```typescript
+ * const version = yield* Prisma.ComputeVersion("web-version", {
+ *   service: service.serviceId,
+ *   artifactPath: "./dist/app.tar.gz",
+ *   start: true,
+ *   healthCheck: { path: "/api/health" },
+ * });
+ * ```
+ *
+ * ### Deleting Superseded Versions
+ * **Example:** Delete a replaced version instead of keeping it
+ * ```typescript
+ * const version = yield* Prisma.ComputeVersion("web-version", {
+ *   service: service.serviceId,
+ *   artifactPath: "./dist/app.tar.gz",
+ *   start: true,
+ * }).pipe(RemovalPolicy.destroy());
  * ```
  *
  * @resource
@@ -246,12 +313,13 @@ export interface ComputeVersion extends Resource<
  */
 export const ComputeVersion = Resource<ComputeVersion>("Prisma.ComputeVersion", {
   aliases: ["Prisma.Deployment"],
+  defaultRemovalPolicy: "retain",
 });
 
 /** Attributes as `Prisma.Deployment` wrote them, before the rename. */
 interface LegacyComputeVersionAttributes extends Omit<
   ComputeVersion["Attributes"],
-  "versionId" | "serviceId" | "serviceEndpointDomain"
+  "versionId" | "serviceId" | "url"
 > {
   deploymentId: string;
   appId: string;
@@ -263,12 +331,12 @@ type SavedAttributes = ComputeVersion["Attributes"] | LegacyComputeVersionAttrib
 /** Read attributes saved before or after the rename under the current names. */
 function currentAttributes(saved: SavedAttributes): ComputeVersion["Attributes"] {
   if ("versionId" in saved) return saved;
-  const { deploymentId, appId, appEndpointDomain, ...rest } = saved;
+  const { deploymentId, appId, appEndpointDomain: _promotedTo, ...rest } = saved;
   return {
     ...rest,
     versionId: deploymentId,
     serviceId: appId,
-    serviceEndpointDomain: appEndpointDomain,
+    url: toComputeUrl(rest.previewDomain),
   };
 }
 
@@ -332,7 +400,6 @@ const attrsFrom = (
   extra?: {
     artifactHash?: string;
     triggersHash?: Redacted.Redacted<string>;
-    serviceEndpointDomain?: string;
   },
 ): ComputeVersion["Attributes"] => ({
   versionId: deployment.id,
@@ -342,7 +409,7 @@ const attrsFrom = (
   previewDomain: deployment.previewDomain,
   artifactHash: extra?.artifactHash,
   triggersHash: extra?.triggersHash,
-  serviceEndpointDomain: extra?.serviceEndpointDomain,
+  url: toComputeUrl(deployment.previewDomain),
   createdAt: deployment.createdAt,
 });
 
@@ -559,6 +626,12 @@ const ProviderLive = () =>
             if (yield* triggersChanged(news.triggers, output?.triggersHash)) {
               return { action: "replace" } as const;
             }
+            // An artifact another resource builds in this deploy is unknown
+            // here. Only a new version ships it: an update would keep the
+            // running version and record the new artifact's hash.
+            if (!isResolved({ path: news.artifactPath, type: news.artifactContentType })) {
+              return { action: "replace" } as const;
+            }
             const replacementContent = {
               portMapping: news.portMapping,
               skipCodeUpload: news.skipCodeUpload,
@@ -591,26 +664,13 @@ const ProviderLive = () =>
             ) {
               return { action: "replace" } as const;
             }
-            const updateProps = {
-              start: news.start,
-              promote: news.promote,
-            };
-            if (!isResolved(updateProps)) return undefined;
-            const resolvedUpdateProps = updateProps as Pick<
-              ComputeVersionProps,
-              "start" | "promote"
-            >;
-            if ((resolvedUpdateProps.start ?? false) || (resolvedUpdateProps.promote ?? false)) {
-              // Reconcile asserted lifecycle state on every deploy so external
-              // stops and service routing drift are repaired.
+            if (!isResolved(news.start)) return undefined;
+            if (news.start ?? false) {
+              // Reconcile asserts the running state on every deploy, so an
+              // external stop is repaired.
               return { action: "update" } as const;
             }
-            if (
-              (resolvedUpdateProps.start ?? false) !== (olds.start ?? false) ||
-              (resolvedUpdateProps.promote ?? false) !== (olds.promote ?? false)
-            ) {
-              return { action: "update" } as const;
-            }
+            if (olds.start ?? false) return { action: "update" } as const;
             return undefined;
           },
           (effect, { output: saved }) =>
@@ -666,9 +726,9 @@ const ProviderLive = () =>
               message: "skipCodeUpload cannot be combined with artifactPath.",
             });
           }
-          if ((news.promote ?? false) && news.start === false) {
+          if (news.healthCheck !== undefined && news.start !== true) {
             return yield* new ComputeVersionInvalidProps({
-              message: "promote cannot be combined with start: false.",
+              message: "healthCheck requires start: true.",
             });
           }
           const artifact = yield* readUploadArtifact({
@@ -718,6 +778,16 @@ const ProviderLive = () =>
                 )
               : Effect.fail(error);
 
+          if (!deployment && (news.skipCodeUpload ?? false)) {
+            const service = yield* getService({ serviceId }).pipe(
+              Effect.map((response) => response.data),
+            );
+            if (service.latestDeploymentId === null) {
+              return yield* new ComputeVersionInvalidProps({
+                message: `skipCodeUpload copies the promoted version of Compute service '${serviceId}', but the service has no promoted version yet. Deploy a version with an artifactPath first.`,
+              });
+            }
+          }
           if (!deployment) {
             const created = yield* createServiceDeployment({
               serviceId,
@@ -764,9 +834,7 @@ const ProviderLive = () =>
             });
           }
 
-          let serviceEndpointDomain = output?.serviceEndpointDomain;
-          const shouldStart = news.start ?? news.promote ?? false;
-          if (shouldStart) {
+          if (news.start ?? false) {
             const currentDeployment = deployment;
             const currentDeploymentId = currentDeployment.id;
             deployment = yield* Effect.gen(function* () {
@@ -776,34 +844,31 @@ const ProviderLive = () =>
               ) {
                 const started = yield* startDeploymentIdempotent(currentDeployment.id);
                 if (started) {
-                  return yield* waitForComputeVersionStatus(currentDeployment.id, "running").pipe(
-                    Effect.map((running) => ({
-                      ...running,
-                      previewDomain: started.previewDomain,
-                    })),
+                  const running = yield* waitForComputeVersionStatus(
+                    currentDeployment.id,
+                    "running",
+                    news,
                   );
+                  const startedRunning = { ...running, previewDomain: started.previewDomain };
+                  yield* waitForComputeUrl(toComputeUrl(startedRunning.previewDomain), news);
+                  return startedRunning;
                 }
               }
-              return yield* waitForComputeVersionStatus(currentDeployment.id, "running");
+              const running = yield* waitForComputeVersionStatus(
+                currentDeployment.id,
+                "running",
+                news,
+              );
+              yield* waitForComputeUrl(toComputeUrl(running.previewDomain), news);
+              return running;
             }).pipe(
               Effect.catch((error) =>
                 cleanupCreatedDeploymentOnFailure(currentDeploymentId, error),
               ),
             );
           }
-          if (news.promote ?? false) {
-            // Promotion is deliberately replayed even when the control-plane
-            // record already names this deployment. The endpoint operation also
-            // repairs provider routing and custom-domain assignment drift.
-            const promoted = yield* promoteVersionObserved(serviceId, deployment.id);
-            serviceEndpointDomain = promoted.appEndpointDomain;
-          }
 
-          return attrsFrom(deployment, serviceId, {
-            artifactHash,
-            triggersHash,
-            serviceEndpointDomain,
-          });
+          return attrsFrom(deployment, serviceId, { artifactHash, triggersHash });
         }),
         delete: Effect.fn(function* ({ output: saved }) {
           const output = saved && currentAttributes(saved);
@@ -846,7 +911,7 @@ const ProviderLocal = () =>
       previewDomain: undefined,
       artifactHash: undefined,
       triggersHash: undefined,
-      serviceEndpointDomain: undefined,
+      url: undefined,
       createdAt: DEV_TIMESTAMP,
     }),
     { oldAttributes: ["deploymentId", "appId", "appEndpointDomain"] },
