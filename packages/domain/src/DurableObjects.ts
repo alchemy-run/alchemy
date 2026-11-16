@@ -816,11 +816,14 @@ const aggregateObject = (
       .get<AggregateMeta>("meta")
       .pipe(Effect.map((meta): AggregateMeta => meta ?? { state: null, version: 0 }));
     const generation = kit.generation > 0 ? { generation: kit.generation } : {};
-    // Folded by an earlier generation of the aggregate: fold it again from its
-    // events, page by page, and save it. Callers run it `exclusively`.
+    // Folded by an earlier generation of the aggregate.
+    const stale = (meta: AggregateMeta) =>
+      meta.version > 0 && (meta.generation ?? 0) < kit.generation;
+    // A stale state is folded again from its events, page by page, and saved.
+    // Callers run it `exclusively`; it reads `meta` again inside the lock.
     const fresh = Effect.gen(function* () {
       const meta = yield* currentMeta;
-      if (meta.version === 0 || (meta.generation ?? 0) >= kit.generation) return meta;
+      if (!stale(meta)) return meta;
       let folded: Json = null;
       let after = 0;
       while (after < meta.version) {
@@ -1030,10 +1033,11 @@ const aggregateObject = (
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
+      // Takes the lock only to fold a stale state.
       state: () =>
         reportDefects(
-          fresh.pipe(
-            exclusively,
+          currentMeta.pipe(
+            Effect.flatMap((meta) => (stale(meta) ? exclusively(fresh) : Effect.succeed(meta))),
             Effect.map(({ state, version }) => ({ state, version })),
           ),
         ),

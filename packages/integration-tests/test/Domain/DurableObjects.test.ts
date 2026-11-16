@@ -17,9 +17,10 @@ import * as Semaphore from "effect/Semaphore";
 
 // ---------------------------------------------------------------- an in-process Durable Object host
 
-/** Rows the objects of one host read from storage. */
+/** Rows the objects of one host read from storage, and the times each object took its lock. */
 interface Stats {
   rowsRead: number;
+  locks?: Map<string, number>;
 }
 
 /** Sorted key-value storage that counts the rows it reads, as Durable Object billing does. */
@@ -180,7 +181,11 @@ const simHost = (
         return {
           state: {
             storage,
-            exclusive: (effect) => gate.withPermits(1)(effect),
+            exclusive: (effect) =>
+              Effect.suspend(() => {
+                stats.locks?.set(id, (stats.locks.get(id) ?? 0) + 1);
+                return gate.withPermits(1)(effect);
+              }),
             waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)),
           } satisfies DurableObjects.ObjectStateShape,
           runtime: {
@@ -837,6 +842,24 @@ const instanceRows = (disk: Disk, aggregate: string, id: string) => {
   };
 };
 
+/** The times `read` made the aggregate instance `aggregate`/`id` take its lock. */
+const locksTakenBy = <A, E, R>(
+  stats: Stats,
+  aggregate: string,
+  id: string,
+  read: Effect.Effect<A, E, R>,
+) => {
+  const taken = () =>
+    [...(stats.locks ?? new Map<string, number>())]
+      .filter(([object]) => object.endsWith(`${aggregate}Aggregate/${id}`))
+      .reduce((sum, [, count]) => sum + count, 0);
+  return Effect.gen(function* () {
+    const before = taken();
+    const result = yield* read;
+    return { result, locks: taken() - before };
+  });
+};
+
 describe("Domain aggregate versions on Durable Objects", { tags: ["unit"] }, () => {
   it.live(
     "bumping an aggregate's version folds each instance again in place, and records nothing",
@@ -912,6 +935,42 @@ describe("Domain aggregate versions on Durable Objects", { tags: ["unit"] }, () 
           expect(opened.result).toEqual({ count: 6 });
           expect(opened.rows).toBeLessThan(5);
         }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "reading an up-to-date instance takes no lock; reading a stale one takes it once",
+    () => {
+      const stats: Stats = { rowsRead: 0, locks: new Map() };
+      const disk: Disk = { objects: new Map() };
+      const read = Effect.gen(function* () {
+        return yield* (yield* AccountV0).get(AccountV0.ref("a-1"));
+      });
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const accounts = yield* AccountV0;
+          yield* accounts.send(AccountV0.ref("a-1"), new Deposit({ amount: 10 }));
+          // An aggregate with no version reads as before: no lock.
+          expect(yield* locksTakenBy(stats, "Account", "a-1", read)).toEqual({
+            result: { balance: 10 },
+            locks: 0,
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV0)));
+
+        yield* Effect.gen(function* () {
+          // Stale after the bump: the read takes the lock to fold it.
+          expect(yield* locksTakenBy(stats, "Account", "a-1", read)).toEqual({
+            result: { balance: 10 },
+            locks: 1,
+          });
+          // Folded and saved: the next read takes none.
+          expect(yield* locksTakenBy(stats, "Account", "a-1", read)).toEqual({
+            result: { balance: 10 },
+            locks: 0,
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV1)));
       });
     },
     { timeout: 60_000 },
