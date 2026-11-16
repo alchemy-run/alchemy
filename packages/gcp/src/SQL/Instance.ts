@@ -273,6 +273,12 @@ export type Instance = Resource<
     storageAutoResize: boolean;
     /** Service account email used by the instance. */
     serviceAccountEmailAddress: string | undefined;
+    /**
+     * PEM of the instance's current server CA certificate, for clients
+     * that verify the server (`sslmode=verify-ca`). `undefined` when
+     * Cloud SQL does not report one.
+     */
+    serverCaCert: string | undefined;
     /** SQL Admin self-link. */
     selfLink: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -365,6 +371,15 @@ export interface InstanceLookup {
  *   },
  * });
  * // db.privateIpAddress is reachable from inside the VPC
+ * ```
+ *
+ * **Example:** Verify the server certificate from a client
+ * ```typescript
+ * const db = yield* GCP.SQL.Instance("Control", {
+ *   databaseVersion: "POSTGRES_17",
+ *   ipConfiguration: { sslMode: "ENCRYPTED_ONLY" },
+ * });
+ * // db.serverCaCert is the PEM to trust with sslmode=verify-ca
  * ```
  *
  * **Example:** Only accept connections through the Cloud SQL connectors
@@ -559,6 +574,7 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
     transactionLogRetentionDays: settings?.backupConfiguration?.transactionLogRetentionDays,
     storageAutoResize: settings?.storageAutoResize === true,
     serviceAccountEmailAddress: instance.serviceAccountEmailAddress,
+    serverCaCert: instance.serverCaCert?.cert,
     selfLink: instance.selfLink,
     createTime: instance.createTime,
   };

@@ -88,6 +88,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.deletionProtectionEnabled).toEqual(false);
       expect(created.state).toEqual("RUNNABLE");
+      expect(created.serverCaCert).toContain("BEGIN CERTIFICATE");
 
       const fetched = yield* sqladmin.getInstances({
         project: created.project,
