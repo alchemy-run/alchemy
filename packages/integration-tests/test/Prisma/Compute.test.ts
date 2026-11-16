@@ -14,6 +14,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { adopt } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
+import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
@@ -576,6 +577,198 @@ branchChange.test.provider(
       expect(moved.serviceId).toBe(first.serviceId);
       expect(moved.versionId).not.toBe(first.versionId);
       expect(branchChange.cloud.services.get(first.serviceId)?.branchId).toBe("branch-2");
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const identity = harness();
+identity.test.provider(
+  "gives the service the Compute's own logical ID, with '.' for '/'",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = identity;
+      yield* stack.destroy();
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Compute("api", { ...base, artifactPath: artifactV1 });
+          yield* Compute("api", { ...base, artifactPath: artifactV2 }).pipe(Namespace.push("Site"));
+          yield* ComputeService("Web", base).pipe(Namespace.push("Site"));
+        }),
+      );
+      expect([...cloud.services.values()].map((service) => service.logicalId).sort()).toEqual([
+        "Site.Web",
+        "Site.api",
+        "api",
+      ]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const sharedLogicalId = harness();
+sharedLogicalId.test.provider(
+  "refuses two services whose addresses give one logical ID, before any write",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = sharedLogicalId;
+      yield* stack.destroy();
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* ComputeService("b", base).pipe(Namespace.push("a"));
+            yield* ComputeService("a.b", base);
+          }),
+        )
+        .pipe(Effect.flip, Effect.map(String));
+      expect(error).toContain("PrismaComputeServiceLogicalIdTaken");
+      expect(error).toContain("'a.b'");
+      expect(cloud.writes()).toEqual([]);
+    }),
+  { tags },
+);
+
+const unset = harness();
+unset.test.provider(
+  "declares no variable for a value that resolves to undefined, and deletes the one it wrote before",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = unset;
+      yield* stack.destroy();
+      const app = (value: string | undefined) =>
+        Effect.gen(function* () {
+          const source = yield* Reader("Source", { value });
+          return yield* Compute("api", {
+            ...base,
+            artifactPath: artifactV1,
+            env: {
+              MAYBE: Output.map(source.value, (resolved) =>
+                typeof resolved === "string" ? resolved : undefined,
+              ),
+            },
+          });
+        });
+
+      const first = yield* stack.deploy(app("set"));
+      expect(cloud.environment()).toEqual({ MAYBE: "set" });
+
+      const cleared = yield* stack.deploy(app(undefined));
+      expect(cloud.environment()).toEqual({});
+      expect(cleared.versionId).not.toBe(first.versionId);
+      expect(cloud.versionEnvironment.get(cleared.versionId!)).toEqual({});
+
+      const again = yield* stack.deploy(app("set"));
+      expect(cloud.environment()).toEqual({ MAYBE: "set" });
+      expect(again.versionId).not.toBe(cleared.versionId);
+
+      yield* stack.destroy();
+      expect(cloud.variables.size).toBe(0);
+    }),
+  { tags },
+);
+
+const wrongClass = harness();
+wrongClass.test.provider(
+  "fails with a typed error when envClass does not match the Branch, before the service is created, and while planning once it exists",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = wrongClass;
+      yield* stack.destroy();
+      const app = (envClass?: "preview") =>
+        Compute("api", {
+          ...base,
+          artifactPath: artifactV1,
+          env: { A: "1" },
+          ...(envClass ? { envClass } : {}),
+        });
+
+      const create = yield* stack.deploy(app("preview")).pipe(Effect.flip);
+      expect(create).toMatchObject({ _tag: "ComputeServiceInvalidProps" });
+      expect(cloud.writes()).toEqual([]);
+
+      yield* stack.deploy(app());
+      yield* clearCalls(cloud);
+      const plan = yield* stack.plan(app("preview")).pipe(Effect.flip);
+      expect(plan).toMatchObject({ _tag: "ComputeServiceInvalidProps" });
+      expect(String(plan.message)).toContain("does not match the role 'production'");
+      expect(cloud.writes()).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const noBranch = harness();
+noBranch.test.provider(
+  "fails with a typed error when the service given by ID has no Branch",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = noBranch;
+      yield* stack.destroy();
+      cloud.services.set("svc-detached", {
+        id: "svc-detached",
+        type: "service",
+        url: "",
+        name: "detached",
+        region: { id: "us-east-1", name: "us-east-1" },
+        projectId: "project-1",
+        branchId: null,
+        latestDeploymentId: null,
+        appEndpointDomain: "svc-detached.stable.prisma.test",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        logicalId: null,
+      });
+      const error = yield* stack
+        .deploy(
+          Compute("api", {
+            service: "svc-detached",
+            skipPromote: true,
+            artifactPath: artifactV1,
+            env: { A: "1" },
+            ...checks,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "EnvironmentVariableInvalidProps" });
+      expect(String(error.message)).toContain("attached to no Branch");
+      expect(cloud.writes()).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const sharedKey = harness();
+sharedKey.test.provider(
+  "says plainly when two Computes declare one key in one project and Branch",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* Compute("web", { ...base, artifactPath: artifactV1, env: { API_KEY: "a" } });
+            yield* Compute("api", { ...base, artifactPath: artifactV2, env: { API_KEY: "b" } });
+          }),
+        )
+        .pipe(Effect.flip, Effect.map(String));
+      expect(error).toContain("EnvironmentVariableConflict");
+      expect(error).toContain("'API_KEY'");
+      expect(error).toContain("not to one service");
+      expect(error).toMatch(/'(web|api)\/Env\/API_KEY' and also at '(web|api)\/Env\/API_KEY'/);
+
+      // A later deploy, which finds the variable already written, says the same.
+      const again = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* Compute("web", { ...base, artifactPath: artifactV1, env: { API_KEY: "a" } });
+            yield* Compute("api", { ...base, artifactPath: artifactV2, env: { API_KEY: "b" } });
+          }),
+        )
+        .pipe(Effect.flip, Effect.map(String));
+      expect(again).toContain("not to one service");
 
       yield* stack.destroy();
     }),

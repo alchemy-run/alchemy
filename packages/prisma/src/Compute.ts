@@ -37,6 +37,7 @@ import {
   ComputePackageJsonError,
 } from "./internal/ComputeArtifactBuild.ts";
 import { resolveProjectId } from "./internal/Refs.ts";
+import { defaultServiceLogicalId } from "./internal/ServiceIdentity.ts";
 import {
   ComputeInvalidProps,
   ComputeOperationFailed,
@@ -942,7 +943,9 @@ const validateDeclaredProps = Effect.fn(function* (props: ComputeProps, effectNa
     );
   }
   if (props.service !== undefined) {
-    const owned = (["project", "serviceName", "regionId", "branchId", "branchGitName"] as const)
+    const owned = (
+      ["project", "serviceName", "regionId", "branchId", "branchGitName", "envClass"] as const
+    )
       .filter((name) => props[name] !== undefined)
       .join(", ");
     if (owned.length > 0) {
@@ -1007,45 +1010,44 @@ const toRedacted = (value: unknown): Redacted.Redacted<string> =>
     ? (value as Redacted.Redacted<string>)
     : Redacted.make(typeof value === "string" ? value : JSON.stringify(value));
 
+/**
+ * A variable's value once resolved. `undefined` or `null`, which an output can
+ * resolve to, means no variable: `Prisma.EnvironmentVariable` then writes none
+ * and deletes the one it wrote before.
+ */
+const variableValue = (value: unknown): Redacted.Redacted<string> | undefined =>
+  value === undefined || value === null ? undefined : toRedacted(value);
+
 const asOutput = (value: unknown): Output.Output<unknown> =>
   Output.isOutput(value) ? value : Output.literal(value);
 
 /** A salted digest of a variable's value, the only form of it the version records. */
 const environmentDigest = (key: string, value: unknown) =>
-  Output.mapEffect((resolved: unknown) =>
-    sha256(`${ENVIRONMENT_DIGEST_SALT}\0${key}\0${Redacted.value(toRedacted(resolved))}`),
-  )(asOutput(value));
-
-/** The class of the service's variables: the role of its Branch, checked against `envClass`. */
-const environmentClass = (
-  role: unknown,
-  envClass: ComputeProps["envClass"],
-): Effect.Effect<"production" | "preview"> =>
-  role === "production" || role === "preview"
-    ? envClass !== undefined && envClass !== role
-      ? Effect.die(
-          new ComputeInvalidProps({
-            message: `Prisma.Compute envClass '${envClass}' does not match attached branch role '${role}'. Omit envClass to let Alchemy infer the correct environment variable scope.`,
-          }),
-        )
-      : Effect.succeed(role)
-    : Effect.die(
-        new ComputeInvalidProps({
-          message:
-            "Prisma.Compute requires a service attached to a branch, because a version reads its environment variables from the service's branch.",
-        }),
-      );
+  Output.mapEffect((resolved: unknown) => {
+    const redacted = variableValue(resolved);
+    return sha256(
+      redacted === undefined
+        ? `${ENVIRONMENT_DIGEST_SALT}\0${key}\0absent`
+        : `${ENVIRONMENT_DIGEST_SALT}\0${key}\0value\0${Redacted.value(redacted)}`,
+    );
+  })(asOutput(value));
 
 const definedProps = <A extends Record<string, unknown>>(props: A) =>
   Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined)) as {
     [K in keyof A]: Exclude<A[K], undefined>;
   };
 
-const declareService = (props: ComputeProps) =>
+/**
+ * The service a Compute declares. Its logical ID on the platform is the
+ * Compute's own, so `Prisma.Compute("api")` serves from the service `api`.
+ */
+const declareService = (host: Compute, props: ComputeProps) =>
   ComputeService(
     "Service",
     definedProps({
       project: props.project!,
+      logicalId: defaultServiceLogicalId(host.FQN),
+      envClass: props.envClass,
       displayName: props.serviceName,
       regionId: props.regionId,
       branchId: props.branchId,
@@ -1058,9 +1060,9 @@ const declareService = (props: ComputeProps) =>
     }),
   );
 
-const serviceOf = (props: ComputeProps) =>
+const serviceOf = (host: Compute, props: ComputeProps) =>
   props.service === undefined
-    ? declareService(props)
+    ? declareService(host, props)
     : Effect.succeed(
         typeof props.service === "string"
           ? ComputeService.lookup({ serviceId: props.service })
@@ -1079,19 +1081,20 @@ const declareCloud = Effect.fn(function* (
   env: EnvironmentInput,
   form: DeclarationForm,
 ) {
-  const service = yield* serviceOf(props);
+  const service = yield* serviceOf(host, props);
   const keys = declaredKeys(env);
   const variables = yield* Effect.forEach(keys, (key) =>
     EnvironmentVariable(`Env/${key}`, {
       project: service.projectId,
-      class: Output.mapEffect((role: unknown) => environmentClass(role, props.envClass))(
-        service.branchRole,
-      ),
+      // A service always has a Branch once `Prisma.ComputeService` has
+      // reconciled it, and checks `envClass` against its role. A service
+      // given by ID may have none; the variable then fails with a typed error.
+      class: Output.map(service.branchRole, (role) => role!),
       branchId: Output.map(Output.all(service.branchRole, service.branchId), ([role, branchId]) =>
         role === "preview" && typeof branchId === "string" ? branchId : undefined,
       ),
       key,
-      value: Output.map(asOutput(env[key]), toRedacted),
+      value: Output.map(asOutput(env[key]), variableValue),
     } satisfies InputProps<EnvironmentVariableProps>),
   );
   const effectNative = isEffectNative(props, form);
@@ -1191,7 +1194,7 @@ const declareDev = Effect.fn(function* (props: ComputeProps, env: EnvironmentInp
       env: {
         NODE_ENV: "development",
         ...Object.fromEntries(
-          declaredKeys(env).map((key) => [key, Output.map(asOutput(env[key]), toRedacted)]),
+          declaredKeys(env).map((key) => [key, Output.map(asOutput(env[key]), variableValue)]),
         ),
         ...dev.env,
       },
@@ -1249,7 +1252,7 @@ const onCreate = (host: Compute, props: ComputeProps) =>
     yield* validateDeclaredProps(props, isEffectNative(props, form));
     if (form === "external") return yield* declareChildren(host, props, {}, form);
     if (!(yield* isLocal) && props.service === undefined) {
-      yield* declareService(props).pipe(Namespace.push(host.LogicalId));
+      yield* declareService(host, props).pipe(Namespace.push(host.LogicalId));
     }
     const services = yield* Effect.context<CompositionServices>();
     pendingCompositions.set(host, (runtimeEnv) =>
