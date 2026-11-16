@@ -239,13 +239,7 @@ export const checkStableEndpoint = Effect.fn(function* (
   url: string | undefined,
   rollbackVersionId: string | undefined,
   options: ComputeUrlCheck & ActiveVersionObservationOptions,
-): Effect.fn.Return<
-  StableEndpointCheck,
-  never,
-  | Effect.Services<ReturnType<typeof waitForComputeUrl>>
-  | Effect.Services<ReturnType<typeof waitForActiveVersion>>
-  | Effect.Services<ReturnType<typeof createServiceRollback>>
-> {
+) {
   const readiness = yield* waitForComputeUrl(url, options).pipe(Effect.result);
   if (Result.isSuccess(readiness)) return { _tag: "Ready" } satisfies StableEndpointCheck;
   if (rollbackVersionId === undefined) {
