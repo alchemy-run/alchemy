@@ -83,6 +83,14 @@ export type SubnetworkProps = {
    */
   purpose?: compute.SubnetworkPurposeEnum;
   /**
+   * Role of a proxy-only subnet (`purpose: "REGIONAL_MANAGED_PROXY"` or
+   * `"INTERNAL_HTTPS_LOAD_BALANCER"`): `ACTIVE` serves the region's
+   * Envoy proxies, `BACKUP` stands by for a swap. Updated in place via
+   * patch (promoting `BACKUP` to `ACTIVE` demotes the current active one).
+   * @default unset — Compute's default on create (`ACTIVE` when required); the observed role is left alone
+   */
+  role?: compute.SubnetworkRoleEnum;
+  /**
    * Secondary ranges for alias IPs. Updated in place via patch.
    */
   secondaryIpRanges?: ReadonlyArray<SubnetworkSecondaryRange>;
@@ -128,6 +136,8 @@ export type Subnetwork = Resource<
     stackType: string | undefined;
     /** Subnet purpose. */
     purpose: string | undefined;
+    /** Proxy-only subnet role (`ACTIVE` or `BACKUP`). */
+    role: string | undefined;
     /** Secondary alias-IP ranges. */
     secondaryIpRanges: ReadonlyArray<SubnetworkSecondaryRange>;
     /** VPC flow log options. */
@@ -222,6 +232,21 @@ export interface SubnetworkLookup {
  *   secondaryIpRanges: [
  *     { rangeName: "pods", ipCidrRange: "10.10.1.0/24" },
  *   ],
+ * });
+ * ```
+ *
+ * ### Proxy-only subnets
+ * Regional internal and external Application Load Balancers need one
+ * proxy-only subnet per region and VPC. Set `role` to pin it as the
+ * `ACTIVE` subnet, or create a `BACKUP` one to swap in later.
+ *
+ * **Example:** Active proxy-only subnet for regional load balancers
+ * ```typescript
+ * const proxySubnet = yield* GCP.Compute.Subnetwork("ProxyOnly", {
+ *   network: network.networkName,
+ *   ipCidrRange: "10.129.0.0/23",
+ *   purpose: "REGIONAL_MANAGED_PROXY",
+ *   role: "ACTIVE",
  * });
  * ```
  *
@@ -395,6 +420,7 @@ const toAttrs = (subnetwork: compute.Subnetwork, project: string): Subnetwork["A
     privateIpGoogleAccess: subnetwork.privateIpGoogleAccess === true,
     stackType: subnetwork.stackType,
     purpose: subnetwork.purpose,
+    role: subnetwork.role,
     secondaryIpRanges: toSecondaryRanges(subnetwork.secondaryIpRanges),
     logConfig: toLogConfig(subnetwork.logConfig),
     enableFlowLogs: subnetwork.enableFlowLogs,
@@ -549,6 +575,7 @@ export const SubnetworkProvider = () =>
           stackType,
         };
         if (news.purpose !== undefined) body.purpose = news.purpose;
+        if (news.role !== undefined) body.role = news.role;
         if (news.secondaryIpRanges !== undefined) {
           body.secondaryIpRanges = [...news.secondaryIpRanges];
         }
@@ -630,6 +657,10 @@ export const SubnetworkProvider = () =>
         current.privateIpv6GoogleAccess !== news.privateIpv6GoogleAccess
       ) {
         patchBody.privateIpv6GoogleAccess = news.privateIpv6GoogleAccess;
+      }
+
+      if (news.role !== undefined && current.role !== news.role) {
+        patchBody.role = news.role;
       }
 
       if (Object.keys(patchBody).length > 0) {
