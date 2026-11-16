@@ -93,12 +93,15 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
           Prisma.Bucket.Type,
           Prisma.BucketAccessKey.Type,
           Prisma.Compute.Type,
+          Prisma.ComputeArtifact.Type,
           Prisma.ComputeService.Type,
           Prisma.ComputeVersion.Type,
           Prisma.CustomDomain.Type,
           Prisma.EnvironmentVariable.Type,
           Prisma.SourceRepository.Type,
         ];
+        // Files on this machine only, so one provider serves deploy and dev.
+        const modeAgnostic = new Set<string>([Prisma.ComputeArtifact.Type]);
         const expectedStables = new Map([
           [Prisma.Project.Type, ["projectId"]],
           [Prisma.Database.Type, ["databaseId"]],
@@ -117,6 +120,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
             ],
           ],
           [Prisma.Compute.Type, ["serviceId"]],
+          [Prisma.ComputeArtifact.Type, undefined],
           [Prisma.ComputeService.Type, ["serviceId"]],
           [Prisma.ComputeVersion.Type, ["versionId"]],
           [Prisma.CustomDomain.Type, ["customDomainId"]],
@@ -130,11 +134,12 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
         );
 
         expect(providers).toHaveLength(resourceTypes.length);
-        for (const provider of providers) {
+        for (let i = 0; i < resourceTypes.length; i += 1) {
+          const provider = providers[i]!;
           expect(typeof provider.reconcile).toBe("function");
           expect(typeof provider.delete).toBe("function");
           // Lookup resolves the concrete local variant in dev.
-          expect(provider.mode).toBe("local");
+          if (!modeAgnostic.has(resourceTypes[i]!)) expect(provider.mode).toBe("local");
         }
         for (let i = 0; i < resourceTypes.length; i += 1) {
           const provider = providers[i]!;
@@ -148,6 +153,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
         "provider:prisma:bucket",
         "provider:prisma:bucketaccesskey",
         "provider:prisma:compute",
+        "provider:prisma:computeartifact",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
