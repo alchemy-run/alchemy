@@ -183,6 +183,8 @@ Any other view, such as one fed by many accounts through `keyOf`, is rebuilt fro
 
 Only ever increase a version. To undo a change, change the code back and bump again. Bump it too when you add back a view you removed earlier: its stored state stopped following the history while it was gone.
 
+An aggregate has a `version` too, for a change to how its own state is computed: see [Aggregate: Change an aggregate: bump its version](/domain/aggregate#change-an-aggregate-bump-its-version).
+
 ## Fill a view lazily
 
 A view keyed by the one aggregate it reads can skip the backfill when it is added, too. List it as lazy on the model's Layer:

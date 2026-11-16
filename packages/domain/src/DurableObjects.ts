@@ -791,6 +791,17 @@ const registerJob = (
     Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
   );
 
+/** How many events an instance reads at once when it folds its state again. */
+const REFOLD_PAGE = 128;
+
+/** What an instance saves as `meta`: its state, its stream version, and the generation that wrote it. */
+interface AggregateMeta {
+  readonly state: Json;
+  readonly version: number;
+  /** The aggregate's generation that folded `state`; absent for 0. */
+  readonly generation?: number;
+}
+
 const aggregateObject = (
   kit: AggregateKit,
   net: Backfill.Network,
@@ -802,8 +813,36 @@ const aggregateObject = (
     const state = yield* ObjectState;
     const outbox = yield* queue<Delivery>("outbox", kit.deliver);
     const currentMeta = state.storage
-      .get<{ state: Json; version: number }>("meta")
-      .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
+      .get<AggregateMeta>("meta")
+      .pipe(Effect.map((meta): AggregateMeta => meta ?? { state: null, version: 0 }));
+    const generation = kit.generation > 0 ? { generation: kit.generation } : {};
+    // Folded by an earlier generation of the aggregate: fold it again from its
+    // events, page by page, and save it. Callers run it `exclusively`.
+    const fresh = Effect.gen(function* () {
+      const meta = yield* currentMeta;
+      if (meta.version === 0 || (meta.generation ?? 0) >= kit.generation) return meta;
+      let folded: Json = null;
+      let after = 0;
+      while (after < meta.version) {
+        const rows = yield* state.storage.list<StoredEvent>({
+          prefix: "event:",
+          start: `event:${pad(after + 1)}`,
+          limit: REFOLD_PAGE,
+        });
+        const events = [...rows.values()];
+        // A saved state short of its version would never be folded again.
+        if (events.length === 0) {
+          return yield* Effect.die(
+            new Error(`${kit.name} has no event after ${after} of its ${meta.version}`),
+          );
+        }
+        folded = yield* kit.fold({ state: folded, events });
+        after = events[events.length - 1]!.envelope.seq;
+      }
+      const next: AggregateMeta = { state: folded, version: meta.version, ...generation };
+      yield* state.storage.put("meta", next);
+      return next;
+    });
     const eventsAfter = (after: number) =>
       state.storage
         .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
@@ -858,7 +897,7 @@ const aggregateObject = (
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         if (duplicate) return { sent: duplicate, kick: false };
-        const current = yield* currentMeta;
+        const current = yield* fresh;
         const result = yield* kit.handle({
           id,
           state: current.state,
@@ -889,7 +928,8 @@ const aggregateObject = (
             yield* state.storage.put("meta", {
               state: result.state,
               version: result.version,
-            });
+              ...generation,
+            } satisfies AggregateMeta);
             yield* state.storage.put(`receipt:${meta.commandId}`, sent);
             // Listed in the directory after the call returns, not before it commits.
             yield* listAfterCommit(runtime.jobs, id);
@@ -990,7 +1030,13 @@ const aggregateObject = (
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
-      state: () => reportDefects(currentMeta),
+      state: () =>
+        reportDefects(
+          fresh.pipe(
+            exclusively,
+            Effect.map(({ state, version }) => ({ state, version })),
+          ),
+        ),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // The backfill protocol, as a source.
       // Any code answers these: a run reads its log, and routes it with its own code.

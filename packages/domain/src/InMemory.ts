@@ -640,6 +640,8 @@ export const make = (
               {
                 state: Json;
                 version: number;
+                /** The aggregate's generation that folded `state`. */
+                generation: number;
                 readonly receipts: Map<string, SendResult>;
                 /** The latest arming of each scheduled command, by its name. */
                 readonly scheduled: Map<string, Armed>;
@@ -673,6 +675,7 @@ export const make = (
                 (found = {
                   state: null,
                   version: 0,
+                  generation: kit.generation,
                   receipts: new Map(),
                   scheduled: new Map(),
                   events: [],
@@ -711,10 +714,28 @@ export const make = (
             return role;
           });
           sourceRoles.set(kit.name, sourceRole);
+          // Folded by an earlier generation of the aggregate: its state is
+          // folded again from its events. An instance with no events is never.
+          const stale = (current: { readonly version: number; readonly generation: number }) =>
+            current.version > 0 && current.generation < kit.generation;
+          // Callers hold `lock`.
+          const fresh = (id: string) =>
+            Effect.gen(function* () {
+              const current = instance(id);
+              if (!stale(current)) return current;
+              current.state = yield* kit.fold({ state: null, events: current.events });
+              current.generation = kit.generation;
+              return current;
+            });
+          // Takes `lock` only to fold, so a read inside a commit never waits on it.
+          const read = (id: string) =>
+            Effect.suspend(() =>
+              stale(instance(id)) ? lock.withPermits(1)(fresh(id)) : Effect.succeed(instance(id)),
+            ).pipe(Effect.map(({ state, version }) => ({ state, version })));
           // Callers hold `lock`.
           const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             Effect.gen(function* () {
-              const current = instance(id);
+              const current = yield* fresh(id);
               const duplicate = current.receipts.get(meta.commandId);
               if (duplicate) return duplicate;
               const result = yield* kit.handle({
@@ -742,6 +763,7 @@ export const make = (
               current.routed = live.routed;
               current.state = result.state;
               current.version = result.version;
+              current.generation = kit.generation;
               for (let i = 0; i < result.events.length; i++)
                 commits.push({ aggregate: kit.name, id, index: current.events.length + i });
               current.events.push(...result.events);
@@ -797,19 +819,13 @@ export const make = (
                   },
                 ),
               ),
-            state: (id) =>
-              Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
+            state: read,
             events: (id) => Effect.sync(() => [...instance(id).events]),
             changes: (id) =>
               Stream.unwrap(
                 versionOf(id).pipe(
                   Effect.map((ref) =>
-                    SubscriptionRef.changes(ref).pipe(
-                      Stream.map(() => ({
-                        state: instance(id).state,
-                        version: instance(id).version,
-                      })),
-                    ),
+                    SubscriptionRef.changes(ref).pipe(Stream.mapEffect(() => read(id))),
                   ),
                 ),
               ),
@@ -831,7 +847,7 @@ export const make = (
             seed: (id, events) =>
               lock.withPermits(1)(
                 Effect.gen(function* () {
-                  const current = instance(id);
+                  const current = yield* fresh(id);
                   const result = yield* kit.seed({
                     id,
                     state: current.state,
@@ -852,6 +868,7 @@ export const make = (
                   current.routed = live.routed;
                   current.state = result.state;
                   current.version = result.version;
+                  current.generation = kit.generation;
                   current.events.push(...result.events);
                   yield* announce(id);
                   yield* enqueue(live.send, kit.deliver);

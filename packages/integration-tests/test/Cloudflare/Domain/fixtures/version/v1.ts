@@ -4,7 +4,10 @@ import * as Layer from "effect/Layer";
 import { BankV1, LatestOfV1, SummaryV1 } from "./model.ts";
 import { bankWorker, hosted } from "./worker.ts";
 
-/** The summary fixed, at version 1: rebuilt in place, and the view built on it from the history. */
+/**
+ * The account and the summary fixed, at version 1: each account folds its state
+ * again, the summary is rebuilt in place, and the view built on it from the history.
+ */
 export default class DomainVersionWorker extends Cloudflare.Worker<DomainVersionWorker>()(
   "DomainVersionWorker",
   { main: import.meta.url },

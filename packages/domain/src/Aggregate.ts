@@ -172,6 +172,20 @@ export interface Definition<
       events: ReadonlyArray<InstanceOf<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
+  /**
+   * Bump it whenever you change how the state is computed (`evolve`, `state`
+   * or `initial`): each instance computes its state again from its events, and
+   * saves it. Only ever increase it.
+   *
+   * An instance is computed again in place: the deploy waits for nothing, and
+   * each instance re-reads its own events the first time it is touched. No
+   * event is rewritten or recorded, so no view or projection is rebuilt.
+   *
+   * It is not the stream's version that `decide` sees in `ctx.version`.
+   *
+   * @default 0
+   */
+  readonly version?: number;
 }
 
 /**
@@ -265,6 +279,7 @@ export interface AnyDefinition {
   readonly decide: AnyHandlers;
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
+  readonly version?: number;
 }
 
 /** An aggregate instance to address: its id, or a ref carrying it. */

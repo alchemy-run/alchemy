@@ -207,6 +207,21 @@ export interface AggregateKit {
   readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
+  /**
+   * This aggregate's generation: its declared `version`. A stored state
+   * written by an earlier one is folded again from the instance's events
+   * (with {@link AggregateKit.fold}) before it is read or decided on.
+   */
+  readonly generation: number;
+  /**
+   * Fold stored events into a state with `evolve`, purely: no envelopes are
+   * made, nothing is routed and no event is recorded. `state` is where to start
+   * (`null` for `initial`), so a platform can fold a long stream page by page.
+   */
+  readonly fold: (input: {
+    readonly state: Json;
+    readonly events: ReadonlyArray<StoredEvent>;
+  }) => Effect.Effect<Json>;
 }
 
 /**
