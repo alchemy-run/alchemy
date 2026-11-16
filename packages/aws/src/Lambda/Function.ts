@@ -2345,6 +2345,7 @@ export const FunctionProvider = () =>
         preferUpdate,
         fileSystemConfigs,
         vpc,
+        layers,
         session,
       }: {
         id: string;
@@ -2363,6 +2364,10 @@ export const FunctionProvider = () =>
         // and the stub doesn't need connectivity — `reconcile` attaches the
         // resolved VPC config afterwards.
         vpc?: FunctionProps["vpc"];
+        // Attached layers. `undefined` omits `Layers` (precreate stub: a layer
+        // created in the same deploy is still an unresolved Output and would
+        // fail to serialize); `[]` explicitly detaches every layer on update.
+        layers?: LayerRef[];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
@@ -2445,12 +2450,13 @@ export const FunctionProvider = () =>
           // a function that never set it) converges back to AWS's default;
           // `UpdateFunctionConfiguration` treats omitted fields as "leave as-is".
           MemorySize: news.memorySize ?? 128,
-          // Always explicit: `UpdateFunctionConfiguration` treats an omitted
-          // `Layers` as "leave as-is", so removing the prop would strand the
-          // previously-attached layers.
-          Layers: isFunctionImageProps(news)
-            ? undefined
-            : (news.layers ?? []).map(layerVersionArnOf),
+          // Reconcile always passes an explicit list:
+          // `UpdateFunctionConfiguration` treats an omitted `Layers` as
+          // "leave as-is", so removing the prop would strand the
+          // previously-attached layers. Image functions have no layers.
+          ...(isFunctionImageProps(news) || layers === undefined
+            ? {}
+            : { Layers: layers.map(layerVersionArnOf) }),
           Environment: {
             Variables: {
               ...runtimeEnv,
@@ -3187,6 +3193,9 @@ export const FunctionProvider = () =>
             session,
           });
 
+          // Layers are omitted from the stub: a layer created in the same
+          // deploy is still an unresolved Output at precreate, and reconcile
+          // attaches the resolved set.
           yield* createOrUpdateFunction({
             id,
             news,
@@ -3369,6 +3378,7 @@ export const FunctionProvider = () =>
             // explicitly so a VPC attached out-of-band is removed.
             vpc:
               vpc ?? (output !== undefined ? { subnetIds: [], securityGroupIds: [] } : undefined),
+            layers: news.layers ?? [],
             preferUpdate: output !== undefined,
             // `[]` (when the prop/bindings were removed on a function that
             // previously had mounts) explicitly clears the file-system
