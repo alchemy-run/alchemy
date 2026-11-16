@@ -109,6 +109,26 @@ export const Uploads = Cloudflare.R2.Bucket("Uploads", {
 });
 ```
 
+## Detect and repair configuration drift
+
+If someone changes a Bucket's settings outside Alchemy, `alchemy drift` compares the
+live configuration with the last successful deployment. It checks custom
+domains, public `r2.dev` access, lifecycle rules and CORS, as well as lock rules
+and Local Uploads when you have declared those settings. A Bucket that never
+declared locks or Local Uploads leaves them unmanaged. Certificate issuance
+and domain ownership status are reported as metadata, not configuration
+changes that should trigger a repair.
+
+```sh
+alchemy drift --stage prod
+alchemy drift --stage prod --repair
+```
+
+The first command only reports differences; the second restores the
+previously deployed configuration. A Cloudflare read failure stops the
+check instead of treating inaccessible settings as empty. Drift repair
+does not restore deleted objects or object contents.
+
 ## Delete a Bucket
 
 R2 won't delete a Bucket that has objects in it, so destroying a full Bucket fails and its data stays safe. For a Bucket whose contents you can lose, set `forceDestroy`, and destroy empties it first:
