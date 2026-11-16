@@ -2,12 +2,15 @@ import * as AWS from "@alchemy.run/aws";
 import { Resource as CloudControlResource } from "@alchemy.run/aws/CloudControl";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as CloudControl from "@distilled.cloud/aws/cloudcontrol";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { getAutoScalingTestSubnetId, getTestAmiId } from "../AutoScaling/TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -163,5 +166,76 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:cloudcontrol", "live"],
     timeout: 240_000,
+  },
+);
+
+// Cloud Control reads an Auto Scaling group back with a `SuspendedProcesses: []`
+// that is not in the schema, and rejects every update that leaves it in place
+// ("Setting SuspendedProcesses is currently not available"). The provider must
+// remove it in the same patch. The launch template is created out-of-band (see
+// AutoScaling/AutoScalingGroup.test.ts) and the group is sized to zero.
+const asgName = "alchemy-test-cloudcontrol-asg";
+const asgLaunchTemplateName = "alchemy-test-cloudcontrol-asg-lt";
+
+const cleanupAsg = Effect.gen(function* () {
+  yield* autoscaling
+    .deleteAutoScalingGroup({ AutoScalingGroupName: asgName, ForceDelete: true } as any)
+    .pipe(Effect.catch(() => Effect.void));
+  yield* ec2
+    .deleteLaunchTemplate({ LaunchTemplateName: asgLaunchTemplateName } as any)
+    .pipe(Effect.catch(() => Effect.void));
+});
+
+const asgDef = (subnetId: string, maxSize: string) =>
+  Effect.gen(function* () {
+    const group = yield* CloudControlResource("CcAsg", {
+      typeName: "AWS::AutoScaling::AutoScalingGroup",
+      desiredState: {
+        AutoScalingGroupName: asgName,
+        MinSize: "0",
+        MaxSize: maxSize,
+        VPCZoneIdentifier: [subnetId],
+        LaunchTemplate: {
+          LaunchTemplateName: asgLaunchTemplateName,
+          Version: "1",
+        },
+      },
+    });
+    return { group };
+  });
+
+const describeAsgMaxSize = autoscaling
+  .describeAutoScalingGroups({ AutoScalingGroupNames: [asgName] } as any)
+  .pipe(Effect.map((r) => r.AutoScalingGroups?.[0]?.MaxSize));
+
+test.provider(
+  "updating an Auto Scaling group removes the non-schema SuspendedProcesses",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* cleanupAsg;
+
+      const imageId = yield* getTestAmiId;
+      const subnetId = yield* getAutoScalingTestSubnetId;
+      yield* ec2.createLaunchTemplate({
+        LaunchTemplateName: asgLaunchTemplateName,
+        LaunchTemplateData: { ImageId: imageId, InstanceType: "t3.micro" },
+      } as any);
+
+      const { group: created } = yield* stack.deploy(asgDef(subnetId, "0"));
+      expect(created.identifier).toBe(asgName);
+      expect(yield* describeAsgMaxSize).toBe(0);
+
+      // A real change patches over the observed `SuspendedProcesses: []`.
+      const { group: updated } = yield* stack.deploy(asgDef(subnetId, "1"));
+      expect(updated.identifier).toBe(asgName);
+      expect(yield* describeAsgMaxSize).toBe(1);
+
+      yield* stack.destroy();
+      yield* assertDeleted(asgName, "AWS::AutoScaling::AutoScalingGroup");
+    }).pipe(logLevel, Effect.ensuring(cleanupAsg)),
+  {
+    tags: ["provider:aws", "provider:aws:cloudcontrol", "provider:aws:autoscaling", "live"],
+    timeout: 360_000,
   },
 );

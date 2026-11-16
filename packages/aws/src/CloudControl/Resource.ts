@@ -151,6 +151,13 @@ const buildPatch = (
  * rather than describing persistent document state — resend it only
  * alongside an actual change.
  *
+ * Cloud Control reads an `AWS::AutoScaling::AutoScalingGroup` back with a
+ * `SuspendedProcesses: []` that is not part of the resource schema, and its
+ * update handler rejects any update that leaves it in place with
+ * `InvalidRequest: Setting SuspendedProcesses is currently not available`.
+ * Removing it in the same patch is accepted, so every real change also sends a
+ * `remove` for it.
+ *
  * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ssm-document.html
  */
 const resourcePatch = (
@@ -158,6 +165,12 @@ const resourcePatch = (
   observed: Record<string, unknown>,
   desired: Record<string, unknown>,
 ) => {
+  if (typeName === "AWS::AutoScaling::AutoScalingGroup") {
+    const patch = buildPatch(observed, desired);
+    return patch.length > 0 && Object.prototype.hasOwnProperty.call(observed, "SuspendedProcesses")
+      ? [...patch, { op: "remove" as const, path: "/SuspendedProcesses" }]
+      : patch;
+  }
   if (typeName !== "AWS::SSM::Document") return buildPatch(observed, desired);
   const { UpdateMethod, ...document } = desired;
   const normalizeDocument = (value: Record<string, unknown>) =>
