@@ -276,6 +276,11 @@ export class SubnetworkNotResolved extends Data.TaggedError("GCP.Compute.Subnetw
 
 const DEFAULT_STACK_TYPE = "IPV4_ONLY";
 const DEFAULT_PRIVATE_GOOGLE_ACCESS = false;
+const PROXY_ONLY_PURPOSES: ReadonlyArray<string> = [
+  "REGIONAL_MANAGED_PROXY",
+  "GLOBAL_MANAGED_PROXY",
+  "INTERNAL_HTTPS_LOAD_BALANCER",
+];
 
 const OWNERSHIP_KEYS = ["alchemy-stack", "alchemy-stage", "alchemy-id"] as const;
 
@@ -560,6 +565,7 @@ export const SubnetworkProvider = () =>
       const network = networkRef(env.project, news.network);
       const privateIpGoogleAccess = news.privateIpGoogleAccess ?? DEFAULT_PRIVATE_GOOGLE_ACCESS;
       const stackType = news.stackType ?? DEFAULT_STACK_TYPE;
+      const proxyOnly = PROXY_ONLY_PURPOSES.includes(news.purpose ?? "");
       const internal = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(internal, news.description);
 
@@ -571,9 +577,9 @@ export const SubnetworkProvider = () =>
           network,
           ipCidrRange: news.ipCidrRange,
           description: desiredDescription,
-          privateIpGoogleAccess,
           stackType,
         };
+        if (!proxyOnly) body.privateIpGoogleAccess = privateIpGoogleAccess;
         if (news.purpose !== undefined) body.purpose = news.purpose;
         if (news.role !== undefined) body.role = news.role;
         if (news.secondaryIpRanges !== undefined) {
@@ -603,12 +609,19 @@ export const SubnetworkProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
+            Effect.retry({
+              while: (error) =>
+                (error._tag === "GCP.OperationFailed" || error._tag === "UnknownGCPError") &&
+                (error.message ?? "").startsWith("BACKUP subnet can be created only if"),
+              times: 24,
+              schedule: Schedule.spaced("5 seconds"),
+            }),
             Effect.catchTag("Conflict", () => Effect.void),
           );
         current = yield* requireSubnetwork(env.project, region, subnetworkName);
       }
 
-      if ((current.privateIpGoogleAccess === true) !== privateIpGoogleAccess) {
+      if (!proxyOnly && (current.privateIpGoogleAccess === true) !== privateIpGoogleAccess) {
         const updated = yield* compute.setPrivateIpGoogleAccessSubnetworks({
           project: env.project,
           region,
@@ -704,6 +717,13 @@ export const SubnetworkProvider = () =>
                 error.reason === "RESOURCE_IN_USE_BY_ANOTHER_RESOURCE"),
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
+          }),
+          Effect.retry({
+            while: (error) =>
+              error._tag === "BadRequest" &&
+              /because a BACKUP subnetwork exists/.test(error.message),
+            times: 24,
+            schedule: Schedule.spaced("5 seconds"),
           }),
           // Compute rejects the delete while another operation is still in
           // flight on the subnet (e.g. load balancer or packet-mirroring
