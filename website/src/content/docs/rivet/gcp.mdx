@@ -54,6 +54,8 @@ export const Default = RivetGCP.CloudRunPool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
+The nodes run as the worker pool's own service account unless you name one, and that account is granted each secret before a revision reads it. `RIVET_TOKEN` stays plain environment unless you name it in `secrets`. Cloud Run holds a private network's addresses for up to a few hours after the pool is deleted, so a destroy in that window fails on the subnetwork, keeps it in state, and succeeds when run again later.
+
 When the control plane is a [`Rivet.ControlPlane`](/rivet/control-planes#use-one-you-already-run) given a `nodeEndpoint` and a `gcp` `network`, set `clusterNetwork` instead: the nodes send private traffic through that network and connect to `nodeEndpoint`, with no `RIVET_ENDPOINT` of your own. A `network` or `subnetwork` you set still wins:
 
 ```typescript title="src/cluster.ts"
