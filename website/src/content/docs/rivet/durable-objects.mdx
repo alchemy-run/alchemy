@@ -197,7 +197,7 @@ return {
 };
 ```
 
-`state.destroy()` destroys the instance and its storage once its calls finish, and the next call to the same name starts an empty instance. Neither hook is a method, and neither runs for an instance that took no call since it last woke.
+`state.sleep()` puts the instance to sleep without waiting for it to go idle; `onSleep` runs, and its next call wakes it with its storage intact. `state.destroy()` destroys the instance and its storage once its calls finish, and the next call to the same name starts an empty instance. Neither hook is a method, and neither runs for an instance that took no call since it last woke.
 
 ## Keep its code out of its callers
 

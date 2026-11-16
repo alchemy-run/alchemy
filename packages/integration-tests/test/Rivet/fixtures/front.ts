@@ -160,14 +160,18 @@ export default class Front extends Docker.Service<Front>()(
             sockets: yield* socketRooms.getByName(name).sockets().pipe(Effect.orDie),
           });
         }
-        // `/lifecycle/<name>/<step>`: `put` stores a value, `destroy` destroys
-        // the instance, `value` reads it back, and `hooks` counts the hooks
-        // that ran without waking it.
+        // `/lifecycle/<name>/<step>`: `put` stores a value, `sleep` puts the
+        // instance to sleep, `destroy` destroys it, `value` reads it back, and
+        // `hooks` counts the hooks that ran without waking it.
         if (group === "lifecycle" && name !== undefined) {
           const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
           const instance = lifecycles.getByName(name);
           if (step === "put") {
             yield* instance.put(Number(url.searchParams.get("value") ?? "1"));
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "sleep") {
+            yield* instance.sleepNow();
             return yield* HttpServerResponse.json({ ok: true });
           }
           if (step === "destroy") {

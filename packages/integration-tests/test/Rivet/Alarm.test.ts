@@ -37,6 +37,7 @@ const makeActor = Effect.promise(async () => {
     },
     waitUntil: () => {},
     keepAwake: (promise) => promise,
+    sleep: () => {},
     destroy: () => {},
   };
   await migrateStorage(c.db);

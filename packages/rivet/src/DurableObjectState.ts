@@ -29,6 +29,8 @@ export interface ActorContextLike {
   waitUntil(promise: Promise<unknown>): void;
   /** Keep the actor awake until `promise` settles. */
   keepAwake<T>(promise: Promise<T>): Promise<T>;
+  /** Ask RivetKit to put the actor to sleep. */
+  sleep(): void;
   /** Ask RivetKit to destroy the actor and its storage. */
   destroy(): void;
 }
@@ -137,6 +139,12 @@ export interface DurableObjectStateShape {
   readonly storage: DurableObjectStorage;
   /** Keep the instance awake until `effect` completes. */
   waitUntil<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, never, R>;
+  /**
+   * Put the instance to sleep now rather than once it has been idle a
+   * while. `onSleep` runs first, its storage is kept, and its next call
+   * wakes it.
+   */
+  sleep(): Effect.Effect<void>;
   /**
    * Destroy the instance and its storage once its calls finish. `onDestroy`
    * runs first. The next call to the same name starts an empty instance.
@@ -546,6 +554,7 @@ export const makeDurableObjectState = (
     id: { name, toString: () => name },
     key: c.key,
     storage,
+    sleep: () => Effect.sync(() => c.sleep()),
     destroy: () => Effect.sync(() => c.destroy()),
     getWebSockets: (tag) => Effect.sync(() => sockets.all(tag)),
     // As on Cloudflare: the work runs with the caller's context and a scope

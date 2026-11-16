@@ -20,6 +20,7 @@ export default class Lifecycle extends Rivet.DurableObject<Lifecycle>()(
       return {
         put: (value: number) => state.storage.put("value", value),
         get: () => Effect.map(state.storage.get<number>("value"), (value) => value ?? null),
+        sleepNow: () => state.sleep(),
         destroyNow: () => state.destroy(),
         onSleep: () => record("slept"),
         onDestroy: () => record("destroyed"),

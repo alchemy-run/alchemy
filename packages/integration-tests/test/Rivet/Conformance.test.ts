@@ -362,6 +362,19 @@ describe.skipIf(!!process.env.FAST)(
       );
 
       test(
+        "sleep runs onSleep and the next call finds its storage",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=5");
+          yield* step(name, "sleep");
+          const hooks = yield* hooksUntil(name, (hooks) => hooks.slept > 0);
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value")).toEqual({ value: 5 });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
         "an idle instance runs onSleep and keeps its storage",
         Effect.gen(function* () {
           const name = crypto.randomUUID();
