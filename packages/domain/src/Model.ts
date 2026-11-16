@@ -828,6 +828,44 @@ const aggregateClient = (
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
         }),
       ),
+    import: (target, events, options) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        if (!store.import) {
+          return yield* Effect.die(
+            new Error(`The platform cannot import events into ${aggregate.aggregateName}`),
+          );
+        }
+        const expected = options.expectedVersion ?? 0;
+        const result = yield* store.import(id, yield* Effect.forEach(events, kernel.encodeEvent), {
+          commandId: options.commandId,
+          expectedVersion: expected,
+        });
+        if (result._tag === "UnexpectedVersion") {
+          return yield* new Aggregate.UnexpectedVersion({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            expected,
+            version: result.version,
+          });
+        }
+        return {
+          stream: result.receipt.stream,
+          version: result.receipt.version,
+          events: yield* Effect.forEach(result.receipt.events, kernel.decodeEvent),
+          reply: undefined,
+        };
+      }).pipe(
+        Effect.withSpan(`Domain.import ${aggregate.aggregateName}`, {
+          ...spanOptions(target),
+          attributes: {
+            ...spanOptions(target).attributes,
+            "domain.command_id": options.commandId,
+            "domain.events": events.length,
+          },
+        }),
+      ),
     get: (target) =>
       store
         .state(Aggregate.targetId(target))

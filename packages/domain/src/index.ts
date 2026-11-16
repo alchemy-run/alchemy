@@ -86,6 +86,8 @@ export declare namespace Aggregate {
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
+  /** Options for `client.import`: the import's command id and the version it expects. */
+  export type ImportOptions = AggregateModule.ImportOptions;
   /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
   export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
   /** Options for `MyAggregate.predict`. */
@@ -109,6 +111,9 @@ export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
 /** No command was scheduled with that id. */
 export const NotScheduled = AggregateModule.NotScheduled;
 export type NotScheduled = AggregateModule.NotScheduled;
+/** An import found the instance at another version than it expected. */
+export const UnexpectedVersion = AggregateModule.UnexpectedVersion;
+export type UnexpectedVersion = AggregateModule.UnexpectedVersion;
 
 /**
  * What keys a view, policy, projection or stream: an aggregate (one instance

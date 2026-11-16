@@ -18,6 +18,7 @@ import {
  */
 import type { HttpEffect } from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -48,6 +49,8 @@ import {
   emptyStreamMeta,
   type HostedModel,
   hostedModels,
+  type ImportMeta,
+  type ImportResult,
   inRange,
   type Json,
   type ListRange,
@@ -56,6 +59,7 @@ import {
   type PolicyKit,
   type ProjectionKit,
   type Push,
+  type SeedResult,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -203,6 +207,14 @@ export interface Host<R = never> {
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
+
+/** Put rows in batches: Cloudflare's storage takes at most 128 keys a put. */
+const putRows = <T>(storage: ObjectStorage, rows: ReadonlyArray<readonly [string, T]>) =>
+  Effect.forEach(
+    Arr.chunksOf(rows, 128),
+    (batch) => storage.put(Object.fromEntries(batch) as Record<string, T>),
+    { discard: true },
+  );
 
 /** The storage list that reads exactly the `entry:` rows in `range`. */
 const entryRange = (range: ListRange | undefined): ListOptions => {
@@ -368,11 +380,10 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
         Effect.gen(function* () {
           if (rows.length === 0) return;
           const last = ((yield* state.storage.get<number>(`${name}-seq`)) ?? 0) + rows.length;
-          const entries: Record<string, Row> = {};
-          rows.forEach((row, index) => {
-            entries[`${prefix}${pad(last - rows.length + index + 1)}`] = row;
-          });
-          yield* state.storage.put(entries);
+          yield* putRows(
+            state.storage,
+            rows.map((row, index) => [`${prefix}${pad(last - rows.length + index + 1)}`, row]),
+          );
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
           // Its rows are progress, so a callback staging them doesn't hand it
@@ -881,16 +892,28 @@ const aggregateObject = (
             reply: result.reply,
           },
         };
-        const routed = yield* state.storage.transaction(
+        return { sent, kick: yield* persist(id, current.version, result, meta.commandId, sent) };
+      });
+    // Commit what `handle` or `seed` produced, atomically; whether there are deliveries to kick.
+    const persist = (
+      id: string,
+      from: number,
+      result: Pick<SeedResult, "state" | "version" | "events" | "deliveries">,
+      commandId: string,
+      sent: SendResult,
+    ) =>
+      state.storage
+        .transaction(
           Effect.gen(function* () {
-            const events: Record<string, StoredEvent> = {};
-            for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
-            yield* state.storage.put(events);
+            yield* putRows(
+              state.storage,
+              result.events.map((event) => [`event:${pad(event.envelope.seq)}`, event]),
+            );
             yield* state.storage.put("meta", {
               state: result.state,
               version: result.version,
             });
-            yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+            yield* state.storage.put(`receipt:${commandId}`, sent);
             // Listed in the directory after the call returns, not before it commits.
             yield* listAfterCommit(runtime.jobs, id);
             // Live to caught-up consumers; through the backfill to lagging ones.
@@ -898,7 +921,7 @@ const aggregateObject = (
               sourceFor(id),
               kit.targets,
               yield* state.storage.get<Routed>("routed"),
-              current.version,
+              from,
               result.version,
               result.deliveries,
             );
@@ -906,8 +929,41 @@ const aggregateObject = (
             yield* outbox.stage(live.send);
             return live.send;
           }),
-        );
-        return { sent, kick: routed.length > 0 };
+        )
+        .pipe(Effect.map((routed) => routed.length > 0));
+    // Callers run it `exclusively`.
+    const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+      Effect.gen(function* () {
+        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+        if (duplicate?._tag === "Accepted") {
+          const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
+          return { imported, kick: false };
+        }
+        const current = yield* currentMeta;
+        if (current.version !== meta.expectedVersion) {
+          const imported: ImportResult = { _tag: "UnexpectedVersion", version: current.version };
+          return { imported, kick: false };
+        }
+        const result = yield* kit.seed({
+          id,
+          state: current.state,
+          version: current.version,
+          events,
+          commandId: meta.commandId,
+          now: yield* Clock.currentTimeMillis,
+        });
+        const receipt = {
+          stream: `${kit.name}/${id}`,
+          version: result.version,
+          events: result.events.map((e) => e.event),
+          reply: null,
+        };
+        const kick = yield* persist(id, current.version, result, meta.commandId, {
+          _tag: "Accepted",
+          receipt,
+        });
+        const imported: ImportResult = { _tag: "Imported", receipt };
+        return { imported, kick };
       });
     const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
@@ -990,6 +1046,12 @@ const aggregateObject = (
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
+      importEvents: (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+        Effect.gen(function* () {
+          const { imported, kick } = yield* exclusively(importEvents(id, events, meta));
+          if (kick) yield* outbox.kick;
+          return imported;
+        }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // The backfill protocol, as a source.
@@ -1931,6 +1993,14 @@ export const makePlatform = <R>(
                               return Effect.fail(new NotScheduled(fields));
                             return Effect.void;
                           },
+                        ),
+                      ),
+                    import: (id, events, meta) =>
+                      announce.pipe(
+                        Effect.andThen(
+                          unwrapDefects<ImportResult>(
+                            namespace.getByName(id).importEvents(id, events, meta),
+                          ),
                         ),
                       ),
                     state: (id) =>

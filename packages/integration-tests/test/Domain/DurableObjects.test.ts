@@ -1,5 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
+import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { type InputGateShape, makeInputGate } from "alchemy/Workers/InputGate";
@@ -11,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -35,6 +37,8 @@ const makeStorage = (stats: Stats, data: Map<string, unknown>): DurableObjects.O
     put: ((keyOrEntries: string | Record<string, unknown>, value?: unknown) =>
       Effect.sync(() => {
         if (typeof keyOrEntries === "string") data.set(keyOrEntries, clone(value));
+        // Cloudflare's storage takes at most 128 keys a put.
+        else if (Object.keys(keyOrEntries).length > 128) throw new Error("more than 128 keys");
         else for (const [key, entry] of Object.entries(keyOrEntries)) data.set(key, clone(entry));
       })) as DurableObjects.ObjectStorage["put"],
     delete: ((keyOrKeys: string | ReadonlyArray<string>) =>
@@ -452,7 +456,113 @@ const rowsReadBy = <A, E, R>(stats: Stats, read: Effect.Effect<A, E, R>) =>
     return { result, rows: stats.rowsRead - before };
   });
 
+// ---------------------------------------------------------------- importing a ledger's history
+
+class Noted extends Domain.Event("Noted", { n: Schema.Number }) {}
+class Note extends Domain.Command("Note", {
+  target: Schema.String,
+  input: { n: Schema.Number },
+  events: [Noted],
+}) {}
+/** What the policy saw: every booking it reacted to. */
+class Audit extends Domain.Aggregate("Audit", {
+  id: Schema.String,
+  state: Schema.Struct({ seen: Schema.Array(Schema.Number) }),
+  initial: { seen: [] },
+  commands: [Note],
+  decide: { Note: (_, { n }) => [new Noted({ n })] },
+  evolve: { Noted: (audit, e) => ({ seen: [...audit.seen, e.n] }) },
+}) {}
+class AuditBookings extends Domain.Policy("AuditBookings", { from: Ledger, on: [Booked] }) {}
+const AuditBookingsLive = AuditBookings.toLayer(
+  Effect.gen(function* () {
+    const audits = yield* Audit;
+    return Effect.fn(function* ({ source, event }) {
+      yield* audits.send(source.id, new Note({ n: event.n }));
+    });
+  }),
+);
+
+class Imports extends Domain.Model("Imports", {
+  aggregates: [Ledger, Audit],
+  views: [Totals],
+  policies: [AuditBookings],
+  projections: [LinesWriter],
+  streams: [Lines],
+}) {}
+
+const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) =>
+  Imports.layer(Layer.mergeAll(LinesWriterLive, AuditBookingsLive)).pipe(
+    Layer.provideMerge(platform),
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
+  );
+
 describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
+  for (const [name, platform] of [
+    ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
+    ["the in-memory platform", () => InMemory],
+  ] as const) {
+    it.live(
+      `an import appends history once, to views and projections only, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const ledgers = yield* Ledger;
+          const ledger = Ledger.ref("imported");
+          const booked = (from: number, to: number) =>
+            Array.from({ length: to - from + 1 }, (_, i) => new Booked({ n: from + i }));
+
+          const first = yield* ledgers.import(ledger, booked(1, 3), { commandId: "import:1" });
+          expect(first.stream).toBe("Ledger/imported");
+          expect(first.version).toBe(3);
+          expect(first.events.map((event) => event.n)).toEqual([1, 2, 3]);
+          expect(yield* ledgers.get(ledger)).toEqual({ count: 3 });
+
+          // A retry commits nothing and answers the first receipt.
+          expect(yield* ledgers.import(ledger, booked(1, 3), { commandId: "import:1" })).toEqual(
+            first,
+          );
+          // Another import expects an instance with no events.
+          const refused = yield* ledgers
+            .import(ledger, booked(1, 3), { commandId: "import:again" })
+            .pipe(Effect.flip);
+          expect(refused).toMatchObject({
+            _tag: "UnexpectedVersion",
+            aggregate: "Ledger",
+            id: "imported",
+            expected: 0,
+            version: 3,
+          });
+
+          // The next batch continues from the previous receipt, more than a storage put takes.
+          const second = yield* ledgers.import(ledger, booked(4, 203), {
+            commandId: "import:2",
+            expectedVersion: first.version,
+          });
+          expect(second.version).toBe(203);
+
+          const atLeast = { stream: second.stream, version: second.version };
+          expect(yield* (yield* Totals).get(ledger, { atLeast })).toEqual(
+            Option.some({ count: 203 }),
+          );
+          yield* LinesWriter.caughtUp(second, { timeout: "30 seconds" });
+          const { entries } = yield* (yield* Lines).list(ledger);
+          expect(entries.map((entry) => entry.event.n)).toEqual(booked(1, 203).map((e) => e.n));
+
+          // A command after the import is decided from the imported state, and
+          // the policy reacts to its event alone.
+          const sent = yield* ledgers.send(ledger, new BookMany({ count: 1 }));
+          expect(sent.version).toBe(204);
+          const audits = yield* Audit;
+          yield* Effect.gen(function* () {
+            while ((yield* audits.get("imported")).seen.length === 0)
+              yield* Effect.sleep("20 millis");
+          }).pipe(Effect.timeout("15 seconds"));
+          expect(yield* audits.get("imported")).toEqual({ seen: [204] });
+        }).pipe(Effect.scoped, Effect.provide(importsOn(platform()))),
+      { timeout: 60_000 },
+    );
+  }
+
   it.live(
     "a stream's list reads only the page it returns",
     () => {

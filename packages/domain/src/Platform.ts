@@ -185,6 +185,22 @@ export type SendResult =
   | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
 
 /**
+ * Result of {@link AggregateStore.import}: the receipt, or the version the
+ * instance was at when it was not the one expected.
+ */
+export type ImportResult =
+  | { readonly _tag: "Imported"; readonly receipt: ReceiptJson }
+  | { readonly _tag: "UnexpectedVersion"; readonly version: number };
+
+/**
+ * What {@link AggregateStore.import} receives with the events.
+ */
+export interface ImportMeta {
+  readonly commandId: string;
+  readonly expectedVersion: number;
+}
+
+/**
  * The kernel for one aggregate type, handed to a platform.
  */
 export interface AggregateKit {
@@ -196,7 +212,7 @@ export interface AggregateKit {
   readonly handle: (input: HandleInput) => Effect.Effect<HandleResult>;
   /**
    * Fold already-decided events into state and route them, without running
-   * `decide`. Used to seed history (story `given`).
+   * `decide`. Used to seed history (story `given`) and to import it.
    */
   readonly seed: (input: SeedInput) => Effect.Effect<SeedResult>;
   /** Route a delivery produced by `handle` to its target's host. */
@@ -289,6 +305,20 @@ export interface AggregateStore {
    * trigger policies (tests; optional).
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
+  /**
+   * Append events without deciding, once per `meta.commandId`: single writer
+   * per id; a seen `commandId` answers its stored receipt; otherwise, unless
+   * the instance is at `meta.expectedVersion`, commit nothing and answer
+   * `UnexpectedVersion`. Persist events, state, receipt and deliveries
+   * atomically, as `send` does. The events reach views and projections as
+   * history, and never trigger policies. Optional: a client fails with a
+   * defect on a platform without it.
+   */
+  readonly import?: (
+    id: string,
+    events: ReadonlyArray<Json>,
+    meta: ImportMeta,
+  ) => Effect.Effect<ImportResult>;
 }
 
 /** How much history has reached a consumer: see `View.History`. */
