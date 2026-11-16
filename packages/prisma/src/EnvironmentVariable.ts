@@ -13,6 +13,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import { isActionState, State } from "alchemy/State/State";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -119,10 +120,25 @@ export interface EnvironmentVariable extends Resource<
 > {}
 
 /**
- * A Prisma compute environment variable.
+ * A Prisma Compute environment variable, in a project and either at project
+ * level or on one Branch.
  *
- * Values are write-only in Prisma. Alchemy stores them as `Redacted` values
- * and reapplies the desired value to repair drift.
+ * A variable belongs to its project and Branch, not to one service: every
+ * service on that Branch reads it, and Prisma copies it into a version when
+ * the version is created. A running version keeps the values it was created
+ * with, so a changed value reaches the app in the next version (see
+ * `Prisma.ComputeVersion`'s `triggers`, which `Prisma.Compute` sets for you).
+ *
+ * Values are write-only in Prisma. Alchemy reapplies the desired value on
+ * every deploy to repair drift. The value is stored in Alchemy state inside a
+ * redaction marker, as plain text.
+ *
+ * :::caution
+ * Changing `project`, `branchId`, `class` or `key` replaces the variable. A
+ * key that already exists in the scope fails the deploy with
+ * `EnvironmentVariableConflict`, which names the other declarations in the
+ * stack; adopt it explicitly if it is the intended variable.
+ * :::
  *
  * ### Creating a Variable
  * **Example:** Project-level production variable
@@ -148,40 +164,118 @@ export interface EnvironmentVariable extends Resource<
  * });
  * ```
  *
+ * ### Values That Resolve to Nothing
+ * A value that resolves to `undefined` declares no variable, and deletes the
+ * one this resource wrote before. `environmentVariableId` is then `null`.
+ *
+ * **Example:** Set a variable only when an optional output has a value
+ * ```typescript
+ * yield* Prisma.EnvironmentVariable("accelerate-url", {
+ *   project,
+ *   class: "production",
+ *   key: "ACCELERATE_URL",
+ *   // Undefined when the connection has no Accelerate URL.
+ *   value: connection.accelerateConnectionString,
+ * });
+ * ```
+ *
  * @resource
  * @product Compute
  */
 export const EnvironmentVariable = Resource<EnvironmentVariable>("Prisma.EnvironmentVariable");
 
-/** The resources in this stack, other than `fqn`, that declare a variable with `key`. */
-const otherDeclarers = Effect.fn(function* (fqn: string, key: string) {
+/** Where a variable lives on the platform: two variables with one scope are one variable. */
+interface VariableScope {
+  readonly projectId: string;
+  readonly class: string;
+  readonly branchId: string | null;
+  readonly key: string;
+}
+
+const sameScope = (left: VariableScope, right: Partial<VariableScope>) =>
+  left.projectId === right.projectId &&
+  left.class === right.class &&
+  left.branchId === (right.branchId ?? null) &&
+  left.key === right.key;
+
+/**
+ * The other resources in this stack that declare the variable in `scope`:
+ * those whose saved attributes name it, and those declared with literal props
+ * that do. A scope that is not known yet is not counted as shared.
+ */
+const otherDeclarers = Effect.fn(function* (fqn: string, scope: VariableScope) {
   const stack = yield* Effect.serviceOption(Stack);
   if (Option.isNone(stack)) return [];
-  return Object.values(stack.value.resources).flatMap((resource) =>
-    resource.Type === "Prisma.EnvironmentVariable" &&
-    resource.FQN !== fqn &&
-    (resource.Props as Partial<EnvironmentVariableProps> | undefined)?.key === key
-      ? [resource.FQN]
-      : [],
-  );
+  const { name, stage } = stack.value;
+  const found = new Set<string>();
+  for (const resource of Object.values(stack.value.resources)) {
+    if (resource.Type !== "Prisma.EnvironmentVariable" || resource.FQN === fqn) continue;
+    const props = resource.Props as Partial<EnvironmentVariableProps> | undefined;
+    if (
+      typeof props?.project === "string" &&
+      typeof props.class === "string" &&
+      (props.branchId === undefined || typeof props.branchId === "string") &&
+      sameScope(scope, { ...props, projectId: props.project })
+    ) {
+      found.add(resource.FQN);
+    }
+  }
+  const state = yield* Effect.serviceOption(State);
+  if (Option.isSome(state)) {
+    const store = yield* state.value;
+    for (const other of yield* store.list({ stack: name, stage })) {
+      if (other === fqn) continue;
+      const row = yield* store.get({ stack: name, stage, fqn: other });
+      if (
+        row &&
+        !isActionState(row) &&
+        row.resourceType === "Prisma.EnvironmentVariable" &&
+        row.status !== "deleting" &&
+        row.attr !== undefined &&
+        sameScope(scope, row.attr as Partial<VariableScope>)
+      ) {
+        found.add(other);
+      }
+    }
+  }
+  return [...found];
 });
 
-const scopeOf = (projectId: string, cls: string, branchId: string | null | undefined) =>
-  `project '${projectId}', class '${cls}', ${branchId ? `Branch '${branchId}'` : "project level"}`;
+/** Whether another resource's saved attributes hold the variable `environmentVariableId`. */
+const heldByAnother = Effect.fn(function* (fqn: string, environmentVariableId: string) {
+  const stack = yield* Effect.serviceOption(Stack);
+  const state = yield* Effect.serviceOption(State);
+  if (Option.isNone(stack) || Option.isNone(state)) return false;
+  const { name, stage } = stack.value;
+  const store = yield* state.value;
+  for (const other of yield* store.list({ stack: name, stage })) {
+    if (other === fqn) continue;
+    const row = yield* store.get({ stack: name, stage, fqn: other });
+    if (
+      row &&
+      !isActionState(row) &&
+      row.resourceType === "Prisma.EnvironmentVariable" &&
+      row.status !== "deleting" &&
+      (row.attr as Partial<EnvironmentVariable["Attributes"]> | undefined)
+        ?.environmentVariableId === environmentVariableId
+    ) {
+      return true;
+    }
+  }
+  return false;
+});
+
+const describeScope = (scope: VariableScope) =>
+  `project '${scope.projectId}', class '${scope.class}', ${scope.branchId ? `Branch '${scope.branchId}'` : "project level"}`;
 
 /** The same key in one project and Branch scope, explained. */
-const sharedKeyError = Effect.fn(function* (
-  fqn: string,
-  key: string,
-  scope: string,
-  cause?: unknown,
-) {
-  const others = yield* otherDeclarers(fqn, key);
+const sharedKeyError = Effect.fn(function* (fqn: string, scope: VariableScope, cause?: unknown) {
+  const others = yield* otherDeclarers(fqn, scope);
   return new EnvironmentVariableConflict({
     message:
-      `Prisma environment variable '${key}' already exists in ${scope}. A variable belongs to its project and Branch, not to one service: every service on that Branch reads it. ` +
+      `Prisma environment variable '${scope.key}' already exists in ${describeScope(scope)}. A variable belongs to its project and Branch, not to one service: every service on that Branch reads it. ` +
       (others.length > 0
-        ? `This stack declares '${key}' at '${fqn}' and also at '${others.join("', '")}', for example two Prisma.Compute that both list '${key}' in env; they would write the same variable. Declare it in one of them, or as one Prisma.EnvironmentVariable that both services read.`
+        ? `This stack declares '${scope.key}' in that scope at '${fqn}' and also at '${others.join("', '")}', for example two Prisma.Compute on one Branch that both list '${scope.key}' in env; they would write the same variable. Declare it in one of them, or as one Prisma.EnvironmentVariable that both services read.`
         : `It appeared after the adoption check and was not written by '${fqn}'. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable, or remove it first.`),
     cause,
   });
@@ -424,12 +518,10 @@ const ProviderLive = () =>
               )
             : yield* findVariableInProject;
           if (!variable) return undefined;
-          if (variableId === undefined && (yield* otherDeclarers(fqn, olds.key)).length > 0) {
-            return yield* yield* sharedKeyError(
-              fqn,
-              olds.key,
-              scopeOf(variable.projectId, variable.class, variable.branchId),
-            );
+          // Another resource in this stack holds this variable, so it is not
+          // this one's to adopt or delete; creating it reports the shared key.
+          if (variableId === undefined && (yield* heldByAnother(fqn, variable.id))) {
+            return undefined;
           }
           const attrs = attrsFrom(
             variable,
@@ -498,8 +590,12 @@ const ProviderLive = () =>
                 Effect.flatMap(
                   sharedKeyError(
                     fqn,
-                    news.key,
-                    scopeOf(projectId, news.class, news.branchId),
+                    {
+                      projectId,
+                      class: news.class,
+                      branchId: news.branchId ?? null,
+                      key: news.key,
+                    },
                     conflict,
                   ),
                   Effect.fail,

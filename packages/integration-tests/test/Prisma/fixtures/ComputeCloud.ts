@@ -210,6 +210,20 @@ export const makeComputeCloud = () => {
       );
     }
     if (head === "services" && id === undefined && request.method === "POST") {
+      // The platform refuses a second service with one name on a Branch.
+      const taken = [...services.values()].some(
+        (service) =>
+          service.projectId === String(body?.projectId) &&
+          service.branchId === ((body?.branchId as string | undefined) ?? null) &&
+          service.name === String(body?.displayName),
+      );
+      if (taken) {
+        return failure(
+          409,
+          "conflict",
+          `An app named "${String(body?.displayName)}" already exists on branch "${String(body?.branchId)}".`,
+        );
+      }
       const number = nextService++;
       const service: WireService = {
         id: `svc-${number}`,

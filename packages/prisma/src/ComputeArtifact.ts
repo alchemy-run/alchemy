@@ -162,6 +162,42 @@ export interface ComputeArtifact extends Resource<
  * });
  * ```
  *
+ * **Example:** Package a static site with its HTTP server
+ * ```typescript
+ * const artifact = yield* Prisma.ComputeArtifact("docs-artifact", {
+ *   path: "./apps/docs",
+ *   build: { type: "static", command: "bun run build", outdir: "dist", spa: true },
+ * });
+ * ```
+ *
+ * **Example:** Bundle an Effect-native module
+ * ```typescript
+ * const artifact = yield* Prisma.ComputeArtifact("api-artifact", {
+ *   main: "./src/api.ts",
+ *   port: 8080,
+ * });
+ * ```
+ *
+ * ### Choosing What Is Hashed
+ * **Example:** Rebuild when a sibling workspace package changes
+ * ```typescript
+ * const artifact = yield* Prisma.ComputeArtifact("web-artifact", {
+ *   path: "./apps/web",
+ *   build: { command: "bun run build", outdir: "dist", entrypoint: "server.js" },
+ *   memo: { include: ["src/**", "package.json", "../../packages/ui/src/**"], lockfile: true },
+ * });
+ * ```
+ *
+ * **Example:** Build on every deploy
+ * ```typescript
+ * const artifact = yield* Prisma.ComputeArtifact("web-artifact", {
+ *   path: "./apps/web",
+ *   build: { command: "bun run build", outdir: "dist", entrypoint: "server.js" },
+ *   // Each deploy also creates a new version.
+ *   memo: false,
+ * });
+ * ```
+ *
  * @resource
  * @product Compute
  */
@@ -222,7 +258,8 @@ export const ComputeArtifactProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ id }) {
-          const directory = yield* resolveStoredPath(yield* directoryOf(id));
+          const stored = yield* directoryOf(id);
+          const directory = yield* resolveStoredPath(stored);
           yield* fs.remove(directory, { recursive: true, force: true });
         }),
       };

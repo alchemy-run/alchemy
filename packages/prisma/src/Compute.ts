@@ -263,7 +263,8 @@ export interface ComputeProps extends PlatformProps {
    * Serve from this Compute service instead of declaring one. Declare the
    * services first, then the Computes, to put a service's own URL, or another
    * service's, into the environment. With `service`, `project`, `serviceName`,
-   * `regionId`, `branchId` and `branchGitName` cannot be set. A service given
+   * `regionId`, `branchId`, `branchGitName` and `envClass` cannot be set:
+   * they belong to the service. A service given
    * by its ID requires `skipPromote: true`, because its active version can
    * only be attached to a `Prisma.ComputeService` declared in this stack.
    */
@@ -407,8 +408,9 @@ export interface ComputeProps extends PlatformProps {
   destroyOldDeployment?: boolean;
   /**
    * Extra values that create a new version when they change, for inputs the
-   * application reads that Compute does not write itself. Merged into the
-   * version's `triggers`; see `Prisma.ComputeVersion`.
+   * application reads that Compute does not write itself. Recorded under the
+   * key `triggers` of the version's `triggers`, beside the digests of the
+   * environment; see `Prisma.ComputeVersion`.
    */
   triggers?: Record<string, unknown>;
   /**
@@ -559,10 +561,12 @@ export const isCompute = (value: unknown): value is Compute =>
   typeof value === "object" && value !== null && "Type" in value && value.Type === ComputeTypeId;
 
 /**
- * Build and deploy an application to Prisma Compute.
+ * Build and deploy an application to Prisma Compute: a service with a stable
+ * URL, its environment variables, and a version built from your code that the
+ * service serves.
  *
- * `Prisma.Compute("api", props)` declares child resources and reports their
- * outputs:
+ * `Prisma.Compute("api", props)` declares these child resources and reports
+ * their outputs as its own attributes:
  *
  * | Resource | Logical ID | Declared |
  * | --- | --- | --- |
@@ -571,45 +575,103 @@ export const isCompute = (value: unknown): value is Compute =>
  * | `Prisma.ComputeArtifact` | `api/Artifact` | unless `artifactPath` or `skipCodeUpload` is set |
  * | `Prisma.ComputeVersion` | `api/Version` | always |
  *
- * The version is attached to the service as its active version unless
- * `skipPromote` is set. A replaced version is kept on the platform unless
- * `destroyOldDeployment` is set, whatever removal policy the stack uses.
+ * The variables are written before the version is created, because Prisma
+ * copies them into a version when it creates it. A changed value, artifact or
+ * port creates a new version, which becomes the service's active version
+ * unless `skipPromote` is set. The service's logical ID on the platform is
+ * the Compute's own: `api`, or `Site.api` under the namespace `Site`.
+ *
+ * A replaced version is kept on the platform, where it scales to zero and the
+ * platform's rollback can return to it, whatever removal policy the stack
+ * uses. Set `destroyOldDeployment` to delete it instead.
  *
  * Under `alchemy dev` no cloud resource is declared: `dev.command` runs as a
  * `Command.Dev` at `api/Dev`, and `url` is the local URL. `Alchemy.remote()`
  * on the Compute deploys it to the cloud instead.
  *
- * A decoration such as `RemovalPolicy.retain()` piped onto
- * `yield* Prisma.Compute("api", props)` reaches every child. For the class
- * form, pipe it around `Effect.provide` of the class's Layer; piped onto
- * `yield*` of the class, it reaches nothing.
- *
- * A stack deployed with an earlier version of this package, which managed the
- * service inside this one resource, cannot be upgraded in place: the deploy
- * and `alchemy destroy` stop with `ComputeCannotUpgradeInPlace` before
- * anything changes, and its message lists the steps to move.
+ * :::caution
+ * A stack deployed with an earlier release of `@alchemy.run/prisma`, which
+ * kept the service inside this one resource, is refused with
+ * `ComputeCannotUpgradeInPlace`: on deploy, before anything changes, and when
+ * the Compute is removed or the stack destroyed, without changing or deleting
+ * the old service. The error lists the options: use that earlier release, or
+ * forget the old service with `alchemy state delete` and deploy a new one
+ * with a new URL.
+ * :::
  *
  * ### Deploying a Service
  * **Example:** Deploy a directory with an entrypoint
  * ```typescript
+ * const project = yield* Prisma.Project("project", { createDatabase: false });
  * const app = yield* Prisma.Compute("api", {
- *   project: project.projectId,
+ *   project,
  *   path: "./apps/api",
  *   entrypoint: "server.ts",
  *   port: 3000,
  * });
+ * // app.url is the service's stable URL.
  * ```
  *
+ * **Example:** Deploy a prebuilt tar.gz artifact
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   artifactPath: "./dist/app.tar.gz",
+ *   port: 8080,
+ * });
+ * ```
+ *
+ * ### Building the Artifact
+ * The build runs again only when its inputs change; see
+ * `Prisma.ComputeArtifact` for what is hashed, and `memo` to widen it.
+ *
+ * **Example:** Run a build command
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   build: {
+ *     command: "bun build src/server.ts --target bun --outdir dist",
+ *     outdir: "dist",
+ *     entrypoint: "server.js",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Auto-build a framework app
+ * ```typescript
+ * const app = yield* Prisma.Compute("web", {
+ *   project,
+ *   path: "./apps/web",
+ *   build: "auto",
+ * });
+ * ```
+ *
+ * **Example:** Deploy a static site
+ * ```typescript
+ * const web = yield* Prisma.Compute("web", {
+ *   project,
+ *   path: "./site",
+ *   build: { type: "static", outdir: ".", spa: true },
+ * });
+ * ```
+ *
+ * **Example:** Rebuild when a sibling workspace package changes
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   build: { command: "bun run build", outdir: "dist", entrypoint: "server.js" },
+ *   memo: { include: ["src/**", "package.json", "../../packages/shared/src/**"], lockfile: true },
+ * });
+ * ```
+ *
+ * ### Effect-native Apps
  * **Example:** Deploy an Effect-native HTTP app
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
- *   {
- *     project,
- *     serviceName: "api",
- *     main: import.meta.filename,
- *     port: 8080,
- *   },
+ *   { project, main: import.meta.filename, port: 8080 },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
@@ -644,15 +706,15 @@ export const isCompute = (value: unknown): value is Compute =>
  * ```
  *
  * ### Runtime Bindings
+ * A binding adds environment variables, which become
+ * `Prisma.EnvironmentVariable` resources like those in `env`, and override a
+ * key `env` also sets.
+ *
  * **Example:** Bind a Prisma Connection
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
- *   {
- *     project,
- *     serviceName: "api",
- *     main: import.meta.filename,
- *   },
+ *   { project, main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connect(connection);
  *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
@@ -667,73 +729,75 @@ export const isCompute = (value: unknown): value is Compute =>
  * );
  * ```
  *
- * **Example:** Build before upload and delete replaced versions
+ * ### Environment Variables
+ * Variables belong to the project and the service's Branch, not to one
+ * service: two Computes on one Branch cannot both declare a key.
+ *
+ * **Example:** Set variables, and drop one
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
- *   project: project.projectId,
- *   path: "./apps/api",
- *   build: {
- *     command: "bun build src/server.ts --target bun --outdir dist",
- *     outdir: "dist",
- *     entrypoint: "server.js",
- *   },
- *   port: 8080,
- *   env: {
- *     // Use this for a standalone Connection. A project's default database
- *     // is injected by Prisma without an explicit DATABASE_URL entry.
- *     DATABASE_URL: connection.databaseUrl,
- *   },
- *   destroyOldDeployment: true,
- * });
- * ```
- *
- * **Example:** Auto-build a framework app
- * ```typescript
- * const app = yield* Prisma.Compute("api", {
- *   project: project.projectId,
- *   path: "./apps/web",
- *   build: "auto",
- *   destroyOldDeployment: true,
- * });
- * ```
- *
- * **Example:** Deploy a static site
- * ```typescript
- * const web = yield* Prisma.Compute("web", {
  *   project,
- *   path: "./site",
- *   build: {
- *     type: "static",
- *     outdir: ".",
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ *   env: {
+ *     LOG_LEVEL: "info",
+ *     API_TOKEN: Redacted.make(process.env.API_TOKEN!),
+ *     // `null` declares no variable; one declared before is deleted.
+ *     LEGACY_FLAG: null,
  *   },
  * });
  * ```
  *
- * **Example:** Deploy a prebuilt tar.gz artifact
+ * **Example:** Create a new version when another input changes
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
- *   project: project.projectId,
- *   artifactPath: "./dist/app.tar.gz",
- *   port: 8080,
+ *   project,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ *   // The app reads flags.json at start, which Compute does not write.
+ *   // Changing this value creates a new version.
+ *   triggers: { flags: "2026-11-17" },
  * });
  * ```
  *
- * ### Deployment Health
+ * ### Versions and Rollback
  * **Example:** Require application readiness before promotion
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project,
  *   path: "./apps/api",
  *   entrypoint: "server.ts",
- *   healthCheck: {
- *     path: "/api/health",
- *     // Defaults to any 2xx response when omitted.
- *     statusCodes: [200, 204],
- *   },
+ *   // Checked on the version's preview URL, then on the stable URL after
+ *   // promotion. When the stable check fails, the service is restored.
+ *   healthCheck: { path: "/api/health", statusCodes: [200, 204] },
+ * });
+ * ```
+ *
+ * **Example:** Delete replaced versions instead of keeping them
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ *   destroyOldDeployment: true,
+ * });
+ * ```
+ *
+ * **Example:** Create versions without serving them
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ *   // app.url is the version's preview URL.
+ *   skipPromote: true,
  * });
  * ```
  *
  * ### Using a Declared Service
+ * Declare the services first, then the Computes, to put a service's own URL,
+ * or another service's, into the environment.
+ *
  * **Example:** Put a service's own URL into its environment
  * ```typescript
  * const service = yield* Prisma.ComputeService("web-service", { project });
@@ -745,17 +809,58 @@ export const isCompute = (value: unknown): value is Compute =>
  * });
  * ```
  *
+ * **Example:** Two services that call each other
+ * ```typescript
+ * const webService = yield* Prisma.ComputeService("web-service", { project });
+ * const apiService = yield* Prisma.ComputeService("api-service", { project });
+ * yield* Prisma.Compute("web", {
+ *   service: webService,
+ *   path: "./apps/web",
+ *   entrypoint: "server.ts",
+ *   env: { API_URL: apiService.url },
+ * });
+ * yield* Prisma.Compute("api", {
+ *   service: apiService,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ *   env: { WEB_URL: webService.url },
+ * });
+ * ```
+ *
+ * ### Removal Policies and Other Decorations
+ * A decoration piped onto `yield* Prisma.Compute(...)` reaches every child.
+ * For a class whose Layer comes from `.make(...)`, pipe it around
+ * `Effect.provide` of that Layer: piped onto `yield*` of the class alone, it
+ * reaches nothing. The version keeps its own policy either way.
+ *
+ * **Example:** Keep everything on the platform when the stack is destroyed
+ * ```typescript
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ * }).pipe(RemovalPolicy.retain());
+ * ```
+ *
+ * **Example:** Decorate a class-form Compute
+ * ```typescript
+ * class Api extends Prisma.Compute<Api>()("api") {}
+ * const ApiLive = Api.make(
+ *   { project, main: import.meta.filename },
+ *   Effect.succeed({ fetch: Effect.succeed(HttpServerResponse.text("ok")) }),
+ * );
+ * const api = yield* Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain());
+ * ```
+ *
  * ### Local Development
  * **Example:** Run locally during alchemy dev
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
- *   project: project.projectId,
+ *   project,
  *   path: "./apps/api",
  *   entrypoint: "server.ts",
- *   dev: {
- *     command: "bun run dev",
- *     port: 3000,
- *   },
+ *   // Alchemy sets PORT and waits until the port accepts a connection.
+ *   dev: { command: "bun run dev", port: 3000 },
  * });
  * ```
  *
@@ -1145,8 +1250,9 @@ const declareCloud = Effect.fn(function* (
       urlReadinessTimeoutSeconds: props.urlReadinessTimeoutSeconds,
       timeoutSeconds: props.timeoutSeconds,
       pollIntervalMs: props.pollIntervalMs,
+      // The caller's map has its own key, so none of its keys can collide.
       triggers: {
-        ...props.triggers,
+        ...(props.triggers === undefined ? {} : { triggers: props.triggers }),
         environment: environmentDigests,
         ...(props.service === undefined
           ? {
@@ -1268,7 +1374,8 @@ const declareAfterInit = (id: string, runtimeEnv: EnvironmentInput) =>
     if (globalThis.__ALCHEMY_RUNTIME__) return;
     const stack = yield* Effect.serviceOption(StackContext);
     if (Option.isNone(stack)) return;
-    const host = stack.value.resources[toFqn(yield* CurrentNamespace, id)];
+    const namespace = yield* CurrentNamespace;
+    const host = stack.value.resources[toFqn(namespace, id)];
     const declare = host === undefined ? undefined : pendingCompositions.get(host);
     if (declare) yield* declare(runtimeEnv);
   });
@@ -1299,7 +1406,12 @@ const compositionOf = (bindings: unknown): ComputeComposition | undefined =>
 /** Whether the composed provider wrote the row. */
 const isComposed = (saved: object) => "composed" in saved && saved.composed === true;
 
-const cannotUpgradeInPlace = Effect.fn(function* (fqn: string) {
+/**
+ * The refusal of a row the earlier provider wrote. `deploy` is the plan of a
+ * deploy, which applies nothing; `delete` is its removal from the program or
+ * `alchemy destroy`, which reach it after the run's other changes.
+ */
+const cannotUpgradeInPlace = Effect.fn(function* (fqn: string, when: "deploy" | "delete") {
   const stack = yield* Effect.serviceOption(Stack);
   const address = Option.match(stack, {
     onNone: () => `<stack>/<stage>/${fqn}`,
@@ -1307,15 +1419,21 @@ const cannotUpgradeInPlace = Effect.fn(function* (fqn: string) {
   });
   return yield* new ComputeCannotUpgradeInPlace({
     message: [
-      `Prisma.Compute '${fqn}' was deployed with @alchemy.run/prisma 2.0.0-beta.87 or earlier, which kept the service, its environment variables and its current version inside this one resource. This version declares them as separate resources and cannot take over that service in place, so nothing was changed.`,
+      `Prisma.Compute '${fqn}' was deployed with an earlier release of @alchemy.run/prisma, from before Prisma.Compute declared its service, environment variables and version as separate resources. This release cannot take over that service in place.`,
+      when === "deploy"
+        ? "The deploy stopped while planning, so nothing was changed."
+        : "The old service, its versions and its environment variables were neither changed nor deleted. Other changes in this run were applied.",
       "",
-      "To keep deploying this stack as it is, stay on @alchemy.run/prisma 2.0.0-beta.87.",
+      "To keep deploying or destroy this stack as it is, use that earlier release: the last release before this change, listed in the changelog.",
       "",
-      "To move to this version, which serves from a new service with a new URL:",
+      "To move to this release, which serves from a new service with a new URL:",
       `1. Run \`alchemy state delete ${address}\`. Alchemy forgets the old service. It keeps running on Prisma with its URL, its versions and its environment variables.`,
-      "2. Deploy with `--adopt`, so the new environment variables take over the old service's variables of the same key, or delete those variables in the Prisma Console first.",
-      "3. Move custom domains to the new service, and update anything that uses the old URL.",
-      "4. Delete the old service in the Prisma Console once nothing uses it.",
+      "2. If the Compute sets serviceName, change it until the old service is deleted: a Branch cannot hold two services with one name.",
+      "3. Deploy with `--adopt`, so the new environment variables take over the old service's variables of the same key, or delete those variables in the Prisma Console first.",
+      "4. Move custom domains to the new service, and update anything that uses the old URL.",
+      "5. Delete the old service in the Prisma Console once nothing uses it.",
+      "",
+      `To destroy the stack on this release instead: run \`alchemy state delete ${address}\`, then \`alchemy destroy\`, and delete the old service in the Prisma Console.`,
     ].join("\n"),
   });
 });
@@ -1333,7 +1451,13 @@ const unchangedAttributes = (output: Compute["Attributes"], data: unknown) => {
     ["activeVersionId", next.activeVersionId],
     ["versionId", next.versionId],
     ["versionUrl", next.versionUrl],
+    ["versionEndpointDomain", next.versionEndpointDomain ?? undefined],
     ["environmentKeys", next.environmentKeys],
+    // Derived as `composedAttributes` derives it, from whichever URL serves.
+    [
+      "url",
+      next.promoted === undefined ? undefined : next.promoted ? next.serviceUrl : next.versionUrl,
+    ],
   ];
   return candidates.flatMap(([name, value]) =>
     isResolved(value) && deepEqual(value, output[name]) ? [name] : [],
@@ -1349,7 +1473,7 @@ const ProviderLive = () =>
         // The children own the platform objects; the service enumerates them.
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ fqn, output, newBindings }) {
-          if (output && !isComposed(output)) return yield* cannotUpgradeInPlace(fqn);
+          if (output && !isComposed(output)) return yield* cannotUpgradeInPlace(fqn, "deploy");
           if (!output) return undefined;
           return {
             action: "update",
@@ -1357,7 +1481,7 @@ const ProviderLive = () =>
           } as const;
         }),
         reconcile: Effect.fn(function* ({ fqn, output, bindings }) {
-          if (output && !isComposed(output)) return yield* cannotUpgradeInPlace(fqn);
+          if (output && !isComposed(output)) return yield* cannotUpgradeInPlace(fqn, "deploy");
           const data = compositionOf(bindings);
           if (!data) {
             return yield* new ComputeOperationFailed({
@@ -1369,7 +1493,7 @@ const ProviderLive = () =>
         // Deleting the children removes the platform objects. A row of the
         // earlier provider is refused: its delete removed the service.
         delete: Effect.fn(function* ({ fqn, output }) {
-          if (!isComposed(output)) return yield* cannotUpgradeInPlace(fqn);
+          if (!isComposed(output)) return yield* cannotUpgradeInPlace(fqn, "delete");
         }),
         tail: ({ output }) =>
           output.versionId ? tailDeploymentLogs(output.versionId) : Stream.empty,

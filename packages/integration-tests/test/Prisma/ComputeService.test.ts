@@ -174,7 +174,16 @@ live.test.provider(
 
     const initial = yield* stack.deploy(resources(false));
     const refused = yield* failureOf(stack.deploy(resources(true)));
-    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    // Both declare the logical ID, so the plan refuses the pair before any write.
+    expect(
+      refused.errors.some(
+        (error) =>
+          typeof error === "object" &&
+          error !== null &&
+          "_tag" in error &&
+          error._tag === "PrismaComputeServiceLogicalIdTaken",
+      ),
+    ).toBe(true);
 
     // First's App survives a deploy that drops the failed declaration.
     yield* stack.deploy(resources(false));

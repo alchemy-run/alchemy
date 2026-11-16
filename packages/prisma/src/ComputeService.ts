@@ -264,43 +264,61 @@ export interface ComputeServiceLookup {
 }
 
 /**
- * A Prisma Compute service, the long-lived application that owns its versions
- * and the stable endpoint.
+ * A Prisma Compute service: the long-lived application with a stable URL. It
+ * owns its versions, the immutable builds of your code, and serves one of them
+ * on its stable endpoint, its active version.
  *
  * Omit `branchId` and `branchGitName` to attach the service to the project's
- * current default branch. Service regions are immutable; create a second
- * service and cut traffic over when moving regions. Use `Prisma.Compute` for
- * the usual build, deploy, health-check, and promotion workflow; use
- * `ComputeService` directly when managing standalone `Prisma.ComputeVersion`
- * resources.
+ * current default branch. The Branch decides which environment variables the
+ * service's versions read: its role (`production` or `preview`) is the
+ * variables' class, reported as `branchRole`. Use `Prisma.Compute` for the
+ * usual build and deploy, which declares a service for you; use
+ * `ComputeService` with `Prisma.ComputeVersion` to manage versions yourself.
+ *
+ * The service is found again after lost state by its logical ID, which is
+ * unique per Branch: by default its address with each `/` replaced by `.`,
+ * such as `Site.Web`.
+ *
+ * :::caution
+ * The region is immutable: changing `regionId` fails the deploy. Changing the
+ * project replaces the service, with a new stable URL. Create a second
+ * service and move traffic to it instead.
+ * :::
  *
  * This resource was named `Prisma.App`. State saved under that type is still
- * read, and is rewritten under the new type on the next deploy.
+ * read, and is rewritten under the new type on the next deploy. A row saved
+ * as `Prisma.App` that is also attached with `activateVersion` in its first
+ * deploy stops with `ComputeServiceIdUnavailable`: deploy once without
+ * `activateVersion`, then add it.
  *
  * ### Creating a Service
  * **Example:** Service on the default branch
  * ```typescript
- * const service = yield* Prisma.ComputeService("web", {
- *   project,
- * });
+ * const project = yield* Prisma.Project("project", { createDatabase: false });
+ * const service = yield* Prisma.ComputeService("web", { project });
  * ```
  *
  * **Example:** Service on a preview branch
  * ```typescript
+ * const preview = yield* Prisma.Branch("preview", { project, gitName: "preview" });
  * const service = yield* Prisma.ComputeService("preview-web", {
  *   project,
  *   branchId: preview.branchId,
+ *   // Fails the deploy if the Branch's role is not preview.
+ *   envClass: "preview",
  * });
  * ```
  *
  * ### Serving a Version
- * A service serves one version on its stable endpoint, its active version.
- * Attach it with `Prisma.activateVersion`. On every deploy the service
- * promotes the attached version, waits until the platform reports it as live,
- * and checks the stable URL. When the check fails, the service is rolled back
- * to the version that was active before and the deploy fails. A service with
- * no attached version keeps serving whatever it serves. The service never
- * stops or deletes a version.
+ * Attach one version with `Prisma.activateVersion`; a second attached version
+ * fails the plan with `ComputeServiceTooManyActiveVersions`. On every deploy
+ * the service promotes the attached version, waits until the platform reports
+ * it as live, and checks the stable URL. When the check fails, the service is
+ * restored to the version it served before and the deploy fails with
+ * `ComputeServiceEndpointCheckFailed`. A version that is not running fails
+ * with `ComputeServiceVersionNotRunning` before promotion. A service with no
+ * attached version keeps serving whatever it serves. The service never stops
+ * or deletes a version.
  *
  * **Example:** Serve a new artifact on the stable endpoint
  * ```typescript
@@ -311,8 +329,25 @@ export interface ComputeServiceLookup {
  * const version = yield* Prisma.ComputeVersion("web-version", {
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
+ *   artifactContentType: "application/gzip",
  * });
  * yield* Prisma.activateVersion(service, version);
+ * ```
+ *
+ * ### Rolling Back
+ * A new artifact replaces the version, and the replaced one is kept on the
+ * platform, where it scales to zero. The platform's rollback, in the Prisma
+ * Console or through its API, serves a kept version again within seconds. The
+ * next deploy promotes the declared version again.
+ *
+ * **Example:** Roll the service back to the version it served before
+ * ```typescript
+ * import { createServiceRollback } from "@distilled.cloud/prisma/management";
+ *
+ * yield* createServiceRollback({
+ *   serviceId: service.serviceId,
+ *   deploymentId: previousVersionId,
+ * });
  * ```
  *
  * ### Looking up an existing Service
@@ -440,7 +475,8 @@ const branchRoleOf = (app: ObservedApp) =>
     : getBranch({ branchId: app.branchId }).pipe(Effect.map((response) => response.data.role));
 
 const attrsFrom = Effect.fn(function* (app: ObservedApp) {
-  return attrsWithRole(app, yield* branchRoleOf(app));
+  const role = yield* branchRoleOf(app);
+  return attrsWithRole(app, role);
 });
 
 const attrsWithRole = (

@@ -62,6 +62,17 @@ export interface WebsiteArtifact extends Resource<
   }
 > {}
 
+/**
+ * The Compute artifact of a `Prisma.Website.*` site: its build output, traced
+ * runtime files and server entry, archived on this machine. It makes no
+ * Prisma API calls.
+ *
+ * It stages again only when the application root's files that git does not
+ * ignore, the nearest lockfile, the build output or the props change. The
+ * archive is named by its SHA-256 and its path is relative to the working
+ * directory the deploy started in, so an unchanged site keeps its version on
+ * a machine that never built it, such as a CI runner.
+ */
 export const WebsiteArtifact = Resource<WebsiteArtifact>("Prisma.WebsiteArtifact");
 
 const MAX_ENTRIES = 50_000;
@@ -97,7 +108,8 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.realPath(path.resolve(initialCwd, props.root));
-  const runtimeBase = process.cwd();
+  // `.alchemy` paths resolve against the directory the deploy started in.
+  const runtimeBase = initialCwd;
   const dotAlchemy = yield* dotAlchemyDirectory;
   const dist = yield* fs.realPath(path.resolve(initialCwd, props.distDir));
   const entry =
@@ -391,9 +403,11 @@ export const WebsiteArtifactProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const inputHash = yield* websiteInputsHash(news);
+          const storedArchive = output ? yield* resolveStoredPath(output.artifactPath) : undefined;
           if (
             output?.inputHash === inputHash &&
-            (yield* fs.exists(yield* resolveStoredPath(output.artifactPath)))
+            storedArchive !== undefined &&
+            (yield* fs.exists(storedArchive))
           ) {
             return output;
           }
@@ -417,10 +431,8 @@ export const WebsiteArtifactProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* fs.remove(yield* resolveStoredPath(output.directory), {
-            recursive: true,
-            force: true,
-          });
+          const directory = yield* resolveStoredPath(output.directory);
+          yield* fs.remove(directory, { recursive: true, force: true });
         }),
       };
     }),

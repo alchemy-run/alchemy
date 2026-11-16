@@ -757,7 +757,6 @@ sharedKey.test.provider(
       expect(error).toContain("EnvironmentVariableConflict");
       expect(error).toContain("'API_KEY'");
       expect(error).toContain("not to one service");
-      expect(error).toMatch(/'(web|api)\/Env\/API_KEY' and also at '(web|api)\/Env\/API_KEY'/);
 
       // A later deploy, which finds the variable already written, says the same.
       const again = yield* stack
@@ -769,6 +768,183 @@ sharedKey.test.provider(
         )
         .pipe(Effect.flip, Effect.map(String));
       expect(again).toContain("not to one service");
+      expect(again).toMatch(/'(web|api)\/Env\/API_KEY' and also at '(web|api)\/Env\/API_KEY'/);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const otherScopes = harness();
+otherScopes.test.provider(
+  "does not count the same key in another project as shared, so an adopting deploy takes over its own variable",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = otherScopes;
+      yield* stack.destroy();
+      // Left on the platform in project-2 by lost state.
+      cloud.variables.set("env-lost", {
+        id: "env-lost",
+        type: "environment_variable",
+        url: "",
+        projectId: "project-2",
+        branchId: null,
+        class: "production",
+        key: "DATABASE_URL",
+        valueKid: "kid-1",
+        isManagedBySystem: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+      const program = Effect.gen(function* () {
+        yield* Compute("one", {
+          ...base,
+          artifactPath: artifactV1,
+          env: { DATABASE_URL: "postgres://one" },
+        });
+        yield* Compute("two", {
+          ...base,
+          project: "project-2",
+          artifactPath: artifactV2,
+          env: { DATABASE_URL: "postgres://two" },
+        });
+      });
+
+      yield* stack.deploy(program.pipe(adopt(true)));
+      expect(cloud.values.get("env-lost")).toBe("postgres://two");
+      expect(cloud.variables.size).toBe(2);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const readsUrl = harness();
+readsUrl.test.provider(
+  "creates no new version for either Compute when one reads the other's url and nothing changed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = readsUrl;
+      yield* stack.destroy();
+      const program = Effect.gen(function* () {
+        const web = yield* Compute("web", { ...base, artifactPath: artifactV1 });
+        const api = yield* Compute("api", {
+          ...base,
+          artifactPath: artifactV2,
+          env: { WEB_URL: web.url },
+        });
+        return { web, api };
+      });
+
+      const first = yield* stack.deploy(program);
+      expect(cloud.versionEnvironment.get(first.api.versionId!)).toEqual({
+        WEB_URL: first.web.url,
+      });
+      const second = yield* stack.deploy(program);
+      expect(second.web.versionId).toBe(first.web.versionId);
+      expect(second.api.versionId).toBe(first.api.versionId);
+      expect(cloud.deployments.size).toBe(2);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const callerTriggers = harness();
+callerTriggers.test.provider(
+  "keeps a caller's triggers apart from the environment digests, whatever their keys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = (value: string, release: string) =>
+        Compute("api", {
+          ...base,
+          artifactPath: artifactV1,
+          env: { A: value },
+          triggers: { environment: release, branch: release },
+        });
+
+      const first = yield* stack.deploy(app("one", "r1"));
+      const triggers = (yield* rows(stack))["api/Version"]?.props.triggers;
+      expect(triggers.triggers).toEqual({ environment: "r1", branch: "r1" });
+      expect(Object.keys(triggers.environment)).toEqual(["A"]);
+
+      const value = yield* stack.deploy(app("two", "r1"));
+      expect(value.versionId).not.toBe(first.versionId);
+      const release = yield* stack.deploy(app("two", "r2"));
+      expect(release.versionId).not.toBe(value.versionId);
+      const unchanged = yield* stack.deploy(app("two", "r2"));
+      expect(unchanged.versionId).toBe(release.versionId);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const forwarded = harness();
+forwarded.test.provider(
+  "forwards healthCheck to the version and the service, which restores the earlier version when the stable URL fails",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = forwarded;
+      yield* stack.destroy();
+      const app = (artifactPath: string) =>
+        Compute("api", { ...base, artifactPath, healthCheck: { path: "/health" } });
+
+      const first = yield* stack.deploy(app(artifactV1));
+      const state = yield* rows(stack);
+      expect(state["api/Service"]?.props.healthCheck).toEqual({ path: "/health" });
+      expect(state["api/Version"]?.props.healthCheck).toEqual({ path: "/health" });
+
+      cloud.knobs.failingActiveVersions.add("dep-2");
+      const failure = yield* stack.deploy(app(artifactV2)).pipe(Effect.flip, Effect.map(String));
+      expect(failure).toContain("ComputeServiceEndpointCheckFailed");
+      expect(cloud.services.get(first.serviceId)?.latestDeploymentId).toBe(first.versionId);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const unchecked = harness();
+unchecked.test.provider(
+  "forwards verifyUrl: false, so neither the version nor the service checks its URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = unchecked;
+      yield* stack.destroy();
+      cloud.knobs.failingPreviews.add("dep-1.preview.prisma.test");
+      cloud.knobs.failingActiveVersions.add("dep-1");
+      const app = yield* stack.deploy(
+        Compute("api", { ...base, artifactPath: artifactV1, verifyUrl: false }),
+      );
+      expect(app.activeVersionId).toBe("dep-1");
+      expect(cloud.probes()).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const reuse = harness();
+reuse.test.provider(
+  "with skipCodeUpload declares no artifact and creates a version from the served code",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = reuse;
+      yield* stack.destroy();
+      yield* stack.deploy(Compute("api", { ...base, artifactPath: artifactV1, env: { A: "1" } }));
+      yield* clearCalls(cloud);
+
+      const reused = yield* stack.deploy(
+        Compute("api", { ...base, skipCodeUpload: true, env: { A: "2" } }),
+      );
+      expect(Object.keys(yield* rows(stack))).not.toContain("api/Artifact");
+      expect(reused.versionId).toBe("dep-2");
+      expect(uploads(cloud)).toBe(0);
+      expect(
+        cloud.fake.captured.find((request) => request.pathname.endsWith("/deployments"))?.bodyJson,
+      ).toMatchObject({ skipCodeUpload: true });
 
       yield* stack.destroy();
     }),
@@ -987,12 +1163,15 @@ for (const naming of ["before-rename", "after-rename"] as const) {
         const deploy = yield* stack.deploy(oldApp()).pipe(Effect.flip);
         expect(deploy).toMatchObject({ _tag: "ComputeCannotUpgradeInPlace" });
         expect(String(deploy.message)).toContain("alchemy state delete");
+        expect(String(deploy.message)).toContain("nothing was changed");
         expect(cloud.writes()).toEqual([]);
 
         // Removing it from the program would run the earlier delete, which
         // deleted the service.
         const removal = yield* stack.deploy(Effect.void).pipe(Effect.flip);
         expect(String(removal)).toContain("ComputeCannotUpgradeInPlace");
+        expect(String(removal)).toContain("neither changed nor deleted");
+        expect(String(removal)).not.toContain("nothing was changed");
         expect(cloud.writes()).toEqual([]);
 
         const destroy = yield* stack.destroy().pipe(Effect.flip);
@@ -1007,6 +1186,36 @@ for (const naming of ["before-rename", "after-rename"] as const) {
     { tags },
   );
 }
+
+const movedWithName = harness();
+movedWithName.test.provider(
+  "moves a stack whose earlier Compute set serviceName, once the new service gets another name",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = movedWithName;
+      yield* stack.destroy();
+      yield* writeEarlierRow(stack, cloud, "after-rename");
+      yield* forgetEarlierRow(stack);
+      const named = (serviceName: string) =>
+        Compute("api", {
+          ...base,
+          serviceName,
+          artifactPath: artifactV2,
+          env: { LOG_LEVEL: "debug" },
+        }).pipe(adopt(true));
+
+      // The old service still holds its name on the Branch.
+      const clash = yield* stack.deploy(named("api-old")).pipe(Effect.flip, Effect.map(String));
+      expect(clash).toContain("ComputeServiceConflict");
+
+      const app = yield* stack.deploy(named("api-new"));
+      expect(app.serviceName).toBe("api-new");
+      expect(cloud.services.get("svc-old")?.name).toBe("api-old");
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
 
 const moved = harness();
 moved.test.provider(
