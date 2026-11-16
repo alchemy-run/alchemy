@@ -20,7 +20,6 @@ import {
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
 import type { ComputeService } from "./ComputeService.ts";
-import { promoteAppObserved } from "./internal/AppPromotion.ts";
 import {
   inspectArtifactFile,
   readArtifactFile,
@@ -29,7 +28,6 @@ import {
 import { executeArtifactUpload } from "./internal/ArtifactUpload.ts";
 import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
 import { startDeploymentIdempotent } from "./internal/DeploymentActions.ts";
-import { ensureDeploymentMembership } from "./internal/DeploymentIdentity.ts";
 import { observeDeployment } from "./internal/DeploymentObserve.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import type { ObservedDeployment } from "./internal/Observed.ts";
@@ -42,6 +40,8 @@ import {
   unresolvedServiceIdOf,
 } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
+import { promoteVersionObserved } from "./internal/ServicePromotion.ts";
+import { ensureVersionMembership } from "./internal/VersionIdentity.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -639,7 +639,7 @@ const ProviderLive = () =>
           const deployment =
             savedDeployment ?? (listed ? yield* observeDeployment(listed.id) : undefined);
           if (savedDeployment) {
-            yield* ensureDeploymentMembership(serviceId, savedDeployment);
+            yield* ensureVersionMembership(serviceId, savedDeployment);
           }
           return deployment ? attrsFrom(deployment, serviceId, output) : undefined;
         }),
@@ -694,7 +694,7 @@ const ProviderLive = () =>
               )
             : undefined;
           if (deployment) {
-            yield* ensureDeploymentMembership(serviceId, deployment);
+            yield* ensureVersionMembership(serviceId, deployment);
             if (deployment.status === "failed") {
               return yield* new ComputeVersionOperationFailed({
                 message: `Prisma deployment '${deployment.id}' is in terminal status 'failed' and must be replaced before reconcile; refusing to restart it or change the stable versionId during an update.`,
@@ -795,7 +795,7 @@ const ProviderLive = () =>
             // Promotion is deliberately replayed even when the control-plane
             // record already names this deployment. The endpoint operation also
             // repairs provider routing and custom-domain assignment drift.
-            const promoted = yield* promoteAppObserved(serviceId, deployment.id);
+            const promoted = yield* promoteVersionObserved(serviceId, deployment.id);
             serviceEndpointDomain = promoted.appEndpointDomain;
           }
 
@@ -812,7 +812,7 @@ const ProviderLive = () =>
             Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!deployment) return;
-          yield* ensureDeploymentMembership(output.serviceId, deployment);
+          yield* ensureVersionMembership(output.serviceId, deployment);
           yield* destroyComputeVersion(output.versionId).pipe(
             // The stop was requested; it finishes once open connections close.
             Effect.catchIf(

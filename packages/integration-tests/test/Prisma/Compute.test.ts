@@ -36,8 +36,8 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { WebSocketServer } from "ws";
-import type { AppPromotionNotConverged } from "../../../prisma/src/internal/AppPromotion.ts";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
+import type { ComputeServicePromotionNotConverged } from "../../../prisma/src/internal/ServicePromotion.ts";
 import {
   type Captured,
   data,
@@ -2644,11 +2644,13 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(error).toMatchObject({ _tag: "AppPromotionNotConverged" });
-          expect((error as AppPromotionNotConverged).message).toContain(
+          expect(error).toMatchObject({ _tag: "ComputeServicePromotionNotConverged" });
+          expect((error as ComputeServicePromotionNotConverged).message).toContain(
             "promotion returned success",
           );
-          expect((error as AppPromotionNotConverged).message).toContain("did not converge");
+          expect((error as ComputeServicePromotionNotConverged).message).toContain(
+            "did not converge",
+          );
           expect(fixture.latestDeploymentId()).toBe("version-old");
           expect(fixture.hasDeployment("version-new")).toBe(true);
           expect(
@@ -6201,8 +6203,8 @@ describe(
             })
             .pipe(Effect.flip);
 
-          expect(error).toMatchObject({ _tag: "AppPromotionNotConverged" });
-          expect((error as AppPromotionNotConverged).message).toContain("ambiguous");
+          expect(error).toMatchObject({ _tag: "ComputeServicePromotionNotConverged" });
+          expect((error as ComputeServicePromotionNotConverged).message).toContain("ambiguous");
           expect(versions.has("version-new")).toBe(true);
           expect(calls).toEqual([
             ["getApp", "service-1"],

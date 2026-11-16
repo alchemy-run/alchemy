@@ -10,13 +10,17 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 
-export class AppPromotionInvalidProps extends Data.TaggedError("AppPromotionInvalidProps")<{
+export class ComputeServicePromotionInvalidProps extends Data.TaggedError(
+  "ComputeServicePromotionInvalidProps",
+)<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-/** The App never reported the deployment as its latest before the wait timed out. */
-export class AppDeploymentTargetTimeout extends Data.TaggedError("AppDeploymentTargetTimeout")<{
+/** The service never reported the version as its latest before the wait timed out. */
+export class ComputeServiceActiveVersionTimeout extends Data.TaggedError(
+  "ComputeServiceActiveVersionTimeout",
+)<{
   readonly message: string;
   readonly errors: readonly unknown[];
   readonly cause?: unknown;
@@ -26,13 +30,15 @@ export class AppDeploymentTargetTimeout extends Data.TaggedError("AppDeploymentT
  * Promotion of a deployment did not converge (and recovery, if attempted,
  * also failed). The deployment is preserved because commit state is ambiguous.
  */
-export class AppPromotionNotConverged extends Data.TaggedError("AppPromotionNotConverged")<{
+export class ComputeServicePromotionNotConverged extends Data.TaggedError(
+  "ComputeServicePromotionNotConverged",
+)<{
   readonly message: string;
   readonly errors: readonly unknown[];
   readonly cause?: unknown;
 }> {}
 
-export interface AppDeploymentTargetObservationOptions {
+export interface ActiveVersionObservationOptions {
   readonly timeoutSeconds?: number;
   readonly pollIntervalMs?: number;
 }
@@ -40,20 +46,20 @@ export interface AppDeploymentTargetObservationOptions {
 const DEFAULT_TIMEOUT_SECONDS = 60;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 
-export const waitForAppDeploymentTarget = Effect.fn(function* (
+export const waitForActiveVersion = Effect.fn(function* (
   appId: string,
   deploymentId: string,
-  options: AppDeploymentTargetObservationOptions = {},
+  options: ActiveVersionObservationOptions = {},
 ) {
   const timeoutSeconds = options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
   const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* new AppPromotionInvalidProps({
+    return yield* new ComputeServicePromotionInvalidProps({
       message: "timeoutSeconds must be a positive finite number.",
     });
   }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* new AppPromotionInvalidProps({
+    return yield* new ComputeServicePromotionInvalidProps({
       message: "pollIntervalMs must be a positive finite number.",
     });
   }
@@ -89,26 +95,26 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, remainingAfterObservation)));
   }
 
-  return yield* new AppDeploymentTargetTimeout({
-    message: `Timed out waiting for Prisma App '${appId}' to report deployment '${deploymentId}' as latest (last observed latest deployment: '${lastLatestDeploymentId ?? "none"}').`,
+  return yield* new ComputeServiceActiveVersionTimeout({
+    message: `Timed out waiting for Prisma Compute service '${appId}' to report deployment '${deploymentId}' as latest (last observed latest deployment: '${lastLatestDeploymentId ?? "none"}').`,
     errors: lastError === undefined ? [] : [lastError],
     cause: lastError,
   });
 });
 
 /**
- * Promote an App and recover response loss by observing the canonical App.
- * Every successful mutation is followed by bounded observation of the App
+ * Promote a version and recover response loss by observing the service.
+ * Every successful mutation is followed by bounded observation of the service
  * row before callers may probe stable readiness or delete another deployment.
  * If the promotion response is lost, the canonical rollback primitive heals
  * an already-flipped Foundry endpoint or safely completes the target
  * promotion. Any non-converged result is ambiguous and must never trigger
  * target deletion.
  */
-export const promoteAppObserved = Effect.fn(function* (
+export const promoteVersionObserved = Effect.fn(function* (
   appId: string,
   deploymentId: string,
-  options: AppDeploymentTargetObservationOptions = {},
+  options: ActiveVersionObservationOptions = {},
 ) {
   const promoted = yield* createServicePromote({
     serviceId: appId,
@@ -118,12 +124,12 @@ export const promoteAppObserved = Effect.fn(function* (
     Effect.result,
   );
   if (Result.isSuccess(promoted)) {
-    const observation = yield* waitForAppDeploymentTarget(appId, deploymentId, options).pipe(
+    const observation = yield* waitForActiveVersion(appId, deploymentId, options).pipe(
       Effect.result,
     );
     if (Result.isFailure(observation)) {
-      return yield* new AppPromotionNotConverged({
-        message: `Prisma App '${appId}' promotion returned success for deployment '${deploymentId}', but the App did not converge to that target. The deployment was preserved because promotion commit state is ambiguous.`,
+      return yield* new ComputeServicePromotionNotConverged({
+        message: `Prisma Compute service '${appId}' promotion returned success for deployment '${deploymentId}', but the service did not converge to that target. The deployment was preserved because promotion commit state is ambiguous.`,
         errors: [observation.failure],
         cause: observation.failure,
       });
@@ -152,12 +158,12 @@ export const promoteAppObserved = Effect.fn(function* (
     Effect.result,
   );
   const observeRepaired: Effect.Effect<
-    Effect.Success<ReturnType<typeof waitForAppDeploymentTarget>>,
-    | Effect.Error<ReturnType<typeof waitForAppDeploymentTarget>>
+    Effect.Success<ReturnType<typeof waitForActiveVersion>>,
+    | Effect.Error<ReturnType<typeof waitForActiveVersion>>
     | Effect.Error<ReturnType<typeof getService>>,
-    Effect.Services<ReturnType<typeof waitForAppDeploymentTarget>>
+    Effect.Services<ReturnType<typeof waitForActiveVersion>>
   > = Result.isSuccess(repaired)
-    ? waitForAppDeploymentTarget(appId, deploymentId, options)
+    ? waitForActiveVersion(appId, deploymentId, options)
     : getService({ serviceId: appId }).pipe(Effect.map((response) => response.data));
   const repairedObservation = yield* Effect.result(observeRepaired);
   if (
@@ -174,7 +180,7 @@ export const promoteAppObserved = Effect.fn(function* (
           reassignedDomains: 0,
         };
   }
-  return yield* new AppPromotionNotConverged({
+  return yield* new ComputeServicePromotionNotConverged({
     cause: promoted.failure,
     errors: [
       promoted.failure,
@@ -184,10 +190,10 @@ export const promoteAppObserved = Effect.fn(function* (
         ? [repairedObservation.failure]
         : [
             new Error(
-              `Prisma App '${appId}' still reports deployment '${repairedObservation.success.latestDeploymentId ?? "none"}' as latest after canonical recovery targeted '${deploymentId}'.`,
+              `Prisma Compute service '${appId}' still reports deployment '${repairedObservation.success.latestDeploymentId ?? "none"}' as latest after canonical recovery targeted '${deploymentId}'.`,
             ),
           ]),
     ],
-    message: `Prisma App '${appId}' promotion of deployment '${deploymentId}' failed and canonical recovery also failed. The deployment was not deleted because endpoint commit state is ambiguous.`,
+    message: `Prisma Compute service '${appId}' promotion of deployment '${deploymentId}' failed and canonical recovery also failed. The deployment was not deleted because endpoint commit state is ambiguous.`,
   });
 });

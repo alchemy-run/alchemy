@@ -35,7 +35,6 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { WebSocketServer } from "ws";
-import type { AppPromotionNotConverged } from "../../../prisma/src/internal/AppPromotion.ts";
 import { executeArtifactUpload } from "../../../prisma/src/internal/ArtifactUpload.ts";
 import type { PrismaCleanupFailed } from "../../../prisma/src/internal/CleanupFailure.ts";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
@@ -43,6 +42,7 @@ import {
   PrismaHttpClientLive,
   PrismaUploadClient,
 } from "../../../prisma/src/internal/HttpClient.ts";
+import type { ComputeServicePromotionNotConverged } from "../../../prisma/src/internal/ServicePromotion.ts";
 import {
   dispatchTo,
   failure,
@@ -632,8 +632,8 @@ describe(
           })
           .pipe(Effect.flip);
 
-        expect(error).toMatchObject({ _tag: "AppPromotionNotConverged" });
-        expect((error as AppPromotionNotConverged).message).toContain("commit state");
+        expect(error).toMatchObject({ _tag: "ComputeServicePromotionNotConverged" });
+        expect((error as ComputeServicePromotionNotConverged).message).toContain("commit state");
         expect(calls).not.toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
         Effect.provide(deploymentProviderLive()),

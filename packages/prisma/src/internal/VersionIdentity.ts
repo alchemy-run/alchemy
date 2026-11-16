@@ -6,13 +6,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { PrismaPaginationError } from "./Pagination.ts";
 
-export class DeploymentIdentityConflict extends Data.TaggedError("DeploymentIdentityConflict")<{
+export class ComputeVersionIdentityConflict extends Data.TaggedError(
+  "ComputeVersionIdentityConflict",
+)<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-/** Prove that a deployment belongs to an App before mutating or deleting it. */
-export const ensureDeploymentMembership = Effect.fn(function* (
+/** Prove that a version belongs to a Compute service before mutating or deleting it. */
+export const ensureVersionMembership = Effect.fn(function* (
   appId: string,
   deployment: { id: string; foundryVersionId: string },
   knownLatestDeploymentId?: string | null,
@@ -39,8 +41,8 @@ export const ensureDeploymentMembership = Effect.fn(function* (
   }
   const matches = deployments.filter((candidate) => candidate.id === deployment.id);
   if (matches.length !== 1 || matches[0]?.foundryVersionId !== deployment.foundryVersionId) {
-    return yield* new DeploymentIdentityConflict({
-      message: `Prisma deployment '${deployment.id}' with Foundry version '${deployment.foundryVersionId}' is not uniquely owned by App '${appId}'. Refusing to start, promote, or delete a mismatched deployment.`,
+    return yield* new ComputeVersionIdentityConflict({
+      message: `Prisma deployment '${deployment.id}' with Foundry version '${deployment.foundryVersionId}' is not uniquely owned by Compute service '${appId}'. Refusing to start, promote, or delete a mismatched deployment.`,
     });
   }
 });

@@ -15,7 +15,6 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { destroyComputeService } from "./ComputeLifecycle.ts";
-import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
 import { desiredBranchId } from "./internal/Branches.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import type { ObservedApp } from "./internal/Observed.ts";
@@ -28,6 +27,7 @@ import {
   unresolvedProjectIdOf,
 } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
+import { ensureServiceImmutableIdentity } from "./internal/ServiceIdentity.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
@@ -506,7 +506,7 @@ const ProviderLive = () =>
             );
             app = result.app;
           }
-          yield* ensureAppImmutableIdentity(
+          yield* ensureServiceImmutableIdentity(
             app,
             projectId,
             news.regionId ?? output?.regionId ?? app.region.id,

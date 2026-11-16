@@ -67,15 +67,12 @@ import {
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
 import { readUploadArtifact, uploadArtifact } from "./ComputeVersion.ts";
-import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
-import { promoteAppObserved, waitForAppDeploymentTarget } from "./internal/AppPromotion.ts";
 import { normalizeBundleFilePath } from "./internal/BundlePaths.ts";
 import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
 import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
 } from "./internal/DeploymentActions.ts";
-import { ensureDeploymentMembership } from "./internal/DeploymentIdentity.ts";
 import { observeDeployment } from "./internal/DeploymentObserve.ts";
 import type {
   ObservedApp,
@@ -91,6 +88,9 @@ import {
   unresolvedProjectIdOf,
 } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
+import { ensureServiceImmutableIdentity } from "./internal/ServiceIdentity.ts";
+import { promoteVersionObserved, waitForActiveVersion } from "./internal/ServicePromotion.ts";
+import { ensureVersionMembership } from "./internal/VersionIdentity.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -1880,7 +1880,7 @@ const ensureApp = Effect.fn(function* (
     createdApp = result.created;
   }
 
-  yield* ensureAppImmutableIdentity(
+  yield* ensureServiceImmutableIdentity(
     app,
     projectId,
     props.regionId ?? output?.regionId ?? app.region.id,
@@ -2299,7 +2299,7 @@ const ProviderLive = () =>
             ? yield* readDeployment(output.versionId)
             : undefined;
           if (outputDeployment) {
-            yield* ensureDeploymentMembership(app.id, outputDeployment, app.latestDeploymentId);
+            yield* ensureVersionMembership(app.id, outputDeployment, app.latestDeploymentId);
           }
           const latestDeployment =
             !outputDeployment && app.latestDeploymentId
@@ -2431,7 +2431,7 @@ const ProviderLive = () =>
               if (!observed) {
                 return (action === "destroy" ? "destroyed" : "stopped") as "destroyed" | "stopped";
               }
-              yield* ensureDeploymentMembership(app.id, observed, app.latestDeploymentId);
+              yield* ensureVersionMembership(app.id, observed, app.latestDeploymentId);
               if (action === "destroy") {
                 yield* destroyComputeVersion(deploymentId, effectiveNews);
                 return "destroyed" as const;
@@ -2483,7 +2483,7 @@ const ProviderLive = () =>
                 Effect.map((response) => response.data),
                 Effect.result,
               );
-              const observedAfterRollback = yield* waitForAppDeploymentTarget(
+              const observedAfterRollback = yield* waitForActiveVersion(
                 app.id,
                 persistedDeploymentId,
                 effectiveNews,
@@ -2576,11 +2576,7 @@ const ProviderLive = () =>
               persistedDeployment !== undefined &&
               (deployment !== undefined || terminalFailedDeploymentId !== undefined)
             ) {
-              yield* ensureDeploymentMembership(
-                app.id,
-                persistedDeployment,
-                app.latestDeploymentId,
-              );
+              yield* ensureVersionMembership(app.id, persistedDeployment, app.latestDeploymentId);
             }
             if (terminalFailedDeploymentId !== undefined) {
               deployment = undefined;
@@ -2689,7 +2685,11 @@ const ProviderLive = () =>
               // Replay promotion even when latestDeploymentId already matches.
               // Promotion also repairs endpoint/custom-domain routing drift.
               preserveCreatedAppOnFailure = true;
-              const promotedApp = yield* promoteAppObserved(app.id, deployment.id, effectiveNews);
+              const promotedApp = yield* promoteVersionObserved(
+                app.id,
+                deployment.id,
+                effectiveNews,
+              );
               serviceEndpointDomain = promotedApp.appEndpointDomain;
               promoted = true;
             }
@@ -2712,7 +2712,7 @@ const ProviderLive = () =>
                   Effect.map((response) => response.data),
                   Effect.result,
                 );
-                const observedAfterRollback = yield* waitForAppDeploymentTarget(
+                const observedAfterRollback = yield* waitForActiveVersion(
                   app.id,
                   rollbackDeploymentId,
                   effectiveNews,
