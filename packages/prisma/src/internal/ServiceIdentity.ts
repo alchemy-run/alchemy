@@ -25,3 +25,6 @@ export const ensureServiceImmutableIdentity = (
           message: `Prisma Compute service '${app.id}' has immutable identity project '${app.projectId}' / region '${app.region.id}', but this resource requires project '${projectId}' / region '${regionId}'. Refusing to patch or claim the mismatched service; replace it or import the correct service ID.`,
         }),
       );
+
+/** A service's logical ID on the platform by default: its address, with `.` for each `/`, which the platform refuses. */
+export const defaultServiceLogicalId = (fqn: string) => fqn.replaceAll("/", ".");

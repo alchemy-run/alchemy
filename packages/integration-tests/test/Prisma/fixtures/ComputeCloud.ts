@@ -184,6 +184,20 @@ export const makeComputeCloud = () => {
         return noContent();
       }
     }
+    // The platform's rule for a service's logical ID, in a query or a write.
+    const logicalId =
+      head === "services"
+        ? request.method === "GET"
+          ? new URLSearchParams(request.search).get("logicalId")
+          : ((request.bodyJson as Record<string, unknown> | undefined)?.logicalId ?? null)
+        : null;
+    if (typeof logicalId === "string" && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(logicalId)) {
+      return failure(
+        422,
+        "validation_error",
+        "logicalId: logicalId must start with a letter or digit and contain only letters, digits, dots, dashes, and underscores",
+      );
+    }
     if (head === "services" && id === undefined && request.method === "GET") {
       const query = new URLSearchParams(request.search);
       return page(

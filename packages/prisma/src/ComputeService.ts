@@ -13,8 +13,10 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { destroyComputeService, toComputeUrl } from "./ComputeLifecycle.ts";
 import type { ComputeVersion } from "./ComputeVersion.ts";
 import { desiredBranchId } from "./internal/Branches.ts";
@@ -31,7 +33,10 @@ import {
 } from "./internal/Refs.ts";
 export { ComputeServiceIdUnavailable } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
-import { ensureServiceImmutableIdentity } from "./internal/ServiceIdentity.ts";
+import {
+  defaultServiceLogicalId,
+  ensureServiceImmutableIdentity,
+} from "./internal/ServiceIdentity.ts";
 import { checkStableEndpoint, promoteVersionObserved } from "./internal/ServicePromotion.ts";
 import type { ComputeHealthCheck } from "./internal/UrlCheck.ts";
 import type { Project } from "./Project.ts";
@@ -136,9 +141,17 @@ export interface ComputeServiceProps {
    * provider finds the service by it instead of creating a second one, and
    * `--adopt` (or `adopt(true)`) takes it back over, because a logical ID alone
    * does not prove which stack owns it. Changing it updates the service in place.
-   * @default the resource's fully qualified logical ID, e.g. `"web"` or `"Site/Web"`
+   * The platform allows letters, digits, dots, dashes and underscores.
+   * @default the resource's fully qualified logical ID with each `/` replaced by `.`, e.g. `"web"` or `"Site.Web"`
    */
   logicalId?: string;
+  /**
+   * Expected class of the environment variables the service's versions read,
+   * which is the role of its Branch. A Branch with another role fails the
+   * deploy before the service is created or moved. `Prisma.Compute` sets it
+   * from its own `envClass`.
+   */
+  envClass?: "production" | "preview";
   /**
    * After promoting the active version, wait until the service's stable URL
    * answers on Prisma's edge. When it does not, the service is rolled back to
@@ -463,6 +476,47 @@ const branchNeedsSync = Effect.fn(function* (
   return !branch.resolved || branch.id !== app.branchId;
 });
 
+const logicalIdOf = (props: Pick<ComputeServiceProps, "logicalId">, fqn: string) =>
+  props.logicalId ?? defaultServiceLogicalId(fqn);
+
+/**
+ * Refuse a logical ID another service in this stack also derives, such as
+ * `a/b` and `a.b`, before either reaches the platform.
+ */
+const refuseSharedLogicalId = Effect.fn(function* (fqn: string, logicalId: string) {
+  const stack = yield* Effect.serviceOption(Stack);
+  if (Option.isNone(stack)) return;
+  const others = Object.values(stack.value.resources).flatMap((resource) => {
+    if (resource.Type !== "Prisma.ComputeService" || resource.FQN === fqn) return [];
+    const props = resource.Props as Partial<ComputeServiceProps> | undefined;
+    const other =
+      props?.logicalId === undefined ? defaultServiceLogicalId(resource.FQN) : props.logicalId;
+    return other === logicalId ? [resource.FQN] : [];
+  });
+  if (others.length > 0) {
+    return yield* new PrismaComputeServiceLogicalIdTaken({
+      message: `Prisma.ComputeService '${fqn}' and '${others.join("', '")}' in this stack both have the logical ID '${logicalId}' on the platform, where a logical ID names one service per branch. A logical ID is the address with each '/' replaced by '.', so 'a/b' and 'a.b' share one. Rename one of them, or give one an explicit logicalId.`,
+    });
+  }
+});
+
+/** The role of `branchId`, and the check of it against `envClass`. */
+const checkEnvironmentClass = Effect.fn(function* (
+  envClass: ComputeServiceProps["envClass"],
+  branchId: string,
+  knownRole?: ComputeService["Attributes"]["branchRole"],
+) {
+  if (envClass === undefined) return;
+  const role =
+    knownRole ??
+    (yield* getBranch({ branchId }).pipe(Effect.map((response) => response.data.role)));
+  if (role !== envClass) {
+    return yield* new ComputeServiceInvalidProps({
+      message: `envClass '${envClass}' does not match the role '${role}' of Branch '${branchId}', which is the class of the environment variables the service's versions read. Omit envClass to use the Branch's role, or attach the service to a ${envClass} Branch.`,
+    });
+  }
+});
+
 const validateAppProps = (props: ComputeServiceProps) =>
   Effect.gen(function* () {
     if (props.healthCheck !== undefined && props.verifyUrl === false) {
@@ -504,7 +558,8 @@ const ensureService = Effect.fn(function* ({
   yield* validateAppProps(news);
   const projectId = yield* resolveProjectId(news.project);
   const displayName = yield* createDisplayName(id, news.displayName);
-  const logicalId = news.logicalId ?? fqn;
+  const logicalId = logicalIdOf(news, fqn);
+  yield* refuseSharedLogicalId(fqn, logicalId);
   const branch = yield* desiredBranchId(projectId, news);
   if (!branch.resolved) {
     return yield* new ComputeServiceOperationFailed({
@@ -514,6 +569,11 @@ const ensureService = Effect.fn(function* ({
           : `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach service '${displayName}'.`,
     });
   }
+  yield* checkEnvironmentClass(
+    news.envClass,
+    branch.id,
+    output?.branchId === branch.id ? output.branchRole : undefined,
+  );
   const serviceId = isPrismaDevId(output?.serviceId) ? undefined : output?.serviceId;
   let app: ObservedApp | undefined = serviceId
     ? yield* getService({ serviceId }).pipe(
@@ -742,7 +802,8 @@ const findServiceInProject = Effect.fn(function* (
 ) {
   const projectId = unresolvedProjectIdOf(props.project);
   if (!projectId) return undefined;
-  const byLogicalId = yield* findAppByLogicalId(projectId, props.logicalId ?? fqn, props);
+  yield* refuseSharedLogicalId(fqn, logicalIdOf(props, fqn));
+  const byLogicalId = yield* findAppByLogicalId(projectId, logicalIdOf(props, fqn), props);
   if (byLogicalId) {
     // A logical ID alone does not prove ownership: another
     // declaration, stage, or stack on the branch can hold it.
@@ -795,7 +856,8 @@ const ProviderLive = () =>
             }
             if (
               isResolved(news.logicalId) &&
-              (news.logicalId ?? fqn) !== (output ? output.logicalId : (olds.logicalId ?? fqn))
+              (news.logicalId ?? defaultServiceLogicalId(fqn)) !==
+                (output ? output.logicalId : logicalIdOf(olds, fqn))
             ) {
               return { action: "update" } as const;
             }
@@ -839,6 +901,21 @@ const ProviderLive = () =>
             Effect.gen(function* () {
               yield* refuseSecondActiveVersion(id, newBindings);
               const diff = yield* effect;
+              // With the Branch unchanged its role is known, so a wrong
+              // envClass fails the plan.
+              if (
+                diff === undefined &&
+                saved !== undefined &&
+                "branchRole" in saved &&
+                isInputObject(news) &&
+                typeof news.envClass === "string"
+              ) {
+                yield* checkEnvironmentClass(
+                  news.envClass,
+                  saved.branchId ?? "unassigned",
+                  saved.branchRole,
+                );
+              }
               // The service promotes its attached version on every deploy. Its
               // ID and URL survive that; `activeVersionId` must be re-read, or a
               // resource reading it keeps the old version.
@@ -972,7 +1049,7 @@ const ProviderLocal = () =>
       serviceEndpointDomain: "localhost",
       url: "http://localhost",
       createdAt: DEV_TIMESTAMP,
-      logicalId: news.logicalId ?? fqn,
+      logicalId: logicalIdOf(news, fqn ?? id),
     }),
     { oldAttributes: ["appId", "latestDeploymentId", "appEndpointDomain"] },
     { precreate: true },
