@@ -1,4 +1,4 @@
-import { nodeTemplate } from "@alchemy.run/rivet/GCP/CloudRunPool";
+import { nodeTemplate, plainEnvironment, secretGrants } from "@alchemy.run/rivet/GCP/CloudRunPool";
 import { startupScript } from "@alchemy.run/rivet/GCP/ComputeEnginePool";
 import { nodeDockerfile, NODE_DOCKERFILE } from "@alchemy.run/rivet/internal/PoolHost";
 import { describe, expect, test } from "@alchemy.run/test";
@@ -33,6 +33,30 @@ describe("RivetGCP.CloudRunPool worker pool", { tags: ["unit"] }, () => {
       },
       containers: [{ resources: { limits: { cpu: "1", memory: "1Gi" } }, env: secretEnv }],
     });
+  });
+
+  test("a pool with secrets and no account of the user's own keeps the worker pool's account", () => {
+    const options = { secrets: { DATABASE_URL: "projects/p/secrets/db/versions/3" } };
+    expect(nodeTemplate(options, { serviceAccount: undefined })).not.toHaveProperty(
+      "serviceAccount",
+    );
+    expect(secretGrants(Object.values(options.secrets))).toEqual([
+      {
+        role: "roles/secretmanager.secretAccessor",
+        resource: { kind: "secretmanager.secret", name: "projects/p/secrets/db" },
+      },
+    ]);
+  });
+
+  test("RIVET_TOKEN named in secrets leaves the plain environment, and stays in it otherwise", () => {
+    const env = { RIVET_ENDPOINT: "https://rivet.acme.dev", RIVET_TOKEN: "plain" };
+    expect(plainEnvironment(env, { RIVET_TOKEN: "projects/p/secrets/rivet/versions/2" })).toEqual({
+      RIVET_ENDPOINT: "https://rivet.acme.dev",
+    });
+    expect(plainEnvironment(env, undefined)).toEqual(env);
+    expect(plainEnvironment(env, { DATABASE_URL: "projects/p/secrets/db/versions/3" })).toEqual(
+      env,
+    );
   });
 });
 

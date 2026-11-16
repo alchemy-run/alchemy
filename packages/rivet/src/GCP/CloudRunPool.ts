@@ -44,21 +44,26 @@ export interface CloudRunPoolOptions extends PoolSettings {
    * Environment each node reads from Secret Manager, by the secret version
    * each value names, such as `projects/acme/secrets/DATABASE_URL/versions/3`.
    * The nodes' service account is granted `roles/secretmanager.secretAccessor`
-   * on each secret, and Cloud Run hands the values to the container, so they
-   * stay out of the worker pool's configuration.
-   * Name `RIVET_TOKEN` here to keep the control plane's token out of it too.
+   * on each secret before the worker pool rolls out a revision that reads it,
+   * and Cloud Run hands the values to the container, so they stay out of the
+   * worker pool's configuration. The control plane's token is plain
+   * environment unless `RIVET_TOKEN` is named here.
    */
   secrets?: Record<string, Input<string>>;
   /**
-   * Email of the service account the nodes run as.
-   * @default the worker pool's own, or, with `secrets`, a service account of the pool's own
+   * Email of the service account the nodes run as. Alchemy grants it access
+   * to `secrets` but never deletes it.
+   * @default the worker pool's own
    */
   serviceAccount?: Input<string>;
   /**
    * VPC network the nodes send private traffic through, with Cloud Run
    * direct VPC egress, so they reach a control plane at a private address.
    * Traffic to public addresses still leaves directly. Cloud Run holds the
-   * subnetwork's addresses for a while after the pool is deleted.
+   * subnetwork's addresses for up to a few hours after the pool is deleted,
+   * and the subnetwork can't be deleted until it lets them go: a destroy in
+   * that window fails on the subnetwork, keeps it in state, and succeeds
+   * when run again later.
    */
   network?: Input<string>;
   /**
@@ -83,6 +88,20 @@ const secretKeyRef = (version: string) => {
   const at = version.lastIndexOf("/versions/");
   return { secret: version.slice(0, at), version: version.slice(at + "/versions/".length) };
 };
+
+/** The grants that let a pool's worker pool read the secrets it names. @internal */
+export const secretGrants = (versions: readonly string[]) =>
+  versions.map((version) => ({
+    role: "roles/secretmanager.secretAccessor",
+    resource: { kind: "secretmanager.secret" as const, name: secretKeyRef(version).secret },
+  }));
+
+/** A node's plain environment: every value not read from Secret Manager. @internal */
+export const plainEnvironment = (
+  env: Record<string, string>,
+  secrets: Record<string, unknown> | undefined,
+) =>
+  Object.fromEntries(Object.entries(env).filter(([name]) => !Object.hasOwn(secrets ?? {}, name)));
 
 /**
  * The revision template of a pool's worker pool, its secrets given as
@@ -175,32 +194,29 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
           options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
         const { program } = nodes;
         const secrets = Object.entries(options.secrets ?? {});
-        let serviceAccount = options.serviceAccount;
+        const { serviceAccount } = options;
         const secretEnv: Array<Input<Run.WorkerPoolEnvVar>> = [];
-        if (secrets.length > 0) {
+        for (const [name, version] of secrets) {
           // Cloud Run checks a revision can read its secrets when it creates
-          // it, so the nodes need an account, granted each secret, beforehand.
-          serviceAccount ??= (yield* IAM.ServiceAccount(`${id}NodeAccount`, {
-            displayName: "Rivet pool nodes",
-          })).email;
-          const member = Output.interpolate`serviceAccount:${asOutput(serviceAccount)}`;
-          for (const [name, version] of secrets) {
-            const grant = yield* IAM.Member(`${id}Secret${name}`, {
-              kind: "secretmanager.secret",
-              name: asOutput(version).pipe(Output.map((v) => secretKeyRef(v).secret)),
-              role: "roles/secretmanager.secretAccessor",
-              member,
-            });
-            secretEnv.push({
-              name,
-              valueSource: {
-                // Read once the grant exists.
-                secretKeyRef: Output.all(asOutput(version), grant.role).pipe(
-                  Output.map(([v]) => secretKeyRef(v)),
-                ),
-              },
-            });
-          }
+          // it. An account of the user's own is granted each secret by the
+          // pool's own grant, read once it exists; the worker pool's own
+          // account is granted them by the worker pool, before it deploys.
+          const ready =
+            serviceAccount === undefined
+              ? asOutput(version)
+              : Output.all(
+                  asOutput(version),
+                  (yield* IAM.Member(`${id}Secret${name}`, {
+                    kind: "secretmanager.secret",
+                    name: asOutput(version).pipe(Output.map((v) => secretKeyRef(v).secret)),
+                    role: "roles/secretmanager.secretAccessor",
+                    member: Output.interpolate`serviceAccount:${asOutput(serviceAccount)}`,
+                  })).role,
+                ).pipe(Output.map(([v]) => v));
+          secretEnv.push({
+            name,
+            valueSource: { secretKeyRef: ready.pipe(Output.map(secretKeyRef)) },
+          });
         }
         const own = Output.all(
           ...Object.entries(options.env ?? {}).map(([name, value]) =>
@@ -209,7 +225,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
         ).pipe(Output.map((entries) => Object.fromEntries(entries)));
         // Every class the pool hosts is bundled into its node image; a Rust
         // program is its own image, built from its staged crate.
-        yield* Run.WorkerPool(`${id}Nodes`, {
+        const workerPool = yield* Run.WorkerPool(`${id}Nodes`, {
           ...(isImageProgram(program)
             ? program
             : {
@@ -222,15 +238,17 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
           scaling: { manualInstanceCount: options.replicas ?? 1 },
           template: nodeTemplate(options, { serviceAccount, secretEnv }),
           env: Output.all(nodeEnvironment(nodes), own).pipe(
-            Output.map(([env, extra]) =>
-              Object.fromEntries(
-                Object.entries({ ...env, ...extra }).filter(
-                  // A secret reaches the node from Secret Manager, never the env.
-                  ([name]) => !secrets.some(([secret]) => secret === name),
-                ),
-              ),
-            ),
+            Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, options.secrets)),
           ),
         });
+        if (serviceAccount === undefined && secrets.length > 0) {
+          // The worker pool keeps its own account and owns these grants:
+          // it revokes them with the binding and deletes them with itself.
+          yield* workerPool.bind`RivetGCP.CloudRunPool.secrets(${id})`(
+            Output.all(...secrets.map(([, version]) => asOutput(version))).pipe(
+              Output.map((versions) => ({ iam: secretGrants(versions) })),
+            ),
+          );
+        }
       }),
   });
