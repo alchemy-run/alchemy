@@ -6,7 +6,7 @@
  * Glyphs are mathematically perfect regular polygons (or a line / a
  * circle as the limit cases). The home page uses them in order down the
  * page — dot → line → triangle → square → pentagon → hexagon → heptagon
- * → octagon → nonagon → decagon → hendecagon → dodecagon → circle — from zero dimensions to the infinite-sided limit.
+ * → octagon → nonagon → decagon → hendecagon → circle — from zero dimensions to the infinite-sided limit.
  */
 
 type Variant =
@@ -21,7 +21,6 @@ type Variant =
   | "nonagon"
   | "decagon"
   | "hendecagon"
-  | "dodecagon"
   | "circle";
 
 interface PolygonSpec {
@@ -43,7 +42,6 @@ const POLYGON: Record<Variant, PolygonSpec> = {
   nonagon: { sides: 9, startDeg: -90 }, // apex up
   decagon: { sides: 10, startDeg: 0 }, // flat-top
   hendecagon: { sides: 11, startDeg: -90 }, // apex up
-  dodecagon: { sides: 12, startDeg: -15 }, // flat-top
   circle: { sides: 0, startDeg: 0 },
 };
 

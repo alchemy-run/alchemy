@@ -18,7 +18,6 @@ import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import TypePolicy from "../components/marketing-islands/TypePolicy.tsx";
 import ObservabilityDash from "../components/marketing-islands/ObservabilityDash.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
-import PhotosLayers from "../components/marketing-islands/PhotosLayers.tsx";
 
 const alchemySpec = installSpec("alchemy");
 
@@ -53,20 +52,29 @@ const PREVIEW_COMMENT_LINES: [number, number][] = [[6, 12]];
 // The vertical track beside the sections that walk the full picture.
 const RAIL = [
   {
-    label: "Your machine",
+    label: "Declare",
     steps: [
       { id: "loop-model", title: "model" },
       { id: "loop-stories", title: "specify" },
-      { id: "loop-verify", title: "verify" },
-      { id: "loop-connect", title: "connect" },
-      { id: "loop-edit", title: "edit" },
-      { id: "loop-types", title: "type-check" },
-      { id: "loop-local", title: "test, emulated" },
-      { id: "loop-live", title: "test, live" },
+      { id: "loop-verify", title: "prove" },
     ],
   },
-  { label: "CI/CD", steps: [{ id: "loop-pr", title: "preview per PR" }] },
-  { label: "Production", steps: [{ id: "loop-prod", title: "monitoring" }] },
+  {
+    label: "Ground",
+    steps: [
+      { id: "loop-connect", title: "encapsulate" },
+      { id: "loop-types", title: "type-check" },
+    ],
+  },
+  {
+    label: "Run",
+    steps: [
+      { id: "loop-local", title: "emulate" },
+      { id: "loop-live", title: "test live" },
+    ],
+  },
+  { label: "Ship", steps: [{ id: "loop-pr", title: "preview per PR" }] },
+  { label: "Observe", steps: [{ id: "loop-prod", title: "trace the model" }] },
 ];
 const railKicker = (id: string) => {
   const group = RAIL.find((g) => g.steps.some((s) => s.id === id))!;
@@ -203,6 +211,17 @@ const WIRING_SRC = `const BankLive = Bank.layer(BankHandlers).pipe(
   ),
 );`;
 
+const TRACE_OUT = `
+[b]Domain.send[/b] Account.WithdrawMoney          [d]the Worker[/d]
+└─ [b]Domain.decide[/b] Account.WithdrawMoney     [d]the account's Durable Object[/d]
+   │   [g]event[/g] MoneyWithdrawn
+   ├─ [b]Domain.view[/b] AccountSummary
+   ├─ [b]Domain.view[/b] DailyOutflow
+   └─ [b]Domain.policy[/b] FraudReview
+      ├─ [b]Domain.external[/b] FraudCheck.score
+      └─ [b]Domain.send[/b] Account.FreezeAccount
+         └─ [b]Domain.decide[/b] Account.FreezeAccount`;
+
 const TEST_SRC = `const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   dev: !!process.env.LOCAL, // emulated, or the real cloud
@@ -216,14 +235,6 @@ test("PUT + GET round-trips through R2", Effect.gen(function* () {
   const res = yield* HttpClient.get(\`\${url}/object/hello.txt\`);
   expect(yield* res.text).toBe("hi!");
 }));`;
-
-/** The app's layers, bottom-up, and what the Photos module owns in each. */
-const PYRAMID = [
-  { layer: "Infrastructure", slice: "Photos bucket" },
-  { layer: "Configuration & policies", slice: "read/write binding" },
-  { layer: "APIs & business logic", slice: "upload()" },
-  { layer: "Frontend", slice: "upload button" },
-];
 
 const VITE_SRC = `import Api from "./src/api.ts";
 
@@ -397,9 +408,9 @@ const PROVIDERS = [
   <AlchemicalDivider variant="dot" class="v2-divider" />
   <section class="v2-section v2-pat-1 v2-overview">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>Every step is verified</h2>
+      <h2 class="v2-h2" data-copy>Declare it, and every step is verified</h2>
       <p class="v2-lede" data-copy>
-        You or your agent write the software, and each step proves it works before the next one starts. The type checker and the stories that specify your business rules answer in milliseconds, a solver proves the rules that must always hold, emulated tests in seconds, and the real cloud in about 20 seconds. Then CI deploys a preview, tests it, and ships it on merge.
+        You or your agent declare the software: the business as a model, its behavior as stories and rules, its infrastructure as Layers. Each step then proves it works before the next one starts. Types, stories and proofs answer in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds. CI deploys a preview, tests it, and ships it on merge.
       </p>
       <p class="v2-overview__source">
         <a
@@ -486,9 +497,9 @@ const PROVIDERS = [
   <section class="v2-section v2-pat-2 v2-feature" id="loop-model" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-model")}</p>
-      <h2 class="v2-h2" data-copy>Start from the business, not the cloud</h2>
+      <h2 class="v2-h2" data-copy>Declare the business in its own language</h2>
       <p class="v2-lede" data-copy>
-        <a href="/domain">Alchemy Domain</a> models your app in the business's own terms. A command declares what it asks for and every way it can end, and an aggregate decides it in a pure function. The rules live in one place, where you, your agent and the type checker can all read them.
+        <a href="/domain">Alchemy Domain</a> gives the words your business already uses a place in the code. A command declares what it asks for and every way it can end, an aggregate decides it in a pure function, and an event records what happened. You, your agent and the type checker all read the same model.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/WithdrawMoney.command.ts" code={COMMAND_SRC} compact />
@@ -534,9 +545,9 @@ const PROVIDERS = [
   <section class="v2-section v2-pat-5 v2-feature" id="loop-connect" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-connect")}</p>
-      <h2 class="v2-h2" data-copy>The model meets the world through Layers</h2>
+      <h2 class="v2-h2" data-copy>Layers encapsulate the infrastructure</h2>
       <p class="v2-lede" data-copy>
-        A verified model still knows nothing about the cloud. It declares what it needs from outside: somewhere to run, the <a href="/domain/external-system">external systems</a> its policies and sagas call, and the stores its <a href="/domain/projection">projections</a> feed. Each is a Layer you provide, and each Layer brings its own infrastructure: Durable Objects, a database, a webhook.
+        A proved model still knows nothing about the cloud. It declares what it needs from outside: somewhere to run, the <a href="/domain/external-system">external systems</a> its policies and sagas call, and the stores its <a href="/domain/projection">projections</a> feed. Each is a Layer, and a Layer owns its resources and the access to them: Durable Objects, a database, a webhook. Swap a Layer and the same model runs in memory, on your machine, or on another cloud.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/Payments.external.ts" code={EXTERNAL_SRC} compact />
@@ -545,56 +556,25 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── EDIT ───────────────── -->
-  <AlchemicalDivider variant="hexagon" class="v2-divider" />
-  <section class="v2-section v2-pat-6 v2-feature" id="loop-edit" data-rail-section>
-    <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-edit")}</p>
-      <h2 class="v2-h2" data-copy>Infrastructure is part of your application</h2>
-      <p class="v2-lede" data-copy>
-        Other IaC tools split an app into two programs, but every feature you build crosses that line. In Alchemy, a Layer owns its infrastructure and service implementation, so the Layers your model runs on deploy as part of the same program, and features can be decomposed.
-      </p>
-      <div class="v2-split v2-split--center">
-        <figure class="v2-pyramid" aria-label="The Photos module spans every layer of the app">
-          <div class="v2-pyramid__stack">
-            <span class="v2-pyramid__module" data-copy>PHOTOS MODULE</span>
-            <ol class="v2-pyramid__layers">
-              {PYRAMID.map((row, i) => (
-                <li class="v2-pyramid__layer" style={`--w:${100 - i * 12}%`}>
-                  <span class="v2-pyramid__name" data-copy>{row.layer}</span>
-                  <span class="v2-pyramid__slice" data-copy>{row.slice}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-          <span class="v2-pyramid__cut" aria-hidden="true"></span>
-          <span class="v2-pyramid__program v2-pyramid__program--above" data-copy>runtime program</span>
-          <span class="v2-pyramid__program v2-pyramid__program--below" data-copy>infrastructure program</span>
-        </figure>
-        <PhotosLayers client:visible />
-      </div>
-    </div>
-  </section>
-
   <!-- ───────────────── TYPE-CHECK ───────────────── -->
-  <AlchemicalDivider variant="heptagon" class="v2-divider" />
-  <section class="v2-section v2-pat-1 v2-feature" id="loop-types" data-rail-section>
+  <AlchemicalDivider variant="hexagon" class="v2-divider" />
+  <section class="v2-section v2-pat-6 v2-feature" id="loop-types" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-types")}</p>
-      <h2 class="v2-h2" data-copy>Type checking proves your infra is correct</h2>
+      <h2 class="v2-h2" data-copy>The type checker proves it is wired correctly</h2>
       <p class="v2-lede" data-copy>
-        Each Layer declares what it needs in its type: the resources it creates, the access it grants, and the services it calls. Leave one out and the program doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
+        A model declares what it needs in its type, and so does each Layer: the resources it creates, the access it grants, and the services it calls. Leave one out and the program doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
       </p>
       <TypePolicy client:visible />
     </div>
   </section>
 
   <!-- ───────────────── EMULATED ───────────────── -->
-  <AlchemicalDivider variant="octagon" class="v2-divider" />
-  <section class="v2-section v2-pat-2 v2-feature" id="loop-local" data-rail-section>
+  <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1 v2-feature" id="loop-local" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-local")}</p>
-      <h2 class="v2-h2" data-copy>Get fast feedback with local emulation</h2>
+      <h2 class="v2-h2" data-copy>Run the whole app on your machine</h2>
       <p class="v2-lede" data-copy>
         <code class="alc-code-inline">alchemy dev</code> runs Workers, Durable Objects, queues and buckets on emulated services on your machine, and the frontend reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and the same suite runs against those services in seconds, with nothing deployed.
       </p>
@@ -606,11 +586,11 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── TESTED LIVE ───────────────── -->
-  <AlchemicalDivider variant="nonagon" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-feature" id="loop-live" data-rail-section>
+  <AlchemicalDivider variant="octagon" class="v2-divider" />
+  <section class="v2-section v2-pat-2 v2-feature" id="loop-live" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-live")}</p>
-      <h2 class="v2-h2" data-copy>Test a live deployment when ready to PR</h2>
+      <h2 class="v2-h2" data-copy>Run the same tests against the real cloud</h2>
       <p class="v2-lede" data-copy>
         Once it works locally, run the same test without <code class="alc-code-inline">LOCAL=1</code>. It deploys the app to a stage of its own, runs against real Workers, buckets and permissions, and destroys the stage afterwards, in about 20 seconds.
       </p>
@@ -622,11 +602,11 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── PER PULL REQUEST ───────────────── -->
-  <AlchemicalDivider variant="decagon" class="v2-divider" />
-  <section class="v2-section v2-pat-4 v2-feature" id="loop-pr" data-rail-section>
+  <AlchemicalDivider variant="nonagon" class="v2-divider" />
+  <section class="v2-section v2-pat-3 v2-feature" id="loop-pr" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-pr")}</p>
-      <h2 class="v2-h2" data-copy>Deploy a preview stage in CI before merging</h2>
+      <h2 class="v2-h2" data-copy>Every pull request gets its own deployment</h2>
       <p class="v2-lede" data-copy>
         CI deploys each pull request to its own stage, runs the same tests, and comments a link to try it. The comment is a resource in the same program, so it is updated on every push and deleted with the preview. Merging deploys to production.
       </p>
@@ -643,21 +623,24 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── OBSERVABILITY ───────────────── -->
-  <AlchemicalDivider variant="hendecagon" class="v2-divider" />
-  <section class="v2-section v2-pat-5 v2-feature" id="loop-prod" data-rail-section>
+  <AlchemicalDivider variant="decagon" class="v2-divider" />
+  <section class="v2-section v2-pat-4 v2-feature" id="loop-prod" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-prod")}</p>
-      <h2 class="v2-h2" data-copy>Disciplined monitoring on Day 1</h2>
+      <h2 class="v2-h2" data-copy>The model traces itself in production</h2>
       <p class="v2-lede" data-copy>
-        Provide one Layer and every request is traced and logged with OpenTelemetry from the first deploy. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app. Swap the Layer to send telemetry to a different platform.
+        The model gives telemetry a shape. Every command, event, policy, view and saga records an OpenTelemetry span named after itself, and the spans join into one trace from a click to everything it caused. Provide one Layer to export them. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app.
       </p>
+      <div class="v2-trace">
+        <Terminal title="trace · Account.WithdrawMoney" content={TRACE_OUT} />
+      </div>
       <ObservabilityDash client:visible />
     </div>
   </section>
 
   <!-- ───────────────── SENTIMENT ───────────────── -->
-  <AlchemicalDivider variant="dodecagon" class="v2-divider" />
-  <section class="v2-section v2-pat-6" aria-labelledby="sentiment-h">
+  <AlchemicalDivider variant="hendecagon" class="v2-divider" />
+  <section class="v2-section v2-pat-5" aria-labelledby="sentiment-h">
     <div class="v2-container">
       <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
       <p class="v2-lede" data-copy>
@@ -670,7 +653,7 @@ const PROVIDERS = [
 
   <!-- ───────────────── GET STARTED ───────────────── -->
   <AlchemicalDivider variant="circle" class="v2-divider" />
-  <section class="v2-section v2-pat-1 v2-section--last">
+  <section class="v2-section v2-pat-6 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
@@ -1196,6 +1179,15 @@ const PROVIDERS = [
   }
   /* Astro hoists a client:visible loader <script> next to the first such
      island; as a grid child it would otherwise render as text. */
+  .v2-trace {
+    margin: 0 0 24px;
+  }
+  .v2-trace :global(.terminal) {
+    margin: 0;
+  }
+  .v2-trace :global(.terminal-body) {
+    overflow-x: auto;
+  }
   .v2-split :global(.terminal) {
     margin: 0;
     flex: 1;
@@ -1256,127 +1248,6 @@ const PROVIDERS = [
   .v2-overview__source a:hover {
     color: var(--alc-fg-1);
     text-decoration-color: currentColor;
-  }
-
-  /* ---------- modules: the app's layers, cut by a feature ---------- */
-  .v2-split--center {
-    align-items: center !important;
-  }
-  .v2-pyramid {
-    /* Band height and gap; the cut sits between the 2nd and 3rd bands. */
-    --band: 58px;
-    --gap: 6px;
-    --cut: calc(2 * var(--band) + 1.5 * var(--gap));
-    position: relative;
-    margin: 0;
-  }
-  .v2-pyramid__stack {
-    --slice-left: 46%;
-    --slice-width: 34%;
-    position: relative;
-    width: 76%;
-    padding-top: 30px;
-  }
-  /* The module: one column through every band. */
-  .v2-pyramid__stack::after {
-    content: "";
-    position: absolute;
-    top: 26px;
-    bottom: -4px;
-    left: var(--slice-left);
-    width: var(--slice-width);
-    border: 1.5px solid var(--alc-accent);
-    border-radius: var(--alc-radius);
-    background: color-mix(in srgb, var(--alc-accent) 10%, transparent);
-    pointer-events: none;
-  }
-  .v2-pyramid__module {
-    position: absolute;
-    top: 0;
-    left: var(--slice-left);
-    width: var(--slice-width);
-    text-align: center;
-    font-family: var(--alc-font-mono);
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    color: var(--alc-accent-text);
-  }
-  .v2-pyramid__layers {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column-reverse;
-    gap: var(--gap);
-  }
-  .v2-pyramid__layer {
-    position: relative;
-    min-height: var(--band);
-    display: flex;
-    align-items: center;
-  }
-  .v2-pyramid__layer::before {
-    content: "";
-    position: absolute;
-    inset: 0 calc((100% - var(--w)) / 2);
-    border: 1px solid var(--alc-hairline-3);
-    border-radius: var(--alc-radius);
-    background: color-mix(in srgb, var(--alc-bg) 85%, transparent);
-  }
-  .v2-pyramid__name {
-    position: relative;
-    margin-left: calc((100% - var(--w)) / 2);
-    padding: 0 12px;
-    max-width: calc(var(--slice-left) - (100% - var(--w)) / 2);
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.25;
-    color: var(--alc-fg-1);
-  }
-  .v2-pyramid__slice {
-    position: absolute;
-    inset: 0 auto 0 var(--slice-left);
-    width: var(--slice-width);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 0 6px;
-    font-family: var(--alc-font-mono);
-    font-size: 12.5px;
-    color: var(--alc-fg-1);
-  }
-  .v2-pyramid__cut {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: var(--cut);
-    border-top: 1.5px dashed var(--alc-fg-2);
-  }
-  .v2-pyramid__program {
-    position: absolute;
-    right: 0;
-    width: 22%;
-    font-size: 12px;
-    line-height: 1.3;
-    color: var(--alc-fg-2);
-  }
-  .v2-pyramid__program--above {
-    bottom: calc(var(--cut) + 8px);
-  }
-  .v2-pyramid__program--below {
-    top: calc(100% - var(--cut) + 8px);
-  }
-  @media (max-width: 480px) {
-    .v2-pyramid__name {
-      font-size: 12px;
-      padding: 0 8px;
-    }
-    .v2-pyramid__slice {
-      font-size: 11px;
-    }
   }
 
   /* One card, as wide as one column of a split. */
