@@ -7,6 +7,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import { vi } from "vitest";
 import * as Internet from "../../globals/Internet.ts";
 import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
@@ -700,6 +701,126 @@ layer(services, { excludeTestServices: true })((it) => {
     60_000,
   );
 
+  // Whether the tail was still queued when the upstream closed is a timing
+  // question there; this pins the close decision itself. The upstream ends its
+  // response while the client socket still holds every byte.
+  it.effect("drains a large immediate response after the upstream sends FIN", () =>
+    Effect.gen(function* () {
+      const body = Buffer.from("ä".repeat(2 * 1024 * 1024));
+      const response = Buffer.concat([
+        Buffer.from(
+          `HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n`,
+        ),
+        body,
+      ]);
+      const upstream = yield* serveTcpUpstream((socket) =>
+        socket.once("data", () => socket.end(response)),
+      );
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const instance = yield* proxy.serve({ host: "127.0.0.1" });
+      yield* instance.set(upstream);
+
+      // Hold real downstream writes until after upstream close, so pending bytes
+      // exercise the FIN boundary independently of kernel buffer sizes.
+      const write = NodeNet.Socket.prototype.write;
+      const end = NodeNet.Socket.prototype.end;
+      let delayedEnd = false;
+      const flushTimers = new Set<ReturnType<typeof setTimeout>>();
+      const writeSpy = vi.spyOn(NodeNet.Socket.prototype, "write").mockImplementation(function (
+        ...args
+      ) {
+        if (this.localPort !== Number(instance.url.port)) return Reflect.apply(write, this, args);
+        if (!this.writableCorked) this.cork();
+        Reflect.apply(write, this, args);
+        return true;
+      });
+      const endSpy = vi.spyOn(NodeNet.Socket.prototype, "end").mockImplementation(function (
+        ...args
+      ) {
+        if (this.localPort !== Number(instance.url.port)) return Reflect.apply(end, this, args);
+        delayedEnd = true;
+        const timer = setTimeout(() => {
+          flushTimers.delete(timer);
+          Reflect.apply(end, this, args);
+        }, 50);
+        flushTimers.add(timer);
+        return this;
+      });
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          writeSpy.mockRestore();
+          endSpy.mockRestore();
+          for (const timer of flushTimers) clearTimeout(timer);
+        }),
+      );
+
+      yield* Effect.promise(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            const socket = NodeNet.connect({
+              host: "127.0.0.1",
+              port: Number(instance.url.port),
+            });
+            const chunks: Buffer[] = [];
+            let ended = false;
+            let resumeTimer: ReturnType<typeof setTimeout> | undefined;
+            const timer = setTimeout(
+              () => socket.destroy(new Error("response did not drain before the deadline")),
+              3000,
+            );
+            socket.once("connect", () => {
+              socket.write("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+              // Hold the reader until the large immediate response fills the socket buffers.
+              socket.pause();
+              resumeTimer = setTimeout(() => socket.resume(), 100);
+            });
+            socket.on("data", (chunk) => chunks.push(chunk));
+            socket.once("error", reject);
+            socket.once("end", () => {
+              ended = true;
+              try {
+                const received = Buffer.concat(chunks);
+                expect(received.length).toBe(response.length);
+                expect(received.equals(response)).toBe(true);
+                resolve();
+              } catch (error) {
+                reject(error);
+              } finally {
+                socket.destroy();
+              }
+            });
+            socket.once("close", () => {
+              clearTimeout(timer);
+              clearTimeout(resumeTimer);
+              if (!ended) reject(new Error("response connection closed before end"));
+            });
+          }),
+      );
+      expect(delayedEnd).toBe(true);
+    }),
+  );
+
+  it.effect("rejects a response when the upstream aborts before its body completes", () =>
+    Effect.gen(function* () {
+      const upstream = yield* serveTcpUpstream((socket) =>
+        socket.once("data", () => {
+          socket.write(
+            "HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\nConnection: keep-alive\r\n\r\npartial",
+            () => socket.resetAndDestroy(),
+          );
+        }),
+      );
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const instance = yield* proxy.serve({ host: "127.0.0.1" });
+      yield* instance.set(upstream);
+      yield* Effect.promise(async () => {
+        const signal = AbortSignal.timeout(3000);
+        await expect(fetch(instance.url, { signal }).then((res) => res.text())).rejects.toThrow();
+        expect(signal.aborted).toBe(false);
+      });
+    }),
+  );
+
   it.effect(
     "answers Expect: 100-continue before the client sends the body",
     () =>
@@ -825,3 +946,44 @@ const roundTrip = (url: URL, payload: string) =>
       ws.close();
     });
   });
+
+const serveTcpUpstream = (accept: (socket: NodeNet.Socket) => void) =>
+  Effect.acquireRelease(
+    Effect.promise(
+      () =>
+        new Promise<{
+          server: NodeNet.Server;
+          sockets: Set<NodeNet.Socket>;
+          url: URL;
+        }>((resolve, reject) => {
+          const sockets = new Set<NodeNet.Socket>();
+          const server = NodeNet.createServer((socket) => {
+            sockets.add(socket);
+            socket.on("error", () => {});
+            socket.once("close", () => sockets.delete(socket));
+            accept(socket);
+          });
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => {
+            const address = server.address();
+            if (address === null || typeof address === "string") {
+              reject(new Error("expected upstream TCP address"));
+              return;
+            }
+            resolve({
+              server,
+              sockets,
+              url: new URL(`http://127.0.0.1:${address.port}`),
+            });
+          });
+        }),
+    ),
+    ({ server, sockets }) =>
+      Effect.promise(
+        () =>
+          new Promise<void>((resolve) => {
+            for (const socket of sockets) socket.destroy();
+            server.close(() => resolve());
+          }),
+      ),
+  ).pipe(Effect.map(({ url }) => url));
