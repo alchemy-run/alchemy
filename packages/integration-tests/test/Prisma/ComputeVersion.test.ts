@@ -1006,6 +1006,82 @@ describe(
       );
     });
 
+    it.effect("replaces when the artifact path is not known while planning", () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const diff = yield* provider.diff!({
+          id: "Version",
+          fqn: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: { service: "service-1", artifactPath: "./dist/app.tar.gz", start: true },
+          news: {
+            service: "service-1",
+            artifactPath: Output.asOutput("./dist/app.tar.gz"),
+            start: true,
+          },
+          oldBindings: [],
+          newBindings: [],
+          output: {
+            versionId: "version-1",
+            serviceId: "service-1",
+            foundryVersionId: "foundry-1",
+            status: "running",
+            previewDomain: null,
+            artifactHash: "old-hash",
+            url: undefined,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        } as never);
+
+        expect(diff).toEqual({ action: "replace" });
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(clientBackedApi(client).layer),
+        Effect.provide(PlatformServices),
+      );
+    });
+
+    it.effect("refuses skipCodeUpload when the service has no promoted version", () => {
+      const calls: string[] = [];
+      const client = {
+        getApp: (id: string) =>
+          promotedService(id).pipe(
+            Effect.map((service) => ({ ...service, latestDeploymentId: null })),
+          ),
+        createAppDeployment: () =>
+          Effect.sync(() => {
+            calls.push("createAppDeployment");
+          }),
+      };
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "Version",
+            fqn: "Version",
+            instanceId: "00000000000000000000000000000000",
+            news: { service: "service-1", skipCodeUpload: true },
+            olds: undefined,
+            output: undefined,
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect(error.message).toContain("has no promoted version yet");
+        expect(calls).toEqual([]);
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(clientBackedApi(client).layer),
+        Effect.provide(PlatformServices),
+      );
+    });
+
     it.effect("replaces when the persisted service changes from an unresolved old prop", () => {
       const client = {} as PrismaManagementClient;
 
