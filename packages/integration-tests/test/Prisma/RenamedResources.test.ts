@@ -1,4 +1,9 @@
 import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@alchemy.run/prisma/Client";
+import {
   ComputeService as PrismaComputeService,
   ComputeServiceProvider,
 } from "@alchemy.run/prisma/ComputeService";
@@ -6,6 +11,11 @@ import {
   ComputeVersion as PrismaComputeVersion,
   ComputeVersionProvider,
 } from "@alchemy.run/prisma/ComputeVersion";
+import {
+  CustomDomain as PrismaCustomDomain,
+  CustomDomainProvider,
+} from "@alchemy.run/prisma/CustomDomain";
+import type { CustomDomain as ApiCustomDomain } from "@alchemy.run/prisma/Types";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
@@ -25,6 +35,15 @@ import {
 } from "./fixtures/FakeManagementApi.ts";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
+
+const tags = [
+  "unit",
+  "local",
+  "provider:prisma",
+  "provider:prisma:computeservice",
+  "provider:prisma:computeversion",
+  "provider:prisma:customdomain",
+];
 
 interface WireService {
   id: string;
@@ -51,10 +70,17 @@ interface WireDeployment {
   createdAt: string;
 }
 
-/** An in-memory Management API holding the services and deployments the stack creates. */
+/**
+ * An in-memory Management API holding the services, deployments and custom
+ * domains a stack creates. Services and deployments are served over the wire;
+ * custom domains through the client `Prisma.CustomDomain` resolves.
+ */
 const makeComputeCloud = () => {
   const services = new Map<string, WireService>();
   const deployments = new Map<string, WireDeployment>();
+  const domains = new Map<string, ApiCustomDomain>();
+  const domainWrites: string[] = [];
+  let nextDeployment = 1;
 
   const respond = (request: Captured) => {
     const [head, id, tail] = request.pathname
@@ -103,12 +129,13 @@ const makeComputeCloud = () => {
         return page([...deployments.values()].filter((d) => d.serviceId === id));
       }
       if (tail === "deployments" && request.method === "POST") {
+        const number = nextDeployment++;
         const deployment: WireDeployment = {
-          id: `dep-${deployments.size + 1}`,
+          id: `dep-${number}`,
           type: "deployment",
           url: "",
           serviceId: id,
-          foundryVersionId: `foundry-${deployments.size + 1}`,
+          foundryVersionId: `foundry-${number}`,
           status: "new",
           previewDomain: null,
           createdAt,
@@ -129,37 +156,109 @@ const makeComputeCloud = () => {
     return unhandled(request);
   };
 
-  return { fake: makeFakeManagementApi(respond), services, deployments };
+  const missingDomain = (id: string) =>
+    new PrismaApiError({
+      method: "GET",
+      path: `/v1/domains/${id}`,
+      status: 404,
+      message: "not found",
+    });
+
+  const domainClient = {
+    listAppDomains: (appId: string) =>
+      Effect.sync(() => [...domains.values()].filter((domain) => domain.appId === appId)),
+    getCustomDomain: (id: string) =>
+      Effect.suspend(() => {
+        const domain = domains.get(id);
+        return domain ? Effect.succeed(domain) : Effect.fail(missingDomain(id));
+      }),
+    createAppDomain: (appId: string, input: { hostname: string }) =>
+      Effect.sync(() => {
+        domainWrites.push(`createAppDomain ${appId}`);
+        const id = `domain-${domains.size + 1}`;
+        const domain: ApiCustomDomain = {
+          id,
+          type: "custom-domain",
+          url: "",
+          hostname: input.hostname,
+          appId,
+          status: "active",
+          foundryStatus: "active",
+          failureReason: null,
+          failureCategory: null,
+          certExpiresAt: null,
+          dnsRecords: [],
+          createdAt,
+          updatedAt: createdAt,
+        };
+        domains.set(id, domain);
+        return { status: 201 as const, domain };
+      }),
+    retryCustomDomain: (id: string) =>
+      Effect.sync(() => {
+        domainWrites.push(`retryCustomDomain ${id}`);
+        return domains.get(id)!;
+      }),
+    deleteCustomDomain: (id: string) =>
+      Effect.sync(() => {
+        domainWrites.push(`deleteCustomDomain ${id}`);
+        domains.delete(id);
+      }),
+  } as unknown as PrismaManagementClient;
+
+  return {
+    fake: makeFakeManagementApi(respond),
+    domainClient,
+    services,
+    deployments,
+    domains,
+    domainWrites,
+  };
 };
 
 class RenameTestProviders extends Provider.ProviderCollection<RenameTestProviders>()("Prisma") {}
 
-const cloud = makeComputeCloud();
+/** One fake cloud per test, so tests that run at the same time never share calls. */
+const harness = (options: { dev: boolean }) => {
+  const cloud = makeComputeCloud();
+  const providers = Layer.effect(
+    RenameTestProviders,
+    Provider.collection([PrismaComputeService, PrismaComputeVersion, PrismaCustomDomain]),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(ComputeServiceProvider(), ComputeVersionProvider(), CustomDomainProvider()),
+    ),
+    Layer.provideMerge(Layer.succeed(PrismaClient, cloud.domainClient)),
+    Layer.provide(
+      Layer.succeed(AlchemyContext, {
+        dotAlchemy: ".alchemy-test",
+        dev: options.dev,
+        adopt: false,
+      }),
+    ),
+    Layer.provideMerge(cloud.fake.layer),
+  );
+  const { test } = Test.make({ providers, dev: options.dev, sidecar: false });
+  return { cloud, test };
+};
 
-const providers = Layer.effect(
-  RenameTestProviders,
-  Provider.collection([PrismaComputeService, PrismaComputeVersion]),
-).pipe(
-  Layer.provideMerge(Layer.mergeAll(ComputeServiceProvider(), ComputeVersionProvider())),
-  Layer.provide(
-    Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
-  ),
-  Layer.provideMerge(cloud.fake.layer),
-);
-
-const { test } = Test.make({ providers });
-
-const program = Effect.gen(function* () {
-  const service = yield* PrismaComputeService("Service", {
-    project: "project-1",
-    branchId: "branch-1",
+const program = (options: { revision: string }) =>
+  Effect.gen(function* () {
+    const service = yield* PrismaComputeService("Service", {
+      project: "project-1",
+      branchId: "branch-1",
+    });
+    const version = yield* PrismaComputeVersion("Version", {
+      service: service.serviceId,
+      skipCodeUpload: true,
+      triggers: { REVISION: options.revision },
+    });
+    const domain = yield* PrismaCustomDomain("Domain", {
+      service: service.serviceId,
+      hostname: "api.renamed.invalid",
+    });
+    return { service, version, domain };
   });
-  const version = yield* PrismaComputeVersion("Version", {
-    service: service.serviceId,
-    skipCodeUpload: true,
-  });
-  return { service, version };
-});
 
 /**
  * Rewrite a created row as an older Alchemy release wrote it: the old resource
@@ -168,8 +267,7 @@ const program = Effect.gen(function* () {
 const writeAsBeforeRename = (
   stack: Test.ScratchStack,
   fqn: string,
-  resourceType: string,
-  rename: { attr: Record<string, string>; props?: Record<string, string> },
+  rename: { type?: string; attr: Record<string, string>; props?: Record<string, string> },
 ) =>
   Effect.gen(function* () {
     const state = yield* yield* State;
@@ -184,12 +282,37 @@ const writeAsBeforeRename = (
       ...address,
       value: {
         ...stored,
-        resourceType,
+        resourceType: rename.type ?? stored.resourceType,
         attr: renameKeys(stored.attr as object, rename.attr),
         props: renameKeys(stored.props as object, rename.props ?? {}),
       },
     });
   }).pipe(Effect.provide(stack.state));
+
+const writeRowsAsBeforeRename = (stack: Test.ScratchStack) =>
+  Effect.gen(function* () {
+    yield* writeAsBeforeRename(stack, "Service", {
+      type: "Prisma.App",
+      attr: {
+        serviceId: "appId",
+        latestVersionId: "latestDeploymentId",
+        serviceEndpointDomain: "appEndpointDomain",
+      },
+    });
+    yield* writeAsBeforeRename(stack, "Version", {
+      type: "Prisma.Deployment",
+      attr: {
+        versionId: "deploymentId",
+        serviceId: "appId",
+        serviceEndpointDomain: "appEndpointDomain",
+      },
+      props: { service: "app" },
+    });
+    yield* writeAsBeforeRename(stack, "Domain", {
+      attr: { serviceId: "appId" },
+      props: { service: "app" },
+    });
+  });
 
 const readRow = (stack: Test.ScratchStack, fqn: string) =>
   Effect.gen(function* () {
@@ -201,97 +324,153 @@ const readRow = (stack: Test.ScratchStack, fqn: string) =>
     return stored;
   }).pipe(Effect.provide(stack.state));
 
-const writeRowsAsBeforeRename = (stack: Test.ScratchStack) =>
+const expectRowsAfterRename = (stack: Test.ScratchStack) =>
   Effect.gen(function* () {
-    yield* writeAsBeforeRename(stack, "Service", "Prisma.App", {
-      attr: {
-        serviceId: "appId",
-        latestVersionId: "latestDeploymentId",
-        serviceEndpointDomain: "appEndpointDomain",
-      },
-    });
-    yield* writeAsBeforeRename(stack, "Version", "Prisma.Deployment", {
-      attr: {
-        versionId: "deploymentId",
-        serviceId: "appId",
-        serviceEndpointDomain: "appEndpointDomain",
-      },
-      props: { service: "app" },
-    });
+    const service = yield* readRow(stack, "Service");
+    expect(service.resourceType).toBe("Prisma.ComputeService");
+    expect(Object.keys(service.attr as object)).toContain("serviceId");
+    expect(service.attr).not.toHaveProperty("appId");
+    expect(service.attr).not.toHaveProperty("latestDeploymentId");
+    expect(service.attr).not.toHaveProperty("appEndpointDomain");
+    const version = yield* readRow(stack, "Version");
+    expect(version.resourceType).toBe("Prisma.ComputeVersion");
+    expect(version.attr).not.toHaveProperty("deploymentId");
+    expect(version.attr).not.toHaveProperty("appId");
+    expect(version.attr).not.toHaveProperty("appEndpointDomain");
+    const domain = yield* readRow(stack, "Domain");
+    expect(domain.attr).not.toHaveProperty("appId");
+    return { service, version, domain };
   });
 
-test.provider(
-  "reads Prisma.App and Prisma.Deployment rows under the new names without replacing them",
+const unchanged = harness({ dev: false });
+
+unchanged.test.provider(
+  "reads Prisma.App, Prisma.Deployment and Prisma.CustomDomain rows under the new names without replacing them",
   (stack) =>
     Effect.gen(function* () {
+      const { cloud } = unchanged;
       yield* stack.destroy();
 
-      const first = yield* stack.deploy(program);
-
+      const first = yield* stack.deploy(program({ revision: "1" }));
       yield* writeRowsAsBeforeRename(stack);
-      const legacyService = yield* readRow(stack, "Service");
-      expect(legacyService.resourceType).toBe("Prisma.App");
-      expect(legacyService.attr).toMatchObject({ appId: first.service.serviceId });
+      expect((yield* readRow(stack, "Service")).resourceType).toBe("Prisma.App");
 
       cloud.fake.captured.length = 0;
-      const second = yield* stack.deploy(program);
+      const second = yield* stack.deploy(program({ revision: "1" }));
 
-      const writes = routesOf(cloud.fake.captured).filter((route) => !route.startsWith("GET "));
-      expect(writes).toEqual([]);
+      expect(routesOf(cloud.fake.captured).filter((route) => !route.startsWith("GET "))).toEqual(
+        [],
+      );
+      expect(cloud.domainWrites).toEqual([`createAppDomain ${first.service.serviceId}`]);
       expect(cloud.services.size).toBe(1);
       expect(cloud.deployments.size).toBe(1);
+      expect(cloud.domains.size).toBe(1);
       expect(second.service.serviceId).toBe(first.service.serviceId);
       expect(second.service.serviceEndpointDomain).toBe(first.service.serviceEndpointDomain);
       expect(second.version.versionId).toBe(first.version.versionId);
       expect(second.version.serviceId).toBe(first.service.serviceId);
+      expect(second.domain.customDomainId).toBe(first.domain.customDomainId);
+      expect(second.domain.serviceId).toBe(first.service.serviceId);
 
-      const service = yield* readRow(stack, "Service");
-      expect(service.resourceType).toBe("Prisma.ComputeService");
-      expect(service.attr).toMatchObject({ serviceId: first.service.serviceId });
-      expect(service.attr).not.toHaveProperty("appId");
-      const version = yield* readRow(stack, "Version");
-      expect(version.resourceType).toBe("Prisma.ComputeVersion");
-      expect(version.attr).toMatchObject({
+      const rows = yield* expectRowsAfterRename(stack);
+      expect(rows.service.attr).toMatchObject({ serviceId: first.service.serviceId });
+      expect(rows.version.attr).toMatchObject({
         versionId: first.version.versionId,
         serviceId: first.service.serviceId,
       });
-      expect(version.attr).not.toHaveProperty("deploymentId");
+      expect(rows.domain.attr).toMatchObject({ serviceId: first.service.serviceId });
+      expect(rows.domain.props).toMatchObject({ service: first.service.serviceId });
 
       yield* stack.destroy();
       expect(cloud.services.size).toBe(0);
       expect(cloud.deployments.size).toBe(0);
+      expect(cloud.domains.size).toBe(0);
     }),
-  {
-    tags: [
-      "unit",
-      "local",
-      "provider:prisma",
-      "provider:prisma:computeservice",
-      "provider:prisma:computeversion",
-    ],
-  },
+  { tags },
 );
 
-test.provider(
-  "destroys Prisma.App and Prisma.Deployment rows through the renamed providers",
+const replaced = harness({ dev: false });
+
+replaced.test.provider(
+  "replaces a version saved as Prisma.Deployment when its triggers change on the first deploy after the rename",
   (stack) =>
     Effect.gen(function* () {
+      const { cloud } = replaced;
       yield* stack.destroy();
 
-      yield* stack.deploy(program);
+      const first = yield* stack.deploy(program({ revision: "1" }));
+      yield* writeRowsAsBeforeRename(stack);
+
+      cloud.fake.captured.length = 0;
+      const second = yield* stack.deploy(program({ revision: "2" }));
+
+      expect(routesOf(cloud.fake.captured).filter((route) => !route.startsWith("GET "))).toEqual([
+        `POST /v1/services/${first.service.serviceId}/deployments`,
+        `DELETE /v1/deployments/${first.version.versionId}`,
+      ]);
+      expect(cloud.domainWrites).toEqual([`createAppDomain ${first.service.serviceId}`]);
+      expect([...cloud.deployments.keys()]).toEqual([second.version.versionId]);
+      expect(second.version.versionId).not.toBe(first.version.versionId);
+      expect(second.version.serviceId).toBe(first.service.serviceId);
+      expect(second.service.serviceId).toBe(first.service.serviceId);
+      expect(second.domain.customDomainId).toBe(first.domain.customDomainId);
+
+      const rows = yield* expectRowsAfterRename(stack);
+      expect(rows.version.attr).toMatchObject({
+        versionId: second.version.versionId,
+        serviceId: first.service.serviceId,
+      });
+
+      yield* stack.destroy();
+      expect(cloud.services.size).toBe(0);
+      expect(cloud.deployments.size).toBe(0);
+      expect(cloud.domains.size).toBe(0);
+    }),
+  { tags },
+);
+
+const destroyed = harness({ dev: false });
+
+destroyed.test.provider(
+  "destroys rows saved as Prisma.App and Prisma.Deployment through the renamed providers",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = destroyed;
+      yield* stack.destroy();
+
+      yield* stack.deploy(program({ revision: "1" }));
       yield* writeRowsAsBeforeRename(stack);
 
       yield* stack.destroy();
       expect(cloud.services.size).toBe(0);
       expect(cloud.deployments.size).toBe(0);
+      expect(cloud.domains.size).toBe(0);
     }),
-  {
-    tags: [
-      "unit",
-      "local",
-      "provider:prisma",
-      "provider:prisma:computeservice",
-      "provider:prisma:computeversion",
-    ],
-  },
+  { tags },
+);
+
+const dev = harness({ dev: true });
+
+dev.test.provider(
+  "reads local rows saved before the rename under the new names in alchemy dev",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const first = yield* stack.deploy(program({ revision: "1" }));
+      expect(first.service.serviceId).toBe("dev:app:Service");
+      yield* writeRowsAsBeforeRename(stack);
+
+      const second = yield* stack.deploy(program({ revision: "1" }));
+
+      expect(second.service.serviceId).toBe(first.service.serviceId);
+      expect(second.version.serviceId).toBe(first.service.serviceId);
+      expect(second.domain.serviceId).toBe(first.service.serviceId);
+      const rows = yield* expectRowsAfterRename(stack);
+      expect(rows.version.attr).toMatchObject({ serviceId: first.service.serviceId });
+      expect(rows.domain.attr).toMatchObject({ serviceId: first.service.serviceId });
+
+      yield* stack.destroy();
+    }),
+  { tags },
 );

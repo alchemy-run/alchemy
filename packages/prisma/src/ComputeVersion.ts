@@ -835,17 +835,22 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(ComputeVersion, ["versionId"], ({ id, news }) => ({
-    versionId: devId("deployment", id),
-    serviceId: attrOrString(news.service, "serviceId"),
-    foundryVersionId: devId("foundry-version", id),
-    status: "new",
-    previewDomain: undefined,
-    artifactHash: undefined,
-    triggersHash: undefined,
-    serviceEndpointDomain: undefined,
-    createdAt: DEV_TIMESTAMP,
-  }));
+  devProvider(
+    ComputeVersion,
+    ["versionId"],
+    ({ id, news }) => ({
+      versionId: devId("deployment", id),
+      serviceId: attrOrString(news.service, "serviceId"),
+      foundryVersionId: devId("foundry-version", id),
+      status: "new",
+      previewDomain: undefined,
+      artifactHash: undefined,
+      triggersHash: undefined,
+      serviceEndpointDomain: undefined,
+      createdAt: DEV_TIMESTAMP,
+    }),
+    { oldAttributes: ["deploymentId", "appId", "appEndpointDomain"] },
+  );
 
 export const ComputeVersionProvider = () =>
   ProviderLayer.dual(ComputeVersion, {

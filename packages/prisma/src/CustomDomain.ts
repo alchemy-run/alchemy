@@ -359,7 +359,9 @@ const ProviderLive = () =>
           (effect, { output: saved }) =>
             effect.pipe(
               Effect.map((diff) =>
-                updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), diff),
+                updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), diff, [
+                  "customDomainId",
+                ]),
               ),
             ),
         ),
@@ -464,26 +466,31 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(CustomDomain, ["customDomainId"], ({ id, news }) => ({
-    customDomainId: devId("custom-domain", id),
-    hostname: news.hostname,
-    serviceId: attrOrString(news.service, "serviceId"),
-    status: "active",
-    foundryStatus: "active",
-    failureReason: null,
-    failureCategory: null,
-    certExpiresAt: null,
-    dnsRecords: [
-      {
-        type: "CNAME" as const,
-        name: news.hostname,
-        value: "localhost",
-        ttl: null,
-      },
-    ],
-    createdAt: DEV_TIMESTAMP,
-    updatedAt: DEV_TIMESTAMP,
-  }));
+  devProvider(
+    CustomDomain,
+    ["customDomainId"],
+    ({ id, news }) => ({
+      customDomainId: devId("custom-domain", id),
+      hostname: news.hostname,
+      serviceId: attrOrString(news.service, "serviceId"),
+      status: "active",
+      foundryStatus: "active",
+      failureReason: null,
+      failureCategory: null,
+      certExpiresAt: null,
+      dnsRecords: [
+        {
+          type: "CNAME" as const,
+          name: news.hostname,
+          value: "localhost",
+          ttl: null,
+        },
+      ],
+      createdAt: DEV_TIMESTAMP,
+      updatedAt: DEV_TIMESTAMP,
+    }),
+    { oldAttributes: ["appId"], keptStables: ["customDomainId"] },
+  );
 
 export const CustomDomainProvider = () =>
   ProviderLayer.dual(CustomDomain, {

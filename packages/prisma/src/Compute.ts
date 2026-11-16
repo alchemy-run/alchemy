@@ -2854,8 +2854,10 @@ export const ComputeDevProvider = () =>
       return {
         stables: ["serviceId"],
         list: () => Effect.succeed([]),
-        diff: Effect.fn(function* () {
-          return { action: "update" } as const;
+        diff: Effect.fn(function* ({ output: saved }) {
+          return updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), {
+            action: "update",
+          } as const);
         }),
         read: Effect.fn(function* ({ output: saved }) {
           const output = saved && currentComputeAttributes(saved);

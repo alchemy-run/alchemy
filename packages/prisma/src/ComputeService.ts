@@ -562,17 +562,22 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(ComputeService, ["serviceId"], ({ id, fqn, news }) => ({
-    serviceId: devId("app", id),
-    name: news.displayName ?? id,
-    projectId: attrOrString(news.project, "projectId"),
-    regionId: news.regionId ?? "us-east-1",
-    branchId: news.branchId ?? null,
-    latestVersionId: null,
-    serviceEndpointDomain: "localhost",
-    createdAt: DEV_TIMESTAMP,
-    logicalId: news.logicalId ?? fqn,
-  }));
+  devProvider(
+    ComputeService,
+    ["serviceId"],
+    ({ id, fqn, news }) => ({
+      serviceId: devId("app", id),
+      name: news.displayName ?? id,
+      projectId: attrOrString(news.project, "projectId"),
+      regionId: news.regionId ?? "us-east-1",
+      branchId: news.branchId ?? null,
+      latestVersionId: null,
+      serviceEndpointDomain: "localhost",
+      createdAt: DEV_TIMESTAMP,
+      logicalId: news.logicalId ?? fqn,
+    }),
+    { oldAttributes: ["appId", "latestDeploymentId", "appEndpointDomain"] },
+  );
 
 export const ComputeServiceProvider = () =>
   ProviderLayer.dual(ComputeService, {
