@@ -1,6 +1,8 @@
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle } from "alchemy/Bundle/TempRoot";
+import { hashDirectory } from "alchemy/Command/Memo";
 import { Stack } from "alchemy/Stack";
+import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,6 +12,7 @@ import * as Redacted from "effect/Redacted";
 import type { ComputeAutoBuild, ComputeProps, ComputeStaticBuild } from "../Compute.ts";
 import { createComputeArchive, normalizeEntrypoint } from "../ComputeArchive.ts";
 import { runBuildCommand, runComputeAutoBuild, runComputeStaticBuild } from "../ComputeBuild.ts";
+import { ALWAYS_IGNORED_PATTERNS } from "./ArchiveIgnore.ts";
 import { normalizeBundleFilePath } from "./BundlePaths.ts";
 import { ComputeInvalidProps, ComputeOperationFailed } from "./UrlCheck.ts";
 
@@ -287,4 +290,66 @@ export const buildComputeArtifactFile = Effect.fn(function* (
     output: "file",
   });
   return { file, port, bundleHash: undefined };
+});
+
+const plainBuildEnv = (env: unknown) =>
+  typeof env === "object" && env !== null
+    ? processEnv(env as Record<string, string | Redacted.Redacted<string> | null | undefined>)
+    : undefined;
+
+/**
+ * Hash what {@link buildComputeArtifactFile} reads, the way `Command.Build`
+ * decides whether to rebuild: the files of the build directory that git does
+ * not ignore plus the nearest lockfile, and the build props. Archiving `path`
+ * without a build hashes every file the archive would contain. An Effect-native
+ * `main` hashes the package it is bundled from and the stack baked into the
+ * bootstrap.
+ */
+export const computeArtifactInputsHash = Effect.fn(function* (props: ComputeArtifactBuildProps) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const settings = {
+    entrypoint: props.entrypoint,
+    handler: props.handler,
+    bundle: props.bundle,
+    port: props.port,
+    archiveIgnore: props.archiveIgnore,
+  };
+  if (props.main !== undefined) {
+    const realMain = yield* fs.realPath(props.main);
+    const cwd = yield* findCwdForBundle(realMain);
+    const stack = yield* Effect.serviceOption(Stack).pipe(
+      Effect.map(Option.map(({ name, stage }) => ({ name, stage }))),
+      Effect.map(Option.getOrUndefined),
+    );
+    const files = yield* hashDirectory({ cwd });
+    return yield* sha256Object({
+      kind: "main",
+      files,
+      main: path.relative(cwd, realMain),
+      stack,
+      ...settings,
+    });
+  }
+  const appPath = path.resolve(props.path ?? ".");
+  if (props.build === undefined || props.build === false) {
+    const files = yield* hashDirectory({
+      cwd: appPath,
+      memo: {
+        include: ["**/*"],
+        exclude: [...ALWAYS_IGNORED_PATTERNS, ...(props.archiveIgnore ?? [])],
+        lockfile: false,
+      },
+    });
+    return yield* sha256Object({ kind: "path", files, ...settings });
+  }
+  const build = props.build === "auto" ? { type: "auto" as const } : props.build;
+  const cwd = "cwd" in build && build.cwd ? path.resolve(build.cwd) : appPath;
+  const files = yield* hashDirectory({ cwd });
+  return yield* sha256Object({
+    kind: "build",
+    files,
+    build: { ...build, env: plainBuildEnv("env" in build ? build.env : undefined) },
+    ...settings,
+  });
 });

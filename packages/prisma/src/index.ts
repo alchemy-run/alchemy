@@ -7,6 +7,7 @@ export * from "./BucketTypes.ts";
 export * from "./Client.ts";
 export * from "./Compute.ts";
 export * from "./ComputeArchive.ts";
+export * from "./ComputeArtifact.ts";
 export * from "./ComputeBuild.ts";
 export * from "./ComputeLifecycle.ts";
 export * from "./ComputeVersion.ts";

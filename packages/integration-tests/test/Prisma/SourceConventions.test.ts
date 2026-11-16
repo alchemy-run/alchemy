@@ -35,6 +35,7 @@ const documentedResources = [
   "Bucket",
   "BucketAccessKey",
   "Compute",
+  "ComputeArtifact",
   "ComputeService",
   "ComputeVersion",
   "Connection",

@@ -14,6 +14,7 @@ import { Bucket, BucketProvider } from "./Bucket.ts";
 import { BucketAccessKey, BucketAccessKeyProvider } from "./BucketAccessKey.ts";
 import { PrismaClientLive } from "./Client.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
+import { ComputeArtifact, ComputeArtifactProvider } from "./ComputeArtifact.ts";
 import { ComputeService, ComputeServiceProvider } from "./ComputeService.ts";
 import { ComputeVersion, ComputeVersionProvider } from "./ComputeVersion.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
@@ -177,6 +178,7 @@ export const providers = () =>
       Compute,
       ComputeService,
       ComputeVersion,
+      ComputeArtifact,
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
@@ -197,6 +199,7 @@ export const providers = () =>
         ComputeProvider(),
         ComputeServiceProvider(),
         ComputeVersionProvider(),
+        ComputeArtifactProvider(),
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
