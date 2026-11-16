@@ -742,6 +742,7 @@ import {
   OrganizationSecurityPolicyProvider,
 } from "./Compute/OrganizationSecurityPolicy.ts";
 import { PacketMirroring, PacketMirroringProvider } from "./Compute/PacketMirroring.ts";
+import { ProjectMetadataItem, ProjectMetadataItemProvider } from "./Compute/ProjectMetadataItem.ts";
 import {
   PublicAdvertisedPrefix,
   PublicAdvertisedPrefixProvider,
@@ -3614,6 +3615,7 @@ const makeProviders = () =>
           WorkloadIdentityPool,
           WorkloadIdentityProvider,
           ProjectService,
+          ProjectMetadataItem,
           SecretVersion,
           IamRole,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
@@ -4744,6 +4746,7 @@ const makeProviders = () =>
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
+                ProjectMetadataItemProvider(),
                 SecretVersionProvider(),
                 IamRoleProvider(),
               ),
