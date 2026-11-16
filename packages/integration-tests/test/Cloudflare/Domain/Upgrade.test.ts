@@ -15,6 +15,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
+import RenameHoldersWorker from "./fixtures/rename-holders-worker.ts";
+import RenameWorker from "./fixtures/rename-worker.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
 import SharedWorker from "./fixtures/shared-worker.ts";
@@ -240,6 +242,84 @@ test.provider(
       );
       expect(yield* namespacesOf(scriptName)).toEqual(hosted);
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 600_000 },
+);
+
+/**
+ * Moving a model to another Worker under a new model name, with
+ * `transferredFrom` and `formerModel`, moves each class to the new Worker
+ * and renames it after the new model, with its objects. The new model gets
+ * a directory of its own, and an account that moved lists itself in it when
+ * it is read, so a view added later still finds it.
+ */
+test.provider(
+  "moving a model to another Worker under a new name with formerModel keeps its data",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeWorker };
+        }),
+      );
+      const oldUrl = before.worker.url!;
+      const oldScript = before.worker.workerName;
+      yield* waitForVersion(oldUrl, 0);
+      yield* call(oldUrl, "/Billing/open/a-1/sam", "POST");
+      yield* poll(oldUrl, "/Billing/owners/a-1", (body) => (body as any)?.owner === "sam");
+      // a run that waits for its approval across the move
+      yield* call(oldUrl, "/saga/s-1/kim", "POST");
+      yield* poll(oldUrl, "/saga/s-1", (body) => (body as any)._tag === "Running");
+      const hosted = yield* namespacesOf(oldScript);
+
+      // The new Worker replaces the old one in the stack.
+      const after = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* RenameWorker };
+        }),
+      );
+      const url = after.worker.url!;
+      const scriptName = after.worker.workerName;
+      yield* waitForVersion(url, 0);
+
+      // the same namespaces under the new model's names, and a new directory
+      const moved = yield* namespacesOf(scriptName);
+      expect(Object.keys(moved).sort()).toEqual([
+        "Ledger.AccountAggregate",
+        "Ledger.ApproveWorkflow",
+        "Ledger.DomainDirectory",
+        "Ledger.OwnersView",
+        "Ledger.OwnersViewRun",
+      ]);
+      expect(moved["Ledger.AccountAggregate"]).toEqual(hosted["Billing.AccountAggregate"]);
+      expect(moved["Ledger.ApproveWorkflow"]).toEqual(hosted["Billing.ApproveWorkflow"]);
+      expect(moved["Ledger.OwnersView"]).toEqual(hosted["Billing.OwnersView"]);
+      expect(moved["Ledger.OwnersViewRun"]).toEqual(hosted["Billing.OwnersViewRun"]);
+      expect(moved["Ledger.DomainDirectory"]).not.toEqual(hosted["Billing.DomainDirectory"]);
+      expect(yield* namespacesOf(oldScript)).toEqual({});
+      // Reading the account lists it in the new model's directory.
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      // the run started on the old Worker finishes on the new one
+      yield* call(url, "/approve/s-1/lee", "POST");
+      yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
+      expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
+
+      // A view added later backfills the accounts that moved.
+      yield* Effect.sleep("5 seconds");
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* RenameHoldersWorker };
+        }),
+      );
+      yield* poll(url, "/Billing/holders/all", (body) => (body as any)?.holders?.["a-1"] === "sam");
+      expect(yield* call(url, "/Billing/holders/all")).toEqual({
+        holders: { "a-1": "sam", "s-1": "kim:lee" },
+      });
+      expect(yield* namespacesOf(scriptName)).toMatchObject(moved);
 
       yield* stack.destroy();
     }).pipe(logLevel),

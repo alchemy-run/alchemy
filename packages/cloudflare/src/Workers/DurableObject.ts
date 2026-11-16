@@ -55,6 +55,8 @@ export interface DurableObjectLike<Shape = any> {
   /** @internal phantom */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
   /** @internal phantom */
+  transferredClassName?: string;
+  /** @internal phantom */
   renamedFrom?: string;
   /** @internal phantom */
   storage?: "sqlite" | "legacy-kv";
@@ -301,6 +303,16 @@ export interface DurableObjectProps {
    */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[] | undefined;
   /**
+   * The class name the namespace had on its former host, when the move also
+   * renames it, for example when a model of several classes moves to another
+   * Worker under a new model name. Cloudflare's `transferred_classes`
+   * migration takes a source and a destination class, so the objects keep
+   * their data under the new name. Only used with `transferredFrom`.
+   *
+   * @default the class's own name
+   */
+  transferredClassName?: string | undefined;
+  /**
    * The class this one was called before, on the same Worker. When the
    * Worker still hosts a class of that name and no binding of this deploy
    * keeps it, the deploy renames it to this class with a `renamed_classes`
@@ -384,7 +396,10 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
-      props?: Pick<DurableObjectProps, "className" | "renamedFrom" | "transferredFrom" | "errors">,
+      props?: Pick<
+        DurableObjectProps,
+        "className" | "renamedFrom" | "transferredFrom" | "transferredClassName" | "errors"
+      >,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -441,7 +456,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
 /** Props of an inline Effect Durable Object, `Cloudflare.DurableObject(name, props, impl)`. */
 export type InlineDurableObjectProps = Pick<
   DurableObjectProps,
-  "className" | "renamedFrom" | "transferredFrom" | "errors"
+  "className" | "renamedFrom" | "transferredFrom" | "transferredClassName" | "errors"
 >;
 
 export class DurableObjectScope extends Context.Service<DurableObjectScope, DurableObject>()(
@@ -1503,6 +1518,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               scriptName,
               hostNamespace: hostNamespaceOf(scriptName, className),
               transferredFrom: normalizeTransferredFrom(transferredFrom),
+              // A move that renames the class names its former class on the old host.
+              ...(scriptName === undefined && classProps?.transferredClassName !== undefined
+                ? { transferredClassName: classProps.transferredClassName }
+                : {}),
               // A rename is of a class this Worker hosts: never of a foreign one.
               ...(scriptName === undefined && classProps?.renamedFrom !== undefined
                 ? { renamedFrom: classProps.renamedFrom }
@@ -1581,6 +1600,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
         transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
+        transferredClassName: (args[1] as DurableObjectProps)?.transferredClassName,
         renamedFrom: (args[1] as DurableObjectProps)?.renamedFrom,
         storage: (args[1] as DurableObjectProps)?.storage,
         containers: (args[1] as DurableObjectBindingProps)?.containers,

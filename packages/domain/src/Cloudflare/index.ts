@@ -104,16 +104,37 @@ interface Placement {
     | DurableObjectTransferSource
     | readonly DurableObjectTransferSource[]
     | undefined;
+  /** The model the classes belonged to on that Worker, when they move under a new model name. */
+  readonly formerModel: string | undefined;
 }
 
 /**
  * The Durable Object props that move a class's objects from the Worker that
  * hosted it before, when the placement names one.
  */
-const transferOf = (placement: Placement): InlineDurableObjectProps =>
+const transferOf = (placement: Placement, formerClass?: string): InlineDurableObjectProps =>
   placement.transferredFrom === undefined
     ? {}
-    : ({ transferredFrom: placement.transferredFrom } as InlineDurableObjectProps);
+    : ({
+        transferredFrom: placement.transferredFrom,
+        ...(formerClass === undefined ? {} : { transferredClassName: formerClass }),
+      } as InlineDurableObjectProps);
+
+/**
+ * How one of the model's classes reaches this Worker: from the former host, under the former model's class of the
+ * same name when the model moved under a new name. Then the directory is the exception: the former model keeps its
+ * own for the classes it still hosts, and each instance that moved lists itself in this model's new one.
+ */
+const movedFrom = (
+  placement: Placement,
+  name: string,
+  formerClass: string | undefined,
+): InlineDurableObjectProps =>
+  formerClass === undefined
+    ? transferOf(placement)
+    : name === "DomainDirectory"
+      ? {}
+      : transferOf(placement, formerClass);
 
 /** Keys for transfer sources that aren't strings or Workers, by identity. */
 const transferIds = new WeakMap<object, string>();
@@ -301,7 +322,16 @@ const cloudflareHost = (
           Effect.map(
             declare(
               named(modelName, name),
-              { ...renamedFrom(version, legacyData, name), ...transferOf(placement) },
+              {
+                ...renamedFrom(version, legacyData, name),
+                ...movedFrom(
+                  placement,
+                  name,
+                  placement.formerModel === undefined
+                    ? undefined
+                    : named(placement.formerModel, name),
+                ),
+              },
               onCloudflare(impl),
             ),
             (namespace) => placed(namespace, placement),
@@ -314,14 +344,17 @@ const cloudflareHost = (
             for (const saga of model.sagas) {
               if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
               else
-                sagaRenames.set(
-                  className(model.modelName, `${saga}Workflow`),
-                  renamedFrom(
+                sagaRenames.set(className(model.modelName, `${saga}Workflow`), {
+                  ...renamedFrom(
                     version,
                     model.legacyData,
                     `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
                   ),
-                );
+                  // Its runs move with the model, from the class the former model named.
+                  ...(placement.transferredFrom !== undefined && placement.formerModel !== undefined
+                    ? { transferredClassName: className(placement.formerModel, `${saga}Workflow`) }
+                    : {}),
+                } as InlineDurableObjectProps);
             }
           }),
         connect: connectTo,
@@ -535,6 +568,7 @@ export function layerDurableObjects({
   locationHint,
   backfillTimeout,
   transferredFrom,
+  formerModel,
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
@@ -548,8 +582,8 @@ export function layerDurableObjects({
     transferredFrom === undefined
       ? ""
       : [transferredFrom as DurableObjectTransferSource].flat().map(transferKey).join(",");
-  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}|${transfer}`;
-  const placement: Placement = { jurisdiction, locationHint, transferredFrom };
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}|${transfer}|${formerModel ?? ""}`;
+  const placement: Placement = { jurisdiction, locationHint, transferredFrom, formerModel };
   let platform = platforms.get(key);
   if (platform === undefined)
     platforms.set(
@@ -689,6 +723,18 @@ export interface DurableObjectsOptions {
    * @default undefined (the classes are new to this Worker)
    */
   readonly transferredFrom?: DurableObjectTransferSource | readonly DurableObjectTransferSource[];
+  /**
+   * The model whose classes these were on the former host, when they move
+   * under a new model name: `"Platform"` for a `Tenancy` model whose
+   * aggregates, views, policies and sagas used to be part of `Platform`.
+   * Each class moves from the former model's class of the same kind and
+   * name (`Platform.StorefrontAggregate` becomes
+   * `Tenancy.StorefrontAggregate`), with its objects. A class the former
+   * host doesn't hold is created empty. Only used with `transferredFrom`.
+   *
+   * @default undefined (the classes keep their model's name)
+   */
+  readonly formerModel?: string;
 }
 
 const platforms = new Map<

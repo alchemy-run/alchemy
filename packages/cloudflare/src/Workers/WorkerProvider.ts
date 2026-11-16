@@ -2122,6 +2122,8 @@ export const LiveWorkerProvider = () =>
         selfScriptName: string;
         logicalId: string;
         className: string;
+        /** The class's name on the former host; differs from `className` when the move renames it. */
+        sourceClassName: string;
         sources: readonly string[];
         observedNamespaces: readonly ObservedDurableObjectNamespace[];
       }) {
@@ -2154,7 +2156,7 @@ export const LiveWorkerProvider = () =>
           ...params.sources,
           ...logicalSources,
           ...params.observedNamespaces.flatMap((ns) =>
-            ns.class === params.className ? [ns.script] : [],
+            ns.class === params.sourceClassName ? [ns.script] : [],
           ),
         ]);
         const matched: string[] = [];
@@ -2186,7 +2188,7 @@ export const LiveWorkerProvider = () =>
           const localBinding = settings.bindings?.find(
             (binding) =>
               binding.type === "durable_object_namespace" &&
-              binding.className === params.className &&
+              binding.className === params.sourceClassName &&
               (binding.scriptName == null || binding.scriptName === script),
           );
           const namespaceId =
@@ -2196,14 +2198,16 @@ export const LiveWorkerProvider = () =>
           const findNamespace = (namespaces: typeof params.observedNamespaces) =>
             namespaces.find((ns) =>
               namespaceId === undefined
-                ? ns.script === script && ns.class === params.className
+                ? ns.script === script && ns.class === params.sourceClassName
                 : ns.id === namespaceId,
             );
           let namespace = findNamespace(params.observedNamespaces);
           if (
             namespace === undefined &&
             (localBinding !== undefined ||
-              Object.values(getDurableObjectTagMap(settings.tags ?? [])).includes(params.className))
+              Object.values(getDurableObjectTagMap(settings.tags ?? [])).includes(
+                params.sourceClassName,
+              ))
           ) {
             // A known source namespace must be located, not replaced with a fresh one.
             namespace = yield* listDurableObjectNamespaces(params.accountId).pipe(
@@ -2214,7 +2218,7 @@ export const LiveWorkerProvider = () =>
                   : Effect.fail(
                       new MissingDurableObjects({
                         scriptName: script,
-                        expected: [params.className],
+                        expected: [params.sourceClassName],
                       }),
                     );
               }),
@@ -2238,7 +2242,7 @@ export const LiveWorkerProvider = () =>
                     binding.type === "durable_object_namespace" &&
                     ((!binding.className &&
                       (binding.scriptName == null || binding.scriptName === script)) ||
-                      (binding.className === params.className &&
+                      (binding.className === params.sourceClassName &&
                         binding.scriptName != null &&
                         binding.scriptName !== script)),
                 )
@@ -2247,7 +2251,7 @@ export const LiveWorkerProvider = () =>
               ),
             );
           }
-          if (namespace?.script === script && namespace.class === params.className) {
+          if (namespace?.script === script && namespace.class === params.sourceClassName) {
             matched.push(script);
           }
         }
@@ -3434,12 +3438,14 @@ export const LiveWorkerProvider = () =>
             if (
               item.type === "durable_object_namespace" &&
               (item.transferredFrom !== undefined ||
+                item.transferredClassName !== undefined ||
                 item.renamedFrom !== undefined ||
                 item.storage !== undefined ||
                 "hostNamespace" in item)
             ) {
               const {
                 transferredFrom: _,
+                transferredClassName: _____,
                 renamedFrom: ____,
                 storage: __,
                 hostNamespace: ___,
@@ -3878,6 +3884,7 @@ export const LiveWorkerProvider = () =>
                   selfScriptName: name,
                   logicalId: binding.logicalId,
                   className: binding.className,
+                  sourceClassName: binding.transferredClassName ?? binding.className,
                   sources: normalizeTransferSources(binding.transferredFrom, name),
                   observedNamespaces,
                 });
@@ -3886,7 +3893,7 @@ export const LiveWorkerProvider = () =>
               // `transferred_classes` migration instead of creating a
               // fresh class.
               transferredClasses.push({
-                from: binding.className,
+                from: binding.transferredClassName ?? binding.className,
                 fromScript,
                 to: binding.className,
               });
@@ -4116,6 +4123,20 @@ export const LiveWorkerProvider = () =>
                 ...(news.tags ?? []),
               ]),
             );
+            // Cloudflare wants the code to export a class expecting a
+            // transfer, under the name the namespace arrives with. A class
+            // that also changes its name isn't exported under its former name
+            // by the real code, so this Worker, which serves nothing yet,
+            // stages on a placeholder that exports every class of the map.
+            const stagedClasses = transferredClasses.some((t) => t.from !== t.to)
+              ? Object.entries(metadata.exports ?? {}).flatMap(([className, entry]) =>
+                  entry?.type === "durable-object" &&
+                  (entry.state === undefined || entry.state === "expecting-transfer")
+                    ? [className]
+                    : [],
+                )
+              : undefined;
+            const stagedModule = metadata.mainModule ?? "main.js";
             yield* putWorkerScript({
               accountId,
               scriptName: name,
@@ -4129,10 +4150,34 @@ export const LiveWorkerProvider = () =>
                       binding.type === "durable_object_namespace" &&
                       transferringIn.has(binding.className) &&
                       (binding.scriptName === undefined || binding.scriptName === name)
+                    ) &&
+                    // The placeholder hosts no Workflow of this Worker's.
+                    !(
+                      stagedClasses !== undefined &&
+                      binding.type === "workflow" &&
+                      ((binding as { scriptName?: string }).scriptName === undefined ||
+                        (binding as { scriptName?: string }).scriptName === name)
                     ),
                 ),
+                ...(stagedClasses === undefined
+                  ? {}
+                  : {
+                      mainModule: stagedModule,
+                      exports: Object.fromEntries(
+                        Object.entries(metadata.exports ?? {}).filter(
+                          ([, entry]) => entry?.type === "durable-object",
+                        ),
+                      ),
+                    }),
               },
-              files: bundle.files,
+              files:
+                stagedClasses === undefined
+                  ? bundle.files
+                  : [
+                      new File([makePlaceholderScript(stagedClasses)], stagedModule, {
+                        type: "application/javascript+module",
+                      }),
+                    ],
             });
             for (const fromScript of new Set(transferredClasses.map((t) => t.fromScript))) {
               yield* commitDurableObjectTransfer({
@@ -4152,7 +4197,7 @@ export const LiveWorkerProvider = () =>
             dispatchNamespace,
             metadata: {
               ...metadata,
-              exports: metadata.exports && settleTransfers(metadata.exports),
+              exports: metadata.exports && settleTransfers(metadata.exports, transferredClasses),
             },
             files: bundle.files,
           });
@@ -5968,7 +6013,12 @@ const buildDurableObjectExports = (params: {
     exports[className] = { type: "durable-object", state: "deleted" };
   }
   for (const { from, fromScript, to } of params.transferredClasses) {
-    exports[to] = {
+    // Cloudflare transfers a namespace under the class name it has on the
+    // former host. A class that also changes its name is received under its
+    // former name, then renamed once the transfer commits (see
+    // `settleTransfers`), so its own name isn't live until then.
+    if (from !== to) delete exports[to];
+    exports[from] = {
       type: "durable-object",
       storage: observedStorage(observedNamespaces, fromScript, from),
       state: "expecting-transfer",
@@ -6071,20 +6121,32 @@ const sameDurableObjectExports = (
  */
 const settleTransfers = (
   exports: Record<string, workers.PutScriptMetadataExport | undefined>,
+  transferredClasses: readonly { from: string; to: string }[] = [],
 ): Record<string, workers.PutScriptMetadataExport> =>
   Object.fromEntries(
-    Object.entries(exports).flatMap(([className, entry]) =>
-      entry === undefined
-        ? []
+    Object.entries(exports).flatMap(([className, entry]) => {
+      if (entry === undefined) return [];
+      if (entry.state !== "expecting-transfer") return [[className, entry]];
+      const settled = {
+        type: entry.type,
+        storage: entry.storage,
+      } as workers.PutScriptMetadataExport;
+      // Received under its former name: rename it to the class this Worker hosts.
+      const to = transferredClasses.find((t) => t.from === className && t.to !== t.from)?.to;
+      return to === undefined
+        ? [[className, settled]]
         : [
             [
               className,
-              entry.state === "expecting-transfer"
-                ? { type: entry.type, storage: entry.storage }
-                : entry,
+              {
+                type: "durable-object",
+                state: "renamed",
+                renamedTo: to,
+              } as workers.PutScriptMetadataExport,
             ],
-          ],
-    ),
+            [to, settled],
+          ];
+    }),
   );
 
 /**
@@ -6250,6 +6312,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
             Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
+          transferredClassName: item.transferredClassName,
           renamedFrom: item.renamedFrom,
           storage: item.storage,
         },
