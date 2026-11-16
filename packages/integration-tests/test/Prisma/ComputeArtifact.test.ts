@@ -10,6 +10,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Provider from "alchemy/Provider";
+import { initialCwd } from "alchemy/Util/Node";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -82,7 +83,7 @@ const builds = (buildsLog: string) =>
       .length;
   });
 
-const program = (app: string) =>
+const program = (app: string, env?: Record<string, string>) =>
   Effect.gen(function* () {
     const artifact = yield* ComputeArtifact("Artifact", {
       path: app,
@@ -90,6 +91,7 @@ const program = (app: string) =>
         command: "mkdir -p dist && cp src/server.js dist/server.js && echo built >> ../builds.log",
         outdir: "dist",
         entrypoint: "server.js",
+        ...(env === undefined ? {} : { env }),
       },
     });
     const service = yield* ComputeService("Service", {
@@ -195,4 +197,132 @@ unchanged.test.provider(
       expect(cloud.services.size).toBe(0);
     }).pipe(Effect.scoped),
   { tags },
+);
+
+const mtime = (file: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    return (yield* fs.stat(path.resolve(initialCwd, file))).mtime;
+  });
+
+const missing = harness();
+missing.test.provider(
+  "keeps the version when the archive is not on this machine and nothing changed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = missing;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+      const { app, buildsLog } = yield* writeApp("one");
+
+      const first = yield* stack.deploy(program(app));
+      expect(path.isAbsolute(first.artifact.artifactPath)).toBe(false);
+      // A CI runner starts without the `.alchemy` directory that holds it.
+      yield* fs.remove(path.resolve(initialCwd, path.dirname(first.artifact.artifactPath)), {
+        recursive: true,
+      });
+
+      yield* clearCalls(cloud);
+      const second = yield* stack.deploy(program(app));
+      expect(yield* builds(buildsLog)).toBe(1);
+      expect(second.artifact.artifactPath).toBe(first.artifact.artifactPath);
+      expect(second.version.versionId).toBe(first.version.versionId);
+      expect(uploads(cloud)).toBe(0);
+      expect(cloud.writes()).toEqual(["POST /v1/services/svc-1/promote"]);
+      expect(cloud.deployments.size).toBe(1);
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  { tags },
+);
+
+const buildEnv = harness();
+buildEnv.test.provider(
+  "builds again and replaces the version when a build.env value changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = buildEnv;
+      yield* stack.destroy();
+      const { app, buildsLog } = yield* writeApp("one");
+
+      const first = yield* stack.deploy(program(app, { API_URL: "https://one.example" }));
+      const second = yield* stack.deploy(program(app, { API_URL: "https://one.example" }));
+      expect(yield* builds(buildsLog)).toBe(1);
+      expect(second.version.versionId).toBe(first.version.versionId);
+
+      const third = yield* stack.deploy(program(app, { API_URL: "https://two.example" }));
+      expect(yield* builds(buildsLog)).toBe(2);
+      expect(third.version.versionId).not.toBe(first.version.versionId);
+      expect(cloud.deployments.size).toBe(2);
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  { tags },
+);
+
+const effectNative = harness();
+effectNative.test.provider(
+  "builds an Effect-native main again when a module it imports from outside its package changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+      // No package.json here, so the bundle's package is this test package and
+      // `value.ts` is outside it.
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-prisma-artifact-main-" });
+      const main = path.join(root, "app.ts");
+      const value = path.join(root, "value.ts");
+      yield* fs.writeFileString(
+        main,
+        'import { value } from "./value.ts";\nexport default { value };\n',
+      );
+      yield* fs.writeFileString(value, 'export const value = "one";\n');
+      const artifact = ComputeArtifact("Artifact", { main });
+
+      const first = yield* stack.deploy(artifact);
+      const firstWrite = yield* mtime(first.artifactPath);
+      const second = yield* stack.deploy(artifact);
+      expect(second.hash).toBe(first.hash);
+      expect(yield* mtime(second.artifactPath)).toEqual(firstWrite);
+
+      yield* fs.writeFileString(value, 'export const value = "two";\n');
+      const third = yield* stack.deploy(artifact);
+      expect(third.hash).not.toBe(first.hash);
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  { tags, timeout: 120_000 },
+);
+
+const staticBuild = harness();
+staticBuild.test.provider(
+  "skips an unchanged static build, and builds again when a page changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-prisma-artifact-static-" });
+      yield* fs.writeFileString(path.join(root, "index.html"), "<h1>one</h1>");
+      const artifact = ComputeArtifact("Artifact", {
+        path: root,
+        build: { type: "static", outdir: "." },
+      });
+
+      const first = yield* stack.deploy(artifact);
+      const firstWrite = yield* mtime(first.artifactPath);
+      const second = yield* stack.deploy(artifact);
+      expect(second.hash).toBe(first.hash);
+      expect(yield* mtime(second.artifactPath)).toEqual(firstWrite);
+
+      yield* fs.writeFileString(path.join(root, "index.html"), "<h1>two</h1>");
+      const third = yield* stack.deploy(artifact);
+      expect(third.hash).not.toBe(first.hash);
+
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  { tags, timeout: 120_000 },
 );

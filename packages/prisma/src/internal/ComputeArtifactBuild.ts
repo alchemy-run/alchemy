@@ -1,7 +1,8 @@
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle } from "alchemy/Bundle/TempRoot";
-import { hashDirectory } from "alchemy/Command/Memo";
+import { hashDirectory, type MemoOptions } from "alchemy/Command/Memo";
 import { Stack } from "alchemy/Stack";
+import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -107,7 +108,8 @@ const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
   }).pipe(Effect.onError(() => fs.remove(directory, { recursive: true }).pipe(Effect.ignore)));
 });
 
-const bundleEffectCompute = Effect.fn(function* (props: ComputeArtifactBuildProps) {
+/** Bundle an Effect-native `main` with the Prisma Compute bootstrap. */
+const bundleEffectNative = Effect.fn(function* (props: ComputeArtifactBuildProps) {
   if (!props.main) {
     return yield* new ComputeInvalidProps({
       message:
@@ -135,7 +137,7 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeArtifactBuildProp
   const importEntrypoint =
     handler === "default" ? "import entrypoint" : `import { ${handler} as entrypoint }`;
 
-  const bundle = yield* Bundle.build(
+  return yield* Bundle.build(
     {
       ...props.bundle?.input,
       input: realMain,
@@ -174,7 +176,10 @@ await bootstrap(entrypoint, ${JSON.stringify({
     },
     props.bundle?.extra,
   );
+});
 
+const bundleEffectCompute = Effect.fn(function* (props: ComputeArtifactBuildProps) {
+  const bundle = yield* bundleEffectNative(props);
   const artifact = yield* writeBundleDirectory(bundle);
   const file = yield* createComputeArchive({
     directory: artifact.directory,
@@ -297,45 +302,51 @@ const plainBuildEnv = (env: unknown) =>
     ? processEnv(env as Record<string, string | Redacted.Redacted<string> | null | undefined>)
     : undefined;
 
+/** Which files decide whether `Prisma.ComputeArtifact` builds again. */
+export type ComputeArtifactMemo = MemoOptions | boolean;
+
+const settingsOf = (props: ComputeArtifactBuildProps) => ({
+  entrypoint: props.entrypoint,
+  handler: props.handler,
+  bundleOptions: props.bundle,
+  port: props.port,
+  archiveIgnore: props.archiveIgnore,
+});
+
+/** The fingerprint of an Effect-native `main`: the bundle's own hash. */
+export const effectNativeInputsHash = (props: ComputeArtifactBuildProps, bundleHash: string) =>
+  sha256Object({ kind: "main", bundle: bundleHash, ...settingsOf(props) });
+
 /**
- * Hash what {@link buildComputeArtifactFile} reads, the way `Command.Build`
- * decides whether to rebuild: the files of the build directory that git does
- * not ignore plus the nearest lockfile, and the build props. Archiving `path`
- * without a build hashes every file the archive would contain. An Effect-native
- * `main` hashes the package it is bundled from and the stack baked into the
- * bootstrap.
+ * Hash what {@link buildComputeArtifactFile} reads.
+ *
+ * - An Effect-native `main` is bundled and the bundle's hash is used, so every
+ *   module the bundler follows counts, in any package.
+ * - Archiving `path` without a build hashes every file the archive would
+ *   contain.
+ * - A command, auto or static build hashes, as `Command.Build` does, the files
+ *   in its working directory that git does not ignore and the nearest
+ *   lockfile, or what `memo` selects, plus the build props with `env`
+ *   resolved.
+ *
+ * Paths are taken relative to the process's initial working directory, so the
+ * same checkout at another path hashes the same.
  */
-export const computeArtifactInputsHash = Effect.fn(function* (props: ComputeArtifactBuildProps) {
-  const fs = yield* FileSystem.FileSystem;
+export const computeArtifactInputsHash = Effect.fn(function* (
+  props: ComputeArtifactBuildProps,
+  memo: MemoOptions | undefined,
+) {
   const path = yield* Path.Path;
-  const settings = {
-    entrypoint: props.entrypoint,
-    handler: props.handler,
-    bundle: props.bundle,
-    port: props.port,
-    archiveIgnore: props.archiveIgnore,
-  };
   if (props.main !== undefined) {
-    const realMain = yield* fs.realPath(props.main);
-    const cwd = yield* findCwdForBundle(realMain);
-    const stack = yield* Effect.serviceOption(Stack).pipe(
-      Effect.map(Option.map(({ name, stage }) => ({ name, stage }))),
-      Effect.map(Option.getOrUndefined),
-    );
-    const files = yield* hashDirectory({ cwd });
-    return yield* sha256Object({
-      kind: "main",
-      files,
-      main: path.relative(cwd, realMain),
-      stack,
-      ...settings,
-    });
+    const bundle = yield* bundleEffectNative(props);
+    return yield* effectNativeInputsHash(props, bundle.hash);
   }
+  const settings = settingsOf(props);
   const appPath = path.resolve(props.path ?? ".");
   if (props.build === undefined || props.build === false) {
     const files = yield* hashDirectory({
       cwd: appPath,
-      memo: {
+      memo: memo ?? {
         include: ["**/*"],
         exclude: [...ALWAYS_IGNORED_PATTERNS, ...(props.archiveIgnore ?? [])],
         lockfile: false,
@@ -345,11 +356,15 @@ export const computeArtifactInputsHash = Effect.fn(function* (props: ComputeArti
   }
   const build = props.build === "auto" ? { type: "auto" as const } : props.build;
   const cwd = "cwd" in build && build.cwd ? path.resolve(build.cwd) : appPath;
-  const files = yield* hashDirectory({ cwd });
+  const files = yield* hashDirectory({ cwd, memo });
   return yield* sha256Object({
     kind: "build",
     files,
-    build: { ...build, env: plainBuildEnv("env" in build ? build.env : undefined) },
+    build: {
+      ...build,
+      ...("cwd" in build && build.cwd ? { cwd: path.relative(initialCwd, cwd) } : {}),
+      env: plainBuildEnv("env" in build ? build.env : undefined),
+    },
     ...settings,
   });
 });

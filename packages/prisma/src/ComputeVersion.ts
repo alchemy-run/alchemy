@@ -9,9 +9,11 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -27,6 +29,7 @@ import {
   readArtifactFile,
   type ArtifactFile,
 } from "./internal/ArtifactFile.ts";
+import { isContentNamedArchive } from "./internal/ArtifactStore.ts";
 import { executeArtifactUpload } from "./internal/ArtifactUpload.ts";
 import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
 import { startDeploymentIdempotent } from "./internal/DeploymentActions.ts";
@@ -450,7 +453,7 @@ const readUploadArtifactInternal = Effect.fn(function* (input: ReadUploadArtifac
   }
   if (input.artifactPath !== undefined) {
     const path = yield* Path.Path;
-    const resolved = path.resolve(input.artifactPath);
+    const resolved = path.resolve(initialCwd, input.artifactPath);
     const artifact = yield* inspectArtifactFile(resolved, MAX_COMPUTE_VERSION_ARTIFACT_BYTES);
     if (input.output === "file") {
       return artifact;
@@ -507,6 +510,23 @@ const artifactHashOf = Effect.fn(function* (props: ComputeVersionProps) {
     artifact: artifact.sha256,
     contentType: props.artifactContentType ?? "application/octet-stream",
   });
+});
+
+/**
+ * Whether an unchanged `artifactPath` names an archive that is not on this
+ * machine, such as a CI runner that did not build it. An archive named by
+ * its SHA-256 holds the bytes its name says, so the version that uploaded it
+ * needs neither the file nor a new upload.
+ */
+const pinnedArchiveMissing = Effect.fn(function* (
+  artifactPath: string | undefined,
+  savedArtifactPath: string | undefined,
+) {
+  if (artifactPath === undefined || artifactPath !== savedArtifactPath) return false;
+  if (!(yield* isContentNamedArchive(artifactPath))) return false;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  return !(yield* fs.exists(path.resolve(initialCwd, artifactPath)));
 });
 
 /**
@@ -644,10 +664,15 @@ const ProviderLive = () =>
               ? unresolvedServiceIdOf(news.service)
               : undefined;
             const oldArtifactHash = output?.artifactHash;
-            const newArtifactHash = yield* artifactHashOf({
-              service: olds.service,
-              ...resolvedReplacementContent,
-            });
+            const newArtifactHash = (yield* pinnedArchiveMissing(
+              resolvedReplacementContent.artifactPath,
+              olds.artifactPath,
+            ))
+              ? undefined
+              : yield* artifactHashOf({
+                  service: olds.service,
+                  ...resolvedReplacementContent,
+                });
             const serviceChanged = concreteIdsChanged(oldServiceId, newServiceId);
             if (
               serviceChanged ||
@@ -699,7 +724,7 @@ const ProviderLive = () =>
           }
           return deployment ? attrsFrom(deployment, serviceId, output) : undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, output: saved }) {
+        reconcile: Effect.fn(function* ({ news, olds: savedProps, output: saved }) {
           const output = saved && currentAttributes(saved);
           if (
             news.portMapping?.http !== undefined &&
@@ -727,10 +752,26 @@ const ProviderLive = () =>
               message: "healthCheck cannot be combined with start: false.",
             });
           }
-          const artifact = yield* readUploadArtifact({
-            artifactPath: news.artifactPath,
-            output: "file",
-          });
+          const serviceId = yield* resolveServiceId(news.service);
+          const deploymentId = isPrismaDevId(output?.versionId) ? undefined : output?.versionId;
+          let deployment: ObservedDeployment | undefined = deploymentId
+            ? yield* observeDeployment(deploymentId).pipe(
+                Effect.catchTag("NotFound", () => Effect.undefined),
+              )
+            : undefined;
+          // The existing version already holds these bytes; only a new
+          // version needs the file.
+          const artifact =
+            deployment !== undefined &&
+            (yield* pinnedArchiveMissing(
+              news.artifactPath,
+              savedProps === undefined ? undefined : currentProps(savedProps).artifactPath,
+            ))
+              ? undefined
+              : yield* readUploadArtifact({
+                  artifactPath: news.artifactPath,
+                  output: "file",
+                });
           const artifactHash =
             artifact === undefined
               ? output?.artifactHash
@@ -742,13 +783,6 @@ const ProviderLive = () =>
             news.triggers === undefined
               ? undefined
               : Redacted.make(yield* triggersHashOf(news.triggers));
-          const serviceId = yield* resolveServiceId(news.service);
-          const deploymentId = isPrismaDevId(output?.versionId) ? undefined : output?.versionId;
-          let deployment: ObservedDeployment | undefined = deploymentId
-            ? yield* observeDeployment(deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.undefined),
-              )
-            : undefined;
           if (deployment) {
             yield* ensureVersionMembership(serviceId, deployment);
             if (deployment.status === "failed") {

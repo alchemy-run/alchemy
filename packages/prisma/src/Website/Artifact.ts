@@ -16,7 +16,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { createComputeArchive } from "../ComputeArchive.ts";
-import { storeArtifact } from "../internal/ArtifactStore.ts";
+import { resolveStoredPath, storeArtifact } from "../internal/ArtifactStore.ts";
 
 export class ArtifactOperationFailed extends Data.TaggedError("ArtifactOperationFailed")<{
   readonly message: string;
@@ -51,9 +51,9 @@ export interface WebsiteArtifact extends Resource<
   "Prisma.WebsiteArtifact",
   WebsiteArtifactProps,
   {
-    /** Private directory owned by this artifact resource. */
+    /** Private directory owned by this artifact resource, relative to the initial working directory. */
     directory: string;
-    /** Verified Compute tarball path. */
+    /** Verified Compute tarball path, relative to the initial working directory. */
     artifactPath: string;
     /** SHA-256 of the tarball uploaded by Compute. */
     hash: string;
@@ -354,7 +354,20 @@ const websiteInputsHash = Effect.fn(function* (props: WebsiteArtifactProps) {
     cwd: path.resolve(initialCwd, props.distDir),
     memo: { include: ["**/*"], exclude: [".alchemy", "**/.alchemy"], lockfile: false },
   });
-  return yield* sha256Object({ props, root, dist });
+  // As passed, `root`, `distDir` and `serverEntry` may be absolute; relative
+  // to the initial working directory they hash the same in any checkout.
+  const relative = (value: string | undefined) =>
+    value === undefined ? undefined : path.relative(initialCwd, path.resolve(initialCwd, value));
+  return yield* sha256Object({
+    props: {
+      ...props,
+      root: relative(props.root),
+      distDir: relative(props.distDir),
+      serverEntry: relative(props.serverEntry),
+    },
+    root,
+    dist,
+  });
 });
 
 export const WebsiteArtifactProvider = () =>
@@ -369,19 +382,26 @@ export const WebsiteArtifactProvider = () =>
         // A changed source, build output or lockfile restages the artifact;
         // an unchanged one keeps `artifactPath`, so its version is not replaced.
         diff: Effect.fn(function* ({ news, output }) {
+          // A missing archive is not a change: it is named by its SHA-256,
+          // so the version that uses it needs no upload.
           if (!output?.inputHash || !isResolved(news)) return { action: "update" } as const;
-          if (!(yield* fs.exists(output.artifactPath))) return { action: "update" } as const;
           return (yield* websiteInputsHash(news)) === output.inputHash
             ? ({ action: "noop" } as const)
             : ({ action: "update" } as const);
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const inputHash = yield* websiteInputsHash(news);
-          if (output?.inputHash === inputHash && (yield* fs.exists(output.artifactPath))) {
+          if (
+            output?.inputHash === inputHash &&
+            (yield* fs.exists(yield* resolveStoredPath(output.artifactPath)))
+          ) {
             return output;
           }
           const name = yield* createPhysicalName({ id, maxLength: 80 });
-          const directory = path.join(dotAlchemy, "prisma-websites", name);
+          const directory = path.relative(
+            initialCwd,
+            path.resolve(initialCwd, dotAlchemy, "prisma-websites", name),
+          );
           return yield* Effect.scoped(
             Effect.gen(function* () {
               const staged = yield* stageWebsiteArtifact(news);
@@ -397,7 +417,10 @@ export const WebsiteArtifactProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* fs.remove(output.directory, { recursive: true, force: true });
+          yield* fs.remove(yield* resolveStoredPath(output.directory), {
+            recursive: true,
+            force: true,
+          });
         }),
       };
     }),

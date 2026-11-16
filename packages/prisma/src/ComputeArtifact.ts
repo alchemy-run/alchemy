@@ -7,10 +7,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { ComputeBuild, ComputeBundleOptions } from "./Compute.ts";
-import { storeArtifact } from "./internal/ArtifactStore.ts";
+import { resolveStoredPath, storeArtifact } from "./internal/ArtifactStore.ts";
 import {
   buildComputeArtifactFile,
   computeArtifactInputsHash,
+  type ComputeArtifactMemo,
+  effectNativeInputsHash,
 } from "./internal/ComputeArtifactBuild.ts";
 
 export interface ComputeArtifactProps {
@@ -61,6 +63,17 @@ export interface ComputeArtifactProps {
    * @default 8080, or the port the auto or static build detects
    */
   port?: number;
+  /**
+   * Which files decide whether the artifact is built again, with the same
+   * meaning as `Command.Build`'s `memo`. Applies to `path` and to command,
+   * auto and static builds; an Effect-native `main` is always compared by its
+   * bundle. Set `include` to cover a sibling workspace package or a file git
+   * ignores that the build reads. Set to `false` to build on every deploy,
+   * which also creates a new version on every deploy.
+   *
+   * @default for a build, every file under its working directory that git does not ignore, plus the nearest lockfile; for `path` alone, every file the archive contains
+   */
+  memo?: ComputeArtifactMemo;
 }
 
 export interface ComputeArtifact extends Resource<
@@ -68,9 +81,10 @@ export interface ComputeArtifact extends Resource<
   ComputeArtifactProps,
   {
     /**
-     * Path of the `tar.gz` artifact, named by its SHA-256 and kept under
-     * `.alchemy` until the resource is deleted. Pass it to
-     * `Prisma.ComputeVersion`'s `artifactPath`.
+     * Path of the `tar.gz` artifact, relative to the working directory the
+     * deploy started in. It is named by its SHA-256 and kept under `.alchemy`
+     * until the resource is deleted. Pass it to `Prisma.ComputeVersion`'s
+     * `artifactPath`.
      */
     artifactPath: string;
     /**
@@ -97,11 +111,23 @@ export interface ComputeArtifact extends Resource<
  *
  * The artifact is built from an Effect-native `main`, a command, `"auto"`
  * framework detection or a static build, or from `path` as it is. Its inputs
- * are hashed on every plan, the way `Command.Build` hashes its sources: every
- * file in the build directory that git does not ignore, the nearest lockfile,
- * and the build props. Without a build, every file the archive would contain
- * is hashed. When nothing changed, the build is skipped and `artifactPath`
- * stays the same, so the version that uses it is not replaced.
+ * are hashed on every plan. When nothing changed, the build is skipped and
+ * `artifactPath` stays the same, so the version that uses it is not replaced.
+ * That holds on a machine that never built it, such as a CI runner: the
+ * archive's name is its SHA-256, so `Prisma.ComputeVersion` knows the bytes
+ * are unchanged without the file.
+ *
+ * What is hashed:
+ * - an Effect-native `main`: the bundle, so every module it imports counts,
+ *   in any package;
+ * - `path` without a build: every file the archive would contain;
+ * - a command, auto or static build: as `Command.Build` does, every file under
+ *   the build's working directory that git does not ignore and the nearest
+ *   lockfile, or the files `memo` selects;
+ * - the props, with `build.env` resolved.
+ *
+ * The process environment is not hashed. A build that reads a variable not
+ * passed in `build.env` is not rebuilt when that variable changes.
  *
  * ### Building an Artifact
  * **Example:** Build an app and serve it as the service's active version
@@ -141,6 +167,9 @@ export interface ComputeArtifact extends Resource<
  */
 export const ComputeArtifact = Resource<ComputeArtifact>("Prisma.ComputeArtifact");
 
+const memoOptions = (memo: ComputeArtifactMemo | undefined) =>
+  typeof memo === "object" ? memo : undefined;
+
 export const ComputeArtifactProvider = () =>
   Provider.effect(
     ComputeArtifact,
@@ -154,29 +183,37 @@ export const ComputeArtifactProvider = () =>
         );
       return {
         list: () => Effect.succeed([]),
+        // Unchanged inputs are a noop even when the archive is not on this
+        // machine: it is named by its SHA-256, so the version that uses it
+        // needs no upload. A reconcile that runs for another reason rebuilds it.
         diff: Effect.fn(function* ({ news, output }) {
           if (!output || !isResolved(news)) return undefined;
-          if (!(yield* fs.exists(output.artifactPath))) return { action: "update" } as const;
-          const inputHash = yield* computeArtifactInputsHash(news);
+          if (news.memo === false) return { action: "update" } as const;
+          const inputHash = yield* computeArtifactInputsHash(news, memoOptions(news.memo));
           return inputHash === output.inputHash
             ? ({ action: "noop" } as const)
             : ({ action: "update" } as const);
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
-          const before = yield* computeArtifactInputsHash(news);
-          if (output?.inputHash === before && (yield* fs.exists(output.artifactPath))) {
-            return output;
+          const memo = memoOptions(news.memo);
+          const saved = news.memo === false ? undefined : output;
+          if (saved) {
+            const before = yield* computeArtifactInputsHash(news, memo);
+            const stored = yield* resolveStoredPath(saved.artifactPath);
+            if (saved.inputHash === before && (yield* fs.exists(stored))) return saved;
           }
           const directory = yield* directoryOf(id);
-          const artifact = yield* buildComputeArtifactFile(news, {
-            effectNative: news.main !== undefined,
-          });
+          const effectNative = news.main !== undefined;
+          const artifact = yield* buildComputeArtifactFile(news, { effectNative });
           const artifactPath = yield* storeArtifact(directory, artifact.file).pipe(
             Effect.ensuring(artifact.file.cleanup),
           );
           // Hashed after the build, as `Command.Build` does, so files the
           // build writes into its own directory are part of the baseline.
-          const inputHash = yield* computeArtifactInputsHash(news);
+          const inputHash =
+            effectNative && artifact.bundleHash !== undefined
+              ? yield* effectNativeInputsHash(news, artifact.bundleHash)
+              : yield* computeArtifactInputsHash(news, memo);
           return {
             artifactPath,
             hash: artifact.file.sha256,
@@ -185,7 +222,7 @@ export const ComputeArtifactProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ id }) {
-          const directory = yield* directoryOf(id);
+          const directory = yield* resolveStoredPath(yield* directoryOf(id));
           yield* fs.remove(directory, { recursive: true, force: true });
         }),
       };

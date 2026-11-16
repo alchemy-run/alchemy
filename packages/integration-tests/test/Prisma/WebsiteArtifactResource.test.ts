@@ -50,6 +50,13 @@ test.provider(
       expect(second.artifactPath).toBe(first.artifactPath);
       expect(second.hash).toBe(first.hash);
       expect(yield* mtime(second.artifactPath)).toEqual(firstWrite);
+      expect(path.isAbsolute(second.artifactPath)).toBe(false);
+
+      // A CI runner starts without the `.alchemy` directory that holds it.
+      yield* fs.remove(second.directory, { recursive: true });
+      const restored = yield* stack.deploy(program);
+      expect(restored.artifactPath).toBe(first.artifactPath);
+      expect(restored.hash).toBe(first.hash);
 
       yield* fs.writeFileString(path.join(dist, "index.html"), "<h1>two</h1>");
       const third = yield* stack.deploy(program);
