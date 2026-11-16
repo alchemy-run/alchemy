@@ -52,10 +52,12 @@ import {
   type Json,
   type ListRange,
   type ModelHost,
+  mustReauthorize,
   Platform,
   type PolicyKit,
   type ProjectionKit,
   type Push,
+  REAUTHORIZE_CLOSE_CODE,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -469,16 +471,26 @@ const accept = (
     );
   });
 
-/** Push to every live read of this instance after a commit. Runs inside the commit's exclusive section. */
+/**
+ * Push to every live read of this instance after a commit. Runs inside the
+ * commit's exclusive section. A read due to be judged again is closed instead,
+ * with its cursor where it was, so the client reconnects through the read's
+ * middleware and resumes.
+ */
 const broadcast = (
   push: (attachment: Attachment) => Effect.Effect<Push, never, ObjectState | RuntimeContext>,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     if (state.sockets === undefined) return;
+    const now = yield* Clock.currentTimeMillis;
     for (const socket of yield* state.sockets.all()) {
       const attachment = socket.deserializeAttachment<Attachment>();
       if (attachment === null) continue;
+      if (mustReauthorize(attachment.subscription, now)) {
+        yield* socket.close(REAUTHORIZE_CLOSE_CODE, "reauthorize");
+        continue;
+      }
       yield* deliverPush(socket, attachment.key, push(attachment));
     }
   });

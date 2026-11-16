@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import type { HttpServerError } from "effect/http/HttpServerError";
@@ -12,14 +13,16 @@ import * as Stream from "effect/Stream";
 import { type Filter, matches } from "./Filter.ts";
 import type { Kernel } from "./Kernel.ts";
 import * as Key from "./Key.ts";
-import type {
-  Json,
-  Push,
-  StreamEntry,
-  StreamMeta,
-  Subscription,
-  ViewEntry,
-  ViewSnapshot,
+import {
+  type Json,
+  mustReauthorize,
+  type Push,
+  REAUTHORIZE_CLOSE_CODE,
+  type StreamEntry,
+  type StreamMeta,
+  type Subscription,
+  type ViewEntry,
+  type ViewSnapshot,
 } from "./Platform.ts";
 import type * as Read from "./Read.ts";
 import { readRpcs } from "./ReadRpcs.ts";
@@ -313,15 +316,22 @@ export const serveSocket = (
       for (const message of pushed.messages) yield* send(message);
       return pushed.done;
     });
+    let closeCode = 1000;
+    // After a change: a read due to be judged again closes, with its cursor where it was.
+    const onChange = Effect.gen(function* () {
+      if (!mustReauthorize(current, yield* Clock.currentTimeMillis)) return yield* deliver;
+      closeCode = REAUTHORIZE_CLOSE_CODE;
+      return true;
+    });
     const pushes = Effect.gen(function* () {
       if (yield* deliver) return;
       yield* changes.pipe(
-        Stream.mapEffect(() => deliver),
+        Stream.mapEffect(() => onChange),
         Stream.takeUntil((done) => done),
         Stream.runDrain,
       );
     }).pipe(
-      Effect.andThen(writer.write(new Socket.CloseEvent(1000, ""))),
+      Effect.andThen(Effect.suspend(() => writer.write(new Socket.CloseEvent(closeCode, "")))),
       Effect.catchCause(() =>
         writer.write(new Socket.CloseEvent(1011, "Domain could not push to this read")),
       ),

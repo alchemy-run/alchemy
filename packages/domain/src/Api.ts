@@ -1,5 +1,6 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -36,7 +37,13 @@ import { internalError, redactCause } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
-import { captureContext, type StreamStore, type Subscription, type ViewStore } from "./Platform.ts";
+import {
+  captureContext,
+  REAUTHORIZE_CLOSE_CODE,
+  type StreamStore,
+  type Subscription,
+  type ViewStore,
+} from "./Platform.ts";
 import type * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
 import { nameOf, readRpcs } from "./ReadRpcs.ts";
@@ -83,6 +90,15 @@ export interface Options<
   readonly streams?: S;
   /** The queries a client may ask. Every query of the model by default. */
   readonly queries?: Q;
+  /**
+   * How long a live read pushed over a WebSocket may run before its
+   * middleware judges the caller again. Once it has passed, the next commit
+   * to the key closes the socket instead of pushing; the client reconnects at
+   * once and resumes from its cursor, so a caller still allowed misses
+   * nothing, and one the middleware now refuses gets its typed rejection.
+   * Unset, a live read is judged once, when it connects.
+   */
+  readonly reauthorizeLiveReads?: Duration.Input;
 }
 
 /** What an Api over `M` serves, from the names it lists. */
@@ -903,12 +919,14 @@ const liveRequestOf = (request: { readonly url: string }): LiveRequest | undefin
  * headers (cookies, in a browser); the context it provides travels with
  * the subscription to the object that owns the key, which pushes to the
  * socket on every commit. A refused read still connects, to deliver its
- * typed rejection.
+ * typed rejection. With `reauthorizeAfter`, the subscription carries when its
+ * middleware must run again (see `Subscription.reauthorizeAt`).
  */
 const liveReads = (
   entries: ReadonlyArray<Servable>,
   internals: Model.Internals["Service"],
   middleware: Context.Context<never>,
+  reauthorizeAfter: Duration.Input | undefined,
 ) => {
   const reads = new Map<
     string,
@@ -964,6 +982,11 @@ const liveReads = (
       where: where as Subscription["where"],
       context: {},
       cursor: live.cursor ?? (read.mode === "watch" ? -1 : (after ?? 0)),
+      ...(reauthorizeAfter === undefined
+        ? {}
+        : {
+            reauthorizeAt: (yield* Clock.currentTimeMillis) + Duration.toMillis(reauthorizeAfter),
+          }),
     };
     const judged = yield* authorized.pipe(
       Effect.map((context): Subscription => ({ ...subscription, context })),
@@ -1164,6 +1187,7 @@ const build = (
   unresolved: ReadonlyArray<Unservable>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
   annotations: Annotations,
+  reauthorizeLiveReads: Duration.Input | undefined,
 ): unknown => {
   const client = RpcClient.make(group).pipe(
     Effect.map((flat) => nest(entries, flat as unknown as Flat)),
@@ -1184,7 +1208,7 @@ const build = (
     );
     // One server per request: Workers forbid sharing I/O objects across requests.
     const rpc = RpcServer.toHttpEffect(group).pipe(Effect.flatten, Effect.provide(layer));
-    const live = liveReads(entries, yield* Model.Internals, middleware);
+    const live = liveReads(entries, yield* Model.Internals, middleware, reauthorizeLiveReads);
     const fetch = Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       return request.headers.upgrade?.toLowerCase() === "websocket" ? yield* live : yield* rpc;
@@ -1363,6 +1387,7 @@ export const make = <
     unresolved,
     RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
     annotations,
+    options.reauthorizeLiveReads,
   ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, Q>>>;
 };
 
@@ -1488,6 +1513,20 @@ export const protocolWebSocket = (
           while (!ended) {
             const exit = yield* Effect.exit(connect);
             if (ended) return;
+            // The server wants the read's middleware to run again: reconnect now.
+            if (
+              Exit.isFailure(exit) &&
+              Option.exists(
+                Cause.findErrorOption(exit.cause),
+                (error) =>
+                  Socket.isSocketError(error) &&
+                  error.reason._tag === "SocketCloseError" &&
+                  error.reason.code === REAUTHORIZE_CLOSE_CODE,
+              )
+            ) {
+              failures = 0;
+              continue;
+            }
             // A close without an `Exit` (a deploy, an evicted object) reconnects and resumes.
             if (++failures > RECONNECTS) {
               return yield* RpcClientError.RpcClientError.make({

@@ -358,6 +358,20 @@ A session token is who is signed in and until when, plus an HMAC of both made wi
 
 A browser can't set headers on a WebSocket, and a URL ends up in logs. A live read authenticates with what its WebSocket upgrade carries: in a browser, the session cookie. Scripts and tests send `Authorization`, which they can set on their WebSockets too. See [Testing an Api](/domain/testing-apis#test-a-deployment).
 
+## Judge live reads again
+
+A live read's middleware runs once, when its WebSocket connects, so a session revoked afterwards keeps receiving pushes until the client disconnects. Give the Api `reauthorizeLiveReads` to bound that:
+
+```typescript title="packages/domain/src/CustomerApi.api.ts"
+export class CustomerApi extends Domain.Api("CustomerApi", {
+  model: Bank,
+  views: ["AccountSummary"],
+  reauthorizeLiveReads: "5 minutes",
+}) {}
+```
+
+Once a read has been open that long, the next commit to its key closes the socket instead of pushing. The client reconnects at once and resumes from its cursor, which runs the read's middleware again: a caller still signed in misses nothing, and a revoked one gets the middleware's rejection. A key with no commits sends nothing either way, so a revoked caller learns of the rejection at the next commit. Live reads streamed over HTTP by `Domain.protocolHttp` are judged once.
+
 ## Ask for a second factor
 
 Add middleware for anything that needs more than a session. `WithdrawMoney` lists `[Session, MfaChallenge]`, so a withdrawal needs both.

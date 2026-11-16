@@ -8,6 +8,8 @@ import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
@@ -297,3 +299,96 @@ for (const [transport, layer] of [
     );
   });
 }
+
+// ---------------------------------------------------------------- reauthorizing live reads
+
+/** Whether the caller's session is revoked: the gate refuses every read once it is. */
+let revoked = false;
+class Revoked extends Domain.Rejection("Revoked") {}
+class Gate extends RpcMiddleware.Service<Gate>()("Test/Gate", { error: Revoked }) {}
+const GateLive = Layer.succeed(Gate, (effect) =>
+  Effect.suspend(() => (revoked ? Effect.fail(new Revoked()) : effect)),
+);
+
+class Ticked extends Domain.Event("Ticked", { by: Schema.Number }) {}
+class Tick extends Domain.Command("Tick", {
+  target: Schema.String,
+  input: { by: Schema.Number },
+  events: [Ticked],
+}) {}
+class Ticker extends Domain.Aggregate("Ticker", {
+  id: Schema.String,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  commands: [Tick],
+  decide: { Tick: (_, { by }) => [new Ticked({ by })] },
+  evolve: { Ticked: (s, e) => ({ total: s.total + e.by }) },
+}) {}
+class TickTotals extends Domain.View("TickTotals", {
+  from: [Ticker],
+  key: Ticker,
+  middleware: [Gate],
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  evolve: { Ticked: (s, e) => ({ total: s.total + e.by }) },
+}) {}
+class Tickers extends Domain.Model("Tickers", { aggregates: [Ticker], views: [TickTotals] }) {}
+class TickerApi extends Domain.Api("TickerApi", {
+  model: Tickers,
+  reauthorizeLiveReads: "200 millis",
+}) {}
+
+const TickerSocketWire = Layer.unwrap(
+  Effect.gen(function* () {
+    const server = yield* HttpServer.HttpServer;
+    const port = "port" in server.address ? server.address.port : 0;
+    return TickerApi.layerClient.pipe(
+      Layer.provide(Domain.protocolWebSocket(`http://127.0.0.1:${port}`)),
+      Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+    );
+  }),
+).pipe(
+  Layer.provideMerge(
+    Layer.unwrap(Effect.map(TickerApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+      Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: "200 millis" })),
+    ),
+  ),
+  Layer.provideMerge(
+    Layer.mergeAll(Tickers.layer(TickTotals.toLayer(Effect.succeed(() => Effect.void))), GateLive),
+  ),
+  Layer.provideMerge(InMemory),
+);
+
+describe("Domain live reads reauthorized", { tags: ["unit", "local"] }, () => {
+  it.live("a live read past its window runs its middleware again on the next commit", () =>
+    Effect.gen(function* () {
+      revoked = false;
+      const api = yield* TickerApi.Client;
+      yield* api.Tick("t-1", { by: 1 });
+      yield* api.TickTotals.get("t-1", { atLeast: { stream: "Ticker/t-1", version: 1 } });
+      const seen = yield* Queue.unbounded<{ readonly state: { readonly total: number } }>();
+      const read = yield* api.TickTotals.watch("t-1").pipe(
+        Stream.runForEach((value) => Queue.offer(seen, value)),
+        Effect.flip,
+        Effect.forkChild,
+      );
+      expect(yield* Queue.take(seen)).toEqual({ state: { total: 1 }, cursor: 1 });
+
+      // Past the window, a caller still allowed reconnects and misses nothing.
+      yield* Effect.sleep("300 millis");
+      yield* api.Tick("t-1", { by: 2 });
+      expect(yield* Queue.take(seen)).toEqual({ state: { total: 3 }, cursor: 2 });
+
+      // Past the window again, a revoked caller gets its rejection and nothing more.
+      revoked = true;
+      yield* Effect.sleep("300 millis");
+      yield* api.Tick("t-1", { by: 4 });
+      expect((yield* Fiber.join(read).pipe(Effect.timeout("3 seconds")))._tag).toBe("Revoked");
+      expect(yield* Queue.size(seen)).toBe(0);
+    }).pipe(
+      Effect.ensuring(Effect.sync(() => (revoked = false))),
+      Effect.scoped,
+      Effect.provide(TickerSocketWire),
+    ),
+  );
+});
