@@ -173,7 +173,7 @@ export const makeServiceImage = Effect.gen(function* () {
   });
 
   /** Observe a locally-present tag in the target engine. Missing → undefined. */
-  const imageExists = (imageRef: string, context: string | undefined) =>
+  const imageExists = (imageRef: string, context: Docker.Target | undefined) =>
     docker.image.inspect(imageRef, context).pipe(
       Effect.map(() => true),
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
@@ -191,7 +191,7 @@ export const makeServiceImage = Effect.gen(function* () {
     /** Image repository name (the service's physical name). */
     name: string;
     /** Docker context the swarm service is deployed to. */
-    context: string | undefined;
+    context: Docker.Target | undefined;
     isExternal?: boolean;
     /** Plan-status session used to emit build progress notes. */
     session: { note: (message: string) => Effect.Effect<void> };

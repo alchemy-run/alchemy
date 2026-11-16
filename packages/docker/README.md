@@ -1,6 +1,6 @@
 # @alchemy.run/docker
 
-Docker for [Alchemy](https://alchemy.run). Declare images, containers, networks, and volumes as typed resources, driven through your active Docker context. Other Alchemy providers use it to build and push the images they deploy.
+Docker for [Alchemy](https://alchemy.run). Declare images, containers, networks, and volumes as typed resources, driven through local or managed Docker endpoints. Other Alchemy providers use it to build and push the images they deploy.
 
 ```sh
 npm install alchemy @alchemy.run/docker effect
@@ -43,6 +43,19 @@ export default Alchemy.Stack(
 ```
 
 `alchemy deploy` pulls the image and starts the container. Change a prop and the next deploy replaces only what changed; `alchemy destroy` removes all of it.
+
+## Portable Docker contexts
+
+A managed `Docker.Context` persists its Docker endpoint, so a CI runner sharing the Alchemy state can plan and inspect remote resources without first creating the named context in its local Docker configuration:
+
+```typescript
+const remote = yield* Docker.Context("remote", {
+  docker: "host=ssh://deploy@example.com",
+});
+const network = yield* Docker.Network("remote-network", { context: remote });
+```
+
+The runner still needs access to the remote engine and its SSH keys or TLS certificate files. Alchemy stores endpoint metadata and certificate **paths**, not private key or certificate contents. A plain context name or `Docker.Context.lookup()` continues to use the machine-local Docker CLI context.
 
 ## Network configuration
 

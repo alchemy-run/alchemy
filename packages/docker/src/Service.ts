@@ -17,7 +17,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
-import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
+import { Docker, dockerEngineTarget, dockerTargetArgs, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
@@ -281,7 +281,7 @@ export interface Service extends Resource<
     /** Swarm service name. */
     name: string;
     /** Docker context the service is deployed to. */
-    context?: string;
+    context?: Docker.Target;
     /** Image reference the service runs. */
     image: string;
     /** Desired number of replicas. */
@@ -598,7 +598,7 @@ export const ServiceProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const inspect = (id: string, context?: string) =>
+      const inspect = (id: string, context?: Docker.Target) =>
         docker.service.inspect(id, context).pipe(
           Effect.map((result) => normalizeServiceInspect(result)),
           Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
@@ -613,7 +613,7 @@ export const ServiceProvider = () =>
         id: string,
         props: ServiceProps,
         name: string,
-        context: string | undefined,
+        context: Docker.Target | undefined,
         session: { note: (message: string) => Effect.Effect<void> },
       ) {
         if (isBundledService(props)) {
@@ -636,7 +636,7 @@ export const ServiceProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* servicePhysicalName(id, olds, instanceId);
-          const context = dockerEngineContextName(olds?.context);
+          const context = dockerEngineTarget(olds?.context);
           const live = yield* inspect(name, context);
           if (!live) return undefined;
           ensureReplicatedMode(live);
@@ -908,7 +908,7 @@ export const ServiceProvider = () =>
         delete: Effect.fn(({ output }) =>
           docker
             .run([
-              ...(output.context ? ["--context", output.context] : []),
+              ...dockerTargetArgs(output.context),
               "service",
               "scale",
               "--detach=false",
@@ -947,7 +947,7 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
   servicePhysicalName(id, props, instanceId).pipe(
     Effect.map((name) => ({
       name,
-      context: dockerEngineContextName(props.context),
+      context: dockerEngineTarget(props.context),
       // The bundled form's image identity is its content hash (compared
       // separately in diff) — the `image` prop is only the environment base
       // there, and it participates in the hash.
@@ -1128,7 +1128,7 @@ const formatPublish = (port: Service.PortMapping): string =>
 
 const toServiceAttributes = (
   service: ServiceInspect,
-  context?: string,
+  context?: Docker.Target,
   code?: { hash: string },
 ): Service["Attributes"] => ({
   id: service.ID,
@@ -1186,9 +1186,9 @@ const normalizeServiceInspect = (value: unknown): ServiceInspect => {
 };
 
 const inspectOrDie = <T, E>(
-  inspect: (nameOrId: string, context?: string) => Effect.Effect<T | undefined, E>,
+  inspect: (nameOrId: string, context?: Docker.Target) => Effect.Effect<T | undefined, E>,
   nameOrId: string,
-  context?: string,
+  context?: Docker.Target,
 ) =>
   inspect(nameOrId, context).pipe(
     Effect.flatMap((value) =>
@@ -1199,7 +1199,7 @@ const inspectOrDie = <T, E>(
 const waitForServiceContainersReleased = (
   docker: Docker["Service"],
   serviceId: string,
-  context?: string,
+  context?: Docker.Target,
 ): Effect.Effect<void, PlatformError> => {
   const maxAttempts = 10;
   const noContainers = Symbol.for("Docker.Service.NoContainers");
@@ -1225,13 +1225,7 @@ const waitForServiceContainersReleased = (
             containerIds,
             (containerId) =>
               docker
-                .run([
-                  ...(context ? ["--context", context] : []),
-                  "container",
-                  "rm",
-                  "-f",
-                  containerId,
-                ])
+                .run([...dockerTargetArgs(context), "container", "rm", "-f", containerId])
                 .pipe(Effect.catchCause(() => Effect.void)),
             { concurrency: "unbounded" },
           ).pipe(Effect.as(undefined)),
@@ -1242,11 +1236,11 @@ const waitForServiceContainersReleased = (
 const listServiceContainerIds = (
   docker: Docker["Service"],
   serviceId: string,
-  context?: string,
+  context?: Docker.Target,
 ): Effect.Effect<string[], PlatformError> =>
   docker
     .run([
-      ...(context ? ["--context", context] : []),
+      ...dockerTargetArgs(context),
       "ps",
       "-a",
       "--filter",

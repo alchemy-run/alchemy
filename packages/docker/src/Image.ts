@@ -7,7 +7,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { type BuildCacheOptions, buildCacheRef, resolveBuildCache } from "./BuildCache.ts";
-import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  sameDockerContextTarget,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
@@ -236,7 +241,7 @@ export const ImageProvider = () =>
         instanceId: string,
       ) {
         const name = yield* dockerPhysicalName(id, props, instanceId);
-        const engineContext = dockerContextName(props.context);
+        const engineContext = dockerContextTarget(props.context);
         const tag = props.tag ?? "latest";
         const ref = `${name}:${tag}`;
 
@@ -291,7 +296,7 @@ export const ImageProvider = () =>
       return Image.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const context = dockerContextName(olds.context);
+          const context = dockerContextTarget(olds.context);
           const ref =
             output?.imageRef ??
             (yield* dockerPhysicalName(id, olds, instanceId).pipe(
@@ -312,7 +317,7 @@ export const ImageProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
-          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
+          if (!sameDockerContextTarget(olds.context, news.context)) {
             return { action: "update" };
           }
           const { image } = yield* buildAndInspectImage(id, news, instanceId);
@@ -321,7 +326,7 @@ export const ImageProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const context = dockerContextName(news.context);
+          const context = dockerContextTarget(news.context);
           const { name, tag, image, ref } = yield* buildAndInspectImage(id, news, instanceId);
 
           let repoDigest: string | undefined;
@@ -345,7 +350,7 @@ export const ImageProvider = () =>
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.image
-            .remove(output.imageRef, undefined, dockerContextName(olds.context))
+            .remove(output.imageRef, undefined, dockerContextTarget(olds.context))
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });

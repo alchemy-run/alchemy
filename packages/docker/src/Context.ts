@@ -3,7 +3,12 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { Docker, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  dockerEndpointFromSpec,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ContextProps {
@@ -37,8 +42,15 @@ export interface Context extends Resource<
     name: string;
     /** Human-readable description. */
     description: string;
-    /** Docker endpoint the context targets. */
-    docker?: string;
+    /** Endpoint returned by Docker CLI, or the legacy string snapshot. */
+    docker?: { Host: string; SkipTLSVerify?: boolean } | string;
+    /**
+     * Persisted endpoint declaration for portable access on CI runners.
+     * Contains only the endpoint and TLS file paths, never certificate data.
+     */
+    dockerSpec?: string;
+    /** A looked-up context is owned by the local Docker CLI, not this stack. */
+    lookupOnly?: true;
   },
   never,
   Providers,
@@ -58,10 +70,17 @@ export interface ContextLookup {
  * A named Docker CLI context — a pointer to a Docker engine (local socket,
  * SSH host, or TCP endpoint) that other Docker resources deploy through.
  *
- * Pass the context (or its name) to any Docker resource's `context` prop to
- * run that resource's operations against the referenced engine instead of the
- * default one. Changing the endpoint updates the context in place; renaming
- * it, or clearing a previously-set endpoint, replaces it.
+ * Pass the context resource to any Docker resource's `context` prop to
+ * run its operations against that engine. Alchemy persists managed endpoint
+ * metadata, so a new CI runner can inspect the same remote Docker engine
+ * without first running `docker context create` on that machine. The
+ * SSH agent/keys or TLS certificate files must still be available to the
+ * runner; no credential material is stored in Alchemy state.
+ *
+ * A plain context name (including `Context.lookup`) continues to require
+ * that context to exist in the current machine's Docker configuration.
+ * Changing the endpoint updates the context in place; renaming it, or
+ * clearing a previously-set endpoint, replaces it.
  *
  *
  * ### Creating Contexts
@@ -130,14 +149,14 @@ export const ContextProvider = () =>
         list: () => Effect.succeed([]),
         lookup: Effect.fn(function* ({ name }) {
           const live = yield* inspect(name);
-          return live ? toContextAttributes(live) : undefined;
+          return live ? { ...toContextAttributes(live), lookupOnly: true as const } : undefined;
         }),
 
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const live = yield* inspect(name);
           if (!live) return undefined;
-          const attrs = toContextAttributes(live);
+          const attrs = toContextAttributes(live, olds?.docker);
           if (output) return attrs;
           return attrs;
         }),
@@ -162,6 +181,21 @@ export const ContextProvider = () =>
           }
 
           if (output && !(yield* inspect(output.id))) {
+            // A context entry is machine-local metadata, not remote state.
+            // Re-use the persisted managed endpoint on fresh CI runners,
+            // including earlier state snapshots with an inspected SSH/socket
+            // endpoint but no `dockerSpec` field.
+            const previousTarget = dockerContextTarget(output);
+            const desiredTarget = dockerEndpointFromSpec(newDesired.docker);
+            if (
+              (output.dockerSpec && output.dockerSpec === newDesired.docker) ||
+              (previousTarget !== undefined &&
+                typeof previousTarget !== "string" &&
+                desiredTarget !== undefined &&
+                Equal.equals(previousTarget, desiredTarget))
+            ) {
+              return { action: "noop" as const };
+            }
             return { action: "update" as const };
           }
 
@@ -175,7 +209,7 @@ export const ContextProvider = () =>
             if (deepEqual(oldDesired, desired)) {
               const current = yield* inspect(output.id);
               if (current) {
-                return toContextAttributes(current);
+                return toContextAttributes(current, desired.docker);
               }
             }
           }
@@ -189,12 +223,18 @@ export const ContextProvider = () =>
               ...(desired.description.length > 0 ? { description: desired.description } : {}),
             };
             yield* docker.context.create(createArgs);
-            return toContextAttributes(yield* docker.context.inspect(desired.name));
+            return toContextAttributes(yield* docker.context.inspect(desired.name), desired.docker);
           }
 
           const current = toContextAttributes(existing);
+          const expectedEndpoint = dockerEndpointFromSpec(desired.docker);
+          const observedHost =
+            typeof current.docker === "string" ? current.docker : current.docker?.Host;
           const needsUpdate =
-            current.description !== desired.description || current.docker !== desired.docker;
+            current.description !== desired.description ||
+            (desired.docker !== undefined &&
+              (expectedEndpoint?.host !== observedHost ||
+                (output?.dockerSpec !== undefined && output.dockerSpec !== desired.docker)));
 
           if (needsUpdate) {
             yield* docker.context.update({
@@ -204,7 +244,7 @@ export const ContextProvider = () =>
             });
           }
 
-          return toContextAttributes(yield* docker.context.inspect(desired.name));
+          return toContextAttributes(yield* docker.context.inspect(desired.name), desired.docker);
         }),
         delete: Effect.fn(({ output }) =>
           docker.context.remove(output.id, true).pipe(
@@ -233,9 +273,13 @@ const normalizeDocker = (docker: string | undefined): string | undefined => {
   return value && value.length > 0 ? value : undefined;
 };
 
-const toContextAttributes = (context: Docker.Context): Context["Attributes"] => ({
+const toContextAttributes = (
+  context: Docker.Context,
+  dockerSpec?: string,
+): Context["Attributes"] => ({
   id: context.Name,
   name: context.Name,
   description: context.Metadata?.Description ?? "",
   docker: context.Endpoints?.docker,
+  ...(dockerSpec ? { dockerSpec } : {}),
 });
