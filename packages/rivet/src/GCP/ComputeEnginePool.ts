@@ -84,6 +84,13 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    * @default a service account of the pool's own
    */
   serviceAccount?: Input<string>;
+  /**
+   * RivetKit release the nodes run a TypeScript program with. Nodes speak
+   * the control plane protocol of their release: a 3.0 node works with a
+   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one.
+   * @default "3.0.0"
+   */
+  rivetkitVersion?: string;
 }
 
 const asOutput = (value: Input<string>): Output.Output<string> =>
@@ -120,11 +127,11 @@ const prepareProgram = (bucket: string, image: boolean) =>
   docker pull -q "$IMAGE" >/dev/null || true`;
 
 /** The `docker run` arguments after the image: how the container starts the node. */
-const runCommand = (image: boolean) =>
+const runCommand = (image: boolean, rivetkitVersion: string) =>
   image
     ? ""
     : ` \\
-    sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${RIVETKIT_VERSION} && exec node node.mjs'`;
+    sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${rivetkitVersion} && exec node node.mjs'`;
 
 /**
  * Read each secret version named in the instance's metadata into the
@@ -147,6 +154,7 @@ export const startupScript = (options: {
   readonly image: boolean;
   readonly stopTimeout: number;
   readonly rolloutInterval: number;
+  readonly rivetkitVersion?: string;
 }) => `#!/bin/bash
 set -uo pipefail
 MD=http://metadata.google.internal/computeMetadata/v1
@@ -172,7 +180,7 @@ start() {
         ? ""
         : ` \\
     -v ${APP_PATH}/node.mjs:/program/node.mjs:ro -w /app`
-    } "$IMAGE"${runCommand(options.image)}
+    } "$IMAGE"${runCommand(options.image, options.rivetkitVersion ?? RIVETKIT_VERSION)}
 }
 etag() {
   curl -sf -H 'Metadata-Flavor: Google' -D - -o /dev/null "$MD/instance/attributes/?recursive=true$1" \\
@@ -345,6 +353,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
               image,
               stopTimeout: options.stopTimeout ?? 30,
               rolloutInterval: options.rolloutInterval ?? 60,
+              rivetkitVersion: options.rivetkitVersion,
             }),
             [HASH_KEY]: programHash ?? "",
             [ENV_KEY]: env,

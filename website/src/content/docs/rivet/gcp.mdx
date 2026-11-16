@@ -40,6 +40,20 @@ export const Default = RivetGCP.CloudRunPool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
+Nodes can read their secrets from Secret Manager, run as a service account of your own, and reach a control plane at a private address through a VPC network. To move actors off old nodes on a deploy, give each deploy a higher `RIVET_NODE_VERSION` and set `drainOnVersionUpgrade`:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetGCP.CloudRunPool("Default", {
+  replicas: 2,
+  network: "private",
+  subnetwork: "private-us-central1",
+  env: { RIVET_ENDPOINT: "http://10.0.0.2:6420", RIVET_NODE_VERSION: "42" },
+  secrets: { RIVET_TOKEN: "projects/acme/secrets/rivet-token/versions/1" },
+  drainOnVersionUpgrade: true,
+  actorEvictionPeriod: 60,
+}).pipe(Layer.provide(Cluster));
+```
+
 ## On Compute Engine
 
 `ComputeEnginePool` runs one Compute Engine instance per node:
