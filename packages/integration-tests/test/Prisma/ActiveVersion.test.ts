@@ -29,10 +29,13 @@ const artifactV2 = `${import.meta.dirname}/fixtures/artifact-v2.bin`;
 /** Reads one attribute of another resource, as a downstream consumer would. */
 interface Reader extends Resource<"Test.Prisma.Reader", { value: unknown }, { value: unknown }> {}
 const Reader = Resource<Reader>("Test.Prisma.Reader");
+/** Logical IDs of every Reader reconcile, in order. */
+const readerReconciles: string[] = [];
 const ReaderProvider = () =>
   Provider.succeed(Reader, {
     list: () => Effect.succeed([]),
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ id, news }) {
+      readerReconciles.push(id);
       return { value: news.value };
     }),
     delete: Effect.fn(function* () {}),
@@ -63,7 +66,15 @@ const harness = (options: { dev?: boolean } = {}) => {
 
 const checks = { urlReadinessTimeoutSeconds: 0.2, timeoutSeconds: 2, pollIntervalMs: 1 } as const;
 
-const app = (options: { artifactPath?: string; activate?: boolean; reader?: boolean } = {}) =>
+const app = (
+  options: {
+    artifactPath?: string;
+    activate?: boolean;
+    reader?: boolean;
+    start?: boolean;
+    domainReader?: string;
+  } = {},
+) =>
   Effect.gen(function* () {
     const service = yield* ComputeService("Service", {
       project: "project-1",
@@ -73,14 +84,17 @@ const app = (options: { artifactPath?: string; activate?: boolean; reader?: bool
     const version = yield* ComputeVersion("Version", {
       service: service.serviceId,
       artifactPath: options.artifactPath ?? artifactV1,
-      start: true,
+      ...(options.start === undefined ? {} : { start: options.start }),
       ...checks,
     });
     if (options.activate ?? true) yield* activateVersion(service, version);
     const reader = options.reader
       ? yield* Reader("Reader", { value: service.activeVersionId })
       : undefined;
-    return { service, version, reader };
+    const domainReader = options.domainReader
+      ? yield* Reader(options.domainReader, { value: service.serviceEndpointDomain })
+      : undefined;
+    return { service, version, reader, domainReader };
   });
 
 const rows = (stack: Test.ScratchStack) =>
@@ -467,6 +481,158 @@ local.test.provider(
       expect(out.service.serviceId).toBe("dev:app:Service");
       expect(out.service.activeVersionId).toBe(out.version.versionId);
       expect(cloud.fake.captured).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const staleRecord = harness();
+staleRecord.test.provider(
+  "rolls back to the version the platform served before the promotion, not the one the row recorded",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = staleRecord;
+      yield* stack.destroy();
+
+      yield* stack.deploy(app());
+      // The row records no active version, as a row written before the
+      // service held one does. The platform serves dep-1.
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        const address = { stack: stack.name, stage: stack.stage, fqn: "Service" };
+        const stored = yield* state.get(address);
+        if (!stored || isActionState(stored) || stored.status !== "created") {
+          return yield* Effect.die(new Error("Expected a created Service row"));
+        }
+        yield* state.set({
+          ...address,
+          value: { ...stored, attr: { ...(stored.attr as object), activeVersionId: null } },
+        });
+      }).pipe(Effect.provide(stack.state));
+      cloud.knobs.failingActiveVersions.add("dep-2");
+      yield* clearCalls(cloud);
+
+      const result = yield* stack.deploy(app({ artifactPath: artifactV2 })).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("rolled back to version 'dep-1'");
+      }
+      expect(cloud.writes()).toContain("POST /v1/services/svc-1/rollback");
+      expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe("dep-1");
+
+      cloud.knobs.failingActiveVersions.clear();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const deletedTarget = harness();
+deletedTarget.test.provider(
+  "fails at once and names the version now live when the rollback target no longer exists",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = deletedTarget;
+      yield* stack.destroy();
+
+      yield* stack.deploy(app());
+      cloud.deployments.delete("dep-1");
+      cloud.knobs.failingActiveVersions.add("dep-2");
+      yield* clearCalls(cloud);
+
+      const result = yield* stack.deploy(app({ artifactPath: artifactV2 })).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        const message = String(result.failure);
+        expect(message).toContain("ComputeServiceRollbackFailed");
+        expect(message).toContain("The rollback to version 'dep-1'");
+        expect(message).toContain("was refused");
+        expect(message).toContain("The service now serves 'dep-2'");
+      }
+      // A refused rollback is not waited out: the service is observed once
+      // more for the message, and not polled for the refused version.
+      const observationsAfterRollback = cloud.fake.captured
+        .slice(
+          cloud.fake.captured.findIndex(
+            (request) => request.pathname === "/v1/services/svc-1/rollback",
+          ),
+        )
+        .filter((request) => request.method === "GET" && request.pathname === "/v1/services/svc-1");
+      expect(observationsAfterRollback.length).toBe(1);
+
+      cloud.knobs.failingActiveVersions.clear();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const alreadyActive = harness();
+alreadyActive.test.provider(
+  "says there is nothing to roll back to when the service already served the failing version",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = alreadyActive;
+      yield* stack.destroy();
+
+      yield* stack.deploy(app());
+      cloud.knobs.failingActiveVersions.add("dep-1");
+      yield* clearCalls(cloud);
+
+      const result = yield* stack.deploy(app()).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain(
+          "already served this version before this deploy, so there is nothing to roll back to",
+        );
+      }
+      expect(cloud.writes()).toEqual(["POST /v1/services/svc-1/promote"]);
+
+      cloud.knobs.failingActiveVersions.clear();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const notStarted = harness();
+notStarted.test.provider(
+  "refuses to promote an attached version that is not running",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = notStarted;
+      yield* stack.destroy();
+
+      const result = yield* stack.deploy(app({ start: false })).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("ComputeServiceVersionNotRunning");
+        expect(String(result.failure)).toContain("not running");
+      }
+      expect(cloud.writes()).not.toContain("POST /v1/services/svc-1/promote");
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const domainReader = harness();
+domainReader.test.provider(
+  "does not replan a reader of the stable endpoint domain on every deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(app({ domainReader: "DomainReader" }));
+      const before = readerReconciles.filter((id) => id === "DomainReader").length;
+      expect(before).toBe(1);
+
+      const again = yield* stack.deploy(app({ domainReader: "DomainReader" }));
+
+      expect(readerReconciles.filter((id) => id === "DomainReader").length).toBe(before);
+      expect(again.domainReader?.value).toBe("svc-1.stable.prisma.test");
 
       yield* stack.destroy();
     }),

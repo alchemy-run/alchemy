@@ -207,6 +207,9 @@ export const promoteVersionObserved = Effect.fn(function* (
  * - `RolledBack`: it did not, and the service reports the earlier version as
  *   live again. `rollbackFailure` is set when the rollback call itself failed
  *   but the service converged anyway.
+ * - `RollbackRefused`: it did not, and the platform refused the rollback.
+ *   Only reported with `stopWhenRollbackRefused`; otherwise the check waits
+ *   for the earlier version anyway.
  * - `RollbackNotConverged`: it did not, and the service never reported the
  *   earlier version as live.
  */
@@ -221,6 +224,11 @@ export type StableEndpointCheck =
       readonly _tag: "RolledBack";
       readonly readinessFailure: ReadinessFailure;
       readonly rollbackFailure: RollbackFailure | undefined;
+    }
+  | {
+      readonly _tag: "RollbackRefused";
+      readonly readinessFailure: ReadinessFailure;
+      readonly rollbackFailure: RollbackFailure;
     }
   | {
       readonly _tag: "RollbackNotConverged";
@@ -238,7 +246,11 @@ export const checkStableEndpoint = Effect.fn(function* (
   serviceId: string,
   url: string | undefined,
   rollbackVersionId: string | undefined,
-  options: ComputeUrlCheck & ActiveVersionObservationOptions,
+  options: ComputeUrlCheck &
+    ActiveVersionObservationOptions & {
+      /** Report a refused rollback at once instead of waiting for the earlier version. */
+      readonly stopWhenRollbackRefused?: boolean;
+    },
 ) {
   const readiness = yield* waitForComputeUrl(url, options).pipe(Effect.result);
   if (Result.isSuccess(readiness)) return { _tag: "Ready" } satisfies StableEndpointCheck;
@@ -253,6 +265,13 @@ export const checkStableEndpoint = Effect.fn(function* (
     deploymentId: rollbackVersionId,
   }).pipe(Effect.result);
   const rollbackFailure = Result.isFailure(rollback) ? rollback.failure : undefined;
+  if (rollbackFailure !== undefined && options.stopWhenRollbackRefused) {
+    return {
+      _tag: "RollbackRefused",
+      readinessFailure: readiness.failure,
+      rollbackFailure,
+    } satisfies StableEndpointCheck;
+  }
   const observed = yield* waitForActiveVersion(serviceId, rollbackVersionId, options).pipe(
     Effect.result,
   );

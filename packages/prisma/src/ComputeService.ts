@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import { destroyComputeService, toComputeUrl } from "./ComputeLifecycle.ts";
 import type { ComputeVersion } from "./ComputeVersion.ts";
 import { desiredBranchId } from "./internal/Branches.ts";
+import { observeDeployment } from "./internal/DeploymentObserve.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import type { ObservedApp } from "./internal/Observed.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
@@ -88,6 +89,20 @@ export class ComputeServiceRollbackNotConverged extends Data.TaggedError(
   readonly message: string;
   readonly errors: readonly unknown[];
   readonly cause?: unknown;
+}> {}
+
+/** The platform refused the rollback after the stable endpoint failed its check. */
+export class ComputeServiceRollbackFailed extends Data.TaggedError("ComputeServiceRollbackFailed")<{
+  readonly message: string;
+  readonly errors: readonly unknown[];
+  readonly cause?: unknown;
+}> {}
+
+/** The version attached as the active version is not running. */
+export class ComputeServiceVersionNotRunning extends Data.TaggedError(
+  "ComputeServiceVersionNotRunning",
+)<{
+  readonly message: string;
 }> {}
 
 export interface ComputeServiceProps {
@@ -276,7 +291,6 @@ export interface ComputeServiceLookup {
  * const version = yield* Prisma.ComputeVersion("web-version", {
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
- *   start: true,
  * });
  * yield* Prisma.activateVersion(service, version);
  * ```
@@ -313,11 +327,13 @@ type SavedAttributes = ComputeService["Attributes"] | LegacyComputeServiceAttrib
 /** Read attributes saved before or after the rename under the current names. */
 function currentAttributes(saved: SavedAttributes): ComputeService["Attributes"] {
   if ("serviceId" in saved) return saved;
-  const { appId, latestDeploymentId, appEndpointDomain, ...rest } = saved;
+  const { appId, latestDeploymentId: _recordedAtCreate, appEndpointDomain, ...rest } = saved;
   return {
     ...rest,
     serviceId: appId,
-    activeVersionId: latestDeploymentId,
+    // `Prisma.App` recorded this when it was last reconciled, usually when it
+    // was created, so it does not say what the service serves now.
+    activeVersionId: null,
     serviceEndpointDomain: appEndpointDomain,
     url: toComputeUrl(appEndpointDomain) ?? appEndpointDomain,
   };
@@ -567,7 +583,6 @@ const ACTIVE_VERSION_SID_PREFIX = "Prisma.ComputeService.ActiveVersion(";
  * const version = yield* Prisma.ComputeVersion("web-version", {
  *   service: service.serviceId,
  *   artifactPath: "./dist/app.tar.gz",
- *   start: true,
  * });
  * yield* Prisma.activateVersion(service, version);
  * ```
@@ -612,9 +627,17 @@ const activeVersionOf = (bindings: ReadonlyArray<ResourceBinding<ComputeServiceA
 const serveActiveVersion = Effect.fn(function* (
   app: ObservedApp,
   versionId: string,
-  previousVersionId: string | null | undefined,
   news: ComputeServiceProps,
 ) {
+  const version = yield* observeDeployment(versionId);
+  if (version.status !== "running") {
+    return yield* new ComputeServiceVersionNotRunning({
+      message: `Prisma Compute service '${app.id}' cannot serve version '${versionId}': the version is '${version.status}', not running. Leave start at its default, true, on the Prisma.ComputeVersion so it is started before it becomes the active version.`,
+    });
+  }
+  // The version to restore is the one the platform served just before this
+  // promotion, as observed in this reconcile.
+  const liveBefore = app.latestDeploymentId;
   // Promotion is replayed on every deploy, also when the service already
   // serves this version: it repairs routing and custom-domain drift.
   const promoted = yield* promoteVersionObserved(app.id, versionId, news);
@@ -625,24 +648,28 @@ const serveActiveVersion = Effect.fn(function* (
   };
   if (news.verifyUrl === false) return served;
   const rollbackVersionId =
-    previousVersionId === null || previousVersionId === versionId ? undefined : previousVersionId;
+    liveBefore === null || liveBefore === versionId ? undefined : liveBefore;
   const check = yield* checkStableEndpoint(
     app.id,
     toComputeUrl(promoted.appEndpointDomain),
     rollbackVersionId,
-    news,
+    { ...news, stopWhenRollbackRefused: true },
   );
   if (check._tag === "Ready") return served;
+  const failed = `Prisma Compute service '${app.id}' promoted version '${versionId}', but its stable endpoint failed its check.`;
   if (check._tag === "NoRollbackTarget") {
     return yield* new ComputeServiceEndpointCheckFailed({
-      message: `Prisma Compute service '${app.id}' promoted version '${versionId}', but its stable endpoint failed its check. The service had no earlier active version to restore, so it still serves '${versionId}'.`,
+      message:
+        liveBefore === versionId
+          ? `${failed} The service already served this version before this deploy, so there is nothing to roll back to. It serves '${versionId}'.`
+          : `${failed} The service served no version before this deploy, so there is nothing to roll back to. It serves '${versionId}'.`,
       errors: [check.readinessFailure],
       cause: check.readinessFailure,
     });
   }
   if (check._tag === "RolledBack") {
     return yield* new ComputeServiceEndpointCheckFailed({
-      message: `Prisma Compute service '${app.id}' promoted version '${versionId}', but its stable endpoint failed its check. The service was rolled back to version '${rollbackVersionId}'.`,
+      message: `${failed} The service was rolled back to version '${rollbackVersionId}', which it served before this deploy, and serves it now.`,
       errors:
         check.rollbackFailure === undefined
           ? [check.readinessFailure]
@@ -650,8 +677,19 @@ const serveActiveVersion = Effect.fn(function* (
       cause: check.readinessFailure,
     });
   }
+  const servingNow = yield* getService({ serviceId: app.id }).pipe(
+    Effect.map((response) => `'${response.data.latestDeploymentId ?? "none"}'`),
+    Effect.orElseSucceed(() => "a version Alchemy could not observe"),
+  );
+  if (check._tag === "RollbackRefused") {
+    return yield* new ComputeServiceRollbackFailed({
+      message: `${failed} The rollback to version '${rollbackVersionId}', which it served before this deploy, was refused: ${errorMessage(check.rollbackFailure)}. The service now serves ${servingNow}.`,
+      errors: [check.readinessFailure, check.rollbackFailure],
+      cause: check.rollbackFailure,
+    });
+  }
   return yield* new ComputeServiceRollbackNotConverged({
-    message: `Prisma Compute service '${app.id}' promoted version '${versionId}', but its stable endpoint failed its check, and after a rollback to version '${rollbackVersionId}' the service never reported that version as live. Nothing else was changed; check the service in the Prisma Console.`,
+    message: `${failed} After a rollback to version '${rollbackVersionId}', which it served before this deploy, the service never reported that version as live. It last reported ${servingNow}. Nothing else was changed.`,
     errors: [
       check.readinessFailure,
       ...(check.rollbackFailure === undefined ? [] : [check.rollbackFailure]),
@@ -660,6 +698,9 @@ const serveActiveVersion = Effect.fn(function* (
     cause: check.readinessFailure,
   });
 });
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error && error.message.length > 0 ? error.message : String(error);
 
 /**
  * Find a service in its project the way `read` does: by logical ID, and for a
@@ -688,7 +729,8 @@ const findServiceInProject = Effect.fn(function* (
   // falls back to the display name for services created before
   // logical IDs existed.
   if (props.logicalId !== undefined) return undefined;
-  const byName = yield* findApp(projectId, yield* createDisplayName(id, props.displayName), props);
+  const displayName = yield* createDisplayName(id, props.displayName);
+  const byName = yield* findApp(projectId, displayName, props);
   return byName ? { app: byName, provenOwned: false } : undefined;
 });
 
@@ -773,7 +815,17 @@ const ProviderLive = () =>
               const planned =
                 activeVersionSids(newBindings).length === 0 || diff?.action === "replace"
                   ? diff
-                  : { action: "update" as const, stables: ["serviceId", "url"] };
+                  : {
+                      action: "update" as const,
+                      stables: [
+                        "serviceId",
+                        "url",
+                        "serviceEndpointDomain",
+                        "projectId",
+                        "regionId",
+                        "createdAt",
+                      ],
+                    };
               return updateRowSavedBeforeRename(isLegacyAttributes(saved), planned);
             }),
         ),
@@ -833,9 +885,7 @@ const ProviderLive = () =>
           const app = yield* ensureService({ id, fqn, news, output });
           const versionId = activeVersionOf(bindings);
           return attrsFrom(
-            versionId === undefined
-              ? app
-              : yield* serveActiveVersion(app, versionId, output?.activeVersionId, news),
+            versionId === undefined ? app : yield* serveActiveVersion(app, versionId, news),
           );
         }),
         delete: Effect.fn(function* ({ output: saved }) {
