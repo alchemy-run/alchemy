@@ -552,19 +552,23 @@ export const projectRolesOf = (project: string, member: string) =>
     }),
   );
 
-/** True when `member` holds `role` unconditionally on the resource. */
+/**
+ * True when `member` holds `role` on the resource: unconditionally, or under
+ * exactly `condition` when one is given.
+ */
 export const hasIamMembership = (options: {
   kind: GcpIamResourceKind;
   name: string;
   member: string;
   role: string;
+  condition?: IamCondition;
 }) =>
   TARGETS[options.kind](targetName(options.kind, options.name)).get.pipe(
     Effect.map((policy) =>
       (policy.bindings ?? []).some(
         (binding) =>
           binding.role === options.role &&
-          binding.condition === undefined &&
+          sameCondition(binding.condition, options.condition) &&
           (binding.members ?? []).includes(principal(options.member)),
       ),
     ),
