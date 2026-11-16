@@ -114,7 +114,7 @@ const clientBackedApi = (client: any) =>
   });
 
 describe(
-  "Prisma Deployment",
+  "Prisma ComputeVersion",
   { tags: ["unit", "provider:prisma", "provider:prisma:computeversion", "local"] },
   () => {
     it.effect("redacts signed upload URLs from transport failures", () => {
@@ -823,7 +823,7 @@ describe(
       );
     });
 
-    it.effect("uses the output App ID when reading a saved deployment", () => {
+    it.effect("uses the output service ID when reading a saved version", () => {
       const calls: Array<[string, unknown?]> = [];
       const client = {
         listAppDeployments: (appId: string) =>
@@ -1106,7 +1106,7 @@ describe(
       );
     });
 
-    it.effect("replaces when the persisted App changes from an unresolved old prop", () => {
+    it.effect("replaces when the persisted service changes from an unresolved old prop", () => {
       const client = {} as PrismaManagementClient;
 
       return Effect.gen(function* () {
@@ -1813,7 +1813,7 @@ describe(
       );
     });
 
-    it.effect("tails Deployment logs through the provider", () =>
+    it.effect("tails version logs through the provider", () =>
       withWebSocketServer((server) =>
         Effect.gen(function* () {
           const url = yield* listenUrl(server);

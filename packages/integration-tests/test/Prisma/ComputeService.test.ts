@@ -44,7 +44,7 @@ const appStack = (props: { displayName?: string; logicalId?: string } = {}) =>
   });
 
 live.test.provider(
-  "creates an App under its fqn logical ID and converges name and logical ID in place",
+  "creates a service under its fqn logical ID and converges name and logical ID in place",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -105,7 +105,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "after lost state, adoption finds the App by its logical ID despite a Console rename",
+  "after lost state, adoption finds the service by its logical ID despite a Console rename",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -138,7 +138,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "recovers an interrupted App create as owned",
+  "recovers an interrupted service create as owned",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -158,7 +158,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "a later declaration reusing a held logical ID does not take over the App",
+  "a later declaration reusing a held logical ID does not take over the service",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -188,7 +188,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "sets the logical ID on an App deployed before logical IDs existed",
+  "sets the logical ID on a service deployed before logical IDs existed",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -212,7 +212,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "requires adoption for an App without a logical ID after lost state, then sets it",
+  "requires adoption for a service without a logical ID after lost state, then sets it",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -245,7 +245,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "rejects a logical ID that another App on the branch holds",
+  "rejects a logical ID that another service on the branch holds",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -305,7 +305,7 @@ live.test.provider(
 );
 
 live.test.provider(
-  "refuses a region change and replaces the App when its project changes",
+  "refuses a region change and replaces the service when its project changes",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 

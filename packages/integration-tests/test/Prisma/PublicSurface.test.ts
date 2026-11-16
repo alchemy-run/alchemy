@@ -232,7 +232,7 @@ const publicExports = [
   "destroyComputeVersion",
   "destroyComputeService",
   "destroyProjectComputeServices",
-  "toComputeVersionUrl",
+  "toComputeUrl",
   "syncComputeEnvironment",
   "readUploadArtifact",
   "uploadArtifact",

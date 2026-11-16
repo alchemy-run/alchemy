@@ -63,7 +63,7 @@ import {
 import {
   destroyComputeService,
   destroyComputeVersion,
-  toComputeVersionUrl,
+  toComputeUrl,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
 import { readUploadArtifact, uploadArtifact } from "./ComputeVersion.ts";
@@ -511,7 +511,7 @@ export interface ComputeProps extends PlatformProps {
    */
   start?: boolean;
   /**
-   * Do not promote the deployment to the stable App endpoint.
+   * Do not promote the version to the service's stable endpoint.
    *
    * @default false
    */
@@ -535,8 +535,9 @@ export interface ComputeProps extends PlatformProps {
    */
   pollIntervalMs?: number;
   /**
-   * Verify that Prisma's public preview/App URL has reached the edge after
-   * the Management API reports the deployment as running.
+   * Verify that Prisma's public preview URL of the version, and the stable URL of
+   * the service, have reached the edge after the Management API reports the
+   * version as running.
    *
    * @default true
    */
@@ -546,7 +547,7 @@ export interface ComputeProps extends PlatformProps {
    * verification only waits for Prisma edge routing to stop returning its
    * platform-level service-not-found response. With this option, Alchemy also
    * sends a public GET to the preview URL before promotion and to the stable
-   * App URL afterward. Redirects are not followed. Each probe phase gets the
+   * service URL afterward. Redirects are not followed. Each probe phase gets the
    * full `urlReadinessTimeoutSeconds` budget.
    *
    * Health checks run only during cloud deployment, not `alchemy dev`, and
@@ -619,7 +620,7 @@ export interface Compute extends Resource<
      * Action taken for the previous deployment.
      */
     previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null | undefined;
-    /** Stable App endpoint readiness observed after promotion. */
+    /** Readiness of the service's stable endpoint observed after promotion. */
     readinessStatus?: "ready" | "pending" | "skipped";
     /** Old deployment cleanup that will be retried before another generation. */
     pendingDeploymentCleanup?: {
@@ -733,11 +734,11 @@ const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInp
  * caller-defined recovery key. If the API commits a deployment but its create
  * response is lost before Alchemy persists the returned ID, that deployment
  * can remain orphaned and a later deploy may create another one. Alchemy does
- * not guess that the App's latest deployment is owned, because it could belong
- * to another actor. Use a durable, locked state backend and inspect the App's
- * deployment history after an interrupted create.
+ * not guess that the service's latest version is owned, because it could belong
+ * to another actor. Use a durable, locked state backend and inspect the service's
+ * version history after an interrupted create.
  *
- * ### Deploying an App
+ * ### Deploying a Service
  * **Example:** Deploy a directory with an entrypoint
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
@@ -2305,8 +2306,8 @@ const ProviderLive = () =>
               ? yield* readDeployment(app.latestDeploymentId)
               : undefined;
           const deployment = outputDeployment ?? latestDeployment;
-          const versionUrl = toComputeVersionUrl(deployment?.previewDomain ?? undefined);
-          const appUrl = toComputeVersionUrl(app.appEndpointDomain);
+          const versionUrl = toComputeUrl(deployment?.previewDomain ?? undefined);
+          const appUrl = toComputeUrl(app.appEndpointDomain);
           const promoted =
             app.latestDeploymentId !== null && deployment?.id === app.latestDeploymentId;
           const attrs: Compute["Attributes"] = {
@@ -2671,10 +2672,7 @@ const ProviderLive = () =>
                   "running",
                   effectiveNews,
                 );
-                yield* waitForDeploymentUrl(
-                  toComputeVersionUrl(running.previewDomain),
-                  effectiveNews,
-                );
+                yield* waitForDeploymentUrl(toComputeUrl(running.previewDomain), effectiveNews);
                 return running;
               }).pipe(
                 Effect.catch((error) =>
@@ -2696,10 +2694,9 @@ const ProviderLive = () =>
               promoted = true;
             }
 
-            const versionUrl = toComputeVersionUrl(deployment.previewDomain);
+            const versionUrl = toComputeUrl(deployment.previewDomain);
             const appUrl =
-              toComputeVersionUrl(serviceEndpointDomain) ??
-              toComputeVersionUrl(deployment.previewDomain);
+              toComputeUrl(serviceEndpointDomain) ?? toComputeUrl(deployment.previewDomain);
             let readinessStatus: "ready" | "pending" | "skipped" = "skipped";
             if (promoted && effectiveNews.verifyUrl !== false) {
               const readiness = yield* waitForDeploymentUrl(appUrl, effectiveNews).pipe(

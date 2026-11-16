@@ -384,7 +384,7 @@ export const destroyProjectComputeServices = Effect.fn(function* (
   } satisfies DestroyProjectComputeServicesResult;
 });
 
-export const toComputeVersionUrl = (domain: string | null | undefined) =>
+export const toComputeUrl = (domain: string | null | undefined) =>
   domain
     ? domain.startsWith("http://") || domain.startsWith("https://")
       ? domain

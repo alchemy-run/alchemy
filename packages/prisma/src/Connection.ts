@@ -189,7 +189,7 @@ export interface Connection extends Resource<
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
- *   { project, appName: "api", main: import.meta.filename },
+ *   { project, serviceName: "api", main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connect(connection);
  *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
