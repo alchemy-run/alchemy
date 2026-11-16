@@ -628,6 +628,7 @@ const activeVersionOf = (bindings: ReadonlyArray<ResourceBinding<ComputeServiceA
 const serveActiveVersion = Effect.fn(function* (
   app: ObservedApp,
   versionId: string,
+  recordedVersionId: string | null | undefined,
   news: ComputeServiceProps,
 ) {
   const version = yield* observeDeployment(versionId);
@@ -637,7 +638,9 @@ const serveActiveVersion = Effect.fn(function* (
     });
   }
   // The version to restore is the one the platform served just before this
-  // promotion, as observed in this reconcile.
+  // promotion, as observed in this reconcile. When that is the attached
+  // version itself, an earlier deploy promoted it and failed to restore the
+  // version before it, which this service's row still records.
   const liveBefore = app.latestDeploymentId;
   // Promotion is replayed on every deploy, also when the service already
   // serves this version: it repairs routing and custom-domain drift.
@@ -649,7 +652,11 @@ const serveActiveVersion = Effect.fn(function* (
   };
   if (news.verifyUrl === false) return served;
   const rollbackVersionId =
-    liveBefore === null || liveBefore === versionId ? undefined : liveBefore;
+    liveBefore !== null && liveBefore !== versionId
+      ? liveBefore
+      : typeof recordedVersionId === "string" && recordedVersionId !== versionId
+        ? recordedVersionId
+        : undefined;
   const check = yield* checkStableEndpoint(
     app.id,
     toComputeUrl(promoted.appEndpointDomain),
@@ -670,7 +677,7 @@ const serveActiveVersion = Effect.fn(function* (
   }
   if (check._tag === "RolledBack") {
     return yield* new ComputeServiceEndpointCheckFailed({
-      message: `${failed} The service was rolled back to version '${rollbackVersionId}', which it served before this deploy, and serves it now.`,
+      message: `${failed} The service was rolled back to version '${rollbackVersionId}', which it served before, and serves it now.`,
       errors:
         check.rollbackFailure === undefined
           ? [check.readinessFailure]
@@ -684,13 +691,13 @@ const serveActiveVersion = Effect.fn(function* (
   );
   if (check._tag === "RollbackRefused") {
     return yield* new ComputeServiceRollbackFailed({
-      message: `${failed} The rollback to version '${rollbackVersionId}', which it served before this deploy, was refused: ${errorMessage(check.rollbackFailure)}. The service now serves ${servingNow}.`,
+      message: `${failed} The rollback to version '${rollbackVersionId}', which it served before, was refused: ${errorMessage(check.rollbackFailure)}. The service now serves ${servingNow}.`,
       errors: [check.readinessFailure, check.rollbackFailure],
       cause: check.rollbackFailure,
     });
   }
   return yield* new ComputeServiceRollbackNotConverged({
-    message: `${failed} After a rollback to version '${rollbackVersionId}', which it served before this deploy, the service never reported that version as live. It last reported ${servingNow}. Nothing else was changed.`,
+    message: `${failed} After a rollback to version '${rollbackVersionId}', which it served before, the service never reported that version as live. It last reported ${servingNow}. Nothing else was changed.`,
     errors: [
       check.readinessFailure,
       ...(check.rollbackFailure === undefined ? [] : [check.rollbackFailure]),
@@ -886,7 +893,9 @@ const ProviderLive = () =>
           const app = yield* ensureService({ id, fqn, news, output });
           const versionId = activeVersionOf(bindings);
           return attrsFrom(
-            versionId === undefined ? app : yield* serveActiveVersion(app, versionId, news),
+            versionId === undefined
+              ? app
+              : yield* serveActiveVersion(app, versionId, output?.activeVersionId, news),
           );
         }),
         delete: Effect.fn(function* ({ output: saved }) {

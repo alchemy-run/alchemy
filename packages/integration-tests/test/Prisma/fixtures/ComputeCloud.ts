@@ -1,6 +1,7 @@
 import {
   type Captured,
   data,
+  failure,
   json,
   makeFakeManagementApi,
   noContent,
@@ -58,6 +59,8 @@ export const makeComputeCloud = () => {
     failingActiveVersions: new Set<string>(),
     /** Rollback calls succeed but the service keeps serving what it serves. */
     rollbackIgnored: false,
+    /** Rollback calls take effect but answer with a server error. */
+    rollbackResponseLost: false,
   };
 
   const serviceFor = (domain: string) =>
@@ -150,6 +153,9 @@ export const makeComputeCloud = () => {
         const target = String(body?.deploymentId);
         if (!deployments.has(target)) return notFound();
         if (tail === "promote" || !knobs.rollbackIgnored) service.latestDeploymentId = target;
+        if (tail === "rollback" && knobs.rollbackResponseLost) {
+          return failure(502, "bad_gateway", "upstream timed out");
+        }
         return data({ appEndpointDomain: service.appEndpointDomain, reassignedDomains: 0 });
       }
     }

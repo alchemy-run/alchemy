@@ -737,3 +737,71 @@ twoStepUpgrade.test.provider(
     }),
   { tags },
 );
+
+const afterFailedRecovery = harness();
+afterFailedRecovery.test.provider(
+  "restores the recorded version on the next deploy after a rollback that did not converge",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = afterFailedRecovery;
+      yield* stack.destroy();
+
+      yield* stack.deploy(app());
+      cloud.knobs.failingActiveVersions.add("dep-2");
+      cloud.knobs.rollbackIgnored = true;
+      const failed = yield* stack.deploy(app({ artifactPath: artifactV2 })).pipe(Effect.result);
+      expect(Result.isFailure(failed)).toBe(true);
+      // The platform serves the broken dep-2; the service's row records dep-1.
+      expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe("dep-2");
+      expect((yield* rows(stack)).Service?.attr.activeVersionId).toBe("dep-1");
+
+      cloud.knobs.rollbackIgnored = false;
+      yield* clearCalls(cloud);
+      const again = yield* stack.deploy(app({ artifactPath: artifactV2 })).pipe(Effect.result);
+
+      expect(Result.isFailure(again)).toBe(true);
+      if (Result.isFailure(again)) {
+        expect(String(again.failure)).toContain("rolled back to version 'dep-1'");
+      }
+      expect(cloud.writes()).toEqual([
+        "POST /v1/services/svc-1/promote",
+        "POST /v1/services/svc-1/rollback",
+      ]);
+      expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe("dep-1");
+
+      cloud.knobs.failingActiveVersions.clear();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const lostRollbackResponse = harness();
+lostRollbackResponse.test.provider(
+  "keeps observing after a rollback whose response was lost, and reports the restored version",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = lostRollbackResponse;
+      yield* stack.destroy();
+
+      yield* stack.deploy(app());
+      cloud.knobs.failingActiveVersions.add("dep-2");
+      cloud.knobs.rollbackResponseLost = true;
+      yield* clearCalls(cloud);
+
+      const result = yield* stack.deploy(app({ artifactPath: artifactV2 })).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        const message = String(result.failure);
+        expect(message).toContain("ComputeServiceEndpointCheckFailed");
+        expect(message).toContain("rolled back to version 'dep-1'");
+        expect(message).not.toContain("was refused");
+      }
+      expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe("dep-1");
+
+      cloud.knobs.rollbackResponseLost = false;
+      cloud.knobs.failingActiveVersions.clear();
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
+);

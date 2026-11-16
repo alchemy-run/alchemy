@@ -207,9 +207,10 @@ export const promoteVersionObserved = Effect.fn(function* (
  * - `RolledBack`: it did not, and the service reports the earlier version as
  *   live again. `rollbackFailure` is set when the rollback call itself failed
  *   but the service converged anyway.
- * - `RollbackRefused`: it did not, and the platform refused the rollback.
- *   Only reported with `stopWhenRollbackRefused`; otherwise the check waits
- *   for the earlier version anyway.
+ * - `RollbackRefused`: it did not, and the platform refused the rollback with
+ *   a client error. Only reported with `stopWhenRollbackRefused`; otherwise,
+ *   and after any other rollback error, the check waits for the earlier
+ *   version anyway.
  * - `RollbackNotConverged`: it did not, and the service never reported the
  *   earlier version as live.
  */
@@ -265,7 +266,16 @@ export const checkStableEndpoint = Effect.fn(function* (
     deploymentId: rollbackVersionId,
   }).pipe(Effect.result);
   const rollbackFailure = Result.isFailure(rollback) ? rollback.failure : undefined;
-  if (rollbackFailure !== undefined && options.stopWhenRollbackRefused) {
+  // Only a client error means the platform refused. After a transport or
+  // server error the rollback may still have taken effect, so keep observing.
+  const refused =
+    rollbackFailure !== undefined &&
+    (rollbackFailure._tag === "BadRequest" ||
+      rollbackFailure._tag === "Forbidden" ||
+      rollbackFailure._tag === "NotFound" ||
+      rollbackFailure._tag === "Conflict" ||
+      rollbackFailure._tag === "UnprocessableEntity");
+  if (refused && options.stopWhenRollbackRefused) {
     return {
       _tag: "RollbackRefused",
       readinessFailure: readiness.failure,
