@@ -71,6 +71,17 @@ const row = (url: string, view: "summary" | "latest", account: string, net: numb
     }),
   );
 
+/** An account's balance, polled within a minute: a redeploy takes a while to reach its object. */
+const balance = (url: string, account: string, expected: number) =>
+  call(url, "GET", `/balance/${account}`).pipe(
+    Effect.map((body) => JSON.parse(body) as { balance: number }),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (value) => value.balance === expected,
+      times: 30,
+    }),
+  );
+
 /** Poll a view row like `row`, but within a minute. */
 const soon = (url: string, view: "summary" | "latest", account: string, net: number) =>
   call(url, "GET", `/${view}/${account}`).pipe(
@@ -120,7 +131,7 @@ for (const dev of [true, false]) {
       });
 
       test.provider(
-        `${dev ? "local" : "live"}: bumping a view's version rebuilds it in place, and what reads it from the history`,
+        `${dev ? "local" : "live"}: bumping a view's version rebuilds it in place, and what reads it from the history; bumping an aggregate's folds each instance again`,
         (stack) =>
           Effect.gen(function* () {
             yield* stack.destroy();
@@ -134,8 +145,9 @@ for (const dev of [true, false]) {
             yield* call(url, "POST", "/deposit/a-1/10");
             yield* call(url, "POST", "/withdraw/a-1/4");
             yield* call(url, "POST", "/deposit/a-2/3");
-            // Version 0 counts deposits only.
+            // Version 0 counts deposits only, and its account does not subtract withdrawals.
             expect(yield* row(url, "summary", "a-1", 10)).toEqual({ net: 10 });
+            expect(yield* balance(url, "a-1", 10)).toEqual({ balance: 10 });
             expect(yield* row(url, "latest", "a-1", 10)).toEqual({ net: 10 });
             const before = dev ? {} : yield* classes(worker.workerName);
 
@@ -154,6 +166,8 @@ for (const dev of [true, false]) {
             // The withdrawal, which the old rows never received, counts: at once, even
             // while the busy object runs the old code.
             expect(yield* soon(url, "summary", "a-1", 6)).toEqual({ net: 6 });
+            // The account folds its state again from its events, before any command.
+            expect(yield* balance(url, "a-1", 6)).toEqual({ balance: 6 });
             if (watcher) {
               yield* Fiber.interrupt(watcher);
               expect(answers.length).toBeGreaterThan(10);
@@ -164,6 +178,7 @@ for (const dev of [true, false]) {
             expect(yield* row(url, "latest", "a-1", 6)).toEqual({ net: 6 });
             // And it keeps up afterwards.
             yield* call(url, "POST", "/withdraw/a-1/1");
+            expect(yield* balance(url, "a-1", 5)).toEqual({ balance: 5 });
             expect(yield* row(url, "summary", "a-1", 5)).toEqual({ net: 5 });
             expect(yield* row(url, "latest", "a-1", 5)).toEqual({ net: 5 });
 

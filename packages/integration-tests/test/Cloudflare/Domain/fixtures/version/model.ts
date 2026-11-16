@@ -13,7 +13,24 @@ export class Withdraw extends Domain.Command("Withdraw", {
   input: { amount: Schema.Number },
   events: [Withdrawn],
 }) {}
+/** The account the first deploy runs, with a fault: withdrawals are not subtracted. */
 export class Account extends Domain.Aggregate("Account", {
+  id: Schema.String,
+  state: Schema.Struct({ balance: Schema.Number }),
+  initial: { balance: 0 },
+  commands: [Deposit, Withdraw],
+  decide: {
+    Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })],
+    Withdraw: (_, cmd) => [new Withdrawn({ amount: cmd.amount })],
+  },
+  evolve: {
+    Deposited: (s, e) => ({ balance: s.balance + e.amount }),
+    Withdrawn: (s) => s,
+  },
+}) {}
+
+/** The fault fixed, at version 1: each account folds its state again from its events. */
+export class AccountV1 extends Domain.Aggregate("Account", {
   id: Schema.String,
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
@@ -26,6 +43,7 @@ export class Account extends Domain.Aggregate("Account", {
     Deposited: (s, e) => ({ balance: s.balance + e.amount }),
     Withdrawn: (s, e) => ({ balance: s.balance - e.amount }),
   },
+  version: 1,
 }) {}
 
 const Net = Schema.Struct({ net: Schema.Number });
@@ -41,8 +59,8 @@ export class Summary extends Domain.View("Summary", {
 
 /** Fixed to count withdrawals, an event its rows never received: version 1. */
 export class SummaryV1 extends Domain.View("Summary", {
-  from: [Account],
-  key: Account,
+  from: [AccountV1],
+  key: AccountV1,
   state: Net,
   initial: { net: 0 },
   evolve: {
@@ -62,7 +80,7 @@ export class Latest extends Domain.View("Latest", {
 }) {}
 export class LatestOfV1 extends Domain.View("Latest", {
   from: [SummaryV1],
-  key: Account,
+  key: AccountV1,
   state: Net,
   initial: { net: 0 },
   evolve: {
@@ -76,6 +94,6 @@ export class Bank extends Domain.Model("Bank", {
   views: [Summary, Latest],
 }) {}
 export class BankV1 extends Domain.Model("Bank", {
-  aggregates: [Account],
+  aggregates: [AccountV1],
   views: [SummaryV1, LatestOfV1],
 }) {}

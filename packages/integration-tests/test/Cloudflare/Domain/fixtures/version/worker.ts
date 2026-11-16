@@ -17,7 +17,8 @@ import {
 /**
  * The Bank Worker's routes, on whichever model a deploy hosts:
  * `POST /deposit/<account>/<amount>`, `POST /withdraw/<account>/<amount>`,
- * `GET /summary/<account>`, `GET /latest/<account>` and `GET /version`.
+ * `GET /balance/<account>`, `GET /summary/<account>`, `GET /latest/<account>`
+ * and `GET /version`.
  */
 export const bankWorker = (
   version: string,
@@ -33,6 +34,7 @@ export const bankWorker = (
         const request = yield* HttpServerRequest;
         const [, route, id, amount] = new URL(request.url, "http://localhost").pathname.split("/");
         if (route === "version") return HttpServerResponse.text(version);
+        if (route === "balance") return yield* HttpServerResponse.json(yield* accounts.get(id!));
         if (route === "summary")
           return yield* HttpServerResponse.json(
             Option.getOrNull(yield* summary.get(Account.ref(id!))),

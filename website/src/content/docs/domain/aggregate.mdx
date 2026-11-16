@@ -137,6 +137,29 @@ Keeping `evolve` separate from `decide` is what lets the state be derived from e
 
 `evolve` never fails either, and never throws. Refusing is `decide`'s job: every command that records `MoneyDeposited` has already returned `NotOpen` for an account that isn't open. So each handler covers every state, and keeps a state its event can't follow. An event that moves the account to another stage, like `AccountOpened`, returns the new state whole.
 
+## Change an aggregate: bump its version
+
+Each instance saves its state with its events, so a command doesn't fold every event again. Change how the state is computed (its `evolve`, `state` or `initial`) and the saved state of every existing instance still comes from the old code. Bump the aggregate's `version`:
+
+```typescript title="src/Account.aggregate.ts"
+export class Account extends Domain.Aggregate("Account", {
+  // ...
+  evolve: {
+    // fixed: the old handler kept the balance from before the withdrawal
+    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+  },
+  version: 1,
+}) {}
+```
+
+After the deploy, each instance folds its own events again with the new code the first time it is touched, by a command or a read, and saves the result. The deploy waits for nothing; the cost is one slower first use per instance. An instance first opened after the deploy has nothing to fold.
+
+On Durable Objects, a long stream is folded in sections of 4,096 events, each in its own exclusive section, so other calls get in between and no section nears Cloudflare's 30-second limit. None of them acts on the old state: each finishes the fold first. A fold cut short carries on where it stopped the next time the instance is touched.
+
+No event is rewritten and none is recorded, so no view, projection or policy hears anything. They read events, not the aggregate's state. This `version` is not the stream's version that `decide` sees in its context: that one counts the instance's events.
+
+Only ever increase a version. To undo a change, change the code back and bump again. A stream that holds an event the code no longer declares can't be folded again, and fails with an unknown event, as a view's rebuild does.
+
 ## Reply from the new state
 
 A command that declares a `reply` gets one from a `reply` handler. It runs after `evolve`, on the state the events produced.

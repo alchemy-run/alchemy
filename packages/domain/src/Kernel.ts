@@ -1024,6 +1024,19 @@ const build = (
     return {
       name: aggregate.aggregateName,
       deliver,
+      generation: def.version ?? 0,
+      fold: Effect.fnUntraced(function* (input) {
+        let state = codecs.state.decode(input.state ?? codecs.initial);
+        for (const row of input.events) {
+          const event = (yield* decodeEvent(row.event)) as { readonly _tag: string };
+          state = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
+            state,
+            event,
+            decodeEnvelope(row.envelope),
+          );
+        }
+        return codecs.state.encode(state);
+      }),
       // Read when used: versions are set once the whole model is built.
       consumerSingleSource: (target: string) => singleSource(target),
       get targets() {

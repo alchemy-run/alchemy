@@ -98,7 +98,10 @@ An aggregate's state is never read by clients directly: a view projects what the
 
 `Aggregate.ref(id)` builds a reference for stories and views.
 
-More: [Aggregate](https://alchemy.run/domain/aggregate).
+When you change how a deployed aggregate computes its state (`evolve`, `state`, `initial`), bump its `version` (`version: 1`), and only ever increase it.
+Each instance folds its own events again the first time it is touched; no event is recorded, so no view is rebuilt.
+
+More: [Aggregate](https://alchemy.run/domain/aggregate), [Aggregate: Change an aggregate: bump its version](https://alchemy.run/domain/aggregate#change-an-aggregate-bump-its-version).
 
 ### Patterns for decide, evolve and reply
 

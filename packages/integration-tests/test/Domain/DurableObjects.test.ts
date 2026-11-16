@@ -17,9 +17,10 @@ import * as Semaphore from "effect/Semaphore";
 
 // ---------------------------------------------------------------- an in-process Durable Object host
 
-/** Rows the objects of one host read from storage. */
+/** Rows the objects of one host read from storage, and the times each object took its lock. */
 interface Stats {
   rowsRead: number;
+  locks?: Map<string, number>;
 }
 
 /** Sorted key-value storage that counts the rows it reads, as Durable Object billing does. */
@@ -124,6 +125,8 @@ const simHost = (
     readonly intercept?: Intercept;
     /** Give each instance Rivet's input gate: construction and each call are calls of their own. */
     readonly inputGate?: boolean;
+    /** Reset an object instead of giving it its lock, as Cloudflare does past 30 seconds. */
+    readonly resetOnLock?: (object: string) => boolean;
   } = {},
 ) => {
   const disk = options.disk ?? { objects: new Map() };
@@ -180,7 +183,12 @@ const simHost = (
         return {
           state: {
             storage,
-            exclusive: (effect) => gate.withPermits(1)(effect),
+            exclusive: (effect) =>
+              Effect.suspend(() => {
+                stats.locks?.set(id, (stats.locks.get(id) ?? 0) + 1);
+                if (options.resetOnLock?.(id)) return Effect.die(new Error(`${id} was reset`));
+                return gate.withPermits(1)(effect);
+              }),
             waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)),
           } satisfies DurableObjects.ObjectStateShape,
           runtime: {
@@ -550,10 +558,11 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         const second = yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: 1 }));
         expect(second.version).toBe(2);
         expect(directory.listed).toEqual([]);
-        // It is listed once the directory answers, with no further command.
-        yield* eventually(() => directory.state.attempts > 0);
+        // It is listed once the directory answers, with no further command. Its
+        // Totals view lists its own row too, after its delivery: wait for both.
+        yield* eventually(() => directory.state.attempts >= 2);
         yield* Deferred.succeed(directory.state.gate!, undefined);
-        yield* eventually(() => directory.listed.length > 0);
+        yield* eventually(() => directory.listed.length >= 2);
         expect(directory.listed).toContain("main");
         // It is listed once: nothing is pending afterwards.
         const attempts = directory.state.attempts;
@@ -733,5 +742,398 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
       }).pipe(Effect.scoped, Effect.provide(gated));
     },
     { timeout: 30_000 },
+  );
+});
+
+// ---------------------------------------------------------------- aggregate versions
+
+class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
+class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
+class Deposit extends Domain.Command("Deposit", {
+  target: Schema.String,
+  input: { amount: Schema.Number },
+  events: [Deposited],
+}) {}
+class Withdraw extends Domain.Command("Withdraw", {
+  target: Schema.String,
+  input: { amount: Schema.Number },
+  events: [Withdrawn],
+}) {}
+const Balance = Schema.Struct({ balance: Schema.Number });
+const decideAccount = {
+  Deposit: (_: unknown, cmd: Deposit) => [new Deposited({ amount: cmd.amount })],
+  Withdraw: (_: unknown, cmd: Withdraw) => [new Withdrawn({ amount: cmd.amount })],
+};
+/** Version 0, with a fault: withdrawals are not subtracted. */
+class AccountV0 extends Domain.Aggregate("Account", {
+  id: Schema.String,
+  state: Balance,
+  initial: { balance: 0 },
+  commands: [Deposit, Withdraw],
+  decide: decideAccount,
+  evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }), Withdrawn: (s) => s },
+}) {}
+/** The fault fixed, at version 1. */
+class AccountV1 extends Domain.Aggregate("Account", {
+  id: Schema.String,
+  state: Balance,
+  initial: { balance: 0 },
+  commands: [Deposit, Withdraw],
+  decide: decideAccount,
+  evolve: {
+    Deposited: (s, e) => ({ balance: s.balance + e.amount }),
+    Withdrawn: (s, e) => ({ balance: s.balance - e.amount }),
+  },
+  version: 1,
+}) {}
+const Net = Schema.Struct({ net: Schema.Number });
+/** One row per account, counting deposits only: the same view on either account. */
+class SummaryOfV0 extends Domain.View("Summary", {
+  from: [AccountV0],
+  key: AccountV0,
+  state: Net,
+  initial: { net: 0 },
+  evolve: { Deposited: (s, e) => ({ net: s.net + e.amount }) },
+}) {}
+class SummaryOfV1 extends Domain.View("Summary", {
+  from: [AccountV1],
+  key: AccountV1,
+  state: Net,
+  initial: { net: 0 },
+  evolve: { Deposited: (s, e) => ({ net: s.net + e.amount }) },
+}) {}
+class BankV0 extends Domain.Model("Bank", { aggregates: [AccountV0], views: [SummaryOfV0] }) {}
+class BankV1 extends Domain.Model("Bank", { aggregates: [AccountV1], views: [SummaryOfV1] }) {}
+
+/** The ledger summing its bookings rather than counting them, at version 1. */
+class LedgerSummed extends Domain.Aggregate("Ledger", {
+  id: Schema.String,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  commands: [BookMany],
+  decide: {
+    BookMany: (ledger, { count }) =>
+      Array.from({ length: count }, (_, i) => new Booked({ n: ledger.count + i + 1 })),
+  },
+  evolve: { Booked: (s, e) => ({ count: s.count + e.n }) },
+  version: 1,
+}) {}
+/** The ledger summing twice its bookings, at version 2. */
+class LedgerDoubled extends Domain.Aggregate("Ledger", {
+  id: Schema.String,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  commands: [BookMany],
+  decide: {
+    BookMany: (ledger, { count }) =>
+      Array.from({ length: count }, (_, i) => new Booked({ n: ledger.count + i + 1 })),
+  },
+  evolve: { Booked: (s, e) => ({ count: s.count + 2 * e.n }) },
+  version: 2,
+}) {}
+class LedgersV0 extends Domain.Model("Ledgers", { aggregates: [Ledger] }) {}
+class LedgersV1 extends Domain.Model("Ledgers", { aggregates: [LedgerSummed] }) {}
+class LedgersV2 extends Domain.Model("Ledgers", { aggregates: [LedgerDoubled] }) {}
+
+/** Host `model` on a new sim host over `disk`, as a deploy of new code over old storage does. */
+const deployedOn = (
+  stats: Stats,
+  disk: Disk,
+  model: { readonly layer: (policies: any) => Layer.Layer<any, any, any> },
+  options: { readonly resetOnLock?: (object: string) => boolean } = {},
+) =>
+  model
+    .layer(Layer.empty)
+    .pipe(
+      Layer.provideMerge(DurableObjects.makePlatform(simHost(stats, { disk, ...options }).host)),
+      Layer.provideMerge(SecureRandom.layerWebCrypto),
+    );
+
+/** The stored rows of one aggregate instance on `disk`. */
+const instanceRows = (disk: Disk, aggregate: string, id: string) => {
+  const found = [...disk.objects.values()].find(
+    (saved) => saved.name === id && saved.cls.endsWith(`${aggregate}Aggregate`),
+  );
+  const data = found?.data ?? new Map<string, unknown>();
+  return {
+    events: [...data.keys()].filter((key) => key.startsWith("event:")).length,
+    meta: data.get("meta") as { readonly version: number; readonly generation?: number },
+  };
+};
+
+/** A fold cut short on one aggregate instance on `disk`, if one is saved. */
+const savedFold = (disk: Disk, aggregate: string, id: string) =>
+  [...disk.objects.values()]
+    .find((saved) => saved.name === id && saved.cls.endsWith(`${aggregate}Aggregate`))
+    ?.data.get("fold") as { readonly generation: number; readonly after: number } | undefined;
+
+/** A stream longer than one section of the fold (4,096 events). */
+const LONG = 5_000;
+/** 1 + 2 + ... + `n`: the summed ledger's count after `n` bookings. */
+const sumTo = (n: number) => (n * (n + 1)) / 2;
+
+/** Book {@link LONG} lines on the ledger `main` at version 0. */
+const bookedLong = (stats: Stats, disk: Disk) =>
+  Effect.gen(function* () {
+    yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: LONG }));
+  }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV0)));
+
+/** Reset the ledger `main` on the `nth` lock it takes, once. */
+const resetOnNthLock = (nth: number) => {
+  let taken = 0;
+  return (object: string) => object.endsWith("LedgerAggregate/main") && ++taken === nth;
+};
+
+/** The times `read` made the aggregate instance `aggregate`/`id` take its lock. */
+const locksTakenBy = <A, E, R>(
+  stats: Stats,
+  aggregate: string,
+  id: string,
+  read: Effect.Effect<A, E, R>,
+) => {
+  const taken = () =>
+    [...(stats.locks ?? new Map<string, number>())]
+      .filter(([object]) => object.endsWith(`${aggregate}Aggregate/${id}`))
+      .reduce((sum, [, count]) => sum + count, 0);
+  return Effect.gen(function* () {
+    const before = taken();
+    const result = yield* read;
+    return { result, locks: taken() - before };
+  });
+};
+
+describe("Domain aggregate versions on Durable Objects", { tags: ["unit"] }, () => {
+  it.live(
+    "bumping an aggregate's version folds each instance again in place, and records nothing",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      const balance = Effect.gen(function* () {
+        return yield* (yield* AccountV0).get(AccountV0.ref("a-1"));
+      });
+      return Effect.gen(function* () {
+        const summaryBefore = yield* Effect.gen(function* () {
+          const accounts = yield* AccountV0;
+          // The summary reads deposits only: wait for the deposit.
+          const receipt = yield* accounts.send(AccountV0.ref("a-1"), new Deposit({ amount: 10 }));
+          yield* accounts.send(AccountV0.ref("a-1"), new Withdraw({ amount: 4 }));
+          expect(yield* balance).toEqual({ balance: 10 });
+          return yield* (yield* SummaryOfV0).get(AccountV0.ref("a-1"), {
+            atLeast: { stream: receipt.stream, version: receipt.version },
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV0)));
+        const before = instanceRows(disk, "Account", "a-1");
+        expect(before).toEqual({ events: 2, meta: { version: 2, state: { balance: 10 } } });
+
+        yield* Effect.gen(function* () {
+          // Read before any command: folded again from its two events.
+          expect(yield* balance).toEqual({ balance: 6 });
+          const after = instanceRows(disk, "Account", "a-1");
+          expect(after.events).toBe(2);
+          expect(after.meta).toEqual({ version: 2, generation: 1, state: { balance: 6 } });
+          expect(yield* (yield* SummaryOfV1).get(AccountV1.ref("a-1"))).toEqual(summaryBefore);
+          // A command decides on the folded state, as the stream's third event.
+          const receipt = yield* (yield* AccountV1).send(
+            AccountV1.ref("a-1"),
+            new Deposit({ amount: 1 }),
+          );
+          expect(receipt.version).toBe(3);
+          expect(yield* balance).toEqual({ balance: 7 });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a stream longer than a page is folded again in order, once",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      // 300 events: more than two pages of the fold.
+      const BOOKED = 300;
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* (yield* Ledger).send(Ledger.ref("main"), new BookMany({ count: BOOKED }));
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV0)));
+        expect(instanceRows(disk, "Ledger", "main").meta).toEqual({
+          version: BOOKED,
+          state: { count: BOOKED },
+        });
+
+        yield* Effect.gen(function* () {
+          const ledgers = yield* LedgerSummed;
+          const first = yield* rowsReadBy(stats, ledgers.get(LedgerSummed.ref("main")));
+          // 1 + 2 + ... + 300, in order across the pages.
+          expect(first.result).toEqual({ count: (BOOKED * (BOOKED + 1)) / 2 });
+          expect(first.rows).toBeGreaterThanOrEqual(BOOKED);
+          // Once: the next read finds it folded, and reads no event.
+          const second = yield* rowsReadBy(stats, ledgers.get(LedgerSummed.ref("main")));
+          expect(second.result).toEqual(first.result);
+          expect(second.rows).toBeLessThan(5);
+          // A ledger first opened after the bump is never folded.
+          yield* ledgers.send(LedgerSummed.ref("new"), new BookMany({ count: 3 }));
+          const opened = yield* rowsReadBy(stats, ledgers.get(LedgerSummed.ref("new")));
+          expect(opened.result).toEqual({ count: 6 });
+          expect(opened.rows).toBeLessThan(5);
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "reading an up-to-date instance takes no lock; reading a stale one takes it once",
+    () => {
+      const stats: Stats = { rowsRead: 0, locks: new Map() };
+      const disk: Disk = { objects: new Map() };
+      const read = Effect.gen(function* () {
+        return yield* (yield* AccountV0).get(AccountV0.ref("a-1"));
+      });
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const accounts = yield* AccountV0;
+          yield* accounts.send(AccountV0.ref("a-1"), new Deposit({ amount: 10 }));
+          // An aggregate with no version reads as before: no lock.
+          expect(yield* locksTakenBy(stats, "Account", "a-1", read)).toEqual({
+            result: { balance: 10 },
+            locks: 0,
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV0)));
+
+        yield* Effect.gen(function* () {
+          // Stale after the bump: the read takes the lock to fold it.
+          expect(yield* locksTakenBy(stats, "Account", "a-1", read)).toEqual({
+            result: { balance: 10 },
+            locks: 1,
+          });
+          // Folded and saved: the next read takes none.
+          expect(yield* locksTakenBy(stats, "Account", "a-1", read)).toEqual({
+            result: { balance: 10 },
+            locks: 0,
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, BankV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a stream longer than a section is folded in short locks, and keeps no place afterwards",
+    () => {
+      const stats: Stats = { rowsRead: 0, locks: new Map() };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        yield* Effect.gen(function* () {
+          const read = (yield* LedgerSummed).get(LedgerSummed.ref("main"));
+          // Two sections: 4,096 events, then the other 904.
+          expect(yield* locksTakenBy(stats, "Ledger", "main", read)).toEqual({
+            result: { count: sumTo(LONG) },
+            locks: 2,
+          });
+          expect(yield* locksTakenBy(stats, "Ledger", "main", read)).toEqual({
+            result: { count: sumTo(LONG) },
+            locks: 0,
+          });
+          expect(savedFold(disk, "Ledger", "main")).toBeUndefined();
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a fold cut short carries on from where it stopped",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        yield* Effect.gen(function* () {
+          const read = (yield* LedgerSummed).get(LedgerSummed.ref("main"));
+          // Reset before its second section: the old state stays, and the place is saved.
+          expect(Exit.isFailure(yield* Effect.exit(read))).toBe(true);
+          expect(instanceRows(disk, "Ledger", "main").meta).toEqual({
+            version: LONG,
+            state: { count: LONG },
+          });
+          expect(savedFold(disk, "Ledger", "main")).toEqual({
+            generation: 1,
+            after: 4_096,
+            state: { count: sumTo(4_096) },
+          });
+          // The next read folds only the other 904 events.
+          const next = yield* rowsReadBy(stats, read);
+          expect(next.result).toEqual({ count: sumTo(LONG) });
+          expect(next.rows).toBeLessThan(1_100);
+          expect(savedFold(disk, "Ledger", "main")).toBeUndefined();
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(deployedOn(stats, disk, LedgersV1, { resetOnLock: resetOnNthLock(2) })),
+        );
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a command sent to a stale instance with a long stream decides on the folded state",
+    () => {
+      const stats: Stats = { rowsRead: 0, locks: new Map() };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        yield* Effect.gen(function* () {
+          const ledgers = yield* LedgerSummed;
+          const sent = yield* locksTakenBy(
+            stats,
+            "Ledger",
+            "main",
+            ledgers.send(LedgerSummed.ref("main"), new BookMany({ count: 1 })),
+          );
+          // Two sections of the fold, then the commit.
+          expect(sent.locks).toBe(3);
+          expect(sent.result.version).toBe(LONG + 1);
+          // Booked as n = sumTo(LONG) + 1, on the folded count.
+          expect(yield* ledgers.get(LedgerSummed.ref("main"))).toEqual({
+            count: 2 * sumTo(LONG) + 1,
+          });
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV1)));
+      });
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "a place saved by an earlier version is not used",
+    () => {
+      const stats: Stats = { rowsRead: 0 };
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        yield* bookedLong(stats, disk);
+        // Version 1's fold is cut short after one section.
+        yield* Effect.gen(function* () {
+          const read = (yield* LedgerSummed).get(LedgerSummed.ref("main"));
+          expect(Exit.isFailure(yield* Effect.exit(read))).toBe(true);
+          expect(savedFold(disk, "Ledger", "main")?.generation).toBe(1);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(deployedOn(stats, disk, LedgersV1, { resetOnLock: resetOnNthLock(2) })),
+        );
+        // Version 2 folds every event with its own code.
+        yield* Effect.gen(function* () {
+          const read = yield* rowsReadBy(
+            stats,
+            (yield* LedgerDoubled).get(LedgerDoubled.ref("main")),
+          );
+          expect(read.result).toEqual({ count: 2 * sumTo(LONG) });
+          expect(read.rows).toBeGreaterThanOrEqual(LONG);
+          expect(instanceRows(disk, "Ledger", "main").meta.generation).toBe(2);
+          expect(savedFold(disk, "Ledger", "main")).toBeUndefined();
+        }).pipe(Effect.scoped, Effect.provide(deployedOn(stats, disk, LedgersV2)));
+      });
+    },
+    { timeout: 60_000 },
   );
 });
