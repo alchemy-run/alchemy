@@ -327,6 +327,12 @@ export interface ProviderService<
     oldBindings: BindingData<Res>;
     newBindings: Input<BindingData<Res>>;
     output: Res["Attributes"] | undefined;
+    /**
+     * Effective protection of this generation, including the desired policy,
+     * stored policy, and the last successful policy of an interrupted update.
+     * Providers can refuse destructive subresource changes during updates.
+     */
+    protected?: boolean;
   }): Effect.Effect<Diff | void, ProviderError, DiffReq>;
   // dev?:() => Effect.Effect<void, any, DevReq>;
   /**
@@ -416,6 +422,8 @@ export interface ProviderService<
     output: Res["Attributes"] | undefined;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    /** Effective protection against destructive subresource updates. */
+    protected?: boolean;
   }): Effect.Effect<Res["Attributes"], ProviderError, ReconcileReq>;
   /** Idempotent; fail with {@link DeleteInProgress} when the cloud cannot finish the delete yet. */
   delete(input: {
