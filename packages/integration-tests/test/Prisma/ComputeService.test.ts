@@ -197,6 +197,35 @@ live.test.provider(
 );
 
 live.test.provider(
+  "a declaration whose logical ID a service on the platform holds does not take over that service",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (name: "First" | "Second") =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const service = yield* Prisma.ComputeService(name, { project, logicalId: "shared" });
+        return { project, service };
+      });
+
+    const initial = yield* stack.deploy(resources("First"));
+    // The service stays on the platform with the logical ID, held by nothing
+    // in this stack, as if another stack had created it.
+    yield* forgetState(stack, "First");
+
+    const refused = yield* failureOf(stack.deploy(resources("Second")));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    expect((yield* observeApp(initial.service.serviceId)).logicalId).toBe("shared");
+
+    yield* Prisma.destroyComputeService(initial.service.serviceId);
+    yield* expectAppGone(initial.service.serviceId);
+    yield* stack.destroy();
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
   "sets the logical ID on a service deployed before logical IDs existed",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
