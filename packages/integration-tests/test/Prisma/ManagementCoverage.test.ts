@@ -102,6 +102,8 @@ const lifecycleResources = [
       "GET /v1/apps/{appId}",
       "PATCH /v1/apps/{appId}",
       "DELETE /v1/apps/{appId}",
+      "POST /v1/apps/{appId}/promote",
+      "POST /v1/apps/{appId}/rollback",
     ],
   },
   {
@@ -151,8 +153,6 @@ const lifecycleResources = [
 ] as const;
 
 const operationOnlyRoutes = [
-  "POST /v1/apps/{appId}/promote",
-  "POST /v1/apps/{appId}/rollback",
   "GET /v1/builds/{buildId}/logs",
   "POST /v1/projects/{id}/transfer",
   "GET /v1/databases/{databaseId}/backups",

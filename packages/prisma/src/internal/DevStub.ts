@@ -62,8 +62,18 @@ const withoutKeys = (record: DevRecord, keys: readonly string[]) =>
 export const devProvider = <R extends ResourceLike>(
   resource: ResourceClass<R>,
   stables: Extract<keyof R["Attributes"], string>[],
-  attrs: (input: { id: string; fqn: string; news: DevRecord; output?: DevRecord }) => DevRecord,
+  attrs: (input: {
+    id: string;
+    fqn: string;
+    news: DevRecord;
+    output?: DevRecord;
+    bindings: ReadonlyArray<{ sid: string; data: unknown }>;
+  }) => DevRecord,
   rename?: DevRename,
+  options?: {
+    /** Create the stub before its cycle peers, as the live provider's `precreate` does. */
+    readonly precreate?: boolean;
+  },
 ) => {
   const oldAttributes = rename?.oldAttributes ?? [];
   const savedBeforeRename = (output: unknown) =>
@@ -81,12 +91,20 @@ export const devProvider = <R extends ResourceLike>(
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ id, fqn, news, output }) {
+    ...(options?.precreate
+      ? {
+          precreate: Effect.fn(function* ({ id, fqn, news }) {
+            const newsRecord = isRecord(news) ? news : {};
+            return attrs({ id, fqn, news: newsRecord, bindings: [] }) as R["Attributes"];
+          }),
+        }
+      : {}),
+    reconcile: Effect.fn(function* ({ id, fqn, news, output, bindings }) {
       const newsRecord = isRecord(news) ? news : {};
       const outputRecord = isRecord(output) ? withoutKeys(output, oldAttributes) : undefined;
       return {
         ...outputRecord,
-        ...attrs({ id, fqn, news: newsRecord, output: outputRecord }),
+        ...attrs({ id, fqn, news: newsRecord, output: outputRecord, bindings }),
       } as R["Attributes"];
     }),
     delete: Effect.fn(function* () {}),

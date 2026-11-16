@@ -272,7 +272,12 @@ const program = (options: { revision: string }) =>
 const writeAsBeforeRename = (
   stack: Test.ScratchStack,
   fqn: string,
-  rename: { type?: string; attr: Record<string, string>; props?: Record<string, string> },
+  rename: {
+    type?: string;
+    /** Old name for each attribute; `null` for one the old release did not write. */
+    attr: Record<string, string | null>;
+    props?: Record<string, string>;
+  },
 ) =>
   Effect.gen(function* () {
     const state = yield* yield* State;
@@ -281,8 +286,13 @@ const writeAsBeforeRename = (
     if (!stored || isActionState(stored) || stored.status !== "created") {
       return yield* Effect.die(new Error(`Expected a created state row for '${fqn}'`));
     }
-    const renameKeys = (record: object, names: Record<string, string>) =>
-      Object.fromEntries(Object.entries(record).map(([key, value]) => [names[key] ?? key, value]));
+    const renameKeys = (record: object, names: Record<string, string | null>) =>
+      Object.fromEntries(
+        Object.entries(record).flatMap(([key, value]) => {
+          const name = names[key];
+          return name === null ? [] : [[name ?? key, value]];
+        }),
+      );
     yield* state.set({
       ...address,
       value: {
@@ -300,8 +310,9 @@ const writeRowsAsBeforeRename = (stack: Test.ScratchStack) =>
       type: "Prisma.App",
       attr: {
         serviceId: "appId",
-        latestVersionId: "latestDeploymentId",
+        activeVersionId: "latestDeploymentId",
         serviceEndpointDomain: "appEndpointDomain",
+        url: null,
       },
     });
     yield* writeAsBeforeRename(stack, "Version", {
@@ -309,7 +320,7 @@ const writeRowsAsBeforeRename = (stack: Test.ScratchStack) =>
       attr: {
         versionId: "deploymentId",
         serviceId: "appId",
-        serviceEndpointDomain: "appEndpointDomain",
+        url: null,
       },
       props: { service: "app" },
     });
