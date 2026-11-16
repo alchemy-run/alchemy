@@ -23,7 +23,7 @@ A `Domain.Model` is how you write one bounded context down. Everything in this m
 
 ## What a model contains
 
-Every model has the same shape. Commands enter on the left and are decided by aggregates. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
+Every model has the same shape. Commands enter on the left and are decided by aggregates: one alone, or several together through a decision. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
 
 <DAG
   nodes={[

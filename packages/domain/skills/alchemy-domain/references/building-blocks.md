@@ -271,7 +271,7 @@ More: [Policy](https://alchemy.run/domain/policy).
 
 ```ts
 // Transfer/ExecuteTransfer.saga.ts
-export const Decision = DurableDeferred.make("decision", { success: Schema.Literals(["approved", "expired"]) });
+export const Approval = DurableDeferred.make("approval", { success: Schema.Literals(["approved", "expired"]) });
 
 export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
   key: TransferId,
@@ -284,7 +284,7 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
     const accounts = yield* Account;
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ key, from, to, amount, requestedBy, needsApproval }) {
-      if (needsApproval && (yield* DurableDeferred.await(Decision)) === "expired") return;
+      if (needsApproval && (yield* DurableDeferred.await(Approval)) === "expired") return;
       yield* Activity.make({
         name: "debit",
         error: Schema.Union([NotOpen, InsufficientFunds]),
@@ -306,7 +306,7 @@ Start and signal it from a policy, keyed by the aggregate:
 ```ts
 const executions = yield* ExecuteTransfer;
 yield* executions.start(source, { from, to, amount, requestedBy, needsApproval });  // returns a run handle at once
-yield* executions.get(source).signal(Decision, "approved");
+yield* executions.get(source).signal(Approval, "approved");
 // run handle: executionId, status, result, signal(deferred, value), interrupt
 ```
 

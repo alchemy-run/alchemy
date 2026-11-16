@@ -13,7 +13,7 @@ DDD has a handful of concepts for doing that, and two techniques are often paire
 
 The **domain** is the area of activity your software serves. For a bank, that's customers, accounts, deposits, withdrawals, transfers and fraud. The domain exists whether or not there's any software; it's the business as the people in it understand it.
 
-A **domain model** is a deliberate simplification of the domain, written as code. It keeps what matters for the decisions the software has to make and leaves the rest out. A bank's model needs to know an account's balance, because withdrawals depend on it. It doesn't need to know the colour of the customer's card.
+A **domain model** is a deliberate simplification of the domain, written as code. It keeps what matters for the rules the software has to enforce and leaves the rest out. A bank's model needs to know an account's balance, because withdrawals depend on it. It doesn't need to know the colour of the customer's card.
 
 The model is about behaviour, not storage. It says what can happen in the domain, which rules govern it, and what's remembered as a result. How that's stored is a separate concern.
 
@@ -83,11 +83,11 @@ Commands and events are the two halves of every change. Someone asks with a comm
 
 See [Event](/domain/event).
 
-## Aggregates: where decisions are made
+## Aggregates: state and the rules that guard it
 
-Something has to decide whether a command is accepted. In DDD, that's an **aggregate**: a cluster of related state together with the rules that govern it. A bank account is an aggregate. It holds a balance, and it enforces the rules about that balance, such as "a withdrawal can't exceed the balance".
+Every command is **decided** once: checked against the current state, then accepted, with events, or refused. Deciding needs state to check against, and something has to own that state. In DDD, that's an **aggregate**: a cluster of related state together with the rules that govern it. A bank account is an aggregate. It holds a balance, and it enforces the rules about that balance, such as "a withdrawal can't exceed the balance".
 
-Rules like that are called **invariants**: conditions that must be true at every moment, with no exceptions. An aggregate exists to protect its invariants. Every command that could affect them goes through the aggregate, which checks it against its current state and either refuses it or records events.
+Rules like that are called **invariants**: conditions that must be true at every moment, with no exceptions. An aggregate exists to protect its invariants. Every command that could affect them is decided by the aggregate, against its current state.
 
 <DAG
   nodes={[
@@ -101,12 +101,12 @@ Rules like that are called **invariants**: conditions that must be true at every
     { from: "account", to: "event" },
     { from: "account", to: "rejection" },
   ]}
-  caption="An aggregate turns a command into events, or refuses it."
+  caption="The account decides a withdrawal: it records an event, or refuses."
 />
 
 Each aggregate is also a **consistency boundary**. It handles one command at a time, so two withdrawals arriving together are decided one after the other, and the second sees the balance the first left behind. Everything inside the boundary is always consistent. Nothing outside it changes in the same step.
 
-That makes the size of an aggregate a design decision. It should contain exactly the state its invariants need. A customer and their accounts are separate aggregates, because no rule requires a customer's details and an account's balance to change together.
+That makes the size of an aggregate a design choice. It should contain exactly the state its invariants need. A customer and their accounts are separate aggregates, because no rule requires a customer's details and an account's balance to change together.
 
 Here is the whole account: how it decides each command, and how each event changes its state.
 
@@ -145,13 +145,15 @@ export class Account extends Domain.Aggregate("Account", {
 
 See [Aggregate](/domain/aggregate).
 
-## Decisions: one rule across several aggregates
+## Decisions: a command that spans aggregates
 
-Some rules are about more than one aggregate. A transfer moves money from one account to another: the first must have the funds, and both must change, or neither.
+An aggregate decides the commands that concern it alone. Some commands concern more than one. A transfer moves money from one account to another: the first must have the funds, and both must change, or neither.
 
-No single account can decide that. Each one sees only its own balance, and nothing outside its boundary changes in the same step. Splitting the rule into two commands, a withdrawal and then a deposit, leaves a moment where the money has left one account and not reached the other.
+No single account can decide that. Each one sees only its own balance, and nothing outside its boundary changes in the same step. Splitting the transfer into two commands, a withdrawal and then a deposit, leaves a moment where the money has left one account and not reached the other.
 
-A **decision** is where such a rule lives. It reads every aggregate the command names, decides against all of their states together, and records events on each of them. Every event commits, or none does.
+A **decision** decides such a command. It reads every aggregate the command names, decides against all of their states together, and records events on each of them. Every event commits, or none does.
+
+So a command is decided in one of two places: by the aggregate it concerns, or by a decision over the several it concerns.
 
 <DAG
   nodes={[
@@ -189,7 +191,7 @@ A decision keeps no state of its own. Each account applies what was recorded on 
 
 The caller gets one answer, at once: the transfer happened, or it was refused and nothing changed. That's the difference from a process that takes time, which comes later as a saga.
 
-Reach for a decision only when a rule really spans aggregates. Most rules belong to one, and an aggregate that decides alone never waits for another.
+Reach for a decision only when a command really spans aggregates. Most concern one, and an aggregate that decides alone never waits for another.
 
 See [Decision](/domain/decision).
 
@@ -357,7 +359,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 
 Policies and aggregates both apply rules, but different kinds. An aggregate enforces invariants: rules that must hold the instant a command commits, inside one boundary, and that can refuse the command. A policy applies a procedure: what the business does next, often across aggregates or outside the model. It runs after the event, and it can't refuse what already happened. It can only decide what happens next, through commands that the receiving aggregates can still refuse.
 
-A rule that involves several aggregates and can be answered at once is a [decision](#decisions-one-rule-across-several-aggregates), not a policy: it can still refuse the command.
+A command that spans several aggregates and can be answered at once belongs to a [decision](#decisions-a-command-that-spans-aggregates), not a policy: it can still be refused.
 
 When a process takes several steps across aggregates and can fail partway, like a transfer that waits for an approval before it debits one account and credits another, a **saga** drives it step by step, and undoes earlier steps if a later one fails. A policy usually starts it. See [Saga](/domain/saga).
 

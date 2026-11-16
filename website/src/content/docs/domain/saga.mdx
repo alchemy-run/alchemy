@@ -63,7 +63,7 @@ A [policy](/domain/policy) is one reaction: an event arrives, the policy acts, a
 
 A [decision](/domain/decision) is neither: it's one command, decided once across several instances, with nothing in between to undo.
 
-Reach for a saga when a process has more than one step, waits for something, a decision or a timer, or has to undo earlier steps on failure. A policy usually starts the saga, on the event that records the request.
+Reach for a saga when a process has more than one step, waits for something, an approval or a timer, or has to undo earlier steps on failure. A policy usually starts the saga, on the event that records the request.
 
 ## Declare a saga
 
@@ -231,22 +231,22 @@ sagas: [ExecuteTransfer],
 
 `start` returns as soon as the run is recorded. Its run handle also has `result`, which waits for the run to finish, but a run can take days, and a policy that waits holds up every later event on its key. Use `result` in tests and scripts. Anything that needs to react to how a saga ends should react to the events it reports instead, like `TransferCompleted` or `TransferFailed`.
 
-## Wait for a decision
+## Wait for an approval
 
-A run can wait as long as it needs to. A large transfer waits until the Transfer decides it: an agent approves it, or its approval window closes first. The saga waits on a `DurableDeferred`, and suspends until someone completes it.
+A run can wait as long as it needs to. A large transfer waits until an agent approves it, or its approval window closes first. The saga waits on a `DurableDeferred`, and suspends until someone completes it.
 
 ```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 if (needsApproval) {
-  // The Transfer decides between approval and expiry; nothing to do if it expired.
-  if ((yield* DurableDeferred.await(Decision)) === "expired") return;
+  // An agent approved it, or the window closed; nothing to do if it expired.
+  if ((yield* DurableDeferred.await(Approval)) === "expired") return;
 }
 ```
 
-The policy passes on the decision with the run's `signal`. `get` returns the run with a key:
+The policy passes on the outcome with the run's `signal`. `get` returns the run with a key:
 
 ```typescript title="packages/domain/src/Transfer/TransferExecution.policy.ts"
 case "TransferApproved":
-  return yield* executions.get(source).signal(Decision, "approved");
+  return yield* executions.get(source).signal(Approval, "approved");
 ```
 
 The Transfer decides the race between approval and expiry, so there's one source of truth for it. See [Deadlines](/domain/deadlines).
@@ -290,7 +290,7 @@ To test a saga on its own, complete what it waits for with `Story.signal`, and m
 
 ```typescript
 Story.saga(ExecuteTransfer, transfer, { _tag: "Running" }),
-Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
+Story.signal(ExecuteTransfer, transfer, Approval, "approved"),
 ```
 
 A step that calls an external system waits until the story answers the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.

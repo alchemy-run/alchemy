@@ -6,7 +6,7 @@ description: A domain-driven design framework for Effect. Model your business as
 import DAG from "../../../components/DAG.astro";
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-`@alchemy.run/domain` models your business in its own terms. Commands ask for changes, aggregates decide them, and events record what happened. A decision decides a command across several aggregates at once. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
+`@alchemy.run/domain` models your business in its own terms. Commands ask for changes. Each is decided once, by the aggregate it concerns or by a decision over the several it concerns, and events record what happened. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
 
 The same model runs in memory for tests and, in production, on [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) or [Effect Cluster](/domain/effect-cluster), with one ordered partition per key.
 

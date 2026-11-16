@@ -136,7 +136,7 @@ Test what a saga does: the events its steps record on aggregates, and how the ru
 Story.then(a1, new TransferDebited({ ... }), new TransferRefunded({ ... })),   // the compensation ran
 Story.saga(ExecuteTransfer, t1, { _tag: "Rejected", rejection: new DestinationClosed() }),
 Story.saga(ExecuteTransfer, t1, { _tag: "Running" }),
-Story.signal(ExecuteTransfer, t1, Decision, "approved"),    // complete a DurableDeferred it waits on
+Story.signal(ExecuteTransfer, t1, Approval, "approved"),    // complete a DurableDeferred it waits on
 ```
 
 The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted` and `Died`. A run that dies fails the story unless a step asserts `{ _tag: "Died" }`.

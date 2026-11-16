@@ -24,10 +24,10 @@ import { TransferId } from "./Transfer.id.ts";
 export class DestinationClosed extends Domain.Rejection("DestinationClosed") {}
 
 /**
- * What the Transfer decided about a large transfer: an agent approved it, or
+ * How a large transfer's wait for approval ended: an agent approved it, or
  * its approval window closed first.
  */
-export const Decision = DurableDeferred.make("decision", {
+export const Approval = DurableDeferred.make("approval", {
   success: Schema.Literals(["approved", "expired"]),
 });
 
@@ -90,7 +90,7 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
 
       if (needsApproval) {
         // The Transfer decides between approval and expiry; nothing to do if it expired.
-        if ((yield* DurableDeferred.await(Decision)) === "expired") return;
+        if ((yield* DurableDeferred.await(Approval)) === "expired") return;
       }
 
       // Debit first: if the credit fails, the money is refunded, so it's never created.

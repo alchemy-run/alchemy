@@ -5,7 +5,7 @@ description: How an aggregate holds state, decides commands, applies events, and
 
 import DAG from "../../../components/DAG.astro";
 
-An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
+An aggregate is state and the rules that guard it. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
 
 ## What an aggregate protects
 
@@ -196,7 +196,7 @@ decide: {
 
 `RefundStranded` tells a policy or a person that the account closed before the money came back. The [saga](/domain/saga) that sent the refund never has to handle a refusal it can do nothing about.
 
-## Use context in decisions
+## Use context in decide
 
 Some rules need more than the state and the command. Only the account's owner may withdraw from it, so `decide` needs to know who's asking.
 

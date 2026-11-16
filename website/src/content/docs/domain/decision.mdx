@@ -5,7 +5,7 @@ description: How a decision implements one command across several aggregate inst
 
 import DAG from "../../../components/DAG.astro";
 
-A decision implements a command that involves several aggregate instances. It reads them, decides against all of their states together, and records events on them. Every event commits, or none does.
+Every command is decided once. An [aggregate](/domain/aggregate) decides the ones that concern it alone. A decision decides one that involves several aggregate instances: it reads them, decides against all of their states together, and records events on them. Every event commits, or none does.
 
 In the example bank, a transfer is a decision: it debits one account and credits another in one step.
 
