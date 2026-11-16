@@ -605,6 +605,62 @@ describe("Domain middleware order", { tags: ["unit", "local"] }, () => {
   );
 });
 
+class Muted extends Domain.Rejection("Muted") {}
+/** Refuses muted authors. It declares that it requires the Author AuthorSession provides. */
+class MuteCheck extends RpcMiddleware.Service<MuteCheck, { requires: Author }>()("Test/MuteCheck", {
+  error: Muted,
+}) {}
+const MuteCheckLive = Layer.succeed(MuteCheck, (effect) =>
+  Effect.gen(function* () {
+    if ((yield* Author) === "mallory") return yield* new Muted();
+    return yield* effect;
+  }),
+);
+
+class Replied extends Domain.Event("Replied", { text: Schema.String, by: Schema.String }) {}
+class Reply extends Domain.Command("Reply", {
+  target: Schema.String,
+  middleware: [AuthorSession, MuteCheck],
+  input: { text: Schema.String },
+  events: [Replied],
+}) {}
+class Thread extends Domain.Aggregate("Thread", {
+  id: Schema.String,
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  commands: [Reply],
+  decide: {
+    Reply: Effect.fn(function* (_, cmd) {
+      return [new Replied({ text: cmd.text, by: yield* Author })];
+    }),
+  },
+  evolve: { Replied: (_, e) => ({ text: e.text }) },
+}) {}
+class Threads extends Domain.Model("Threads", { aggregates: [Thread] }) {}
+class ThreadsApi extends Domain.Api("ThreadsApi", { model: Threads, commands: ["Reply"] }) {}
+const ThreadsWorld = Layer.mergeAll(
+  Threads.layer(Layer.empty),
+  AuthorSessionLive,
+  MuteCheckLive,
+).pipe(Layer.provideMerge(InMemory));
+
+describe("Domain middleware requires", { tags: ["unit", "local"] }, () => {
+  it.live("a middleware that requires what an earlier one provides needs nothing else", () =>
+    Effect.gen(function* () {
+      const threads = yield* ThreadsApi.clientInProcess;
+      expect((yield* threads.Reply("t-1", { text: "hi" }).pipe(Effect.flip))._tag).toBe(
+        "Unauthenticated",
+      );
+      expect(
+        (yield* threads
+          .Reply("t-1", { text: "hi" }, { headers: { "x-author": "mallory" } })
+          .pipe(Effect.flip))._tag,
+      ).toBe("Muted");
+      yield* threads.Reply("t-1", { text: "hi" }, { headers: { "x-author": "sam" } });
+    }).pipe(Effect.scoped, Effect.provide(ThreadsWorld)),
+  );
+});
+
 // ---------------------------------------------------------------- a view's Layer
 
 /** Authors an editor has suspended: kept outside the model. */
