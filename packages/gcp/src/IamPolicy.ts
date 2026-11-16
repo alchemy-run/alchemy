@@ -465,13 +465,27 @@ export const updateIamMembership = (options: {
   /** Manage the bindings carrying exactly this condition. */
   condition?: IamCondition;
 }) => {
-  const target = TARGETS[options.kind](targetName(options.kind, options.name));
   const member = principal(options.member);
   const add = new Set(options.add ?? []);
   const remove = new Set(options.remove ?? []);
+  return applyIamPolicyEdit(options.kind, options.name, (policy) =>
+    rewrite(policy, member, add, remove, options.condition),
+  );
+};
+
+/**
+ * Apply `edit` to one resource's IAM policy and wait until GCP reads it
+ * back. `edit` returns `undefined` once the policy already matches.
+ */
+const applyIamPolicyEdit = (
+  kind: GcpIamResourceKind,
+  resourceName: string,
+  edit: (policy: IamPolicy) => IamPolicy | undefined,
+) => {
+  const target = TARGETS[kind](targetName(kind, resourceName));
   const write = Effect.gen(function* () {
     const policy = yield* target.get;
-    const next = rewrite(policy, member, add, remove, options.condition);
+    const next = edit(policy);
     if (next === undefined) return;
     yield* target.set(next);
   }).pipe(
@@ -494,9 +508,9 @@ export const updateIamMembership = (options: {
   // without etag) is re-applied.
   const confirmed = target.get.pipe(
     Effect.flatMap((policy) =>
-      rewrite(policy, member, add, remove, options.condition) === undefined
+      edit(policy) === undefined
         ? Effect.void
-        : Effect.fail(new IamPolicyNotConverged({ resourceName: options.name })),
+        : Effect.fail(new IamPolicyNotConverged({ resourceName })),
     ),
   );
   return write.pipe(
@@ -577,3 +591,55 @@ export const hasIamMembership = (options: {
       () => Effect.succeed(false),
     ),
   );
+
+const sameMembers = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) =>
+  left.length === right.length && left.every((member) => right.includes(member));
+
+/**
+ * Members of the unconditional `role` binding on the resource, or
+ * `undefined` when the role has no unconditional binding or the resource
+ * is gone.
+ */
+export const iamBindingMembers = (options: {
+  kind: GcpIamResourceKind;
+  name: string;
+  role: string;
+}) =>
+  TARGETS[options.kind](targetName(options.kind, options.name)).get.pipe(
+    Effect.map((policy) => {
+      const members = (policy.bindings ?? [])
+        .filter((binding) => binding.role === options.role && binding.condition === undefined)
+        .flatMap((binding) => binding.members ?? []);
+      return members.length > 0 ? [...new Set(members)] : undefined;
+    }),
+    Effect.catchIf(
+      (error) => error._tag === "NotFound",
+      () => Effect.succeed(undefined),
+    ),
+  );
+
+/**
+ * Make `members` the only principals of the unconditional `role` binding
+ * on the resource; an empty list removes the binding. Other roles and
+ * every conditional binding are left alone.
+ */
+export const setIamBinding = (options: {
+  kind: GcpIamResourceKind;
+  name: string;
+  role: string;
+  members: Iterable<string>;
+}) => {
+  const members = [...new Set([...options.members].map(principal))];
+  return applyIamPolicyEdit(options.kind, options.name, (policy) => {
+    const bindings = policy.bindings ?? [];
+    const isRole = (binding: IamPolicyBinding) =>
+      binding.role === options.role && binding.condition === undefined;
+    const observed = bindings.filter(isRole).flatMap((binding) => binding.members ?? []);
+    if (sameMembers([...new Set(observed)], members)) return undefined;
+    const others = bindings.filter((binding) => !isRole(binding));
+    return {
+      ...policy,
+      bindings: members.length > 0 ? [...others, { role: options.role, members }] : others,
+    };
+  });
+};

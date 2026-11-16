@@ -1524,6 +1524,7 @@ import {
   DatasetsHl7V2StoresMessage,
   DatasetsHl7V2StoresMessageProvider,
 } from "./Healthcare/DatasetsHl7V2StoresMessage.ts";
+import { Binding as IamBinding, BindingProvider as IamBindingProvider } from "./IAM/Binding.ts";
 import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServiceAccount.ts";
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
@@ -3615,6 +3616,7 @@ const makeProviders = () =>
           WorkloadIdentityPool,
           WorkloadIdentityProvider,
           ProjectService,
+          IamBinding,
           ProjectMetadataItem,
           SecretVersion,
           IamRole,
@@ -4746,6 +4748,7 @@ const makeProviders = () =>
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
+                IamBindingProvider(),
                 ProjectMetadataItemProvider(),
                 SecretVersionProvider(),
                 IamRoleProvider(),
