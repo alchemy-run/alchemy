@@ -35,6 +35,7 @@ const publicExports = [
   "ComputeServiceRollbackNotConverged",
   "ComputeServiceRollbackFailed",
   "ComputeServiceVersionNotRunning",
+  "ComputeServiceIdUnavailable",
   "BranchConflict",
   "BranchOperationFailed",
   "BranchUnexpectedResponse",

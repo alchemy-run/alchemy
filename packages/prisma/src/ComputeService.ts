@@ -28,6 +28,7 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./internal/Refs.ts";
+export { ComputeServiceIdUnavailable } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
 import { ensureServiceImmutableIdentity } from "./internal/ServiceIdentity.ts";
 import { checkStableEndpoint, promoteVersionObserved } from "./internal/ServicePromotion.ts";

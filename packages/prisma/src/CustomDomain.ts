@@ -17,7 +17,13 @@ import {
 import type { Compute } from "./Compute.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
-import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
+import {
+  concreteIdOf,
+  concreteIdsChanged,
+  isInputObject,
+  isPrismaDevId,
+  serviceIdUnavailable,
+} from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
 import type { Providers } from "./Providers.ts";
 import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
@@ -202,13 +208,7 @@ const unresolvedServiceIdOf = (service: ServiceReference | undefined) =>
 
 const resolveServiceId = (service: ServiceReference) => {
   const value = serviceIdValue(service);
-  return typeof value === "string"
-    ? Effect.succeed(value)
-    : Effect.fail(
-        new CustomDomainOperationFailed({
-          message: "Unable to resolve Prisma Compute service id.",
-        }),
-      );
+  return typeof value === "string" ? Effect.succeed(value) : Effect.fail(serviceIdUnavailable());
 };
 
 const findDomain = (client: PrismaManagementClient, serviceId: string, hostname: string) =>

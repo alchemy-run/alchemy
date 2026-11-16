@@ -638,3 +638,102 @@ domainReader.test.provider(
     }),
   { tags },
 );
+
+/** Rewrite the service and version rows as a release before the rename wrote them. */
+const writeRowsAsBeforeRename = (stack: Test.ScratchStack) =>
+  Effect.gen(function* () {
+    const state = yield* yield* State;
+    const rewrite = (
+      fqn: string,
+      resourceType: string,
+      attr: (saved: Record<string, unknown>) => Record<string, unknown>,
+      props: (saved: Record<string, unknown>) => Record<string, unknown> = (saved) => saved,
+    ) =>
+      Effect.gen(function* () {
+        const address = { stack: stack.name, stage: stack.stage, fqn };
+        const stored = yield* state.get(address);
+        if (!stored || isActionState(stored) || stored.status !== "created") {
+          return yield* Effect.die(new Error(`Expected a created ${fqn} row`));
+        }
+        yield* state.set({
+          ...address,
+          value: {
+            ...stored,
+            resourceType,
+            attr: attr(stored.attr as Record<string, unknown>),
+            props: props(stored.props as Record<string, unknown>),
+          },
+        });
+      });
+    yield* rewrite(
+      "Service",
+      "Prisma.App",
+      ({ serviceId, activeVersionId: _active, url: _url, serviceEndpointDomain, ...rest }) => ({
+        ...rest,
+        appId: serviceId,
+        latestDeploymentId: null,
+        appEndpointDomain: serviceEndpointDomain,
+      }),
+    );
+    yield* rewrite(
+      "Version",
+      "Prisma.Deployment",
+      ({ versionId, serviceId, url: _url, ...rest }) => ({
+        ...rest,
+        deploymentId: versionId,
+        appId: serviceId,
+        appEndpointDomain: undefined,
+      }),
+      ({ service, ...rest }) => ({ ...rest, app: service, promote: true }),
+    );
+  }).pipe(Effect.provide(stack.state));
+
+const twoStepUpgrade = harness();
+twoStepUpgrade.test.provider(
+  "stops with a clear error when activateVersion meets a service saved before the rename, and upgrades in two deploys",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = twoStepUpgrade;
+      yield* stack.destroy();
+
+      yield* stack.deploy(app({ activate: false }));
+      yield* writeRowsAsBeforeRename(stack);
+      yield* clearCalls(cloud);
+
+      // The program renames the resources and adds activateVersion at once.
+      const direct = yield* stack.deploy(app({ artifactPath: artifactV2 })).pipe(Effect.result);
+      expect(Result.isFailure(direct)).toBe(true);
+      if (Result.isFailure(direct)) {
+        const message = String(direct.failure);
+        expect(message).toContain("ComputeServiceIdUnavailable");
+        expect(message).toContain("Deploy once with the renamed resources and without");
+      }
+      expect(cloud.writes()).toEqual([]);
+
+      // First deploy: renamed resources, no activateVersion.
+      yield* stack.deploy(app({ activate: false }));
+      const rewritten = yield* rows(stack);
+      expect(rewritten.Service?.resourceType).toBe("Prisma.ComputeService");
+      expect(rewritten.Service?.attr.serviceId).toBe("svc-1");
+      expect(rewritten.Version?.resourceType).toBe("Prisma.ComputeVersion");
+      yield* clearCalls(cloud);
+
+      // Second deploy: add activateVersion with the new artifact.
+      // (The failed attempt left a replacement of the version in state, so the
+      // first deploy created a version from the v1 artifact again.)
+      const upgraded = yield* stack.deploy(app({ artifactPath: artifactV2 }));
+      const created = upgraded.version.versionId;
+      expect(cloud.writes()).toEqual([
+        "POST /v1/services/svc-1/deployments",
+        `POST /v1/deployments/${created}/start`,
+        "POST /v1/services/svc-1/promote",
+      ]);
+      expect(upgraded.service.serviceId).toBe("svc-1");
+      expect(upgraded.service.activeVersionId).toBe(created);
+      expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe(created);
+
+      yield* stack.destroy();
+      expect(cloud.services.size).toBe(0);
+    }),
+  { tags },
+);

@@ -59,8 +59,27 @@ export const resolveBucketId = (bucket: string | Bucket) =>
 export const unresolvedServiceIdOf = (service: string | ComputeService | undefined) =>
   concreteIdOf(typeof service === "string" ? service : (service?.serviceId as unknown));
 
-export const resolveServiceId = (service: string | ComputeService) =>
-  resolveId(
-    "Compute service id",
-    typeof service === "string" ? service : (service.serviceId as unknown),
-  );
+/**
+ * A resource received no Compute service ID. On the first deploy after the
+ * upgrade that renamed `Prisma.App`, a service whose saved state predates the
+ * rename has no `serviceId` until it is reconciled once, and a version
+ * attached with `Prisma.activateVersion` reads it before that.
+ */
+export class ComputeServiceIdUnavailable extends Data.TaggedError("ComputeServiceIdUnavailable")<{
+  readonly message: string;
+}> {}
+
+export const serviceIdUnavailable = () =>
+  new ComputeServiceIdUnavailable({
+    message:
+      "This resource received no Compute service ID. The service's saved state was written before Prisma.App was renamed Prisma.ComputeService, and Prisma.activateVersion makes the service and its version read each other before that state is rewritten. Deploy once with the renamed resources and without Prisma.activateVersion, so the service's state is rewritten, then add Prisma.activateVersion and deploy again.",
+  });
+
+export const resolveServiceId = (service: string | ComputeService | undefined) =>
+  service === undefined
+    ? Effect.fail(serviceIdUnavailable())
+    : typeof service === "string"
+      ? Effect.succeed(service)
+      : typeof service.serviceId === "string"
+        ? Effect.succeed(service.serviceId)
+        : Effect.fail(serviceIdUnavailable());
