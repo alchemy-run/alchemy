@@ -17,7 +17,7 @@ import { ALWAYS_IGNORED_PATTERNS } from "./ArchiveIgnore.ts";
 import { normalizeBundleFilePath } from "./BundlePaths.ts";
 import { ComputeInvalidProps, ComputeOperationFailed } from "./UrlCheck.ts";
 
-export const processEnv = (
+const processEnv = (
   env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
 ) =>
   Object.fromEntries(

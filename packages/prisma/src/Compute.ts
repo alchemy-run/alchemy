@@ -1,153 +1,62 @@
-import { Retry } from "@distilled.cloud/prisma";
-import {
-  type GetServicesResponse,
-  type GetEnvironmentVariablesResponse,
-  type GetProjectBranchesResponse,
-  deleteEnvironmentVariable,
-  getServices,
-  getService,
-  getBranch,
-  getEnvironmentVariables,
-  getProjectBranches,
-  updateService,
-  updateEnvironmentVariable,
-  createService,
-  createServiceDeployment,
-  createServiceRollback,
-  createEnvironmentVariable,
-} from "@distilled.cloud/prisma/management";
-import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import * as Bundle from "alchemy/Bundle/Bundle";
-import { isResolved } from "alchemy/Diff";
+import type * as Bundle from "alchemy/Bundle/Bundle";
+import * as Command from "alchemy/Command";
+import { deepEqual, isResolved } from "alchemy/Diff";
+import { toFqn } from "alchemy/FQN";
 import { HttpServer, type HttpEffect } from "alchemy/Http";
 import type { InputProps } from "alchemy/Input";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
+import * as Namespace from "alchemy/Namespace";
+import { CurrentNamespace } from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
-import { createPhysicalName } from "alchemy/PhysicalName";
+// Declares `globalThis.__ALCHEMY_RUNTIME__`.
+import type {} from "alchemy/Phase";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { ProviderModePolicy } from "alchemy/ProviderMode";
+import { RemovalPolicy } from "alchemy/RemovalPolicy";
+import type { Resource, ResourceBinding } from "alchemy/Resource";
 import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { logChildLine } from "alchemy/Util/LogRecord";
-import { sha256Object } from "alchemy/Util/sha256";
+import { Stack } from "alchemy/Stack";
+import { StackContext } from "alchemy/StackContext";
+import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as ChildProcess from "effect/process/ChildProcess";
-import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
+import { ComputeArtifact } from "./ComputeArtifact.ts";
 import { type ComputeAutoBuildFramework } from "./ComputeBuild.ts";
+import { activateVersion, ComputeService } from "./ComputeService.ts";
+import { ComputeVersion } from "./ComputeVersion.ts";
+import { EnvironmentVariable, type EnvironmentVariableProps } from "./EnvironmentVariable.ts";
 import {
-  destroyComputeService,
-  destroyComputeVersion,
-  toComputeUrl,
-  waitForComputeVersionStatus,
-} from "./ComputeLifecycle.ts";
-import { readUploadArtifact, uploadArtifact } from "./ComputeVersion.ts";
-import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
-import {
-  buildComputeArtifactFile,
+  type ComputeArtifactMemo,
   ComputePackageJsonError,
-  processEnv,
 } from "./internal/ComputeArtifactBuild.ts";
-import {
-  startDeploymentIdempotent,
-  stopDeploymentIdempotent,
-} from "./internal/DeploymentActions.ts";
-import { observeDeployment } from "./internal/DeploymentObserve.ts";
-import type {
-  ObservedApp,
-  ObservedDeployment,
-  ObservedEnvironmentVariable,
-} from "./internal/Observed.ts";
-import { PrismaPaginationError } from "./internal/Pagination.ts";
-import {
-  concreteIdsChanged,
-  isInputObject,
-  isPrismaDevId,
-  resolveProjectId,
-  unresolvedProjectIdOf,
-} from "./internal/Refs.ts";
-import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
-import { ensureServiceImmutableIdentity } from "./internal/ServiceIdentity.ts";
-import {
-  checkStableEndpoint,
-  promoteVersionObserved,
-  waitForActiveVersion,
-} from "./internal/ServicePromotion.ts";
+import { resolveProjectId } from "./internal/Refs.ts";
 import {
   ComputeInvalidProps,
   ComputeOperationFailed,
-  ComputeUnexpectedResponse,
-  type ComputeHealthCheck,
   validateComputeHealthCheck,
-  waitForComputeUrl,
+  type ComputeHealthCheck,
 } from "./internal/UrlCheck.ts";
-import { ensureVersionMembership } from "./internal/VersionIdentity.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
 
-export class ComputeConflict extends Data.TaggedError("ComputeConflict")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export class ComputeNotReady extends Data.TaggedError("ComputeNotReady")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-/** A Compute environment key is managed by Prisma and cannot be managed by Alchemy. */
-export class ComputeEnvironmentVariableSystemManaged extends Data.TaggedError(
-  "ComputeEnvironmentVariableSystemManaged",
-)<{
-  readonly message: string;
-}> {}
-
-/** A Compute environment key already exists but is not owned by this Compute resource. */
-export class ComputeEnvironmentVariableNotOwned extends Data.TaggedError(
-  "ComputeEnvironmentVariableNotOwned",
-)<{
-  readonly message: string;
-}> {}
-
 /**
- * Rolling back environment variables created during a failed reconcile also
- * failed. `errors` holds the reconcile failure, then each cleanup failure.
+ * The stack's state for this `Prisma.Compute` was written by an earlier version
+ * of this package, which managed the service, its environment variables and
+ * its version inside the one resource. This version cannot take them over in
+ * place, so the deploy or destroy stopped before changing anything.
  */
-export class ComputeEnvironmentRollbackFailed extends Data.TaggedError(
-  "ComputeEnvironmentRollbackFailed",
-)<{
+export class ComputeCannotUpgradeInPlace extends Data.TaggedError("ComputeCannotUpgradeInPlace")<{
   readonly message: string;
-  readonly errors: readonly unknown[];
-  readonly cause?: unknown;
 }> {}
-
-/**
- * Recovery of a promoted deployment (rollback, readiness, or displaced
- * deployment cleanup) did not converge. `errors` holds every underlying failure.
- */
-export class ComputeDeploymentRecoveryFailed extends Data.TaggedError(
-  "ComputeDeploymentRecoveryFailed",
-)<{
-  readonly message: string;
-  readonly errors: readonly unknown[];
-}> {
-  override get cause() {
-    return this.errors[0];
-  }
-}
 
 const ComputeTypeId = "Prisma.Compute" as const;
 type ComputeTypeId = typeof ComputeTypeId;
@@ -345,9 +254,19 @@ export interface ComputeDev {
 
 export interface ComputeProps extends PlatformProps {
   /**
-   * Project ID or `project.projectId` output that owns the service.
+   * Project ID or `project.projectId` output that owns the service. Required
+   * unless `service` is set.
    */
-  project: string | Project;
+  project?: string | Project;
+  /**
+   * Serve from this Compute service instead of declaring one. Declare the
+   * services first, then the Computes, to put a service's own URL, or another
+   * service's, into the environment. With `service`, `project`, `serviceName`,
+   * `regionId`, `branchId` and `branchGitName` cannot be set. A service given
+   * by its ID requires `skipPromote: true`, because its active version can
+   * only be attached to a `Prisma.ComputeService` declared in this stack.
+   */
+  service?: string | ComputeService;
   /**
    * Display name of the Compute service. If omitted, Alchemy generates a stable
    * physical name.
@@ -433,20 +352,15 @@ export interface ComputeProps extends PlatformProps {
    */
   port?: number;
   /**
-   * Runtime environment variables to sync through Prisma's environment
-   * variable API before creating a new deployment. Set a value to `null`
-   * to delete that variable.
+   * Runtime environment variables. Each key becomes a
+   * `Prisma.EnvironmentVariable` at `<id>/Env/<KEY>`, written before the
+   * version is created, in the class and Branch of the service's Branch. A
+   * `null` value declares no variable, so a variable declared before is
+   * deleted. A changed value creates a new version. A value set by a binding
+   * overrides the same key here.
    *
-   * Plain strings are persisted in Alchemy state. For secrets, use
-   * `Redacted.make(secret)`; encryption in the Prisma Management API does not
-   * protect a plain value already recorded in Alchemy state.
-   *
-   * The Management API exposes neither an idempotency key nor ownership
-   * metadata for environment variables, and reads return redacted values. If
-   * a process crashes after Prisma commits a create but before Alchemy saves
-   * its returned ID, the next deploy safely refuses to claim that natural-key
-   * match. Use standalone `Prisma.EnvironmentVariable` resources for critical
-   * keys that need independent lifecycle management and explicit adoption.
+   * Values are stored in Alchemy state inside a redaction marker, as plain
+   * text; the version records only a salted digest of each value.
    *
    * ```typescript
    * env: {
@@ -457,9 +371,10 @@ export interface ComputeProps extends PlatformProps {
    */
   env?: Record<string, string | Redacted.Redacted<string> | null | undefined>;
   /**
-   * Prisma environment variable class used by the `env` convenience property.
+   * Expected class of the environment variables. The class is the role of the
+   * service's Branch; a different value here fails the deploy.
    *
-   * @default "production"
+   * @default the role of the service's Branch
    */
   envClass?: "production" | "preview";
   /**
@@ -482,11 +397,24 @@ export interface ComputeProps extends PlatformProps {
    */
   skipPromote?: boolean;
   /**
-   * Delete the previously promoted deployment after the new one is promoted.
+   * Delete the previous version when a new one replaces it. By default a
+   * replaced version is kept on the platform, where it scales to zero and the
+   * platform's rollback can return to it.
    *
    * @default false
    */
   destroyOldDeployment?: boolean;
+  /**
+   * Extra values that create a new version when they change, for inputs the
+   * application reads that Compute does not write itself. Merged into the
+   * version's `triggers`; see `Prisma.ComputeVersion`.
+   */
+  triggers?: Record<string, unknown>;
+  /**
+   * Which files decide whether the artifact is built again; see
+   * `Prisma.ComputeArtifact`'s `memo`.
+   */
+  memo?: ComputeArtifactMemo;
   /**
    * Poll timeout while waiting for start/stop.
    *
@@ -532,6 +460,23 @@ export interface ComputeProps extends PlatformProps {
   dev?: ComputeDev;
 }
 
+/** What the children of a `Prisma.Compute` report to it. */
+export interface ComputeComposition {
+  serviceId: string;
+  serviceName: string;
+  serviceEndpointDomain: string;
+  projectId: string;
+  regionId: string;
+  activeVersionId: string | null;
+  serviceUrl: string;
+  versionId: string;
+  versionUrl: string | undefined;
+  versionEndpointDomain: string | null | undefined;
+  environmentKeys: string[];
+  /** Whether the version is attached to the service as its active version. */
+  promoted: boolean;
+}
+
 export interface Compute extends Resource<
   ComputeTypeId,
   ComputeProps,
@@ -541,91 +486,61 @@ export interface Compute extends Resource<
      */
     serviceId: string;
     /**
-     * ID of the Compute version created for the current deploy. The Management
-     * API calls a version a deployment.
+     * Service display name.
      */
-    versionId: string | undefined;
+    serviceName: string;
     /**
      * Project ID that owns the service.
      */
     projectId: string;
     /**
-     * Service display name.
-     */
-    serviceName: string;
-    /**
      * Region ID where the service is placed.
      */
     regionId: string;
     /**
-     * Preview endpoint domain of the current version.
-     */
-    versionEndpointDomain: string | undefined;
-    /**
-     * HTTPS URL of the current version's preview endpoint.
-     */
-    versionUrl: string | undefined;
-    /**
-     * Stable endpoint domain of the service after promotion.
+     * Stable endpoint domain of the service.
      */
     serviceEndpointDomain: string | undefined;
     /**
-     * Preferred URL for the app, local in dev or stable/preview in deploys.
+     * ID of the version the service serves on its stable endpoint, or null
+     * before any version was promoted.
+     */
+    activeVersionId: string | null;
+    /**
+     * ID of the Compute version this deploy declared. The Management API calls
+     * a version a deployment.
+     */
+    versionId: string | undefined;
+    /**
+     * Preview endpoint domain of the version.
+     */
+    versionEndpointDomain: string | undefined;
+    /**
+     * HTTPS URL of the version's preview endpoint.
+     */
+    versionUrl: string | undefined;
+    /**
+     * Preferred URL: the stable URL when the version is the active version,
+     * otherwise its preview URL, and the local URL in dev.
      */
     url: string | undefined;
     /**
-     * Whether the current deployment was promoted to the stable endpoint.
+     * Keys of the environment variables declared for the version, including
+     * those set by bindings.
      */
-    promoted: boolean;
+    environmentKeys: string[];
     /**
-     * Previously promoted deployment ID observed before deploy.
-     */
-    previousDeploymentId: string | null | undefined;
-    /**
-     * Action taken for the previous deployment.
-     */
-    previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null | undefined;
-    /** Readiness of the service's stable endpoint observed after promotion. */
-    readinessStatus?: "ready" | "pending" | "skipped";
-    /** Old deployment cleanup that will be retried before another generation. */
-    pendingDeploymentCleanup?: {
-      deploymentId: string;
-      action: "stop" | "destroy";
-    };
-    /**
-     * Environment variable keys managed by this Compute resource.
-     *
-     * This includes explicit `env` props and env vars added by bindings.
-     */
-    environmentKeys?: string[];
-    /**
-     * Environment variable IDs created by this Compute resource, keyed by
-     * variable name. IDs are the ownership boundary for shared branch/project
-     * environment-variable namespaces.
-     */
-    environmentVariableIds?: Record<string, string>;
-    /**
-     * Prisma environment class used for the managed environment variable keys.
-     */
-    environmentClass?: "production" | "preview";
-    /**
-     * Branch ID used for managed preview branch environment overrides, or null
-     * for project-level environment templates.
-     */
-    environmentBranchId?: string | null;
-    /**
-     * Fingerprint of the uploaded artifact/reused artifact inputs and the
-     * branch attachment that Prisma resolves environment variables from.
-     */
-    artifactHash: Redacted.Redacted<string> | undefined;
-    /**
-     * Whether the app output represents a local dev process.
+     * Whether the output represents a local dev process.
      */
     local: boolean;
+    /**
+     * Set by the provider that declares the service, variables and version as
+     * child resources. A row without it was written by an earlier version of
+     * this package, which managed them inside this one resource.
+     */
+    composed: true;
   },
-  {
-    env?: Record<string, string | Redacted.Redacted<string> | null | undefined>;
-  },
+  ComputeComposition,
   Providers
 > {}
 
@@ -642,68 +557,36 @@ export { ComputePackageJsonError };
 export const isCompute = (value: unknown): value is Compute =>
   typeof value === "object" && value !== null && "Type" in value && value.Type === ComputeTypeId;
 
-/** Attributes as `Prisma.Compute` wrote them before the Compute service and version renames. */
-interface LegacyComputeAttributes extends Omit<
-  Compute["Attributes"],
-  | "serviceId"
-  | "versionId"
-  | "serviceName"
-  | "versionEndpointDomain"
-  | "versionUrl"
-  | "serviceEndpointDomain"
-> {
-  appId: string;
-  deploymentId: string | undefined;
-  appName: string;
-  deploymentEndpointDomain: string | undefined;
-  deploymentUrl: string | undefined;
-  appEndpointDomain: string | undefined;
-}
-
-type SavedComputeAttributes = Compute["Attributes"] | LegacyComputeAttributes;
-
-/** Read attributes saved before or after the renames under the current names. */
-function currentComputeAttributes(saved: SavedComputeAttributes): Compute["Attributes"] {
-  if ("serviceId" in saved) return saved;
-  const {
-    appId,
-    deploymentId,
-    appName,
-    deploymentEndpointDomain,
-    deploymentUrl,
-    appEndpointDomain,
-    ...rest
-  } = saved;
-  return {
-    ...rest,
-    serviceId: appId,
-    versionId: deploymentId,
-    serviceName: appName,
-    versionEndpointDomain: deploymentEndpointDomain,
-    versionUrl: deploymentUrl,
-    serviceEndpointDomain: appEndpointDomain,
-  };
-}
-
-/** The service name from props saved before or after `appName` became `serviceName`. */
-const savedServiceName = (olds: ComputeProps & { appName?: string }) =>
-  olds.serviceName ?? olds.appName;
-
-const hasEffectNativeComputeInput = (props: ComputeProps) =>
-  props.isExternal !== true && (props.main !== undefined || props.exports !== undefined);
-
-const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInput(props);
-
 /**
  * Build and deploy an application to Prisma Compute.
  *
- * Prisma's create-deployment API exposes neither an idempotency key nor a
- * caller-defined recovery key. If the API commits a deployment but its create
- * response is lost before Alchemy persists the returned ID, that deployment
- * can remain orphaned and a later deploy may create another one. Alchemy does
- * not guess that the service's latest version is owned, because it could belong
- * to another actor. Use a durable, locked state backend and inspect the service's
- * version history after an interrupted create.
+ * `Prisma.Compute("api", props)` declares child resources and reports their
+ * outputs:
+ *
+ * | Resource | Logical ID | Declared |
+ * | --- | --- | --- |
+ * | `Prisma.ComputeService` | `api/Service` | unless `service` is set |
+ * | `Prisma.EnvironmentVariable` | `api/Env/<KEY>` | one per key of `env` and of the bindings |
+ * | `Prisma.ComputeArtifact` | `api/Artifact` | unless `artifactPath` or `skipCodeUpload` is set |
+ * | `Prisma.ComputeVersion` | `api/Version` | always |
+ *
+ * The version is attached to the service as its active version unless
+ * `skipPromote` is set. A replaced version is kept on the platform unless
+ * `destroyOldDeployment` is set, whatever removal policy the stack uses.
+ *
+ * Under `alchemy dev` no cloud resource is declared: `dev.command` runs as a
+ * `Command.Dev` at `api/Dev`, and `url` is the local URL. `Alchemy.remote()`
+ * on the Compute deploys it to the cloud instead.
+ *
+ * A decoration such as `RemovalPolicy.retain()` piped onto
+ * `yield* Prisma.Compute("api", props)` reaches every child. For the class
+ * form, pipe it around `Effect.provide` of the class's Layer; piped onto
+ * `yield*` of the class, it reaches nothing.
+ *
+ * A stack deployed with an earlier version of this package, which managed the
+ * service inside this one resource, cannot be upgraded in place: the deploy
+ * and `alchemy destroy` stop with `ComputeCannotUpgradeInPlace` before
+ * anything changes, and its message lists the steps to move.
  *
  * ### Deploying a Service
  * **Example:** Deploy a directory with an entrypoint
@@ -783,7 +666,7 @@ const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInp
  * );
  * ```
  *
- * **Example:** Build before upload and replace old versions
+ * **Example:** Build before upload and delete replaced versions
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -849,6 +732,18 @@ const isEffectNativeCompute = (props: ComputeProps) => hasEffectNativeComputeInp
  * });
  * ```
  *
+ * ### Using a Declared Service
+ * **Example:** Put a service's own URL into its environment
+ * ```typescript
+ * const service = yield* Prisma.ComputeService("web-service", { project });
+ * const web = yield* Prisma.Compute("web", {
+ *   service,
+ *   path: "./apps/web",
+ *   entrypoint: "server.ts",
+ *   env: { PUBLIC_URL: service.url },
+ * });
+ * ```
+ *
  * ### Local Development
  * **Example:** Run locally during alchemy dev
  * ```typescript
@@ -876,7 +771,11 @@ export const Compute: Platform<
     id: string,
     props: InputProps<ComputeProps> | Effect.Effect<InputProps<ComputeProps>, never, PropsReq>,
   ): Effect.Effect<Compute, never, Providers | PropsReq>;
-} = Platform(ComputeTypeId, {
+} = Platform<
+  Compute,
+  Effect.Error<ReturnType<typeof onCreate>>,
+  Effect.Services<ReturnType<typeof onCreate>>
+>(ComputeTypeId, {
   createRuntimeContext: (id): ComputeRuntimeContext => {
     const runners: Effect.Effect<void, never, unknown>[] = [];
     const env: Record<string, unknown> = {};
@@ -954,1466 +853,565 @@ export const Compute: Platform<
         }),
       run,
       serve,
-      exports: Effect.sync(() => ({
-        default: Effect.forEach(
-          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
-          [...runners],
-          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
-          (effect) =>
-            Effect.forever(
-              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
-              effect.pipe(
-                Effect.tapError((error) => Effect.logError(error)),
-                Effect.ignore,
+      // `Platform` evaluates this after the init, also when the init returns
+      // nothing, so the children the init's bindings need are declared here.
+      exports: Effect.andThen(
+        declareAfterInit(id, env),
+        Effect.sync(() => ({
+          default: Effect.forEach(
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
+            [...runners],
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
+            (effect) =>
+              Effect.forever(
+                // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- runners keep each program's own requirements; the host satisfies them when it runs `default`
+                effect.pipe(
+                  Effect.tapError((error) => Effect.logError(error)),
+                  Effect.ignore,
+                ),
               ),
-            ),
-          { concurrency: "unbounded" },
-        ),
-      })),
+            { concurrency: "unbounded" },
+          ),
+        })),
+      ),
     };
     return runtimeContext;
   },
+  onCreate: (resource, props) => onCreate(resource, props),
 });
 
-const devProcesses = new Map<string, ChildProcessHandle>();
+/** The sid of the binding through which the children report to the host. */
+const COMPOSITION_SID = "Prisma.Compute.Composition";
 
-const stopTrackedDevProcess = Effect.fn(function* (processKey: string) {
-  const existing = devProcesses.get(processKey);
-  if (!existing) return;
-
-  const running = yield* existing.isRunning;
-  if (running) {
-    // Keep the handle tracked when termination fails so a later reconcile or
-    // destroy can retry instead of losing the only reference to the process.
-    yield* existing.kill();
-  }
-  devProcesses.delete(processKey);
-});
-
-const projectConsistencySchedule = Schedule.max([
-  Schedule.exponential(Duration.millis(500)),
-  Schedule.recurs(6),
-]);
-
-// Only project/branch/app reads and the app create flow through the
-// provisioning-consistency retries, so a NotFound there is exactly the
-// post-create lag the schedule exists to absorb.
-// The retried effects mix distilled's tagged operation errors with plain
-// `Error` failures of their own (an unresolvable branch, a foreign App), so
-// narrow before reading the tag.
-const isAppProvisioningNotFound = (error: Error | { readonly _tag: string }) =>
-  "_tag" in error && error._tag === "NotFound";
-
-// Distilled emits the cursor-paginated list operations as plain ops, so
-// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-const listBranches = (projectId: string, gitName?: string) =>
-  Effect.gen(function* () {
-    const branches: GetProjectBranchesResponse["data"][number][] = [];
-    let cursor: string | undefined;
-    while (true) {
-      const page = yield* getProjectBranches({
-        projectId,
-        limit: 100,
-        ...(gitName === undefined ? {} : { gitName }),
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-      branches.push(...page.data);
-      const nextCursor = page.pagination.nextCursor;
-      if (!page.pagination.hasMore) break;
-      if (nextCursor === null) {
-        return yield* new PrismaPaginationError({
-          message:
-            "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
-        });
-      }
-      cursor = nextCursor;
-    }
-    return branches;
-  });
-
-const listApps = (projectId: string) =>
-  Effect.gen(function* () {
-    const apps: GetServicesResponse["data"][number][] = [];
-    let cursor: string | undefined;
-    while (true) {
-      const page = yield* getServices(
-        cursor === undefined ? { projectId, limit: 100 } : { projectId, limit: 100, cursor },
-      );
-      apps.push(...page.data);
-      const nextCursor = page.pagination.nextCursor;
-      if (!page.pagination.hasMore) break;
-      if (nextCursor === null) {
-        return yield* new PrismaPaginationError({
-          message:
-            "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
-        });
-      }
-      cursor = nextCursor;
-    }
-    return apps;
-  });
-
-const desiredComputeBranchId = Effect.fn(function* (
-  projectId: string,
-  props: Pick<ComputeProps, "branchId" | "branchGitName">,
-) {
-  if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
-    return { resolved: true as const, id: props.branchId };
-  }
-  const branches = yield* listBranches(projectId, props.branchGitName);
-  const matchingBranches =
-    props.branchGitName === undefined ? branches.filter((branch) => branch.isDefault) : branches;
-  if (matchingBranches.length > 1) {
-    return yield* new ComputeConflict({
-      message:
-        props.branchGitName === undefined
-          ? `Prisma returned multiple default branches for project '${projectId}'; refusing an ambiguous Compute App match.`
-          : `Prisma returned multiple branches named '${props.branchGitName}' in project '${projectId}'; refusing an ambiguous Compute App match.`,
-    });
-  }
-  const branch = matchingBranches[0];
-  return branch ? { resolved: true as const, id: branch.id } : { resolved: false as const };
-});
-
-const createServiceName = (id: string, serviceName: string | undefined) =>
-  serviceName === undefined ? createPhysicalName({ id }) : Effect.succeed(serviceName);
-
-const findApp = Effect.fn(function* (
-  projectId: string,
-  serviceName: string,
-  props: Pick<ComputeProps, "branchId" | "branchGitName">,
-) {
-  const candidates = (yield* listApps(projectId)).filter((app) => app.name === serviceName);
-  if (candidates.length === 0) return undefined;
-  const branch = yield* desiredComputeBranchId(projectId, props);
-  if (!branch.resolved) return undefined;
-  const matches = candidates.filter((app) => app.branchId === branch.id);
-  if (matches.length > 1) {
-    return yield* new ComputeConflict({
-      message: `Prisma returned multiple Apps named '${serviceName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
-    });
-  }
-  return matches[0];
-});
-
-const createApp = (
-  projectId: string,
-  props: ComputeProps & { serviceName: string },
-  branchId: string,
-) =>
-  createService({
-    projectId,
-    displayName: props.serviceName,
-    branchId,
-    ...(props.regionId === undefined ? {} : { regionId: props.regionId }),
-  }).pipe(
-    // A replayed create would make a second App; the retry policy cannot
-    // see the request, so opt out explicitly.
-    Retry.none,
-    Effect.map((response) => response.data),
-  );
-
-const plainEnv = (
-  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
-) =>
-  Object.fromEntries(
-    Object.entries(env).flatMap(([key, value]) =>
-      value === undefined
-        ? []
-        : [[key, Redacted.isRedacted(value) ? Redacted.value(value) : value]],
-    ),
-  ) as Record<string, string | null>;
-
-const persistedArtifactHashValue = (value: Redacted.Redacted<string> | string | undefined) =>
-  Redacted.isRedacted(value) ? Redacted.value(value) : value;
-
-const managedEnvKeys = (
-  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
-) =>
-  Object.entries(plainEnv(env))
-    .flatMap(([key, value]) => (value === null ? [] : [key]))
-    .sort();
+/** Domain separator, so an environment digest is never the bare SHA-256 of a value. */
+const ENVIRONMENT_DIGEST_SALT = "alchemy/Prisma.Compute/environment/v1";
 
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
-const ENV_VALUE_MAX_BYTES = 8 * 1024;
 const EXPORT_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
-const computeEnvValue = (value: string | Redacted.Redacted<string>) =>
-  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+type EnvironmentInput = Record<string, unknown>;
 
-const validateComputeEnvironmentKey = (key: string) =>
-  Effect.gen(function* () {
-    if (key.length < 1 || key.length > 256 || !ENV_KEY_PATTERN.test(key)) {
-      return yield* new ComputeInvalidProps({
-        message: `Prisma environment variable key '${key}' must match POSIX env-var key shape: [A-Z_][A-Z0-9_]* and be at most 256 characters.`,
-      });
-    }
-  });
-
-const validateComputeEnvironmentWrite = (key: string, value: string | Redacted.Redacted<string>) =>
-  Effect.gen(function* () {
-    yield* validateComputeEnvironmentKey(key);
-    const raw = computeEnvValue(value);
-    if (raw.length === 0) {
-      return yield* new ComputeInvalidProps({
-        message: `Prisma environment variable '${key}' value must be non-empty.`,
-      });
-    }
-    const byteLength = yield* Effect.sync(() => new TextEncoder().encode(raw).byteLength);
-    if (byteLength > ENV_VALUE_MAX_BYTES) {
-      return yield* new ComputeInvalidProps({
-        message: `Prisma environment variable '${key}' value exceeds ${ENV_VALUE_MAX_BYTES} bytes.`,
-      });
-    }
-  });
-
-const validateComputeProps = (props: ComputeProps) =>
-  Effect.gen(function* () {
+/**
+ * Check the props that are known while the program is evaluated, so a wrong
+ * combination fails before anything is created.
+ */
+const validateDeclaredProps = Effect.fn(function* (props: ComputeProps, effectNative: boolean) {
+  const invalid = (message: string) => Effect.fail(new ComputeInvalidProps({ message }));
+  if (props.healthCheck !== undefined && !Output.isOutput(props.healthCheck)) {
     yield* validateComputeHealthCheck(props.healthCheck);
-    if (props.healthCheck !== undefined && props.verifyUrl === false) {
-      return yield* new ComputeInvalidProps({
-        message: "healthCheck cannot be combined with verifyUrl: false.",
-      });
+  }
+  if (props.healthCheck !== undefined && props.verifyUrl === false) {
+    return yield* invalid("healthCheck cannot be combined with verifyUrl: false.");
+  }
+  if (props.healthCheck !== undefined && props.start === false) {
+    return yield* invalid("healthCheck requires start to be enabled.");
+  }
+  for (const [name, value] of [
+    ["timeoutSeconds", props.timeoutSeconds],
+    ["pollIntervalMs", props.pollIntervalMs],
+    ["urlReadinessTimeoutSeconds", props.urlReadinessTimeoutSeconds],
+  ] as const) {
+    if (typeof value === "number" && (!Number.isFinite(value) || value <= 0)) {
+      return yield* invalid(`${name} must be a positive finite number.`);
     }
-    if (props.healthCheck !== undefined && props.start === false) {
-      return yield* new ComputeInvalidProps({
-        message: "healthCheck requires start to be enabled.",
-      });
+  }
+  for (const [name, value] of [
+    ["port", props.port],
+    ["dev.port", props.dev?.port],
+  ] as const) {
+    if (typeof value === "number" && (!Number.isInteger(value) || value < 1 || value > 65_535)) {
+      return yield* invalid(`${name} must be an integer between 1 and 65535.`);
     }
-    for (const [name, value] of [
-      ["timeoutSeconds", props.timeoutSeconds],
-      ["pollIntervalMs", props.pollIntervalMs],
-      ["urlReadinessTimeoutSeconds", props.urlReadinessTimeoutSeconds],
-    ] as const) {
-      if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
-        return yield* new ComputeInvalidProps({
-          message: `${name} must be a positive finite number.`,
-        });
-      }
+  }
+  for (const [key, value] of Object.entries(props.env ?? {})) {
+    if (value === undefined) continue;
+    if (key.length > 256 || !ENV_KEY_PATTERN.test(key)) {
+      return yield* invalid(
+        `Prisma environment variable key '${key}' must match POSIX env-var key shape: [A-Z_][A-Z0-9_]* and be at most 256 characters.`,
+      );
     }
-    for (const [name, value] of [
-      ["port", props.port],
-      ["dev.port", props.dev?.port],
-    ] as const) {
-      if (value !== undefined && (!Number.isInteger(value) || value < 1 || value > 65_535)) {
-        return yield* new ComputeInvalidProps({
-          message: `${name} must be an integer between 1 and 65535.`,
-        });
-      }
+  }
+  if ((props.skipPromote ?? false) && (props.destroyOldDeployment ?? false)) {
+    return yield* invalid(
+      "destroyOldDeployment cannot be combined with skipPromote because the previous version stays active when promotion is skipped.",
+    );
+  }
+  if (props.start === false && !(props.skipPromote ?? false)) {
+    return yield* invalid(
+      "start: false requires skipPromote: true because Prisma Compute promotion requires a running version.",
+    );
+  }
+  if (props.service !== undefined) {
+    const owned = (["project", "serviceName", "regionId", "branchId", "branchGitName"] as const)
+      .filter((name) => props[name] !== undefined)
+      .join(", ");
+    if (owned.length > 0) {
+      return yield* invalid(
+        `Prisma.Compute with service cannot also set ${owned}: those belong to the service.`,
+      );
     }
-    for (const [key, value] of Object.entries(props.env ?? {})) {
-      if (value === undefined) continue;
-      if (value === null) {
-        yield* validateComputeEnvironmentKey(key);
-      } else {
-        yield* validateComputeEnvironmentWrite(key, value);
-      }
+    if (typeof props.service === "string" && !(props.skipPromote ?? false)) {
+      return yield* invalid(
+        "Prisma.Compute with a service ID requires skipPromote: true. A version can be attached as the active version only to a Prisma.ComputeService declared in this stack; pass that resource as service instead.",
+      );
     }
-    if ((props.skipPromote ?? false) && (props.destroyOldDeployment ?? false)) {
-      return yield* new ComputeInvalidProps({
-        message:
-          "destroyOldDeployment cannot be combined with skipPromote because the previous deployment stays active when promotion is skipped.",
-      });
+  } else if (props.project === undefined) {
+    return yield* invalid("Prisma.Compute requires project, or service.");
+  }
+  if (props.branchId !== undefined && props.branchGitName !== undefined) {
+    return yield* invalid("branchId and branchGitName are mutually exclusive.");
+  }
+  if (props.branchId === null || props.branchGitName === null) {
+    return yield* invalid(
+      "Prisma.Compute requires an attached branch because a version reads its environment variables from the service's branch. Omit branchGitName to use the project's default branch, or set branchId/branchGitName.",
+    );
+  }
+  if ((props.skipCodeUpload ?? false) && props.artifactPath !== undefined) {
+    return yield* invalid("skipCodeUpload cannot be combined with artifactPath.");
+  }
+  if ((props.skipCodeUpload ?? false) && props.build !== undefined) {
+    return yield* invalid("skipCodeUpload cannot be combined with build.");
+  }
+  if (effectNative) {
+    const handler = props.handler ?? "default";
+    if (handler !== "default" && !EXPORT_IDENTIFIER_PATTERN.test(handler)) {
+      return yield* invalid(
+        "Effect-native Prisma Compute handler must be `default` or a valid JavaScript export identifier.",
+      );
     }
-    if (props.start === false && !(props.skipPromote ?? false)) {
-      return yield* new ComputeInvalidProps({
-        message:
-          "start: false requires skipPromote: true because Prisma Compute promotion requires a running deployment.",
-      });
+    if (props.main === undefined) {
+      return yield* invalid(
+        "Effect-native Prisma Compute apps require `main`. Set `main: import.meta.filename`.",
+      );
     }
-    if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* new ComputeInvalidProps({
-        message: "branchId and branchGitName are mutually exclusive.",
-      });
-    }
-    if (props.branchId === null || props.branchGitName === null) {
-      return yield* new ComputeInvalidProps({
-        message:
-          "Prisma.Compute requires an attached branch because deployment creation resolves environment variables from the App branch. Omit branchGitName to use the project's default branch, or set branchId/branchGitName.",
-      });
-    }
-    if ((props.skipCodeUpload ?? false) && props.artifactPath !== undefined) {
-      return yield* new ComputeInvalidProps({
-        message: "skipCodeUpload cannot be combined with artifactPath.",
-      });
-    }
-    if ((props.skipCodeUpload ?? false) && props.build !== undefined) {
-      return yield* new ComputeInvalidProps({
-        message: "skipCodeUpload cannot be combined with build.",
-      });
-    }
-    if (hasEffectNativeComputeInput(props)) {
-      const handler = props.handler ?? "default";
-      if (handler !== "default" && !EXPORT_IDENTIFIER_PATTERN.test(handler)) {
-        return yield* new ComputeInvalidProps({
-          message:
-            "Effect-native Prisma Compute handler must be `default` or a valid JavaScript export identifier.",
-        });
-      }
-      if (props.main === undefined) {
-        return yield* new ComputeInvalidProps({
-          message:
-            "Effect-native Prisma Compute apps require `main`. Set `main: import.meta.filename`.",
-        });
-      }
-      if (props.artifactPath !== undefined) {
-        return yield* new ComputeInvalidProps({
-          message: "Effect-native Prisma Compute apps cannot use artifactPath.",
-        });
-      }
-      if (props.build !== undefined) {
-        return yield* new ComputeInvalidProps({
-          message: "Effect-native Prisma Compute apps cannot use build.",
-        });
-      }
-      if (props.skipCodeUpload) {
-        return yield* new ComputeInvalidProps({
-          message: "Effect-native Prisma Compute apps cannot skip code upload.",
-        });
-      }
-    }
-  });
-
-const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
-  const env = plainEnv(props.env);
-  const envClass = props.envClass ?? "production";
-  const defaultPort = props.port ?? 8080;
-  if (isEffectNativeCompute(props)) {
     if (props.artifactPath !== undefined) {
-      return yield* new ComputeInvalidProps({
-        message: "Effect-native Prisma Compute apps cannot use artifactPath.",
-      });
-    }
-    if (props.skipCodeUpload) {
-      return yield* new ComputeInvalidProps({
-        message: "Effect-native Prisma Compute apps cannot skip code upload.",
-      });
+      return yield* invalid("Effect-native Prisma Compute apps cannot use artifactPath.");
     }
     if (props.build !== undefined) {
-      return yield* new ComputeInvalidProps({
-        message: "Effect-native Prisma Compute apps cannot use build.",
-      });
+      return yield* invalid("Effect-native Prisma Compute apps cannot use build.");
     }
-    const artifact = yield* buildComputeArtifactFile(props, { effectNative: true });
-    return {
-      file: artifact.file,
-      hash: yield* sha256Object({
-        bundle: artifact.bundleHash,
-        env,
-        envClass,
-        port: defaultPort,
-      }),
-      port: defaultPort,
-    };
+    if (props.skipCodeUpload) {
+      return yield* invalid("Effect-native Prisma Compute apps cannot skip code upload.");
+    }
   }
-
-  if (props.skipCodeUpload) {
-    return {
-      file: undefined,
-      hash: yield* sha256Object({
-        skipCodeUpload: true,
-        env,
-        envClass,
-        port: defaultPort,
-      }),
-      port: defaultPort,
-    };
-  }
-
-  if (props.artifactPath !== undefined) {
-    const file = yield* readUploadArtifact({
-      artifactPath: props.artifactPath,
-      output: "file",
-    });
-    return {
-      file: file!,
-      hash: yield* sha256Object({
-        artifact: file!.sha256,
-        env,
-        envClass,
-        port: defaultPort,
-      }),
-      port: defaultPort,
-    };
-  }
-
-  const artifact = yield* buildComputeArtifactFile(props, { effectNative: false });
-  return {
-    file: artifact.file,
-    hash: yield* sha256Object({
-      artifact: artifact.file.sha256,
-      env,
-      envClass,
-      port: artifact.port,
-    }),
-    port: artifact.port,
-  };
 });
 
-const findExistingApp = Effect.fn(function* (output: Compute["Attributes"] | undefined) {
-  const serviceId =
-    output?.serviceId && !isPrismaDevId(output.serviceId) ? output.serviceId : undefined;
-  return serviceId
-    ? yield* getService({ serviceId }).pipe(
-        Effect.map((response) => response.data),
-        Effect.catchTag("NotFound", () => Effect.undefined),
-      )
-    : undefined;
-});
+/** The keys that declare a variable: `null` and `undefined` declare none. */
+const declaredKeys = (env: EnvironmentInput) =>
+  Object.entries(env)
+    .flatMap(([key, value]) => (value === null || value === undefined ? [] : [key]))
+    .sort();
 
-const ensureApp = Effect.fn(function* (
-  projectId: string,
-  props: ComputeProps & { serviceName: string },
-  output: Compute["Attributes"] | undefined,
-  observedApp?: ObservedApp,
-) {
-  let app: ObservedApp | undefined = observedApp ?? (yield* findExistingApp(output));
-  const branch = yield* desiredComputeBranchId(projectId, props);
-  if (!branch.resolved) {
-    return yield* new ComputeOperationFailed({
-      message:
-        props.branchGitName === undefined
-          ? `Prisma project '${projectId}' has no default branch to attach Compute App '${props.serviceName}'. Create or promote a default branch, or specify branchId/branchGitName.`
-          : `Prisma project '${projectId}' has no branch named '${props.branchGitName}' to attach Compute App '${props.serviceName}'.`,
-    });
-  }
+const toRedacted = (value: unknown): Redacted.Redacted<string> =>
+  Redacted.isRedacted(value)
+    ? (value as Redacted.Redacted<string>)
+    : Redacted.make(typeof value === "string" ? value : JSON.stringify(value));
 
-  let createdApp = false;
-  if (!app) {
-    const result = yield* createApp(projectId, props, branch.id).pipe(
-      Effect.map((app) => ({ app, created: true })),
-      Effect.catchTag("Conflict", (conflict) =>
-        findApp(projectId, props.serviceName, props).pipe(
-          Effect.flatMap((app) =>
-            app && output?.serviceId !== undefined && app.id === output.serviceId
-              ? Effect.succeed({ app, created: false })
-              : Effect.fail(
-                  new ComputeConflict({
-                    message: `Prisma App '${props.serviceName}' already exists on the requested branch but is not owned by this Compute resource. Import it with explicit adoption or choose a different App name.`,
-                    cause: conflict,
-                  }),
-                ),
-          ),
-        ),
-      ),
-    );
-    app = result.app;
-    createdApp = result.created;
-  }
+const asOutput = (value: unknown): Output.Output<unknown> =>
+  Output.isOutput(value) ? value : Output.literal(value);
 
-  yield* ensureServiceImmutableIdentity(
-    app,
-    projectId,
-    props.regionId ?? output?.regionId ?? app.region.id,
-  );
-  if (app.name !== props.serviceName || app.branchId !== branch.id) {
-    app = yield* updateService({
-      serviceId: app.id,
-      displayName: props.serviceName,
-      branchId: branch.id,
-    }).pipe(Effect.map((response) => response.data));
-  }
+/** A salted digest of a variable's value, the only form of it the version records. */
+const environmentDigest = (key: string, value: unknown) =>
+  Output.mapEffect((resolved: unknown) =>
+    sha256(`${ENVIRONMENT_DIGEST_SALT}\0${key}\0${Redacted.value(toRedacted(resolved))}`),
+  )(asOutput(value));
 
-  return { app, created: createdApp };
-});
-
-const ensureSkipCodeUploadCanFork = (props: ComputeProps, app: ObservedApp | undefined) =>
-  Effect.gen(function* () {
-    if (!(props.skipCodeUpload ?? false)) return;
-    if (app?.latestDeploymentId) return;
-    return yield* new ComputeInvalidProps({
-      message:
-        "skipCodeUpload requires an existing Prisma deployment to fork from. Upload and start a deployment first, or remove skipCodeUpload.",
-    });
-  });
-
-const findEnvironmentVariable = (
-  projectId: string,
-  cls: "production" | "preview",
-  key: string,
-  branchId?: string | null,
-) =>
-  Effect.gen(function* () {
-    // Distilled emits the cursor-paginated list operations as plain ops, so
-    // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-    const variables: GetEnvironmentVariablesResponse["data"][number][] = [];
-    let cursor: string | undefined;
-    while (true) {
-      const page = yield* getEnvironmentVariables({
-        projectId,
-        class: cls,
-        key,
-        limit: 100,
-        ...(branchId ? { branchId } : {}),
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-      variables.push(...page.data);
-      const nextCursor = page.pagination.nextCursor;
-      if (!page.pagination.hasMore) break;
-      if (nextCursor === null) {
-        return yield* new PrismaPaginationError({
+/** The class of the service's variables: the role of its Branch, checked against `envClass`. */
+const environmentClass = (
+  role: unknown,
+  envClass: ComputeProps["envClass"],
+): Effect.Effect<"production" | "preview"> =>
+  role === "production" || role === "preview"
+    ? envClass !== undefined && envClass !== role
+      ? Effect.die(
+          new ComputeInvalidProps({
+            message: `Prisma.Compute envClass '${envClass}' does not match attached branch role '${role}'. Omit envClass to let Alchemy infer the correct environment variable scope.`,
+          }),
+        )
+      : Effect.succeed(role)
+    : Effect.die(
+        new ComputeInvalidProps({
           message:
-            "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
-        });
-      }
-      cursor = nextCursor;
-    }
-    return variables.find((variable) => variable.branchId === (branchId ?? null));
-  });
+            "Prisma.Compute requires a service attached to a branch, because a version reads its environment variables from the service's branch.",
+        }),
+      );
 
-const systemManagedEnvironmentVariableError = (key: string) =>
-  new ComputeEnvironmentVariableSystemManaged({
-    message: `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
-  });
+const definedProps = <A extends Record<string, unknown>>(props: A) =>
+  Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined)) as {
+    [K in keyof A]: Exclude<A[K], undefined>;
+  };
 
-const ensureUserManagedEnvironmentVariable = (variable: ObservedEnvironmentVariable) =>
-  Effect.gen(function* () {
-    if (variable.isManagedBySystem) {
-      return yield* systemManagedEnvironmentVariableError(variable.key);
-    }
-  });
+const declareService = (props: ComputeProps) =>
+  ComputeService(
+    "Service",
+    definedProps({
+      project: props.project!,
+      displayName: props.serviceName,
+      regionId: props.regionId,
+      branchId: props.branchId,
+      branchGitName: props.branchGitName,
+      verifyUrl: props.verifyUrl,
+      healthCheck: props.healthCheck,
+      urlReadinessTimeoutSeconds: props.urlReadinessTimeoutSeconds,
+      timeoutSeconds: props.timeoutSeconds,
+      pollIntervalMs: props.pollIntervalMs,
+    }),
+  );
 
-const environmentVariableOwnershipError = (key: string, variableId: string) =>
-  new ComputeEnvironmentVariableNotOwned({
-    message: `Prisma environment variable '${key}' (${variableId}) already exists in this branch/class scope but is not owned by this Compute resource. It may be foreign or left by an interrupted prior Compute deploy; the Management API exposes no ownership marker or plaintext value that would make takeover safe. Use one standalone Prisma.EnvironmentVariable resource as the independently manageable owner, choose a different key, explicitly adopt that resource, or remove the existing variable before deploying.`,
-  });
+const serviceOf = (props: ComputeProps) =>
+  props.service === undefined
+    ? declareService(props)
+    : Effect.succeed(
+        typeof props.service === "string"
+          ? ComputeService.lookup({ serviceId: props.service })
+          : props.service,
+      );
 
-interface ComputeEnvironmentScope {
-  class: "production" | "preview";
-  branchId: string | null;
-}
+const isEffectNative = (props: ComputeProps, form: DeclarationForm) =>
+  form === "class" && props.isExternal !== true;
 
-const environmentScope = (
-  cls: "production" | "preview",
-  branchId?: string | null,
-): ComputeEnvironmentScope => ({
-  class: cls,
-  branchId: branchId ?? null,
-});
+type DeclarationForm = "external" | "class";
 
-const sameEnvironmentScope = (left: ComputeEnvironmentScope, right: ComputeEnvironmentScope) =>
-  left.class === right.class && left.branchId === right.branchId;
-
-const resolveComputeEnvironmentScope = Effect.fn(function* (app: ObservedApp, props: ComputeProps) {
-  if (!app.branchId) {
-    return yield* new ComputeConflict({
-      message:
-        "Prisma.Compute requires an attached branch because deployment creation resolves environment variables from the App branch.",
-    });
-  }
-
-  const branch = yield* getBranch({
-    branchId: app.branchId,
-  }).pipe(Effect.map((response) => response.data));
-  const inferredClass = branch.role;
-  if (props.envClass !== undefined && props.envClass !== inferredClass) {
-    return yield* new ComputeInvalidProps({
-      message: `Prisma.Compute envClass '${props.envClass}' does not match attached branch role '${inferredClass}'. Omit envClass to let Alchemy infer the correct environment variable scope.`,
-    });
-  }
-
-  return environmentScope(inferredClass, inferredClass === "preview" ? app.branchId : null);
-});
-
-interface ComputeEnvironmentPlan {
-  key: string;
-  value: string | null;
-  variable: ObservedEnvironmentVariable | undefined;
-}
-
-const rollbackCreatedEnvironmentVariables = Effect.fn(function* <E>(
-  createdIds: ReadonlyArray<{ key: string; id: string }>,
-  originalError: E,
+/** Declare the cloud children under the host's namespace and report them to it. */
+const declareCloud = Effect.fn(function* (
+  host: Compute,
+  props: ComputeProps,
+  env: EnvironmentInput,
+  form: DeclarationForm,
 ) {
-  if (createdIds.length === 0) {
-    return yield* Effect.fail(originalError);
-  }
-  const cleanupErrors: unknown[] = [];
-  for (const created of [...createdIds].reverse()) {
-    const result = yield* Effect.result(
-      deleteEnvironmentVariable({ envVarId: created.id }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
+  const service = yield* serviceOf(props);
+  const keys = declaredKeys(env);
+  const variables = yield* Effect.forEach(keys, (key) =>
+    EnvironmentVariable(`Env/${key}`, {
+      project: service.projectId,
+      class: Output.mapEffect((role: unknown) => environmentClass(role, props.envClass))(
+        service.branchRole,
       ),
-    );
-    if (Result.isFailure(result)) {
-      cleanupErrors.push(result.failure);
-    }
+      branchId: Output.map(Output.all(service.branchRole, service.branchId), ([role, branchId]) =>
+        role === "preview" && typeof branchId === "string" ? branchId : undefined,
+      ),
+      key,
+      value: Output.map(asOutput(env[key]), toRedacted),
+    } satisfies InputProps<EnvironmentVariableProps>),
+  );
+  const effectNative = isEffectNative(props, form);
+  const artifact =
+    props.artifactPath === undefined && !(props.skipCodeUpload ?? false)
+      ? yield* ComputeArtifact(
+          "Artifact",
+          definedProps({
+            path: props.path,
+            archiveIgnore: props.archiveIgnore,
+            entrypoint: props.entrypoint,
+            main: effectNative ? props.main : undefined,
+            handler: effectNative ? props.handler : undefined,
+            bundle: effectNative ? props.bundle : undefined,
+            build: effectNative ? undefined : props.build,
+            port: props.port,
+            memo: props.memo,
+          }),
+        )
+      : undefined;
+  const serviceId: Output.Output<string> =
+    typeof props.service === "string" ? Output.literal(props.service) : service.serviceId;
+  // Variables are copied into a version when it is created, so the version
+  // waits for them. The edge rides `service`: the only prop whose change of
+  // resolution does not replace the version.
+  const versionService =
+    variables.length === 0
+      ? serviceId
+      : Output.flatMap(
+          Output.all(serviceId, ...variables.map((variable) => Output.of(variable))),
+          () => serviceId,
+        );
+  const environmentDigests = Object.fromEntries(
+    keys.map((key) => [key, environmentDigest(key, env[key])]),
+  );
+  const version = yield* ComputeVersion(
+    "Version",
+    definedProps({
+      service: versionService,
+      artifactPath: artifact?.artifactPath ?? props.artifactPath,
+      artifactContentType:
+        artifact !== undefined || props.artifactPath !== undefined ? "application/gzip" : undefined,
+      skipCodeUpload: props.skipCodeUpload,
+      portMapping: { http: artifact?.defaultPort ?? props.port ?? 8080 },
+      start: props.start,
+      verifyUrl: props.verifyUrl,
+      healthCheck: props.healthCheck,
+      urlReadinessTimeoutSeconds: props.urlReadinessTimeoutSeconds,
+      timeoutSeconds: props.timeoutSeconds,
+      pollIntervalMs: props.pollIntervalMs,
+      triggers: {
+        ...props.triggers,
+        environment: environmentDigests,
+        ...(props.service === undefined
+          ? {
+              branch: {
+                branchId: props.branchId ?? null,
+                branchGitName: props.branchGitName ?? null,
+              },
+            }
+          : {}),
+      },
+    }),
+    // Set here, so a stack-wide policy neither deletes the versions the
+    // platform's rollback returns to nor protects them from replacement.
+  ).pipe(Effect.provideService(RemovalPolicy, props.destroyOldDeployment ? "destroy" : "retain"));
+  const promoted = !(props.skipPromote ?? false);
+  if (promoted && typeof props.service !== "string") {
+    yield* activateVersion(service, version);
   }
-  if (cleanupErrors.length > 0) {
-    return yield* new ComputeEnvironmentRollbackFailed({
-      message: `Failed to roll back newly created Prisma environment variables after reconcile failed. Manual cleanup: ${createdIds.map(({ id }) => `DELETE /v1/environment-variables/${id}`).join(", ")}.`,
-      errors: [originalError, ...cleanupErrors],
-      cause: originalError,
-    });
-  }
-  return yield* Effect.fail(originalError);
+  yield* host.bind(COMPOSITION_SID, {
+    serviceId,
+    serviceName: service.name,
+    serviceEndpointDomain: service.serviceEndpointDomain,
+    projectId: service.projectId,
+    regionId: service.regionId,
+    activeVersionId: service.activeVersionId,
+    serviceUrl: service.url,
+    versionId: version.versionId,
+    versionUrl: version.url,
+    versionEndpointDomain: version.previewDomain,
+    environmentKeys: keys,
+    promoted,
+  });
 });
 
-const syncComputeEnvironmentInternal = Effect.fn(function* (
-  projectId: string,
-  cls: "production" | "preview",
-  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
-  branchId?: string | null,
-  ownedIds: Readonly<Record<string, string>> = {},
-) {
-  const synced: string[] = [];
-  const deleted: string[] = [];
-  const nextOwnedIds: Record<string, string> = {};
-  const createdIds: Array<{ key: string; id: string }> = [];
-  const plans: ComputeEnvironmentPlan[] = [];
-
-  // Observe and validate the entire scope before the first write. In
-  // particular, a foreign/system-owned key discovered late in the input must
-  // not leave earlier keys partially created.
-  for (const [key, value] of Object.entries(plainEnv(env))) {
-    if (value === null) {
-      yield* validateComputeEnvironmentKey(key);
-    } else {
-      yield* validateComputeEnvironmentWrite(key, value);
-    }
-    const variable = yield* findEnvironmentVariable(projectId, cls, key, branchId);
-    if (variable) {
-      yield* ensureUserManagedEnvironmentVariable(variable);
-      if (ownedIds[key] !== variable.id) {
-        return yield* environmentVariableOwnershipError(key, variable.id);
-      }
-    }
-    plans.push({ key, value, variable });
-  }
-
-  const apply = Effect.gen(function* () {
-    for (const { key, value, variable } of plans) {
-      if (value === null) continue;
-      if (variable) {
-        yield* updateEnvironmentVariable({
-          envVarId: variable.id,
-          value,
-        });
-        nextOwnedIds[key] = variable.id;
-      } else {
-        const created = yield* createEnvironmentVariable({
-          projectId,
-          ...(branchId ? { branchId } : {}),
-          class: cls,
-          key,
-          value,
-        }).pipe(
-          // A replayed create would make a second variable; the retry policy
-          // cannot see the request, so opt out explicitly.
-          Retry.none,
-          Effect.map((response) => response.data),
-        );
-        createdIds.push({ key, id: created.id });
-        nextOwnedIds[key] = created.id;
-      }
-      synced.push(key);
-    }
-    // Apply explicit deletions only after all ownership checks and upserts.
-    for (const { key, value, variable } of plans) {
-      if (value !== null || !variable) continue;
-      yield* deleteEnvironmentVariable({
-        envVarId: variable.id,
-      }).pipe(Effect.catchTag("NotFound", () => Effect.void));
-      deleted.push(key);
-    }
-    return { synced, deleted, ownedIds: nextOwnedIds, createdIds };
-  });
-
-  return yield* apply.pipe(
-    Effect.catch((error) => rollbackCreatedEnvironmentVariables(createdIds, error)),
+/** Under `alchemy dev`: the local process, and no cloud resource. */
+const declareDev = Effect.fn(function* (props: ComputeProps, env: EnvironmentInput) {
+  const dev = props.dev;
+  if (dev?.command === undefined) return;
+  const port = dev.port ?? props.port;
+  yield* Command.Dev(
+    "Dev",
+    definedProps({
+      command: dev.command,
+      cwd: dev.cwd ?? props.path,
+      env: {
+        NODE_ENV: "development",
+        ...Object.fromEntries(
+          declaredKeys(env).map((key) => [key, Output.map(asOutput(env[key]), toRedacted)]),
+        ),
+        ...dev.env,
+      },
+      port,
+    }),
   );
 });
 
-export const syncComputeEnvironment = Effect.fn(function* (
-  projectId: string,
-  cls: "production" | "preview",
-  env: Record<string, string | Redacted.Redacted<string> | null | undefined> = {},
-  branchId?: string | null,
-  ownedIds: Readonly<Record<string, string>> = {},
+/**
+ * Declare the children of `host`. Does nothing inside a deployed bundle,
+ * where only the runtime runs.
+ */
+const declareChildren = Effect.fn(function* (
+  host: Compute,
+  props: ComputeProps,
+  runtimeEnv: EnvironmentInput,
+  form: DeclarationForm,
 ) {
-  const result = yield* syncComputeEnvironmentInternal(projectId, cls, env, branchId, ownedIds);
-  return {
-    synced: result.synced,
-    deleted: result.deleted,
-    ownedIds: result.ownedIds,
-  };
-});
-
-const destroyComputeEnvironment = Effect.fn(function* (
-  projectId: string,
-  scope: ComputeEnvironmentScope,
-  ownedIds: Readonly<Record<string, string>> = {},
-) {
-  const deleted: string[] = [];
-  for (const [key, ownedId] of Object.entries(ownedIds)) {
-    const variable = yield* findEnvironmentVariable(
-      projectId,
-      scope.class,
-      key,
-      scope.branchId,
-    ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
-    if (!variable) continue;
-    if (variable.id !== ownedId || variable.isManagedBySystem) continue;
-    yield* deleteEnvironmentVariable({
-      envVarId: variable.id,
-    }).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    deleted.push(key);
+  if (globalThis.__ALCHEMY_RUNTIME__) return;
+  // A value set by a binding overrides the same key in `env`.
+  const env = { ...props.env, ...runtimeEnv };
+  if (yield* isLocal) {
+    yield* declareDev(props, env).pipe(Namespace.push(host.LogicalId));
+  } else {
+    yield* declareCloud(host, props, env, form).pipe(Namespace.push(host.LogicalId));
   }
-  return { deleted };
 });
 
-const cleanupRemovedComputeEnvironment = Effect.fn(function* (
-  projectId: string,
-  oldScope: ComputeEnvironmentScope,
-  oldOwnedIds: Readonly<Record<string, string>>,
-  newScope: ComputeEnvironmentScope,
-  newEnv: Record<string, string | Redacted.Redacted<string> | null | undefined> | undefined,
-) {
-  const newValues = plainEnv(newEnv);
-  const deleted: string[] = [];
-  for (const [key, ownedId] of Object.entries(oldOwnedIds)) {
-    if (sameEnvironmentScope(oldScope, newScope) && key in newValues) continue;
-    const variable = yield* findEnvironmentVariable(
-      projectId,
-      oldScope.class,
-      key,
-      oldScope.branchId,
+/** Under `alchemy dev`, unless the Compute is piped through `Alchemy.remote()`. */
+const isLocal = Effect.gen(function* () {
+  const context = yield* Effect.serviceOption(AlchemyContext);
+  const remote = yield* ProviderModePolicy;
+  return Option.isSome(context) && context.value.dev && remote !== true;
+});
+
+/**
+ * The rest of a class-form Compute, declared once its init has set the
+ * variables its bindings need. Keyed by the host resource, which the runtime
+ * context finds again in the stack.
+ */
+const pendingCompositions = new WeakMap<
+  object,
+  (runtimeEnv: EnvironmentInput) => Effect.Effect<void>
+>();
+
+/**
+ * Runs in `onCreate`, which both declaration forms call, so a wrong prop fails
+ * the program before anything is created.
+ */
+const onCreate = (host: Compute, props: ComputeProps) =>
+  Effect.gen(function* () {
+    if (globalThis.__ALCHEMY_RUNTIME__) return;
+    // Only the form without an init registers its props with `isExternal`.
+    const form: DeclarationForm = host.Props?.isExternal === true ? "external" : "class";
+    yield* validateDeclaredProps(props, isEffectNative(props, form));
+    if (form === "external") return yield* declareChildren(host, props, {}, form);
+    if (!(yield* isLocal) && props.service === undefined) {
+      yield* declareService(props).pipe(Namespace.push(host.LogicalId));
+    }
+    const services = yield* Effect.context<CompositionServices>();
+    pendingCompositions.set(host, (runtimeEnv) =>
+      declareChildren(host, props, runtimeEnv, form).pipe(Effect.provideContext(services)),
     );
-    if (!variable) continue;
-    if (variable.id !== ownedId || variable.isManagedBySystem) continue;
-    yield* deleteEnvironmentVariable({
-      envVarId: variable.id,
-    }).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    deleted.push(key);
-  }
-  return { deleted };
-});
-
-const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
-  const path = yield* Path.Path;
-  const dev = props.dev;
-  const processKey = `dev:${id}`;
-  const localUrl =
-    dev?.url ??
-    ((dev?.port ?? props.port) ? `http://localhost:${dev?.port ?? props.port}` : undefined);
-  if (!dev?.command) {
-    return localUrl;
-  }
-
-  yield* stopTrackedDevProcess(processKey);
-
-  const cwd = dev.cwd ? path.resolve(dev.cwd) : path.resolve(props.path ?? ".");
-  const env = {
-    NODE_ENV: "development",
-    ...processEnv(props.env),
-    ...processEnv(dev.env),
-    ...((dev.port ?? props.port) ? { PORT: String(dev.port ?? props.port) } : {}),
-  };
-  const handle = yield* ChildProcess.make(dev.command, [], {
-    shell: true,
-    cwd,
-    env,
-    extendEnv: true,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    detached: false,
   });
-  // The dev server's output becomes log records instead of raw writes over
-  // the CLI's renderer; each drain ends when the process does.
-  for (const name of ["stdout", "stderr"] as const) {
-    yield* handle[name].pipe(
-      Stream.decodeText,
-      Stream.splitLines,
-      Stream.runForEach((line) => logChildLine(line, { stream: name })),
-      Effect.ignore,
-      Effect.forkDetach,
-    );
-  }
-  devProcesses.set(processKey, handle);
-  return localUrl;
+
+type CompositionServices = Effect.Services<ReturnType<typeof declareChildren>>;
+
+/** Declare what the init's bindings needed, from the runtime context's `exports`. */
+const declareAfterInit = (id: string, runtimeEnv: EnvironmentInput) =>
+  Effect.gen(function* () {
+    if (globalThis.__ALCHEMY_RUNTIME__) return;
+    const stack = yield* Effect.serviceOption(StackContext);
+    if (Option.isNone(stack)) return;
+    const host = stack.value.resources[toFqn(yield* CurrentNamespace, id)];
+    const declare = host === undefined ? undefined : pendingCompositions.get(host);
+    if (declare) yield* declare(runtimeEnv);
+  });
+
+const composedAttributes = (
+  data: ComputeComposition,
+): Omit<Compute["Attributes"], "local" | "composed"> => ({
+  serviceId: data.serviceId,
+  serviceName: data.serviceName,
+  projectId: data.projectId,
+  regionId: data.regionId,
+  serviceEndpointDomain: data.serviceEndpointDomain,
+  activeVersionId: data.activeVersionId,
+  versionId: data.versionId,
+  versionEndpointDomain: data.versionEndpointDomain ?? undefined,
+  versionUrl: data.versionUrl,
+  url: data.promoted ? data.serviceUrl : data.versionUrl,
+  environmentKeys: data.environmentKeys,
 });
 
-const activeBindingEnv = (
-  bindings: ResourceBinding<Compute["Binding"]>[],
-): Record<string, string | Redacted.Redacted<string> | null | undefined> =>
-  bindings
-    .filter(
-      (binding: ResourceBinding<Compute["Binding"]> & { action?: string }) =>
-        binding.action !== "delete",
-    )
-    .map((binding) => binding.data?.env)
-    .reduce<Record<string, string | Redacted.Redacted<string> | null | undefined>>(
-      (acc, env) => (env ? { ...acc, ...env } : acc),
-      {} as Record<string, string | Redacted.Redacted<string> | null | undefined>,
-    );
+const compositionOf = (bindings: unknown): ComputeComposition | undefined =>
+  Array.isArray(bindings)
+    ? (bindings as ReadonlyArray<ResourceBinding<ComputeComposition>>).find(
+        (binding) => binding.sid === COMPOSITION_SID,
+      )?.data
+    : undefined;
+
+/** Whether the composed provider wrote the row. */
+const isComposed = (saved: object) => "composed" in saved && saved.composed === true;
+
+const cannotUpgradeInPlace = Effect.fn(function* (fqn: string) {
+  const stack = yield* Effect.serviceOption(Stack);
+  const address = Option.match(stack, {
+    onNone: () => `<stack>/<stage>/${fqn}`,
+    onSome: ({ name, stage }) => `${name}/${stage}/${fqn}`,
+  });
+  return yield* new ComputeCannotUpgradeInPlace({
+    message: [
+      `Prisma.Compute '${fqn}' was deployed with @alchemy.run/prisma 2.0.0-beta.87 or earlier, which kept the service, its environment variables and its current version inside this one resource. This version declares them as separate resources and cannot take over that service in place, so nothing was changed.`,
+      "",
+      "To keep deploying this stack as it is, stay on @alchemy.run/prisma 2.0.0-beta.87.",
+      "",
+      "To move to this version, which serves from a new service with a new URL:",
+      `1. Run \`alchemy state delete ${address}\`. Alchemy forgets the old service. It keeps running on Prisma with its URL, its versions and its environment variables.`,
+      "2. Deploy with `--adopt`, so the new environment variables take over the old service's variables of the same key, or delete those variables in the Prisma Console first.",
+      "3. Move custom domains to the new service, and update anything that uses the old URL.",
+      "4. Delete the old service in the Prisma Console once nothing uses it.",
+    ].join("\n"),
+  });
+});
+
+/** The attributes whose new values are known and unchanged keep their old values in the plan. */
+const unchangedAttributes = (output: Compute["Attributes"], data: unknown) => {
+  if (typeof data !== "object" || data === null) return [];
+  const next = data as Partial<ComputeComposition>;
+  const candidates: Array<[keyof Compute["Attributes"], unknown]> = [
+    ["serviceId", next.serviceId],
+    ["serviceName", next.serviceName],
+    ["projectId", next.projectId],
+    ["regionId", next.regionId],
+    ["serviceEndpointDomain", next.serviceEndpointDomain],
+    ["activeVersionId", next.activeVersionId],
+    ["versionId", next.versionId],
+    ["versionUrl", next.versionUrl],
+    ["environmentKeys", next.environmentKeys],
+  ];
+  return candidates.flatMap(([name, value]) =>
+    isResolved(value) && deepEqual(value, output[name]) ? [name] : [],
+  );
+};
 
 const ProviderLive = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
       return {
-        stables: ["serviceId"],
-        // Compute is a composite over App + Deployment. ComputeServiceProvider owns nuke
-        // enumeration to avoid deleting the same canonical App twice.
+        stables: [],
+        // The children own the platform objects; the service enumerates them.
         list: () => Effect.succeed([]),
-        diff: Effect.fn(
-          function* ({ olds, news, output: saved }) {
-            if (!isInputObject(news)) return undefined;
-            const output = saved && currentComputeAttributes(saved);
-            if (output?.local || isPrismaDevId(output?.serviceId)) {
-              return { action: "update" } as const;
-            }
-            const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
-            const newProjectId = isResolved(news.project)
-              ? unresolvedProjectIdOf(news.project)
-              : undefined;
-            if (concreteIdsChanged(oldProjectId, newProjectId)) {
-              // A different project is a distinct API uniqueness scope, so the
-              // old and replacement Apps can safely coexist.
-              return { action: "replace" } as const;
-            }
-            if (isResolved(news.regionId) && news.regionId !== undefined) {
-              const currentRegionId = output?.regionId ?? olds.regionId;
-              if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
-                return yield* new ComputeInvalidProps({
-                  message: `Prisma Compute App region is immutable and cannot be changed atomically without deleting the live App first. Deploy a second Compute under a different serviceName in the target region, cut traffic over, then remove the original.`,
-                });
-              }
-            }
-            // Source files/build output can change with no prop change, so
-            // reconcile must rerun and decide from the computed artifact hash.
-            return { action: "update" } as const;
-          },
-          (effect, { output: saved }) =>
-            effect.pipe(
-              Effect.map((diff) =>
-                updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), diff),
-              ),
-            ),
-        ),
-        read: Effect.fn(function* ({ id, output: saved, olds }) {
-          const output = saved && currentComputeAttributes(saved);
-          if (output?.local) return output;
-          const serviceId =
-            output?.serviceId && !isPrismaDevId(output.serviceId) ? output.serviceId : undefined;
-          const findAppInProject = Effect.gen(function* () {
-            const projectId = unresolvedProjectIdOf(olds.project);
-            return projectId
-              ? yield* findApp(
-                  projectId,
-                  yield* createServiceName(id, savedServiceName(olds)),
-                  olds,
-                )
-              : undefined;
-          });
-          const app = serviceId
-            ? yield* getService({ serviceId }).pipe(
-                Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.undefined),
-              )
-            : yield* findAppInProject;
-          if (!app) return undefined;
-          const readDeployment = (id: string) =>
-            observeDeployment(id).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
-          const outputDeployment = output?.versionId
-            ? yield* readDeployment(output.versionId)
-            : undefined;
-          if (outputDeployment) {
-            yield* ensureVersionMembership(app.id, outputDeployment, app.latestDeploymentId);
-          }
-          const latestDeployment =
-            !outputDeployment && app.latestDeploymentId
-              ? yield* readDeployment(app.latestDeploymentId)
-              : undefined;
-          const deployment = outputDeployment ?? latestDeployment;
-          const versionUrl = toComputeUrl(deployment?.previewDomain ?? undefined);
-          const appUrl = toComputeUrl(app.appEndpointDomain);
-          const promoted =
-            app.latestDeploymentId !== null && deployment?.id === app.latestDeploymentId;
-          const attrs: Compute["Attributes"] = {
-            serviceId: app.id,
-            versionId: deployment?.id,
-            projectId: app.projectId ?? output?.projectId,
-            serviceName: app.name,
-            regionId: app.region.id,
-            versionEndpointDomain: deployment?.previewDomain ?? undefined,
-            versionUrl,
-            serviceEndpointDomain: app.appEndpointDomain ?? output?.serviceEndpointDomain,
-            url: promoted ? (appUrl ?? versionUrl) : versionUrl,
-            promoted,
-            previousDeploymentId: output?.previousDeploymentId,
-            previousDeploymentAction: output?.previousDeploymentAction,
-            readinessStatus: output?.readinessStatus,
-            pendingDeploymentCleanup: output?.pendingDeploymentCleanup,
-            environmentKeys: output?.environmentKeys,
-            environmentVariableIds: output?.environmentVariableIds,
-            environmentClass: output?.environmentClass ?? olds.envClass,
-            environmentBranchId: output?.environmentBranchId,
-            // A latest-deployment fallback is unrelated to a missing saved
-            // deployment. Never transfer its artifact identity to other code.
-            artifactHash: outputDeployment ? output?.artifactHash : undefined,
-            local: false,
-          };
-          return serviceId ? attrs : Unowned(attrs);
+        diff: Effect.fn(function* ({ fqn, output, newBindings }) {
+          if (output && !isComposed(output)) return yield* cannotUpgradeInPlace(fqn);
+          if (!output) return undefined;
+          return {
+            action: "update",
+            stables: unchangedAttributes(output, compositionOf(newBindings)),
+          } as const;
         }),
-        reconcile: Effect.fn(function* ({ id, news, olds, output: saved, bindings }) {
-          const output = saved && currentComputeAttributes(saved);
-          const bindingEnv = activeBindingEnv(bindings);
-          const effectiveNews = {
-            ...news,
-            serviceName: yield* createServiceName(id, news.serviceName),
-            env: {
-              ...bindingEnv,
-              ...news.env,
-            },
-          };
-          yield* validateComputeProps(effectiveNews);
-          const projectId = yield* resolveProjectId(effectiveNews.project);
-          const artifact = yield* resolveArtifact(effectiveNews);
-          const cleanupArtifact = artifact.file?.cleanup ?? Effect.void;
-          const releaseArtifactOnFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-            effect.pipe(
-              Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : cleanupArtifact)),
-            );
-          const observedApp = effectiveNews.skipCodeUpload
-            ? yield* releaseArtifactOnFailure(
-                findExistingApp(output).pipe(
-                  Effect.retry({
-                    while: isAppProvisioningNotFound,
-                    schedule: projectConsistencySchedule,
-                  }),
-                ),
-              )
-            : undefined;
-          yield* releaseArtifactOnFailure(ensureSkipCodeUploadCanFork(effectiveNews, observedApp));
-          const ensuredApp = yield* releaseArtifactOnFailure(
-            ensureApp(projectId, effectiveNews, output, observedApp).pipe(
-              Effect.retry({
-                while: isAppProvisioningNotFound,
-                schedule: projectConsistencySchedule,
-              }),
-            ),
-          );
-          let app = ensuredApp.app;
-          let preserveCreatedAppOnFailure = false;
-          const cleanupCreatedAppOnFailure = <E>(error: E) =>
-            ensuredApp.created && !preserveCreatedAppOnFailure
-              ? destroyComputeService(app.id).pipe(
-                  Effect.mapError((cleanupError) =>
-                    aggregateCleanupFailure(
-                      "App",
-                      app.id,
-                      `/v1/services/${app.id}`,
-                      error,
-                      cleanupError,
-                    ),
-                  ),
-                  Effect.andThen(() => Effect.fail(error)),
-                )
-              : Effect.fail(error);
-
-          let createdEnvironmentVariableIds: Array<{
-            key: string;
-            id: string;
-          }> = [];
-          let deploymentConverged = false;
-
-          return yield* Effect.gen(function* () {
-            const currentEnvironmentScope = yield* resolveComputeEnvironmentScope(
-              app,
-              effectiveNews,
-            );
-            const deploymentHash = yield* sha256Object({
-              artifact: artifact.hash,
-              branchId: app.branchId,
-              environmentClass: currentEnvironmentScope.class,
-              environmentBranchId: currentEnvironmentScope.branchId,
+        reconcile: Effect.fn(function* ({ fqn, output, bindings }) {
+          if (output && !isComposed(output)) return yield* cannotUpgradeInPlace(fqn);
+          const data = compositionOf(bindings);
+          if (!data) {
+            return yield* new ComputeOperationFailed({
+              message: `Prisma.Compute '${fqn}' received nothing from its service and version. It is declared in the cloud only through Prisma.Compute, which declares them.`,
             });
-            const outputArtifactHash = persistedArtifactHashValue(
-              output?.artifactHash as Redacted.Redacted<string> | string | undefined,
-            );
-            const persistedDeployment = output?.versionId
-              ? yield* observeDeployment(output.versionId).pipe(
-                  Effect.catchTag("NotFound", () => Effect.undefined),
-                )
-              : undefined;
-            const terminalFailedDeploymentId =
-              persistedDeployment?.status === "failed" ? persistedDeployment.id : undefined;
-            const promotionRequested = !(effectiveNews.skipPromote ?? false);
-            let persistedPendingCleanup = output?.pendingDeploymentCleanup;
-            const cleanupPreviousDeployment = Effect.fn(function* (
-              deploymentId: string,
-              action: "stop" | "destroy",
-            ) {
-              const observed = yield* observeDeployment(deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.undefined),
-              );
-              if (!observed) {
-                return (action === "destroy" ? "destroyed" : "stopped") as "destroyed" | "stopped";
-              }
-              yield* ensureVersionMembership(app.id, observed, app.latestDeploymentId);
-              if (action === "destroy") {
-                yield* destroyComputeVersion(deploymentId, effectiveNews);
-                return "destroyed" as const;
-              }
-              yield* stopDeploymentIdempotent(deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.void),
-              );
-              yield* waitForComputeVersionStatus(deploymentId, "stopped", effectiveNews).pipe(
-                Effect.catchTag("NotFound", () => Effect.undefined),
-              );
-              return "stopped" as const;
-            });
-
-            if (
-              terminalFailedDeploymentId !== undefined &&
-              promotionRequested &&
-              output?.promoted === true &&
-              app.latestDeploymentId !== null &&
-              app.latestDeploymentId !== terminalFailedDeploymentId
-            ) {
-              return yield* new ComputeDeploymentRecoveryFailed({
-                errors: [],
-                message: `Prisma Compute state preserves terminal failed deployment '${terminalFailedDeploymentId}', but App '${app.id}' reports deployment '${app.latestDeploymentId}' as latest. Alchemy cannot prove that the live deployment is the interrupted replacement, and the persisted failed deployment is not a safe rollback target. No new deployment was created and neither deployment was deleted.`,
-              });
-            }
-
-            // Apply persists the previous stable Attributes before reconcile.
-            // If a prior attempt promoted a new generation, failed its stable
-            // health check, and could not roll back, that durable output still
-            // identifies the deployment we must restore while the App points
-            // at the displaced unhealthy generation. Recover that transition
-            // before changing env or creating another deployment, otherwise a
-            // retry would use the unhealthy generation as its rollback target.
-            if (
-              promotionRequested &&
-              output?.promoted === true &&
-              output.versionId !== undefined &&
-              terminalFailedDeploymentId === undefined &&
-              outputArtifactHash !== deploymentHash &&
-              app.latestDeploymentId !== null &&
-              app.latestDeploymentId !== output.versionId
-            ) {
-              const persistedDeploymentId = output.versionId;
-              const displacedDeploymentId = app.latestDeploymentId;
-              const rollback = yield* createServiceRollback({
-                serviceId: app.id,
-                deploymentId: persistedDeploymentId,
-              }).pipe(
-                Effect.map((response) => response.data),
-                Effect.result,
-              );
-              const observedAfterRollback = yield* waitForActiveVersion(
-                app.id,
-                persistedDeploymentId,
-                effectiveNews,
-              ).pipe(Effect.result);
-
-              if (Result.isFailure(observedAfterRollback)) {
-                return yield* new ComputeDeploymentRecoveryFailed({
-                  errors: [
-                    ...(Result.isFailure(rollback) ? [rollback.failure] : []),
-                    ...(Result.isFailure(observedAfterRollback)
-                      ? [observedAfterRollback.failure]
-                      : []),
-                  ],
-                  message: `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
-                });
-              }
-
-              app = observedAfterRollback.success;
-              yield* destroyComputeVersion(displacedDeploymentId, effectiveNews).pipe(
-                Effect.mapError(
-                  (cleanupError) =>
-                    new ComputeDeploymentRecoveryFailed({
-                      errors: [
-                        ...(Result.isFailure(rollback) ? [rollback.failure] : []),
-                        cleanupError,
-                      ],
-                      message: `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
-                    }),
-                ),
-              );
-            }
-
-            if (output?.readinessStatus === "pending" && outputArtifactHash !== deploymentHash) {
-              return yield* new ComputeNotReady({
-                message: `Prisma Compute deployment '${output.versionId ?? "unknown"}' still has pending stable-endpoint readiness. Reconcile the existing generation before changing code or environment inputs.`,
-              });
-            }
-            // Keep one cleanup candidate. A non-live older candidate is
-            // drained before any env/deploy mutation; a candidate that is
-            // still live is derived from app.latestDeploymentId below.
-            if (
-              persistedPendingCleanup !== undefined &&
-              output?.readinessStatus !== "pending" &&
-              persistedPendingCleanup.deploymentId !== app.latestDeploymentId
-            ) {
-              yield* cleanupPreviousDeployment(
-                persistedPendingCleanup.deploymentId,
-                persistedPendingCleanup.action,
-              );
-              persistedPendingCleanup = undefined;
-            } else if (persistedPendingCleanup?.deploymentId === app.latestDeploymentId) {
-              persistedPendingCleanup = undefined;
-            }
-            const previousEnvironmentScope = environmentScope(
-              olds?.envClass ?? output?.environmentClass ?? "production",
-              output?.environmentBranchId,
-            );
-            const previousEnvironmentVariableIds = output?.environmentVariableIds ?? {};
-            const environmentResult = yield* syncComputeEnvironmentInternal(
-              projectId,
-              currentEnvironmentScope.class,
-              effectiveNews.env,
-              currentEnvironmentScope.branchId,
-              sameEnvironmentScope(previousEnvironmentScope, currentEnvironmentScope)
-                ? previousEnvironmentVariableIds
-                : {},
-            );
-            createdEnvironmentVariableIds = environmentResult.createdIds;
-
-            // Deployment creation snapshots the App branch environment. Remove
-            // formerly-owned keys before creating it so deleted keys cannot be
-            // captured into the new runtime. Any failure here happens before
-            // deployment creation and rolls back newly-created variables.
-            yield* cleanupRemovedComputeEnvironment(
-              projectId,
-              previousEnvironmentScope,
-              previousEnvironmentVariableIds,
-              currentEnvironmentScope,
-              effectiveNews.env,
-            );
-
-            let deployment: ObservedDeployment | undefined =
-              outputArtifactHash === deploymentHash ? persistedDeployment : undefined;
-            // A failed deployment is terminal and cannot be repaired by
-            // replaying start/promotion. Preserve it as the cleanup target,
-            // but create a fresh generation and do not delete the failed one
-            // until the replacement has passed preview + stable readiness and
-            // promotion is observed.
-            if (
-              persistedDeployment !== undefined &&
-              (deployment !== undefined || terminalFailedDeploymentId !== undefined)
-            ) {
-              yield* ensureVersionMembership(app.id, persistedDeployment, app.latestDeploymentId);
-            }
-            if (terminalFailedDeploymentId !== undefined) {
-              deployment = undefined;
-            }
-            let createdDeploymentId: string | undefined;
-            const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
-              createdDeploymentId === failedDeploymentId
-                ? destroyComputeVersion(failedDeploymentId, effectiveNews).pipe(
-                    Effect.mapError((cleanupError) =>
-                      aggregateCleanupFailure(
-                        "deployment",
-                        failedDeploymentId,
-                        `/v1/deployments/${failedDeploymentId}`,
-                        error,
-                        cleanupError,
-                      ),
-                    ),
-                    Effect.andThen(() => Effect.fail(error)),
-                  )
-                : Effect.fail(error);
-
-            if (!deployment) {
-              const created = yield* createServiceDeployment({
-                serviceId: app.id,
-                portMapping: { http: artifact.port },
-                ...(effectiveNews.skipCodeUpload === undefined
-                  ? {}
-                  : { skipCodeUpload: effectiveNews.skipCodeUpload }),
-              }).pipe(
-                // A replayed create would make a second deployment; the retry
-                // policy cannot see the request, so opt out explicitly.
-                Retry.none,
-                Effect.map((response) => response.data),
-              );
-              createdDeploymentId = created.id;
-              if (artifact.file !== undefined && !created.uploadUrl) {
-                return yield* cleanupCreatedDeploymentOnFailure(
-                  created.id,
-                  new ComputeOperationFailed({
-                    message: "Prisma deployment creation did not return an upload URL.",
-                  }),
-                );
-              }
-              if (created.uploadUrl && artifact.file !== undefined) {
-                yield* uploadArtifact(created.uploadUrl, artifact.file, "application/gzip").pipe(
-                  Effect.catch((error) => cleanupCreatedDeploymentOnFailure(created.id, error)),
-                );
-              }
-              deployment = yield* observeDeployment(created.id).pipe(
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed({
-                    id: created.id,
-                    foundryVersionId: created.foundryVersionId,
-                    status: "new",
-                    previewDomain: null,
-                    createdAt: undefined,
-                  }),
-                ),
-                Effect.catch((error) => cleanupCreatedDeploymentOnFailure(created.id, error)),
-              );
-            }
-            if (!deployment) {
-              return yield* new ComputeUnexpectedResponse({
-                message: "Prisma deployment could not be resolved after creation.",
-              });
-            }
-
-            const previousDeploymentId =
-              terminalFailedDeploymentId ??
-              persistedPendingCleanup?.deploymentId ??
-              (app.latestDeploymentId !== null && app.latestDeploymentId !== deployment.id
-                ? app.latestDeploymentId
-                : null);
-            const rollbackDeploymentId =
-              previousDeploymentId === terminalFailedDeploymentId ? null : previousDeploymentId;
-
-            if (effectiveNews.start ?? true) {
-              const currentDeployment = deployment;
-              const currentDeploymentId = currentDeployment.id;
-              deployment = yield* Effect.gen(function* () {
-                if (
-                  currentDeployment.status !== "running" &&
-                  currentDeployment.status !== "provisioning"
-                ) {
-                  yield* startDeploymentIdempotent(currentDeployment.id);
-                }
-                const running = yield* waitForComputeVersionStatus(
-                  currentDeployment.id,
-                  "running",
-                  effectiveNews,
-                );
-                yield* waitForComputeUrl(toComputeUrl(running.previewDomain), effectiveNews);
-                return running;
-              }).pipe(
-                Effect.catch((error) =>
-                  cleanupCreatedDeploymentOnFailure(currentDeploymentId, error),
-                ),
-              );
-            }
-
-            let serviceEndpointDomain = app.appEndpointDomain;
-            let previousDeploymentAction: "stopped" | "destroyed" | "still-active" | null =
-              previousDeploymentId ? "still-active" : null;
-            let promoted = app.latestDeploymentId === deployment.id;
-            if (promotionRequested) {
-              // Replay promotion even when latestDeploymentId already matches.
-              // Promotion also repairs endpoint/custom-domain routing drift.
-              preserveCreatedAppOnFailure = true;
-              const promotedApp = yield* promoteVersionObserved(
-                app.id,
-                deployment.id,
-                effectiveNews,
-              );
-              serviceEndpointDomain = promotedApp.appEndpointDomain;
-              promoted = true;
-            }
-
-            const versionUrl = toComputeUrl(deployment.previewDomain);
-            const appUrl =
-              toComputeUrl(serviceEndpointDomain) ?? toComputeUrl(deployment.previewDomain);
-            let readinessStatus: "ready" | "pending" | "skipped" = "skipped";
-            if (promoted && effectiveNews.verifyUrl !== false) {
-              const check = yield* checkStableEndpoint(
-                app.id,
-                appUrl,
-                rollbackDeploymentId || undefined,
-                effectiveNews,
-              );
-              if (check._tag === "Ready") {
-                readinessStatus = "ready";
-              } else if (check._tag === "RolledBack") {
-                return yield* cleanupCreatedDeploymentOnFailure(
-                  deployment.id,
-                  check.rollbackFailure === undefined
-                    ? check.readinessFailure
-                    : new ComputeDeploymentRecoveryFailed({
-                        errors: [check.readinessFailure, check.rollbackFailure],
-                        message: `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
-                      }),
-                );
-              } else if (check._tag === "RollbackNotConverged") {
-                return yield* new ComputeDeploymentRecoveryFailed({
-                  errors: [
-                    check.readinessFailure,
-                    ...(check.rollbackFailure === undefined ? [] : [check.rollbackFailure]),
-                    check.observationFailure,
-                  ],
-                  message: `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
-                });
-              } else {
-                // A first deployment has no safe rollback target. Never report
-                // a successful stack deployment while the production endpoint
-                // is unreachable. A newly created App can be fully cleaned up;
-                // a pre-existing App is preserved for observed-state recovery.
-                if (ensuredApp.created) {
-                  preserveCreatedAppOnFailure = false;
-                } else {
-                  deploymentConverged = true;
-                }
-                if (terminalFailedDeploymentId !== undefined) {
-                  return yield* new ComputeDeploymentRecoveryFailed({
-                    errors: [check.readinessFailure],
-                    message: `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
-                  });
-                }
-                return yield* check.readinessFailure;
-              }
-            }
-
-            deploymentConverged = true;
-            let pendingDeploymentCleanup =
-              promoted && previousDeploymentId && previousDeploymentId !== deployment.id
-                ? {
-                    deploymentId: previousDeploymentId,
-                    action:
-                      persistedPendingCleanup?.deploymentId === previousDeploymentId
-                        ? persistedPendingCleanup.action
-                        : previousDeploymentId === terminalFailedDeploymentId
-                          ? ("destroy" as const)
-                          : effectiveNews.destroyOldDeployment
-                            ? ("destroy" as const)
-                            : ("stop" as const),
-                  }
-                : undefined;
-            if (promoted && pendingDeploymentCleanup) {
-              const cleanup = yield* cleanupPreviousDeployment(
-                pendingDeploymentCleanup.deploymentId,
-                pendingDeploymentCleanup.action,
-              ).pipe(Effect.result);
-              if (Result.isSuccess(cleanup)) {
-                previousDeploymentAction = cleanup.success;
-                pendingDeploymentCleanup = undefined;
-              } else {
-                yield* Effect.logWarning(
-                  `Prisma deployment '${pendingDeploymentCleanup.deploymentId}' cleanup is pending and will be retried before another Compute generation is created.`,
-                );
-              }
-            }
-
-            return {
-              serviceId: app.id,
-              versionId: deployment.id,
-              projectId,
-              serviceName: app.name,
-              regionId: app.region.id,
-              versionEndpointDomain: deployment.previewDomain ?? undefined,
-              versionUrl,
-              serviceEndpointDomain,
-              url: promoted ? appUrl : versionUrl,
-              promoted,
-              previousDeploymentId,
-              previousDeploymentAction,
-              readinessStatus,
-              pendingDeploymentCleanup,
-              environmentKeys: managedEnvKeys(effectiveNews.env),
-              environmentVariableIds: environmentResult.ownedIds,
-              environmentClass: currentEnvironmentScope.class,
-              environmentBranchId: currentEnvironmentScope.branchId,
-              artifactHash: Redacted.make(deploymentHash),
-              local: false,
-            };
-          }).pipe(
-            Effect.catch((error) =>
-              deploymentConverged
-                ? Effect.fail(error)
-                : rollbackCreatedEnvironmentVariables(createdEnvironmentVariableIds, error),
-            ),
-            Effect.catch(cleanupCreatedAppOnFailure),
-            Effect.ensuring(cleanupArtifact),
-          );
-        }),
-        delete: Effect.fn(function* ({ olds, output: saved }) {
-          const output = saved && currentComputeAttributes(saved);
-          if (output.local || isPrismaDevId(output.serviceId)) {
-            yield* stopTrackedDevProcess(output.serviceId);
-            return;
           }
-          yield* destroyComputeEnvironment(
-            output.projectId,
-            environmentScope(
-              olds?.envClass ?? output.environmentClass ?? "production",
-              output.environmentBranchId,
-            ),
-            output.environmentVariableIds,
-          );
-          yield* destroyComputeService(output.serviceId);
+          return { ...composedAttributes(data), local: false, composed: true } as const;
         }),
-        tail: ({ output: saved }) => {
-          const { versionId } = currentComputeAttributes(saved);
-          return versionId ? tailDeploymentLogs(versionId) : Stream.empty;
-        },
+        // Deleting the children removes the platform objects. A row of the
+        // earlier provider is refused: its delete removed the service.
+        delete: Effect.fn(function* ({ fqn, output }) {
+          if (!isComposed(output)) return yield* cannotUpgradeInPlace(fqn);
+        }),
+        tail: ({ output }) =>
+          output.versionId ? tailDeploymentLogs(output.versionId) : Stream.empty,
       };
     }),
   );
 
+/** Under `alchemy dev` the host reports the local URL; `Command.Dev` runs the process. */
 export const ComputeDevProvider = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
-      const ctx = yield* AlchemyContext;
       return {
         stables: ["serviceId"],
         list: () => Effect.succeed([]),
-        diff: Effect.fn(function* ({ output: saved }) {
-          return updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), {
-            action: "update",
-          } as const);
+        diff: Effect.fn(function* () {
+          return { action: "update" } as const;
         }),
-        read: Effect.fn(function* ({ output: saved }) {
-          const output = saved && currentComputeAttributes(saved);
-          return output?.local ? output : undefined;
-        }),
-        reconcile: Effect.fn(function* ({ id, news, output: saved, bindings }) {
-          const output = saved && currentComputeAttributes(saved);
-          const bindingEnv = activeBindingEnv(bindings);
-          const effectiveNews = {
-            ...news,
-            env: {
-              ...bindingEnv,
-              ...news.env,
-            },
-          };
-          yield* validateComputeProps(effectiveNews);
-          const projectId = yield* resolveProjectId(effectiveNews.project);
-          if (!ctx.dev) {
-            return yield* new ComputeOperationFailed({
-              message: "ComputeDevProvider requires Alchemy dev mode.",
-            });
-          }
-          const localUrl = yield* startDev(id, effectiveNews);
+        reconcile: Effect.fn(function* ({ id, news }) {
+          const port = news.dev?.port ?? news.port;
+          const url = news.dev?.url ?? (port ? `http://localhost:${port}` : undefined);
+          const service = news.service as unknown;
+          const projectId =
+            news.project !== undefined
+              ? yield* resolveProjectId(news.project)
+              : typeof service === "object" && service !== null && "projectId" in service
+                ? String(service.projectId)
+                : `dev:project:${id}`;
           return {
-            serviceId: output?.serviceId ?? `dev:${id}`,
-            versionId: undefined,
+            serviceId: `dev:${id}`,
+            serviceName: news.serviceName ?? id,
             projectId,
-            serviceName: effectiveNews.serviceName ?? id,
-            regionId: effectiveNews.regionId ?? "us-east-1",
-            versionEndpointDomain: localUrl,
-            versionUrl: localUrl,
-            serviceEndpointDomain: localUrl,
-            url: localUrl,
-            promoted: false,
-            previousDeploymentId: undefined,
-            previousDeploymentAction: undefined,
-            readinessStatus: "skipped",
-            pendingDeploymentCleanup: undefined,
-            environmentKeys: managedEnvKeys(effectiveNews.env),
-            environmentVariableIds: {},
-            environmentClass: effectiveNews.envClass ?? "production",
-            environmentBranchId: null,
-            artifactHash: undefined,
+            regionId: news.regionId ?? "us-east-1",
+            serviceEndpointDomain: url,
+            activeVersionId: null,
+            versionId: undefined,
+            versionEndpointDomain: url,
+            versionUrl: url,
+            url,
+            environmentKeys: declaredKeys(news.env ?? {}),
             local: true,
-          };
+            composed: true,
+          } as const;
         }),
-        delete: Effect.fn(function* ({ output: saved }) {
-          yield* stopTrackedDevProcess(currentComputeAttributes(saved).serviceId);
-        }),
+        delete: () => Effect.void,
       };
     }),
   );

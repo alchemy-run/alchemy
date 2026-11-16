@@ -111,7 +111,7 @@ const stackManagementApiLayer = () =>
  *
  * This layer covers the operation helpers. The lifecycle helpers
  * (`destroyComputeService`, `destroyComputeVersion`, `destroyProjectComputeServices`,
- * `waitForComputeVersionStatus`, `syncComputeEnvironment`) also need an
+ * `waitForComputeVersionStatus`) also need an
  * `HttpClient` from the caller, because the Prisma-scoped node transport is
  * `Layer.provide`d privately here — see the comment on the private provide
  * above for why it must not reach the surrounding stack. Add one, e.g.:

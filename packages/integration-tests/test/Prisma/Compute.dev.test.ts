@@ -229,12 +229,15 @@ test.provider(
       const outputPath = path.join(root, "dev-output.json");
       const stoppedPath = path.join(root, "dev-stopped.txt");
 
+      // `Command.Dev` is ready once the port accepts a connection.
       yield* fs.writeFileString(
         scriptPath,
         [
-          "trap 'printf stopped > dev-stopped.txt; exit 0' TERM INT",
+          "trap 'printf stopped > dev-stopped.txt; kill $SERVER; exit 0' TERM INT",
           'printf \'{"port":"%s","greeting":"%s","nodeEnv":"%s"}\' "$PORT" "$GREETING" "$NODE_ENV" > dev-output.json',
-          "while true; do sleep 1; done",
+          `"${process.execPath}" -e 'Bun.serve({ port: Number(process.env.PORT), fetch: () => new Response("ok") })' &`,
+          "SERVER=$!",
+          "wait $SERVER",
           "",
         ].join("\n"),
       );
