@@ -560,6 +560,13 @@ const renderModel = (report: ModelReport): string => {
           `  ${skipped.policy}  ${skipped.file === undefined ? "" : `${skipped.file}:${skipped.line}  `}${skipped.reason}`,
       ),
     );
+  if (report.aside.length > 0)
+    out.push(
+      "Left out, and no rule depends on it",
+      ...report.aside.map((left) => `  ${left.kind} ${left.name}  ${left.reason}`),
+    );
+  if (report.unkept.length > 0)
+    out.push("Schema checks not proved kept", ...report.unkept.map((line) => `  ${line}`));
   out.push("");
   for (const invariant of report.invariants) {
     const name = `${invariant.aggregate}.${invariant.name}`;

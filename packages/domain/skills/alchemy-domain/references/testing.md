@@ -223,7 +223,9 @@ Rules of thumb:
 
 - A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
 - `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, each saga step run twice, reactions reordered, schedules late, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
-- Keep numbers that are added or multiplied whole (`Schema.Int`, money in cents). Arithmetic JavaScript rounds is reported as not read.
+- Keep numbers that are added or multiplied whole (`Schema.Int`, `Schema.BigInt`, money in cents). Arithmetic JavaScript rounds is reported as not read. A division is read through `Math.floor`, `Math.ceil` or `Math.trunc`.
+- `decide`, `evolve` and rules are plain functions of their inputs: loops, `+=`, rest patterns, `Option`, `effect/Array`, `effect/Record` and `effect/Struct` helpers are read. A loop over a list from the state or a command is tried up to 2 items past what its schema asks for, so its rule is `Checked`, not `Proved`.
+- Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
 - An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.

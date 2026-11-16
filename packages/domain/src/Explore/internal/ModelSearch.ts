@@ -92,6 +92,13 @@ export interface Skipped {
   readonly line: number | undefined;
 }
 
+/** A part of the model the sequences were run without, which no rule depends on. */
+export interface Aside {
+  readonly kind: "view" | "projection" | "stream" | "query";
+  readonly name: string;
+  readonly reason: string;
+}
+
 export interface Found {
   /** The command sequences run, one per path through the code. */
   readonly sequences: number;
@@ -185,6 +192,17 @@ export interface Found {
   readonly endings: ReadonlyArray<Ending>;
   /** The policies and sagas left out: the sequences were run as if they did nothing. */
   readonly skipped: ReadonlyArray<Skipped>;
+  /**
+   * Every other part of the model the sequences were run without, by name: a
+   * view or projection no rule reads and no policy reacts to, and each stream
+   * and query. No rule depends on one, so leaving it out changes no result.
+   */
+  readonly aside: ReadonlyArray<Aside>;
+  /**
+   * What a command writes to a part of a state whose schema has a check the
+   * prover does not read: the new value is not proved to pass it.
+   */
+  readonly unkept: ReadonlyArray<string>;
   /** A rejection a policy does not handle: its handler fails with it. */
   readonly failures: ReadonlyArray<{
     readonly policy: string;
@@ -224,8 +242,10 @@ export interface ModelLike {
     readonly views?: ReadonlyArray<unknown>;
     readonly policies: ReadonlyArray<unknown>;
     readonly projections?: ReadonlyArray<unknown>;
+    readonly streams?: ReadonlyArray<unknown>;
   };
   readonly sagas?: ReadonlyArray<unknown>;
+  readonly queries?: ReadonlyArray<unknown>;
   readonly invariants?: { readonly [name: string]: (model: never) => boolean };
   readonly eventually?: { readonly [name: string]: (model: never) => boolean };
 }
@@ -697,6 +717,8 @@ export const locate = Effect.fn(function* (
   /** Why the explorer does not fold a view, by its class. */
   const unfolded = new Map<unknown, string>();
   const skipped: Array<Skipped> = [];
+  /** What the sequences were run without, where no rule depends on it. */
+  const aside: Array<Aside> = [];
   const readers: ReadonlyArray<{ readonly cls: ViewClass; readonly kind: "view" | "projection" }> =
     [
       ...((model.definitions.views ?? []) as ReadonlyArray<ViewClass>).map((cls) => ({
@@ -736,6 +758,7 @@ export const locate = Effect.fn(function* (
       unfolded.set(cls, reason ?? "is not followed");
       if (named.has(name))
         skipped.push({ policy: name, reason: reason!, file: undefined, line: undefined });
+      else aside.push({ kind, name, reason: reason! });
       continue;
     }
     views.push({
@@ -854,7 +877,28 @@ export const locate = Effect.fn(function* (
       }
   }
   const folded = views.filter((view) => wanted.has(view));
-  return { aggregates, missing, unread, policies, sagas, skipped, rules, views: folded };
+  for (const view of views)
+    if (!wanted.has(view))
+      aside.push({
+        kind: view.kind,
+        name: view.name,
+        reason: "no rule reads it and no policy reacts to it",
+      });
+  for (const stream of (model.definitions.streams ?? []) as ReadonlyArray<{
+    readonly streamName: string;
+  }>)
+    aside.push({
+      kind: "stream",
+      name: stream.streamName,
+      reason: "what a stream gives is not checked",
+    });
+  for (const query of (model.queries ?? []) as ReadonlyArray<{ readonly queryName: string }>)
+    aside.push({
+      kind: "query",
+      name: query.queryName,
+      reason: "what a query answers is not checked",
+    });
+  return { aggregates, missing, unread, policies, sagas, skipped, aside, rules, views: folded };
 });
 
 export type Located = Effect.Success<ReturnType<typeof locate>>;
@@ -885,9 +929,11 @@ export const search = Effect.fn(function* (
    */
   const dead: Array<string> = [];
   const kept = new Map<string, ReadonlySet<string>>();
+  const unkept: Array<string> = [];
   for (const agg of aggs) {
     if (agg.invariants.length === 0) continue;
     const rows = yield* Induction.rows(solver, interpreter, agg.cls, agg.definition);
+    unkept.push(...Induction.unkept(rows).map((line) => `${agg.name}.${line}`));
     for (const row of rows) if (row.accepted === false) dead.push(`${agg.name}.${row.command}`);
     if (!Schema.is(agg.definition.state as Schema.Schema<unknown>)(agg.cls.definition.initial))
       continue;
@@ -2173,7 +2219,7 @@ export const search = Effect.fn(function* (
     /** The solver's values as real commands, run one after another on the real code. */
     const replay = Effect.fn(function* (played: Sequence, run: Value.Run, model: Check.Model) {
       const build = (what: string, value: V) => {
-        const built = Symbolic.concretize(value, model);
+        const built = Symbolic.concretize(value, model, run.lists);
         return "value" in built
           ? Effect.succeed(built.value)
           : Effect.fail(new Disagreement({ reason: `${built.reason} (${what})` }));
@@ -2211,7 +2257,7 @@ export const search = Effect.fn(function* (
       const resent = played.trail.some((entry) => entry.again);
       for (const call of played.calls) {
         if (call.again && !resent) continue;
-        const built = Symbolic.concretize(call.answer, model);
+        const built = Symbolic.concretize(call.answer, model, run.lists);
         asked.push({
           at: call.at,
           by: call.by,
@@ -3038,6 +3084,8 @@ export const search = Effect.fn(function* (
       unstarted: sagas.flatMap((saga) => (started.has(saga.name) ? [] : [saga.name])),
       endings: [...endings.values()],
       skipped: [...located.skipped, ...skipped.values()],
+      aside: located.aside,
+      unkept,
       failures: [...failures.values()],
       unsettled,
       unread: [...unread.values()],

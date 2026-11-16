@@ -80,14 +80,24 @@ export interface Report {
       readonly paths: number;
     }>;
   }>;
+  /**
+   * The checks of the state's and the commands' schemas the prover does not
+   * read, each with the part it is on. A value such a check refuses may be
+   * tried, so a counterexample that needs one is not confirmed.
+   */
+  readonly unread: ReadonlyArray<string>;
+  /**
+   * What a command writes to a part of the state whose schema has a check
+   * the prover does not read: the new value is not proved to pass it.
+   */
+  readonly unkept: ReadonlyArray<string>;
   /** What the proof takes for granted. */
   readonly assumptions: ReadonlyArray<string>;
 }
 
 const ASSUMPTIONS = [
-  "whole numbers are exact: they stay within ±2^53",
+  "whole numbers are exact: a number stays within ±2^53, and a bigint has no limit",
   "an event or rejection whose fields fail its schema crashes the command, and nothing is committed",
-  "of the state's schema, the prover reads types, integers and bounds: a check of another kind is not proved kept",
 ];
 
 /**
@@ -152,6 +162,15 @@ export const report = (
           paths: row.paths,
         })),
       })),
+      unread: [
+        ...Symbolic.unread(aggregate.definition.state, "state"),
+        ...aggregate.definition.commands.flatMap((command) =>
+          Object.entries((command as unknown as Paths.CommandClass).fields).flatMap(
+            ([key, schema]) => Symbolic.unread(schema, `${command.tag}.${key}`),
+          ),
+        ),
+      ].map((check) => `${check.at}: ${check.check}`),
+      unkept: Induction.unkept(rows),
       assumptions: ASSUMPTIONS,
     };
     return made;
@@ -232,6 +251,7 @@ const detail = (verdict: Verdict): ReadonlyArray<string> => {
 
 const LABEL = {
   Proved: "proved",
+  Bounded: "proved for short lists only",
   Violated: "violated",
   Unconfirmed: "not proved",
   NotTranslated: "not read",
@@ -267,7 +287,10 @@ export const render = (report: Report): string => {
     }
     lines.push(...notes.map((note) => `    ✗ ${note}`), "");
   };
-  const leaving = report.commands.filter((c) => c.schema._tag !== "Proved").map((c) => c.command);
+  // A command proved for short lists only is not known to leave the schema: its own line says so.
+  const leaving = report.commands
+    .filter((c) => c.schema._tag !== "Proved" && c.schema._tag !== "Bounded")
+    .map((c) => c.command);
   section(
     "The state stays in its schema",
     report.initial,
@@ -275,13 +298,12 @@ export const render = (report: Report): string => {
     [],
   );
   // A proof starts from a state in the schema: it says nothing after a command that leaves it.
-  const open = closed(report)
-    ? []
-    : [
-        leaving.length > 0
-          ? `proved only from a state in the schema, which ${leaving.join(", ")} may leave`
-          : "proved only from a state in the schema, and the initial state is not in it",
-      ];
+  const open =
+    leaving.length > 0
+      ? [`proved only from a state in the schema, which ${leaving.join(", ")} may leave`]
+      : report.initial
+        ? []
+        : ["proved only from a state in the schema, and the initial state is not in it"];
   for (const invariant of report.invariants)
     section(invariant.name, invariant.initial, invariant.commands, open);
   for (const transition of report.transitions)
@@ -291,6 +313,14 @@ export const render = (report: Report): string => {
       `✗ ${c.command} is never accepted: no state the invariants allow lets it record an event`,
       "",
     );
+  if (report.unread.length > 0)
+    lines.push(
+      "Schema checks not read: a value one refuses may be tried",
+      ...report.unread.map((check) => `  - ${check}`),
+      "",
+    );
+  if (report.unkept.length > 0)
+    lines.push("Schema checks not proved kept", ...report.unkept.map((line) => `  - ${line}`), "");
   lines.push("Assuming:", ...report.assumptions.map((a) => `  - ${a}`));
   return lines.join("\n");
 };

@@ -1,4 +1,5 @@
 import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 import type { Asked, Story } from "./ModelSearch.ts";
 import { whole } from "./ModelSearch.ts";
 
@@ -118,7 +119,10 @@ const tagOf = (value: unknown): string => String((value as { readonly _tag?: unk
 /** A value as TypeScript source. An instance of a class is written as its fields. */
 const literal = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "bigint") return `${value}n`;
   if (value === null || typeof value !== "object") return String(value);
+  if (Option.isOption(value))
+    return Option.isSome(value) ? `Option.some(${literal(value.value)})` : "Option.none()";
   if (DateTime.isDateTime(value))
     return `DateTime.makeUnsafe(${JSON.stringify(DateTime.formatIso(value))})`;
   if (Array.isArray(value)) return `[${value.map(literal).join(", ")}]`;

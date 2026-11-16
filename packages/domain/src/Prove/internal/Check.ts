@@ -34,10 +34,12 @@ export type Verdict =
       readonly line: number;
       readonly reason: string;
     }
+  /** No list of up to a few items breaks it: longer lists were not looked at. */
+  | { readonly _tag: "Bounded"; readonly reason: string }
   /** The solver gave up. */
   | { readonly _tag: "Unknown"; readonly reason: string };
 
-export type Model = ReadonlyMap<string, number | string | boolean>;
+export type Model = ReadonlyMap<string, number | bigint | string | boolean>;
 
 const SAFE = Number.MAX_SAFE_INTEGER;
 
@@ -62,7 +64,7 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
     // A number in JavaScript is exact only this far.
     ...declarations.flatMap((declaration) => {
       const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
-      return match ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
+      return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
     }),
   ];
   // Equal results of a function that never repeats one mean equal arguments.
@@ -80,7 +82,7 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
       values,
     });
     if (answer._tag !== "Sat") return answer;
-    const model = new Map<string, number | string | boolean>();
+    const model = new Map<string, number | bigint | string | boolean>();
     values.forEach((text, index) => {
       const value = answer.values[index];
       if (value !== undefined) model.set(text, value);
@@ -196,7 +198,7 @@ const replay = Effect.fn(function* (
   model: Model,
 ) {
   const build = (what: string, value: Parameters<typeof Symbolic.concretize>[0]) => {
-    const built = Symbolic.concretize(value, model);
+    const built = Symbolic.concretize(value, model, run.lists);
     return "value" in built
       ? Effect.succeed(built.value)
       : Effect.fail(unconfirmed(`the solver found inputs, but ${built.reason} (${what})`));

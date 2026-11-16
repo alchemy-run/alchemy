@@ -22,7 +22,20 @@ it.effect(
   "the bank keeps its promises",
   () =>
     Effect.gen(function* () {
-      const report = yield* Verify.model(Bank, { apis: [CustomerApi, SupportApi], story });
+      const report = yield* Verify.model(Bank, {
+        apis: [CustomerApi, SupportApi],
+        story,
+        // An account's own rules have to stay proved: one that slips to checked fails this.
+        require: {
+          proved: [
+            "Account.NeverOverdrawn",
+            "Account.WithinDailyLimit",
+            "Account.AClosedAccountStaysClosed",
+            "Account.MoneyLeavesOnlyByWithdrawalOrTransfer",
+            "Account.OnlyAnAgentChangesTheOwner",
+          ],
+        },
+      });
       const standing = Object.fromEntries(report.rules.map((rule) => [rule.name, rule.standing]));
       expect(standing).toEqual({
         // No state and no input break these: a solver decides each.
@@ -44,6 +57,13 @@ it.effect(
       expect(report.walked).toBeGreaterThan(50);
       expect(report.explored.projections).toEqual(["Ledger"]);
       expect(report.undone).toEqual([]);
+      // Everything the sequences were run without is named, with why.
+      const aside = report.explored.aside.map((left) => `${left.kind} ${left.name}`);
+      expect(aside).toContain("stream AccountCard");
+      expect(aside).toContain("query AccountLedger");
+      expect(aside).toContain("view AccountSummary");
+      expect(aside).toContain("projection AccountCards");
+      expect(Verify.render(report)).toContain("stream AccountCard: what a stream gives");
     }).pipe(Effect.provide(NodeServices.layer)),
   300_000,
 );

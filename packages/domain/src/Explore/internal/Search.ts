@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
@@ -112,6 +113,9 @@ export const lift = (value: unknown): V => {
   if (typeof value === "boolean") return Value.bool(value);
   if (value === null) return Value.nil;
   if (value === undefined) return Value.undef;
+  if (typeof value === "bigint") return { _tag: "Big", value };
+  if (Option.isOption(value))
+    return Option.isSome(value) ? Value.some(lift(value.value)) : Value.none;
   if (DateTime.isDateTime(value)) {
     const millis = DateTime.toEpochMillis(value);
     return { _tag: "Time", millis: Smt.int(millis) };
@@ -227,7 +231,7 @@ export const search = Effect.fn(function* (
     model: Check.Model,
   ) {
     const build = (what: string, value: V) => {
-      const built = Symbolic.concretize(value, model);
+      const built = Symbolic.concretize(value, model, run.lists);
       return "value" in built
         ? Effect.succeed(built.value)
         : Effect.fail(new Disagreement({ reason: `${built.reason} (${what})` }));

@@ -73,7 +73,34 @@ export interface Options {
   readonly walks?: Explore.ModelOptions["walks"];
   /** What a pass may leave undone. */
   readonly allow?: Explore.ModelOptions["allow"];
+  /**
+   * How far a rule has to be known to hold, for the rules named: a rule in
+   * `proved` that is only checked fails the verification.
+   */
+  readonly require?: Require;
 }
+
+/** The rules a pass has to do more than check. */
+export interface Require {
+  /** The rules that have to be proved, each as the report names it: `Account.NeverOverdrawn`. */
+  readonly proved?: ReadonlyArray<string>;
+}
+
+/** Each rule that is required to be proved and is not, as a part of the check left undone. */
+const required = (
+  rules: ReadonlyArray<{ readonly name: string; readonly standing: Rule["standing"] }>,
+  require: Require | undefined,
+): ReadonlyArray<string> =>
+  (require?.proved ?? []).flatMap((name) => {
+    const rule = rules.find((rule) => rule.name === name);
+    return !rule
+      ? [`${name} is required to be proved, and the model has no rule of that name`]
+      : rule.standing === "proved" || rule.standing === "broken"
+        ? []
+        : [
+            `${name} is required to be proved, and is ${rule.standing === "checked" ? "only checked" : "not looked at"}`,
+          ];
+  });
 
 /** The verification could not start: a file did not load, or the solver is missing. */
 export class VerifyError extends Data.TaggedError("VerifyError")<{ readonly message: string }> {}
@@ -187,7 +214,8 @@ const OWN = (() => {
 })();
 
 const ASSUMPTIONS = [
-  "whole numbers are exact: they stay within ±2^53",
+  "whole numbers are exact: a number stays within ±2^53, and a bigint has no limit",
+  `a list an input holds has up to ${Symbolic.MAX_ITEMS} items more than its schema asks for`,
   "an external system answers what its schema allows, and nothing else",
   "middleware lets every caller in: who sends a command is anyone its request context allows",
   "what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given",
@@ -350,14 +378,18 @@ export const report = (
         });
       }
     }
+    const rules = rulesOf(explored);
     const made: Report = {
       model: model.modelName,
-      rules: rulesOf(explored),
+      rules,
       explored,
       runs,
       walked,
       unrun,
-      undone: Explore.undone(explored, options.allow ?? {}),
+      undone: [
+        ...Explore.undone(explored, options.allow ?? {}),
+        ...required(rules, options.require),
+      ],
       assumptions: ASSUMPTIONS,
     };
     return made;
@@ -425,6 +457,11 @@ export interface AggregateOptions {
   readonly budget?: number;
   /** What a pass may leave undone. */
   readonly allow?: Explore.Options["allow"];
+  /**
+   * How far a rule has to be known to hold, for the rules named: a rule in
+   * `proved` that is only checked fails the verification.
+   */
+  readonly require?: Require;
 }
 
 /** Why a rule no sequence breaks is not proved. */
@@ -496,6 +533,12 @@ const renderAggregate = (report: AggregateReport): string => {
   if (broken.length > 0) out.push(...broken.map((rule) => `✗ ${rule.name} breaks`), "");
   if (report.undone.length > 0)
     out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
+  if (report.proof.unkept.length > 0)
+    out.push(
+      "Schema checks not proved kept",
+      ...report.proof.unkept.map((line) => `  - ${line}`),
+      "",
+    );
   if (broken.length > 0 || report.undone.length > 0)
     out.push(Prove.render(report.proof), "", Explore.render(report.explored));
   return out.join("\n");
@@ -530,33 +573,37 @@ export const aggregate = (
       ...(options.depth === undefined ? {} : { depth: options.depth }),
       ...(options.budget === undefined ? {} : { budget: options.budget }),
     }).pipe(Effect.mapError(failed));
+    const rules: AggregateReport["rules"] = explored.invariants.map((rule) => {
+      const verdicts = [...proof.invariants, ...proof.transitions].find(
+        (proved) => proved.name === rule.name,
+      )?.commands;
+      const failing = verdicts?.find((command) => command.verdict._tag !== "Proved");
+      return {
+        name: rule.name,
+        kind: rule.kind,
+        standing: rule.broken
+          ? "broken"
+          : rule.proved
+            ? "proved"
+            : rule.states > 0
+              ? "checked"
+              : "unseen",
+        seen: rule.states,
+        unproved:
+          rule.broken || rule.proved || !failing
+            ? undefined
+            : { command: failing.command, verdict: failing.verdict },
+      };
+    });
     const made: AggregateReport = {
       aggregate: target.aggregateName,
-      rules: explored.invariants.map((rule) => {
-        const verdicts = [...proof.invariants, ...proof.transitions].find(
-          (proved) => proved.name === rule.name,
-        )?.commands;
-        const failing = verdicts?.find((command) => command.verdict._tag !== "Proved");
-        return {
-          name: rule.name,
-          kind: rule.kind,
-          standing: rule.broken
-            ? "broken"
-            : rule.proved
-              ? "proved"
-              : rule.states > 0
-                ? "checked"
-                : "unseen",
-          seen: rule.states,
-          unproved:
-            rule.broken || rule.proved || !failing
-              ? undefined
-              : { command: failing.command, verdict: failing.verdict },
-        };
-      }),
+      rules,
       proof,
       explored,
-      undone: Explore.undone(explored, options.allow ?? {}),
+      undone: [
+        ...Explore.undone(explored, options.allow ?? {}),
+        ...required(rules, options.require),
+      ],
     };
     return made.rules.some((rule) => rule.standing === "broken") || made.undone.length > 0
       ? yield* new AggregateNotVerified({ message: `\n${renderAggregate(made)}`, report: made })
@@ -689,6 +736,16 @@ export const render = (report: Report | AggregateReport): string => {
     out.push(
       "Called again when an event is delivered again: each has to be safe to repeat",
       ...explored.repeated.map((call) => `  ${call}`),
+      "",
+    );
+
+  if (explored.unkept.length > 0)
+    out.push("Schema checks not proved kept", ...explored.unkept.map((line) => `  - ${line}`), "");
+
+  if (explored.aside.length > 0)
+    out.push(
+      "Left out, and no rule depends on it",
+      ...explored.aside.map((left) => `  - ${left.kind} ${left.name}: ${left.reason}`),
       "",
     );
 

@@ -26,13 +26,47 @@ export interface Row {
    * `undefined` when the prover could not tell.
    */
   readonly accepted: boolean | undefined;
+  /**
+   * What the command writes to a part of the state whose schema has a check
+   * the prover does not read: the new value is not proved to pass it.
+   */
+  readonly unkept: ReadonlyArray<string>;
 }
+
+/** The checks of the state's schema no proof covers, as lines of a report. */
+export const unkept = (rows: ReadonlyArray<Row>): ReadonlyArray<string> =>
+  rows.flatMap((row) =>
+    row.unkept.map(
+      (line) => `${line}: the prover does not read that check, so it is not proved kept`,
+    ),
+  );
 
 /** Whether every command keeps the state in its schema, so that the proofs follow one another. */
 export const closed = (rows: ReadonlyArray<Row>): boolean =>
   rows.every((row) => row.fits._tag === "Proved");
 
-const RANK = { Proved: 0, Unknown: 1, NotTranslated: 2, Unconfirmed: 3, Violated: 4 } as const;
+const RANK = {
+  Proved: 0,
+  Bounded: 1,
+  Unknown: 2,
+  NotTranslated: 3,
+  Unconfirmed: 4,
+  Violated: 5,
+} as const;
+
+/**
+ * What a proof on one path is worth: where the path gave a list only a few
+ * items, it says nothing of a longer one.
+ */
+const within = (verdict: Verdict, run: Value.Run): Verdict =>
+  verdict._tag !== "Proved" || run.bounds.size === 0
+    ? verdict
+    : {
+        _tag: "Bounded",
+        reason: [...run.bounds]
+          .map(([name, most]) => `${name} was tried with up to ${most} items`)
+          .join(", "),
+      };
 
 const worse = (a: Verdict, b: Verdict): Verdict => (RANK[b._tag] > RANK[a._tag] ? b : a);
 
@@ -64,6 +98,7 @@ export const rows = Effect.fn(function* (
       for (const name of names) verdicts.set(name, worse(verdicts.get(name)!, verdict));
     };
     let fits: Verdict = { _tag: "Proved" };
+    const unkept = new Set<string>();
     let accepted: boolean | undefined = false;
     let paths = 0;
     let prefix: ReadonlyArray<number> | undefined = [];
@@ -81,6 +116,14 @@ export const rows = Effect.fn(function* (
       const taken = yield* Paths.path(interpreter, definition, command, prefix);
       prefix = Value.nextPrefix(taken.run.taken);
       const outcome = taken.outcome;
+      // A path that gave a list only a few items says nothing of a longer one,
+      // whatever it found: not that the command keeps a rule, nor that it does nothing.
+      if (taken.run.bounds.size > 0) {
+        const short = within({ _tag: "Proved" }, taken.run);
+        all(short);
+        fits = worse(fits, short);
+        accepted ||= undefined;
+      }
       if (outcome._tag === "Stopped") {
         const unread = notRead(outcome.error);
         all(unread);
@@ -99,26 +142,29 @@ export const rows = Effect.fn(function* (
               taken.inputs,
               check.condition.success,
             );
-        verdicts.set(check.name, worse(verdicts.get(check.name)!, verdict));
+        verdicts.set(check.name, worse(verdicts.get(check.name)!, within(verdict, taken.run)));
       }
-      fits = worse(
-        fits,
-        yield* Check.check(
-          solver,
-          aggregate,
-          Check.schema(aggregate),
-          taken.run,
-          taken.inputs,
-          outcome.fits,
-        ),
+      const fitting = yield* Check.check(
+        solver,
+        aggregate,
+        Check.schema(aggregate),
+        taken.run,
+        taken.inputs,
+        outcome.fits,
       );
+      fits = worse(fits, within(fitting, taken.run));
+      // A part the command writes, with a check the prover does not read: nothing
+      // says the new value passes it. The proofs never assume such a check, so
+      // they stand; the report says the check is not proved kept.
+      for (const check of outcome.unread)
+        unkept.add(`${command.tag} writes ${check.at}, which has to be ${check.check}`);
       if (accepted !== true) {
         // Any inputs at all that take this path: the command can record an event.
         const taking = yield* Check.solve(solver, taken.run, "false");
         accepted = taking._tag === "Sat" ? true : taking._tag === "Unknown" ? undefined : accepted;
       }
     }
-    made.push({ command: command.tag, paths, verdicts, fits, accepted });
+    made.push({ command: command.tag, paths, verdicts, fits, accepted, unkept: [...unkept] });
   }
   return made;
 });

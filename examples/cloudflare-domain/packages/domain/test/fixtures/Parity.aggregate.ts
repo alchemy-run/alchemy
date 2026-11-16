@@ -9,7 +9,7 @@ export class Take extends Domain.Command("Take", {
   events: [Taken],
 }) {}
 
-/** Decides with code the explorer does not read (`Math.trunc`), and breaks its invariant. */
+/** Decides with code the explorer does not read (`Math.sign`), and breaks its invariant. */
 export class Parity extends Domain.Aggregate("Parity", {
   id: Schema.String,
   state: Schema.Struct({ n: Schema.Int }),
@@ -17,7 +17,7 @@ export class Parity extends Domain.Aggregate("Parity", {
   invariants: { NotNegative: (parity) => parity.n >= 0 },
   commands: [Take],
   decide: {
-    Take: (_, cmd) => [new Taken({ amount: Math.trunc(cmd.amount) })],
+    Take: (_, cmd) => [new Taken({ amount: Math.sign(cmd.amount) })],
   },
   evolve: { Taken: (parity, event) => ({ n: parity.n - event.amount }) },
 }) {}

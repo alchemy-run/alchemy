@@ -25,6 +25,12 @@ export const int = (n: number): Term => ({
   text: n < 0 ? `(- ${digits(-n)})` : digits(n),
 });
 
+/** A `bigint`, which is a whole number of any size. */
+export const big = (n: bigint): Term => ({
+  sort: "Int",
+  text: n < 0n ? `(- ${(-n).toString()})` : n.toString(),
+});
+
 export const real = (n: number): Term => {
   const body = Number.isInteger(n) ? `${digits(Math.abs(n))}.0` : digits(Math.abs(n));
   return { sort: "Real", text: n < 0 ? `(- ${body})` : body };
@@ -123,17 +129,21 @@ export const parse = (input: string): ReadonlyArray<Sexp> => {
 };
 
 /** The JavaScript value of a value the solver printed, or `undefined` when it is not one. */
-export const valueOf = (sexp: Sexp): number | string | boolean | undefined => {
+export const valueOf = (sexp: Sexp): number | bigint | string | boolean | undefined => {
   if (sexp._tag === "Text") return sexp.value;
   if (sexp._tag === "Atom") {
     if (sexp.text === "true") return true;
     if (sexp.text === "false") return false;
     const n = Number(sexp.text);
+    // A whole number a `number` cannot hold exactly is a `bigint`'s.
+    if (/^\d+$/.test(sexp.text) && !Number.isSafeInteger(n)) return BigInt(sexp.text);
     return Number.isNaN(n) ? undefined : n;
   }
   const [head, ...rest] = sexp.items;
   if (head?._tag !== "Atom") return undefined;
   const numbers = rest.map(valueOf);
+  if (head.text === "-" && numbers.length === 1 && typeof numbers[0] === "bigint")
+    return -numbers[0];
   if (!numbers.every((n) => typeof n === "number")) return undefined;
   const [a, b] = numbers as Array<number>;
   if (head.text === "-" && a !== undefined) return b === undefined ? -a : a - b;
@@ -151,7 +161,10 @@ export interface Query {
 
 export type Answer =
   | { readonly _tag: "Unsat" }
-  | { readonly _tag: "Sat"; readonly values: ReadonlyArray<number | string | boolean | undefined> }
+  | {
+      readonly _tag: "Sat";
+      readonly values: ReadonlyArray<number | bigint | string | boolean | undefined>;
+    }
   | { readonly _tag: "Unknown"; readonly reason: string };
 
 export interface Solver {
@@ -288,7 +301,7 @@ export const solver: Effect.Effect<Solver, SolverError, Scope.Scope> = Effect.ge
         Z3.model_dec_ref(context, model);
         return out;
       });
-      const found = new Map<string, number | string | boolean | undefined>();
+      const found = new Map<string, number | bigint | string | boolean | undefined>();
       for (const item of parse(printed)) {
         if (item._tag !== "List") continue;
         const [head, name, , , value] = item.items;

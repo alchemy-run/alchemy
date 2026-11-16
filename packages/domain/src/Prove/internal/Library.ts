@@ -11,6 +11,18 @@ export interface Host {
   readonly call: (fn: V, args: ReadonlyArray<V>, site: Site) => Eval<V>;
   /** What `yield*` on the value gives. */
   readonly settle: (value: V, site: Site) => Eval<V>;
+  /** Whether a value is truthy on this path. */
+  readonly decide: (value: V, site: Site) => Eval<boolean>;
+  /** A list with its items, when the value is one. */
+  readonly force: (value: V) => V;
+  /** An array's method that takes a function, such as `map`. */
+  readonly array: (
+    name: string,
+    items: ReadonlyArray<V>,
+    fn: V,
+    initial: V | undefined,
+    site: Site,
+  ) => Eval<V>;
   /** The request contexts provided around the code being run, by tag. */
   readonly provided: Map<unknown, V>;
   /** Models a caller adds, by `module:path`. They come before the prover's own. */
@@ -211,7 +223,360 @@ export const make = (host: Host) => {
     });
   };
 
+  /**
+   * A function written both ways: with what it works on first (`f(self, x)`),
+   * or without it, to be given it by `pipe` (`f(x)` then `self`).
+   */
+  const dual =
+    (name: string, arity: number, body: Model): Model =>
+    (args, site) =>
+      args.length >= arity
+        ? body(args, site)
+        : Effect.succeed(
+            native(name, ([self], at) =>
+              self ? body([self, ...args], at) : wrongArguments(at, name),
+            ),
+          );
+
+  /** A function of an `Option`. */
+  const onOption = (
+    name: string,
+    arity: number,
+    body: (
+      option: NonNullable<ReturnType<typeof Value.optionOf>>,
+      rest: ReadonlyArray<V>,
+      site: Site,
+      self: V,
+    ) => Eval<V>,
+  ): Model =>
+    dual(name, arity, ([self, ...rest], site) => {
+      const option = Value.optionOf(self);
+      return option && self ? body(option, rest, site, self) : wrongArguments(site, name);
+    });
+
+  /** `Option.fromNullishOr` and the two like it: what counts as nothing differs. */
+  const fromNullable =
+    (nothing: ReadonlyArray<V["_tag"]>): Model =>
+    ([value]) =>
+      Effect.succeed(!value || nothing.includes(value._tag) ? Value.none : Value.some(value));
+
+  /** A function of an array, whose items the prover has to see. */
+  const onArray = (
+    name: string,
+    arity: number,
+    body: (items: ReadonlyArray<V>, rest: ReadonlyArray<V>, site: Site) => Eval<V>,
+  ): Model =>
+    dual(name, arity, ([self, ...rest], site) => {
+      const list = self ? host.force(self) : undefined;
+      return list?._tag === "Arr" ? body(list.items, rest, site) : wrongArguments(site, name);
+    });
+
+  const arr = (items: ReadonlyArray<V>): V => ({ _tag: "Arr", items });
+
+  /** An array's own method, as the library's function of the same name. */
+  const method = (name: string, as = name): Model =>
+    onArray(`Array.${name}`, 2, (items, [fn], site) =>
+      fn ? host.array(as, items, fn, undefined, site) : wrongArguments(site, `Array.${name}`),
+    );
+
+  /** A function of an object whose keys the prover sees. */
+  const onRecord = (
+    name: string,
+    arity: number,
+    body: (fields: Readonly<Record<string, V>>, rest: ReadonlyArray<V>, site: Site) => Eval<V>,
+  ): Model =>
+    dual(name, arity, ([self, ...rest], site) =>
+      self?._tag === "Obj" && !self.brand
+        ? body(self.fields, rest, site)
+        : wrongArguments(site, name),
+    );
+
+  /** A key the code names: one the prover cannot see is not translated. */
+  const keyed = (name: string, key: V | undefined, site: Site): Eval<string> =>
+    key?._tag === "Str" || key?._tag === "Num"
+      ? Effect.succeed(String(key.value))
+      : Effect.fail(Value.notTranslated(site, `${name} is given a key the prover cannot see`));
+
+  const keysOf = (name: string, keys: V | undefined, site: Site): Eval<ReadonlyArray<string>> =>
+    keys?._tag === "Arr"
+      ? Effect.forEach(keys.items, (key) => keyed(name, key, site))
+      : Effect.fail(Value.notTranslated(site, `${name} is given keys the prover cannot see`));
+
+  /** `Math.floor` and the functions like it: a whole number stays what it is. */
+  const whole =
+    (
+      name: string,
+      fold: (n: number) => number,
+      /** The result for a number that may not be whole, and for one whole number over another. */
+      rounded: (text: string) => string,
+      divided: (dividend: string, divisor: number) => string,
+    ): Model =>
+    ([value], site) => {
+      if (value?._tag === "Num") return Effect.succeed(Value.num(fold(value.value)));
+      if (value?._tag !== "Term" || value.big === true) return wrongArguments(site, name);
+      if (value.term.sort === "Int") return Effect.succeed(value);
+      if (value.term.sort !== "Real") return wrongArguments(site, name);
+      return Effect.succeed(
+        Value.term(
+          "Int",
+          value.quotient
+            ? divided(value.quotient.dividend, value.quotient.divisor)
+            : rounded(value.term.text),
+        ),
+      );
+    };
+
+  /** The floor of one whole number over another: the solver's `div`, which rounds down for a divisor above zero. */
+  const floorOf = (dividend: string, divisor: number): string =>
+    divisor > 0 ? `(div ${dividend} ${divisor})` : `(div (- ${dividend}) ${-divisor})`;
+  const ceilOf = (dividend: string, divisor: number): string =>
+    `(- ${floorOf(`(- ${dividend})`, divisor)})`;
+
+  /** `pipe(value, f, g)`: each function applied to what the one before gave. */
+  const piped: Model = Effect.fnUntraced(function* (args: ReadonlyArray<V>, site: Site) {
+    const [first, ...steps] = args;
+    if (!first) return yield* wrongArguments(site, "pipe");
+    let value = first;
+    for (const step of steps) value = yield* host.call(step, [value], site);
+    return value;
+  });
+
   const models: Readonly<Record<string, Model>> = {
+    "effect/pipe:": piped,
+    "effect/Function:pipe": piped,
+    "effect/Option:some": ([value]) => Effect.succeed(Value.some(value ?? Value.undef)),
+    "effect/Option:none": () => Effect.succeed(Value.none),
+    "effect/Option:fromNullishOr": fromNullable(["Null", "Undef"]),
+    "effect/Option:fromNullOr": fromNullable(["Null"]),
+    "effect/Option:fromUndefinedOr": fromNullable(["Undef"]),
+    "effect/Option:isSome": onOption("Option.isSome", 1, (option) =>
+      Effect.succeed(Value.bool(option._tag === "Some")),
+    ),
+    "effect/Option:isNone": onOption("Option.isNone", 1, (option) =>
+      Effect.succeed(Value.bool(option._tag === "None")),
+    ),
+    "effect/Option:match": onOption("Option.match", 2, (option, [cases], site) => {
+      if (cases?._tag !== "Obj") return wrongArguments(site, "Option.match");
+      const handler = cases.fields[option._tag === "Some" ? "onSome" : "onNone"];
+      return handler
+        ? host.call(handler, option._tag === "Some" ? [option.value] : [], site)
+        : wrongArguments(site, "Option.match");
+    }),
+    "effect/Option:getOrElse": onOption("Option.getOrElse", 2, (option, [orElse], site) =>
+      option._tag === "Some"
+        ? Effect.succeed(option.value)
+        : orElse
+          ? host.call(orElse, [], site)
+          : wrongArguments(site, "Option.getOrElse"),
+    ),
+    "effect/Option:getOrUndefined": onOption("Option.getOrUndefined", 1, (option) =>
+      Effect.succeed(option._tag === "Some" ? option.value : Value.undef),
+    ),
+    "effect/Option:getOrNull": onOption("Option.getOrNull", 1, (option) =>
+      Effect.succeed(option._tag === "Some" ? option.value : Value.nil),
+    ),
+    "effect/Option:orElse": onOption("Option.orElse", 2, (option, [orElse], site, self) =>
+      option._tag === "Some"
+        ? Effect.succeed(self)
+        : orElse
+          ? host.call(orElse, [], site)
+          : wrongArguments(site, "Option.orElse"),
+    ),
+    "effect/Option:map": onOption("Option.map", 2, (option, [f], site) =>
+      option._tag === "None"
+        ? Effect.succeed(Value.none)
+        : f
+          ? host.call(f, [option.value], site).pipe(Effect.map(Value.some))
+          : wrongArguments(site, "Option.map"),
+    ),
+    "effect/Option:flatMap": onOption("Option.flatMap", 2, (option, [f], site) =>
+      option._tag === "None"
+        ? Effect.succeed(Value.none)
+        : f
+          ? host.call(f, [option.value], site)
+          : wrongArguments(site, "Option.flatMap"),
+    ),
+    "effect/Option:filter": onOption("Option.filter", 2, (option, [f], site, self) =>
+      option._tag === "None"
+        ? Effect.succeed(Value.none)
+        : f
+          ? host.call(f, [option.value], site).pipe(
+              Effect.flatMap((kept) => host.decide(kept, site)),
+              Effect.map((kept) => (kept ? self : Value.none)),
+            )
+          : wrongArguments(site, "Option.filter"),
+    ),
+    "effect/Option:exists": onOption("Option.exists", 2, (option, [f], site) =>
+      option._tag === "None"
+        ? Effect.succeed(Value.bool(false))
+        : f
+          ? host.call(f, [option.value], site).pipe(
+              Effect.flatMap((held) => host.decide(held, site)),
+              Effect.map(Value.bool),
+            )
+          : wrongArguments(site, "Option.exists"),
+    ),
+    "effect/Struct:omit": onRecord("Struct.omit", 2, (fields, [keys], site) =>
+      keysOf("Struct.omit", keys, site).pipe(
+        Effect.map((left) =>
+          Value.obj(
+            Object.fromEntries(Object.entries(fields).filter(([key]) => !left.includes(key))),
+          ),
+        ),
+      ),
+    ),
+    "effect/Struct:pick": onRecord("Struct.pick", 2, (fields, [keys], site) =>
+      keysOf("Struct.pick", keys, site).pipe(
+        Effect.map((kept) =>
+          Value.obj(
+            Object.fromEntries(Object.entries(fields).filter(([key]) => kept.includes(key))),
+          ),
+        ),
+      ),
+    ),
+    "effect/Record:get": onRecord("Record.get", 2, (fields, [key], site) =>
+      keyed("Record.get", key, site).pipe(
+        Effect.map((name) =>
+          Object.hasOwn(fields, name) ? Value.some(fields[name]!) : Value.none,
+        ),
+      ),
+    ),
+    "effect/Record:has": onRecord("Record.has", 2, (fields, [key], site) =>
+      keyed("Record.has", key, site).pipe(
+        Effect.map((name) => Value.bool(Object.hasOwn(fields, name))),
+      ),
+    ),
+    "effect/Record:set": onRecord("Record.set", 3, (fields, [key, value], site) =>
+      keyed("Record.set", key, site).pipe(
+        Effect.map((name) => Value.obj({ ...fields, [name]: value ?? Value.undef })),
+      ),
+    ),
+    "effect/Record:remove": onRecord("Record.remove", 2, (fields, [key], site) =>
+      keyed("Record.remove", key, site).pipe(
+        Effect.map((name) =>
+          Value.obj(Object.fromEntries(Object.entries(fields).filter(([own]) => own !== name))),
+        ),
+      ),
+    ),
+    "effect/Record:map": onRecord("Record.map", 2, (fields, [f], site) =>
+      f
+        ? Effect.forEach(Object.entries(fields), ([key, value]) =>
+            host
+              .call(f, [value, Value.str(key)], site)
+              .pipe(Effect.map((made) => [key, made] as const)),
+          ).pipe(Effect.map((entries) => Value.obj(Object.fromEntries(entries))))
+        : wrongArguments(site, "Record.map"),
+    ),
+    "effect/Record:keys": onRecord("Record.keys", 1, (fields) =>
+      Effect.succeed(arr(Object.keys(fields).map(Value.str))),
+    ),
+    "effect/Record:values": onRecord("Record.values", 1, (fields) =>
+      Effect.succeed(arr(Object.values(fields))),
+    ),
+    "effect/Record:size": onRecord("Record.size", 1, (fields) =>
+      Effect.succeed(Value.num(Object.keys(fields).length)),
+    ),
+    "effect/Record:isEmptyRecord": onRecord("Record.isEmptyRecord", 1, (fields) =>
+      Effect.succeed(Value.bool(Object.keys(fields).length === 0)),
+    ),
+    "effect/Record:isEmptyReadonlyRecord": onRecord("Record.isEmptyReadonlyRecord", 1, (fields) =>
+      Effect.succeed(Value.bool(Object.keys(fields).length === 0)),
+    ),
+    "Object:keys": onRecord("Object.keys", 1, (fields) =>
+      Effect.succeed(arr(Object.keys(fields).map(Value.str))),
+    ),
+    "Object:values": onRecord("Object.values", 1, (fields) =>
+      Effect.succeed(arr(Object.values(fields))),
+    ),
+    "Object:entries": onRecord("Object.entries", 1, (fields) =>
+      Effect.succeed(
+        arr(Object.entries(fields).map(([key, value]) => arr([Value.str(key), value]))),
+      ),
+    ),
+    "effect/Array:map": method("map"),
+    "effect/Array:filter": method("filter"),
+    "effect/Array:flatMap": method("flatMap"),
+    "effect/Array:some": method("some"),
+    "effect/Array:every": method("every"),
+    "effect/Array:findFirst": onArray("Array.findFirst", 2, (items, [fn], site) =>
+      fn
+        ? Effect.gen(function* () {
+            for (const item of items)
+              if (yield* host.decide(yield* host.call(fn, [item], site), site))
+                return Value.some(item);
+            return Value.none;
+          })
+        : wrongArguments(site, "Array.findFirst"),
+    ),
+    "effect/Array:reduce": onArray("Array.reduce", 3, (items, [initial, fn], site) =>
+      initial && fn
+        ? host.array("reduce", items, fn, initial, site)
+        : wrongArguments(site, "Array.reduce"),
+    ),
+    "effect/Array:append": onArray("Array.append", 2, (items, [last]) =>
+      Effect.succeed(arr([...items, last ?? Value.undef])),
+    ),
+    "effect/Array:prepend": onArray("Array.prepend", 2, (items, [head]) =>
+      Effect.succeed(arr([head ?? Value.undef, ...items])),
+    ),
+    "effect/Array:appendAll": onArray("Array.appendAll", 2, (items, [more], site) => {
+      const added = more ? host.force(more) : undefined;
+      return added?._tag === "Arr"
+        ? Effect.succeed(arr([...items, ...added.items]))
+        : wrongArguments(site, "Array.appendAll");
+    }),
+    "effect/Array:length": onArray("Array.length", 1, (items) =>
+      Effect.succeed(Value.num(items.length)),
+    ),
+    "effect/Array:isArrayEmpty": onArray("Array.isArrayEmpty", 1, (items) =>
+      Effect.succeed(Value.bool(items.length === 0)),
+    ),
+    "effect/Array:isReadonlyArrayEmpty": onArray("Array.isReadonlyArrayEmpty", 1, (items) =>
+      Effect.succeed(Value.bool(items.length === 0)),
+    ),
+    "effect/Array:isArrayNonEmpty": onArray("Array.isArrayNonEmpty", 1, (items) =>
+      Effect.succeed(Value.bool(items.length > 0)),
+    ),
+    "effect/Array:isReadonlyArrayNonEmpty": onArray("Array.isReadonlyArrayNonEmpty", 1, (items) =>
+      Effect.succeed(Value.bool(items.length > 0)),
+    ),
+    "effect/Array:head": onArray("Array.head", 1, (items) =>
+      Effect.succeed(items[0] ? Value.some(items[0]) : Value.none),
+    ),
+    "effect/Array:last": onArray("Array.last", 1, (items) =>
+      Effect.succeed(items.length > 0 ? Value.some(items[items.length - 1]!) : Value.none),
+    ),
+    "effect/Array:get": onArray("Array.get", 2, (items, [index], site) =>
+      index?._tag === "Num"
+        ? Effect.succeed(items[index.value] ? Value.some(items[index.value]!) : Value.none)
+        : wrongArguments(site, "Array.get"),
+    ),
+    "Math:floor": whole("Math.floor", Math.floor, (text) => `(to_int ${text})`, floorOf),
+    "Math:ceil": whole("Math.ceil", Math.ceil, (text) => `(- (to_int (- ${text})))`, ceilOf),
+    "Math:trunc": whole(
+      "Math.trunc",
+      Math.trunc,
+      (text) => `(ite (>= ${text} 0.0) (to_int ${text}) (- (to_int (- ${text}))))`,
+      (dividend, divisor) =>
+        `(ite (>= ${divisor > 0 ? dividend : `(- ${dividend})`} 0) ${floorOf(dividend, divisor)} ${ceilOf(dividend, divisor)})`,
+    ),
+    "Math:abs": ([value], site) => {
+      if (value?._tag === "Num") return Effect.succeed(Value.num(Math.abs(value.value)));
+      if (
+        value?._tag !== "Term" ||
+        value.big === true ||
+        value.quotient ||
+        (value.term.sort !== "Int" && value.term.sort !== "Real")
+      )
+        return wrongArguments(site, "Math.abs");
+      const zero = value.term.sort === "Int" ? "0" : "0.0";
+      return Effect.succeed(
+        Value.term(
+          value.term.sort,
+          `(ite (>= ${value.term.text} ${zero}) ${value.term.text} (- ${value.term.text}))`,
+        ),
+      );
+    },
     "effect/Effect:fn": fn,
     "effect/Effect:fnUntraced": fn,
     "effect/Effect:gen": ([body], site) =>
@@ -338,15 +703,17 @@ export const make = (host: Host) => {
 
 /** A number as a solver term, or `undefined` when the value is not a number. */
 export const numeric = (v: V): Term | undefined =>
-  v._tag === "Num"
-    ? Number.isFinite(v.value)
-      ? Number.isInteger(v.value)
-        ? Smt.int(v.value)
-        : Smt.real(v.value)
-      : undefined
-    : v._tag === "Term" && (v.term.sort === "Int" || v.term.sort === "Real")
-      ? v.term
-      : undefined;
+  v._tag === "Big"
+    ? Smt.big(v.value)
+    : v._tag === "Num"
+      ? Number.isFinite(v.value)
+        ? Number.isInteger(v.value)
+          ? Smt.int(v.value)
+          : Smt.real(v.value)
+        : undefined
+      : v._tag === "Term" && (v.term.sort === "Int" || v.term.sort === "Real")
+        ? v.term
+        : undefined;
 
 const toReal = (term: Term): Term =>
   term.sort === "Int" ? { sort: "Real", text: `(to_real ${term.text})` } : term;

@@ -196,8 +196,15 @@ Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, 
 Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
   ✓ none breaks a rule
 
+Left out, and no rule depends on it
+  - view AccountSummary: no rule reads it and no policy reacts to it
+  - projection AccountCards: no rule reads it and no policy reacts to it
+  - stream AccountCard: what a stream gives is not checked
+  - query AccountLedger: what a query answers is not checked
+
 Assumed
-  - whole numbers are exact: they stay within ±2^53
+  - whole numbers are exact: a number stays within ±2^53, and a bigint has no limit
+  - a list an input holds has up to 2 items more than its schema asks for
   - an external system answers what its schema allows, and nothing else
   - middleware lets every caller in: who sends a command is anyone its request context allows
   - what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given
@@ -209,7 +216,28 @@ Assumed
 
 **Sampled** reaches past that. A rule that takes five commands to break is out of reach of every sequence of two, so longer ones are run too: 200 walks of up to 12 commands, each command picked at random. The seed makes them the same on every run, so a failure repeats.
 
+**Left out** names every part of the model the sequences ran without. No rule reads one and no policy reacts to one, so leaving it out changes no result. A view a rule does read is followed, and a policy the search can't follow fails the test.
+
 **Assumed** is what a pass takes for granted. Read it once. It's where a rule that verifies can still be wrong in production.
+
+## Keep a rule proved
+
+A rule the solver can't prove isn't an error. It drops to **Checked**, and the report says why. That's the right default, and it's also how a proof is lost without anyone noticing: a change to `decide` adds something the prover can't decide, and the test still passes.
+
+`require` pins the rules that have to stay proved. One that is only checked then fails the test.
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+Verify.model(Bank, {
+  apis: [CustomerApi, SupportApi],
+  story,
+  require: { proved: ["Account.NeverOverdrawn", "Account.WithinDailyLimit"] },
+});
+```
+
+```text
+Not done
+  ✗ Account.NeverOverdrawn is required to be proved, and is only checked
+```
 
 ## Fix what breaks
 
@@ -404,6 +432,58 @@ it.effect("an account keeps its rules", () =>
 ```
 
 A proof also covers two things you didn't write down. Every command leaves the state in its schema, since each proof starts from a state the schema allows. And every command can record an event from some state: one that never can is reported, because a rule is true of it only because it does nothing.
+
+## Write handlers the prover can read
+
+The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array methods, and helpers from `effect/Option`, `effect/Array`, `effect/Record` and `effect/Struct`.
+
+Whole numbers are exact, and so is a `bigint`. A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number.
+
+```typescript title="packages/domain/src/Window.aggregate.ts"
+decide: {
+  Tick: (state, _command, context) => {
+    const bucket = Math.floor(DateTime.toEpochMillis(context.now) / 60_000);
+    return bucket > state.bucket ? [new WindowReset({ bucket })] : [];
+  },
+},
+```
+
+An `Option` field is read as either case, and so is an optional one: a proof starts from a state with the field and from one without it.
+
+```typescript title="packages/domain/src/Wallet.aggregate.ts"
+invariants: {
+  NeverNegative: (wallet) => !Option.exists(wallet.balance, (balance) => balance < 0),
+},
+```
+
+A loop runs once per item, so the prover has to know how many items there are. A list the code writes has a known length. A list that comes from the state or a command doesn't, so it's tried with every length up to two items more than its schema asks for.
+
+```typescript title="packages/domain/src/Basket.aggregate.ts"
+invariants: {
+  TheTotalIsTheSumOfTheLines: (basket) => {
+    let total = 0;
+    for (const line of basket.lines) total += line.price * line.count;
+    return basket.total === total;
+  },
+},
+```
+
+That isn't every list, so the rule is checked, not proved, and the report says which list was cut short:
+
+```text
+Checked: in every sequence of up to 3 commands on a new instance
+  ✓ TheTotalIsTheSumOfTheLines
+      not proved for AddLines: state.lines was tried with up to 2 items, command.lines was tried with up to 2 items
+```
+
+A schema's checks are read where the solver has the words for them: whole numbers, bounds, multiples, and the length of a string or a list. Any other check is named in the report. A command that writes to a field with such a check is listed too, since nothing proves the new value passes it.
+
+```text
+Schema checks not proved kept
+  - Rename writes state.code, which has to be a string matching the RegExp ^[A-Z]+$: the prover does not read that check, so it is not proved kept
+```
+
+Code the prover can't read fails with the file, the line and the reason. The common ones are a loop whose number of turns depends on an input, a property read by a key that comes from an input, a record whose keys the schema leaves open, code that changes a value it was given, and anything `async`.
 
 ## Use the parts on their own
 

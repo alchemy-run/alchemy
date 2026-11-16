@@ -43,6 +43,11 @@ export type Outcome =
       readonly checks: ReadonlyArray<Check>;
       /** That the new state is one the state's schema allows, as a formula. */
       readonly fits: string;
+      /**
+       * The parts of the new state that are not what they were, and have a
+       * check the prover does not read: nothing says the new value passes it.
+       */
+      readonly unread: ReadonlyArray<Symbolic.Unread>;
     }
   | { readonly _tag: "Stopped"; readonly error: Value.NotTranslated }
   | { readonly _tag: "Infeasible" };
@@ -313,6 +318,7 @@ export const path = (
     );
     inputs = stepped.inputs;
     if (stepped.applied._tag !== "Changed") return { _tag: "Unchanged" } as const;
+    const after = stepped.applied.state;
     return {
       _tag: "Changed",
       checks: yield* checks(interpreter, definition, stepped.applied.state, {
@@ -320,7 +326,10 @@ export const path = (
         command: stepped.inputs.command,
         events: stepped.applied.events,
       }),
-      fits: Symbolic.fits(stepped.applied.state, stateAst),
+      fits: Symbolic.fits(stepped.applied.state, stateAst, run),
+      unread: Symbolic.unread(definition.state, "state").filter(
+        (check) => !same(at(state, check.path), at(after, check.path)),
+      ),
     } as const;
   });
 
@@ -332,6 +341,49 @@ export const path = (
     }),
     Effect.map((outcome) => ({ run, inputs, outcome })),
   );
+};
+
+/** The part of a value a path of properties leads to. */
+const at = (value: V | undefined, path: ReadonlyArray<string>): V | undefined =>
+  path.reduce<V | undefined>(
+    (part, key) => (part?._tag === "Obj" ? part.fields[key] : undefined),
+    value,
+  );
+
+/** Whether a part of the state is what it was: the same input, or the same value written again. */
+const same = (a: V | undefined, b: V | undefined): boolean => {
+  if (a === b) return true;
+  if (!a || !b || a._tag !== b._tag) return false;
+  switch (a._tag) {
+    case "Num":
+    case "Big":
+    case "Str":
+    case "Bool":
+      return a.value === (b as typeof a).value;
+    case "Null":
+    case "Undef":
+      return true;
+    case "Term":
+      return a.term.text === (b as typeof a).term.text;
+    case "Time":
+      return a.millis.text === (b as typeof a).millis.text;
+    case "List":
+      return a.name === (b as typeof a).name;
+    case "Obj": {
+      const other = (b as typeof a).fields;
+      const keys = Object.keys(a.fields);
+      return (
+        keys.length === Object.keys(other).length &&
+        keys.every((key) => same(a.fields[key], other[key]))
+      );
+    }
+    case "Arr": {
+      const other = (b as typeof a).items;
+      return a.items.length === other.length && a.items.every((item, i) => same(item, other[i]));
+    }
+    default:
+      return false;
+  }
 };
 
 /** The names under one of the definition's objects of rules, e.g. `invariants`. */

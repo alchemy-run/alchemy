@@ -50,7 +50,8 @@ export interface Env {
 
 /** A domain class instance: an event, a rejection or a command. */
 export interface Brand {
-  readonly kind: "Event" | "Rejection" | "Command";
+  /** `Option`: an `effect/Option`, whose `_tag` is `Some` or `None`. */
+  readonly kind: "Event" | "Rejection" | "Command" | "Option";
   readonly cls: unknown;
 }
 
@@ -64,13 +65,30 @@ export type OpticStep =
  */
 export type V =
   | { readonly _tag: "Num"; readonly value: number }
+  | { readonly _tag: "Big"; readonly value: bigint }
   | { readonly _tag: "Str"; readonly value: string }
   | { readonly _tag: "Bool"; readonly value: boolean }
   | { readonly _tag: "Null" }
   | { readonly _tag: "Undef" }
-  | { readonly _tag: "Term"; readonly term: Term }
+  | {
+      readonly _tag: "Term";
+      readonly term: Term;
+      /** A `bigint`: it has no largest value, and never meets a `number`. */
+      readonly big?: true;
+      /**
+       * One whole number divided by another. JavaScript rounds the result,
+       * so only what is exact of it is translated: its floor and ceiling,
+       * and how it compares with a whole number.
+       */
+      readonly quotient?: { readonly dividend: string; readonly divisor: number };
+    }
   | { readonly _tag: "Obj"; readonly fields: Readonly<Record<string, V>>; readonly brand?: Brand }
   | { readonly _tag: "Arr"; readonly items: ReadonlyArray<V> }
+  /**
+   * A list an input holds, before the code looks at it. Looking gives it a
+   * length, which the run chooses, and an input for each item.
+   */
+  | { readonly _tag: "List"; readonly name: string; readonly ast: unknown }
   | {
       readonly _tag: "Fn";
       readonly node: Node;
@@ -99,6 +117,27 @@ export const undef: V = { _tag: "Undef" };
 export const term = (sort: Sort, text: string): V => ({ _tag: "Term", term: { sort, text } });
 export const obj = (fields: Readonly<Record<string, V>>, brand?: Brand): V =>
   brand ? { _tag: "Obj", fields, brand } : { _tag: "Obj", fields };
+
+const OPTION: Brand = { kind: "Option", cls: undefined };
+
+/** `Option.none()`: there is one, as in the library. */
+export const none: V = obj({ _tag: str("None") }, OPTION);
+/** `Option.some(value)`. */
+export const some = (value: V): V => obj({ _tag: str("Some"), value }, OPTION);
+
+/** What an `Option` holds: `undefined` when the value is not one. */
+export const optionOf = (
+  v: V | undefined,
+): { readonly _tag: "None" } | { readonly _tag: "Some"; readonly value: V } | undefined => {
+  if (v?._tag !== "Obj" || v.brand?.kind !== "Option") return undefined;
+  const tag = v.fields._tag;
+  return tag?._tag === "Str" && tag.value === "Some"
+    ? { _tag: "Some", value: v.fields.value ?? undef }
+    : { _tag: "None" };
+};
+
+/** Whether a value is a `bigint`. */
+export const isBig = (v: V): boolean => v._tag === "Big" || (v._tag === "Term" && v.big === true);
 
 /** A place in the source, for a message that names it. */
 export interface Site {
@@ -169,6 +208,12 @@ export class Run {
   readonly applications = new Map<string, Application>();
   /** The request contexts the code read, by key: each is an input, made once. */
   readonly contexts = new Map<string, { readonly tag: unknown; readonly value: V }>();
+  /** The lists the code looked at, by name, with the items this path gave each. */
+  readonly lists = new Map<string, V>();
+  /** The lists tried only up to a length, by name: longer ones were not looked at. */
+  readonly bounds = new Map<string, number>();
+  /** The constants that are a `bigint`: they have no largest value. */
+  readonly bigs = new Set<string>();
   /**
    * The command being run, when a run has several: a prefix on the name of
    * each request context it reads, so every command reads its own.
@@ -194,6 +239,9 @@ export class Run {
     next.conditions.push(...this.conditions);
     for (const [text, application] of this.applications) next.applications.set(text, application);
     for (const [key, context] of this.contexts) next.contexts.set(key, context);
+    for (const [name, list] of this.lists) next.lists.set(name, list);
+    for (const [name, bound] of this.bounds) next.bounds.set(name, bound);
+    for (const name of this.bigs) next.bigs.add(name);
     for (const [condition, taken] of this.decided) next.decided.set(condition, taken);
     next.label = this.label;
     return next;
@@ -208,8 +256,9 @@ export class Run {
   }
 
   /** A fresh input of the given sort. */
-  constant(name: string, sort: Sort): Term {
+  constant(name: string, sort: Sort, big = false): Term {
     const text = Smt.symbol(name);
+    if (big) this.bigs.add(text);
     if (!this.declarations.has(text)) {
       this.declarations.set(text, `(declare-const ${text} ${sort})`);
       this.constants.push(text);
