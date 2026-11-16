@@ -103,41 +103,54 @@ The kernel hands it a `DecisionKit`: `reads(command)` gives the instances in str
 
 One process. A decision takes the lock of every aggregate type it reads, in name order, reads, decides, and records before it lets go.
 
-### Durable Objects: two-phase commit with no coordinator
+### Durable Objects: two-phase commit, driven by the first instance
 
-Each instance is an object with its own storage, so nothing can lock two at once. `src/TwoPhase.ts` commits across them, and whoever sends the command runs it:
+Each instance is an object with its own storage, so nothing can lock two at once. `src/TwoPhase.ts` commits across them. The first instance the command reads, in stream order, is the *primary*. The sender makes one call, `txDecide`, to the primary's object, and the primary drives the rest:
 
-1. **Read** every instance's state and version, and decide.
-2. **Prepare** each instance, in stream order. The instance checks that it still has the version it was read at and stores the decision's events as an *intent*. While it holds one it takes no other command.
-3. **Commit the first instance**, the *primary*. That single local transaction is the commit point. It turns the primary's intent into events and stores the receipt under the command id.
-4. **Commit the others.** Each turns its intent into events, state and deliveries, in one local transaction, as an ordinary command would.
+1. **Read** its own state and every other instance's, and decide.
+2. **Hold** the whole plan in its own storage: its events, each other instance's events and read version, and the receipt. It schedules a durable wake-up in the same step.
+3. **Prepare** each other instance. The instance checks that it still has the version it was read at and stores its events as an *intent*. While it holds one it takes no other command.
+4. **Commit** itself. One local transaction turns its part of the plan into events, stores the receipt under the command id, and records `Committed` with the list of instances still to be told. This is the commit point.
+5. **Deliver** the outcome. Each other instance turns its intent into events, state and deliveries in one local transaction, as an ordinary command would. The primary removes it from the list, and forgets the outcome when the list is empty.
 
-The sender may die at any step. Recovery needs no coordinator object, because the outcome always lives on the primary:
+No clock decides an outcome. An earlier version had whoever sent the command drive these steps, and a deadline on the primary to free instances when that sender died. A sender is a Worker request and can vanish at any await, so the deadline was the only way to end an attempt. Now the driver's state is durable, so an attempt is ended by a fact:
 
-- An instance holding an intent asks the primary. *Committed*: it applies its intent. *Aborted*: it drops it. It asks when its next command arrives, and on a durable callback one second after the deadline, so an instance nobody touches again still settles.
-- The primary judges the deadline, and only the primary, on its own clock. An intent that outlives it (5 seconds) is aborted, and the abort is recorded, so a commit that arrives late finds nothing to commit. Clocks decide when a stuck instance is freed. They never decide what happened.
-- The primary keeps a committed outcome until every other instance has acknowledged applying it.
+- **Commit**: every other instance answered `Prepared`.
+- **Abort**: one answered `Conflict` (it changed) or `Busy` (another decision holds it), or couldn't be reached after a few tries. The primary releases itself and records `Aborted` in one transaction, then tells the others.
+
+Recovery is the same steps again, because everything but the commit and the abort is idempotent:
+
+- `prepare` for an attempt an instance already holds answers `Prepared`.
+- `commit` on the primary answers `Committed` when it already committed, and `Gone` when the attempt ended some other way. `abort` answers what became of it.
+- Delivering an outcome to an instance that has no such intent does nothing.
+
+The wake-up runs `TwoPhase.finish` on the plan in storage when the plan has been held for two seconds, and redelivers any outcome somebody hasn't acknowledged. A command or a read that finds the primary held that long does the same first. If the original driver is in fact still alive, the two overlap harmlessly: they prepare the same instances with the same attempt id, and whichever reaches the commit or the abort first decides, in the primary's exclusive section. The two seconds only choose when to help. They can't abort anything.
+
+An instance told an outcome by the primary acts on it without asking, because the primary records an outcome before it tells anyone. An instance that holds an intent and hears nothing asks the primary (`txOutcome`), on its next command and on a wake-up of its own. The primary answers `Pending` while it holds the plan, then the recorded outcome, and `Aborted` for an attempt it has no trace of. That last answer is safe because an outcome is forgotten only once every instance has acknowledged it, so an instance still asking holds a stray copy: a prepare that arrived after its attempt ended.
 
 Why it is safe:
 
-- **All or nothing.** Before the primary commits, every instance holds an intent or nothing, and an intent is invisible. After it, every other instance either has applied or holds the intent and can learn the outcome. No path applies some and drops others.
+- **All or nothing.** Before the primary commits, every instance holds an intent or nothing, and an intent is invisible. After it, every other instance either has applied or holds the intent, and the primary keeps the outcome until it has applied.
+- **One place decides.** Commit and abort both happen in the primary's exclusive section and both remove the plan, so exactly one of them wins, whoever asks and however often.
 - **No lost update.** Prepare checks the version under the instance's exclusive section and holds the instance until the intent settles, so nothing commits between the check and the apply.
-- **No deadlock.** Intents are taken in stream order. Two decisions that share instances meet at the first one they share, where the second is told the instance is busy before it holds anything the first needs.
+- **No deadlock.** The primary is the first instance in stream order, so it only prepares instances after itself, and nothing waits while holding: an attempt that meets a held instance aborts, releases everything, and retries after a pause.
 - **Rejections come from a real state.** A rejection commits nothing, but it must not come from states that never existed together. After deciding, the versions are read again, and if none moved, the states did exist together at one moment. No lock is taken.
-- **Exactly once.** The primary stores the receipt in its commit transaction. A send with a command id it has committed gets that receipt, from the first read or from prepare.
-- **Idempotent calls.** Every call between objects may be retried in transit. A repeated prepare for the same attempt answers the same. A prepare that arrives after its attempt was aborted by its deadline finds the abort. A commit asked twice answers `Committed` twice.
-- **A lost answer can't split a decision.** The sender may commit the primary and never learn that it did. When it then gives up and tells the others to abort, they don't take its word: an instance that isn't the primary asks the primary first, and applies its intent if the decision committed.
+- **Exactly once.** The primary stores the receipt in its commit transaction. A send with a command id it has committed gets that receipt.
+- **The sender doesn't matter.** Once the plan is held, the decision finishes whether or not the sender is still there. It only loses the answer, and a resend with the same command id returns it.
+- **No callbacks into a waiting object.** The primary calls other instances only outside its exclusive section, and they never need to call it back to act on what it tells them.
 
 What it costs:
 
-- **Calls.** A decision over N instances makes about 3N calls (read, prepare, commit) and one acknowledgement. A decision over one instance still goes through them.
-- **Writes.** Each prepare stores the intent and schedules the durable callback that settles it if nobody else does. Each commit cancels it. That is several more storage rows per instance than an aggregate's own command writes.
-- **A held instance waits.** Commands to an instance that holds an intent wait: milliseconds normally, up to the deadline if the sender died.
-- **Contention retries.** A decision that meets a busy instance, or one that changed, starts over, with backoff, for about 20 seconds. After that it dies with a defect that says so. A hot instance serializes every decision that reads it, which is inherent in the rule.
+- **Calls.** One from the sender, then about three per other instance (read, prepare, commit).
+- **Writes.** The primary stores the plan and a wake-up, then the outcome. Each other instance stores its intent and a wake-up. Each cancels its wake-up when it settles.
+- **A held instance waits.** Commands to an instance that holds an intent wait: milliseconds normally, about two seconds when the driver stopped.
+- **An unreachable primary blocks.** Instances it prepared stay held until its object answers. Their commands fail after about 13 seconds and succeed once it is back. This is two-phase commit's blocking case. It affects availability, not correctness.
+- **Contention retries.** An attempt that meets a busy or changed instance starts over, with backoff, for about 20 seconds, inside the primary's call. After that it dies with a defect that says so. A hot instance serializes every decision that reads it, which is inherent in the rule.
+- **`decide` runs in the primary's object.** The code that hosts an aggregate must also host the decisions that read it first; an object on older code answers with a defect, and the sender retries through the rollout.
 
 ### Pluggable
 
-`TwoPhase.DecisionCommit` is a `Context.Reference` holding the strategy `makePlatform` uses. Provide another to the platform's Layer to replace two-phase commit.
+`TwoPhase.DecisionCommit` is a `Context.Reference` holding the strategy `makePlatform` uses. A strategy is given the command and a way to hand it to an instance as its primary. Provide another to the platform's Layer to replace two-phase commit.
 
 The one worth building next is for Effect Cluster, whose instances share one Postgres: a decision can be a single database transaction that locks each instance's row. It needs aggregate commits to take the same row lock, so it is its own change.
 
@@ -151,7 +164,7 @@ The one worth building next is for Effect Cluster, whose instances share one Pos
 ## Tests
 
 - `test/Domain/Decision.test.ts`: the semantics, in memory.
-- `test/Domain/DecisionDurableObjects.test.ts`: the two-phase commit on in-process objects, including the sender dying before the second prepare, after every prepare, and after the commit point, and an instance that settles with no further command. Every case runs twice: as Cloudflare runs an instance, and behind the input gate Rivet and Effect Cluster run storage behind.
+- `test/Domain/DecisionDurableObjects.test.ts`: the two-phase commit on in-process objects. Interrupted cases: the sender hanging up, the primary stopping before the second prepare and after the commit, every object evicted midway, an unreachable instance, a stray intent, and a lost commit answer. Every case runs twice: as Cloudflare runs an instance, and behind the input gate Rivet and Effect Cluster run storage behind.
 - `test/Domain/DecisionApi.test.ts`: stories, the typed client, plain HTTP, the CLI and MCP tools.
 - `test/Domain/conformance`: five cases every platform runs over HTTP, on Cloudflare (local workerd), Rivet and Effect Cluster (Docker).
 - `packages/domain/test/types/Decision.ts`: what is a type error.
@@ -161,5 +174,4 @@ The one worth building next is for Effect Cluster, whose instances share one Pos
 
 - **Scheduling.** A decision's command can't be scheduled with `schedule`.
 - **`predict`.** An aggregate predicts its own commands for optimistic updates. A decision has no `predict` yet: it would need each instance's state on the client.
-- **A late prepare.** A prepare that arrives after its attempt was undone by its sender (not by the deadline) is accepted, and holds the instance until the deadline frees it. It can't commit, so only liveness is affected.
 - **Keyed logs.** A coarser partition (one log per tenant) could decide with tags and queries inside itself, DCB-style, and take part in a decision as one participant. `DecisionKit` already treats participants by address, version and events, so it would fit the same commit.

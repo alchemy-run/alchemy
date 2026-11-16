@@ -360,40 +360,73 @@ Its client method takes the input, like any command's: `bank.TransferMoney({ fro
 
 In memory, a decision holds the instances it reads, decides, and records before it lets go.
 
-On [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) and [Effect Cluster](/domain/effect-cluster), each instance is an object with storage of its own, so a decision commits in two phases.
+On [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) and [Effect Cluster](/domain/effect-cluster), each instance is an object with storage of its own, so no single write can cover two of them. One of the instances runs the commit instead: the first one the command reads, in the order of their streams. Call it the primary.
+
+Whoever sends the command makes one call, to the primary. The primary does the rest.
 
 <DAG
   nodes={[
-    { id: "read", label: "1 · read", type: "state and version", col: 0, row: 0 },
-    { id: "prepare", label: "2 · prepare", type: "each holds the events", col: 1, row: 0 },
-    { id: "commit", label: "3 · commit the first", type: "the decision happened", col: 2, row: 0, tone: "accent" },
-    { id: "rest", label: "4 · commit the rest", type: "each records its events", col: 3, row: 0 },
+    { id: "read", label: "1 · read", type: "every state, then decide", col: 0, row: 0 },
+    { id: "hold", label: "2 · hold", type: "the decision, in its storage", col: 1, row: 0 },
+    { id: "prepare", label: "3 · prepare", type: "the others hold their events", col: 2, row: 0 },
+    { id: "commit", label: "4 · commit", type: "the decision happened", col: 3, row: 0, tone: "accent" },
+    { id: "tell", label: "5 · tell the others", type: "each records its events", col: 4, row: 0 },
   ]}
   edges={[
-    { from: "read", to: "prepare" },
+    { from: "read", to: "hold" },
+    { from: "hold", to: "prepare" },
     { from: "prepare", to: "commit" },
-    { from: "commit", to: "rest" },
+    { from: "commit", to: "tell" },
   ]}
-  caption="Before step 3 nothing happened. After it, everything did."
+  caption="Every step runs on the primary. Before step 4 nothing happened. After it, everything did."
 />
 
-Each instance is prepared in turn: it checks that nothing changed since it was read, and holds the decision's events without recording them. Then the first instance commits, in one write of its own. That write is the moment the decision happens. The others record their events next.
+The primary reads its own state and asks the others for theirs, then runs `decide`. A rejection ends it there, with nothing stored.
 
-If an instance changed in between, the decision starts over and decides again against the new state.
+Otherwise it writes the whole decision to its own storage: its events, and what each other instance is to record. From then on, finishing the decision needs nothing but that storage.
 
-## When the sender stops midway
+Each other instance is prepared in turn. It checks that nothing changed since it was read, and holds its events without recording them. While it holds them, its own commands wait.
 
-Whoever sends the command runs those steps, and may stop at any of them. An instance left holding events asks the first instance what happened. If it committed, the instance records its events. If it didn't, the instance drops them.
+Then the primary commits, in one write of its own: its events, the receipt, and the fact that it committed. That write is the moment the decision happens. The others are told next, and each records what it held.
 
-An instance that hears nothing asks on its own a few seconds later, so nothing waits for its next command.
+## When something stops midway
+
+The sender can hang up, and an object can be restarted, at any step. A decision still ends one way on every instance, because its outcome is written in one place, the primary's storage, in one write.
+
+Everything else can be done twice without harm. Preparing an instance that is already prepared changes nothing, and so does telling an instance an outcome it already has. So recovery is the same steps, run again.
+
+The primary keeps a wake-up for as long as it holds a decision. If whatever was running the commit is gone, the primary wakes a couple of seconds later, reads the decision from its storage, and carries on from step 3. A command that reaches it first does the same before it runs.
+
+<DAG
+  nodes={[
+    { id: "held", label: "holds the decision", type: "its driver is gone", col: 0, row: 0 },
+    { id: "wake", label: "wakes", type: "or a command arrives", col: 1, row: 0 },
+    { id: "again", label: "runs the steps again", type: "from its storage", col: 2, row: 0 },
+    { id: "done", label: "committed", type: "on every instance", col: 3, row: 0, tone: "accent" },
+  ]}
+  edges={[
+    { from: "held", to: "wake" },
+    { from: "wake", to: "again" },
+    { from: "again", to: "done" },
+  ]}
+  caption="The primary finishes what it holds. Nothing gives up because time passed."
+/>
+
+So a sender that hangs up doesn't cancel a decision that was already held: it commits without it. Send the command again with the same [command id](/domain/command#send-it-exactly-once) and you get the receipt of what happened.
+
+The primary gives a decision up for one reason: another instance couldn't be prepared. It had changed, another decision held it, or it couldn't be reached. The primary writes that down first, then tells the instances it had prepared to let go. The command is then decided again from the start, against the new states.
+
+After the commit, the primary keeps telling an instance that hasn't answered until it does. An instance that is holding events and hears nothing also asks the primary, before its next command and on a wake-up of its own.
 
 ## What it costs
 
-A decision makes a few calls per instance, where an aggregate's command makes one.
+A decision makes a few calls per instance, where an aggregate's command makes one. A decision that reads one instance still goes through the same steps.
 
-While an instance holds a decision's events, its own commands wait: a few milliseconds, or a few seconds when the sender stopped midway.
+While an instance holds a decision's events, its own commands wait: a few milliseconds, or about two seconds when whatever was running the commit stopped.
 
-An instance that many decisions read becomes the place they queue. Two transfers out of the same account run one after the other, as two withdrawals do.
+If the primary's object can't be reached at all, the instances it prepared stay held until it can. A command to one of them fails after about 13 seconds of waiting, and succeeds once the primary is back.
+
+An instance that many decisions read becomes the place they queue. Two transfers out of the same account run one after the other, as two withdrawals do. A decision that keeps losing that race for about 20 seconds fails, and nothing of it is recorded.
 
 ## What it can't do yet
 

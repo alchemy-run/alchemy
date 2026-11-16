@@ -48,7 +48,7 @@ const funded = Effect.gen(function* () {
   return accounts;
 });
 
-/** Wait until `check` holds: an instance settles on its own once its intent's deadline passes. */
+/** Wait until `check` holds: an instance left midway finishes on its own, on a wake-up. */
 const eventually = <E, R>(check: Effect.Effect<boolean, E, R>) =>
   check.pipe(
     Effect.repeat({ schedule: Schedule.spaced("200 millis"), until: (ok) => ok, times: 60 }),
@@ -56,8 +56,8 @@ const eventually = <E, R>(check: Effect.Effect<boolean, E, R>) =>
   );
 
 /**
- * The caller dies at one step of a commit: the first call of `method` to the
- * account `id` never arrives, and whoever made it never continues.
+ * Whoever drives a commit stops at one step: the first call of `method` to
+ * the account `id` never arrives, and whoever made it never continues.
  */
 const dieAt = (method: string, id: string) => {
   let died = false;
@@ -69,14 +69,38 @@ const dieAt = (method: string, id: string) => {
   return { intercept, died: () => died };
 };
 
-/** Send a transfer whose caller dies midway: it never answers, so it runs detached. */
-const doomed = (commandId: string) =>
+/**
+ * The first `times` calls of `method` to the account `id` fail. With
+ * `landed`, each one arrives and only its answer is lost.
+ */
+const failAt = (method: string, id: string, times: number, landed = false) => {
+  let failed = 0;
+  const intercept: Intercept = (call, run) =>
+    call.method !== method || call.args[0] !== id
+      ? run
+      : // Decided each time the call is made: a retry is the same Effect, run again.
+        Effect.suspend(() => {
+          if (failed >= times) return run;
+          failed += 1;
+          const lost = Effect.fail(new Error("the call was lost"));
+          return landed ? Effect.andThen(run, lost) : lost;
+        });
+  return { intercept, failed: () => failed };
+};
+
+/** Send a transfer nobody waits for: what drives it may stop midway. */
+const detached = (commandId: string) =>
   Effect.gen(function* () {
     const transfer = yield* Transfer;
     yield* transfer
       .send(new TransferMoney({ from: a, to: b, amount: 30 }), { commandId })
       .pipe(Effect.ignoreCause, Effect.forkDetach);
   });
+
+const both = [
+  { stream: "Account/a", version: 2 },
+  { stream: "Account/b", version: 1 },
+];
 
 // Once as Cloudflare runs an instance, and once behind an input gate, as Rivet and Effect Cluster do.
 for (const inputGate of [false, true]) {
@@ -205,160 +229,193 @@ for (const inputGate of [false, true]) {
     );
   });
 
-  describe(
-    `Domain decision on Durable Objects${suffix}, the caller dies`,
-    { tags: ["unit"] },
-    () => {
-      it.live(
-        "before the second instance is prepared: nothing is recorded, and both are freed",
-        () => {
-          const crash = dieAt("txPrepare", "b");
-          return Effect.gen(function* () {
-            const accounts = yield* funded;
-            yield* doomed("t-1");
-            yield* eventually(Effect.sync(crash.died));
-            // `a` holds the intent until its deadline; then its next command goes through.
-            yield* accounts.send(new Deposit({ accountId: a, amount: 1 }));
-            expect(yield* accounts.get(a)).toEqual({ balance: 101 });
-            expect(yield* accounts.get(b)).toEqual({ balance: 0 });
-            // And the same transfer can be decided again.
-            const transfer = yield* Transfer;
-            yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }));
-            expect(yield* accounts.get(b)).toEqual({ balance: 30 });
-          }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
-        },
-        { timeout: 60_000 },
-      );
+  describe(`Domain decision on Durable Objects${suffix}, interrupted`, { tags: ["unit"] }, () => {
+    it.live(
+      "the sender hangs up: the decision commits without it",
+      () => {
+        // The command reaches the primary; its answer never reaches the sender.
+        let sent = false;
+        const intercept: Intercept = (call, run) => {
+          if (call.method !== "txDecide") return run;
+          sent = true;
+          return Effect.andThen(Effect.forkDetach(run), Effect.never);
+        };
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          yield* detached("t-1");
+          yield* eventually(Effect.sync(() => sent));
+          yield* eventually(Effect.map(accounts.get(b), (state) => state.balance === 30));
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(intercept)));
+      },
+      { timeout: 60_000 },
+    );
 
-      it.live(
-        "after every instance is prepared, before the commit: nothing is recorded on either",
-        () => {
-          const crash = dieAt("txCommit", "a");
-          return Effect.gen(function* () {
-            const accounts = yield* funded;
-            yield* doomed("t-1");
-            yield* eventually(Effect.sync(crash.died));
-            // `b` asks the primary, which aborts the intent once its deadline passed.
-            yield* accounts.send(new Deposit({ accountId: b, amount: 1 }));
-            expect(yield* accounts.get(b)).toEqual({ balance: 1 });
-            yield* accounts.send(new Deposit({ accountId: a, amount: 1 }));
-            expect(yield* accounts.get(a)).toEqual({ balance: 101 });
-          }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
-        },
-        { timeout: 60_000 },
-      );
+    it.live(
+      "the primary stops before the second instance is prepared: it finishes on its wake-up",
+      () => {
+        const crash = dieAt("txPrepare", "b");
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          yield* detached("t-1");
+          yield* eventually(Effect.sync(crash.died));
+          // Nothing is recorded yet: `a` only holds the decision.
+          expect(yield* accounts.get(a)).toEqual({ balance: 100 });
+          // Nobody touches either account. `a` wakes, and carries the decision to its end.
+          yield* eventually(Effect.map(accounts.get(b), (state) => state.balance === 30));
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+          // Sent again with the same id, it is not decided twice.
+          const transfer = yield* Transfer;
+          const again = yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }), {
+            commandId: "t-1",
+          });
+          expect(again.commits).toEqual(both);
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
+      },
+      { timeout: 60_000 },
+    );
 
-      it.live(
-        "after the commit, before the second instance hears of it: it is recorded on both",
-        () => {
-          const crash = dieAt("txCommit", "b");
-          return Effect.gen(function* () {
-            const accounts = yield* funded;
-            yield* doomed("t-1");
-            yield* eventually(Effect.sync(crash.died));
-            expect(yield* accounts.get(a)).toEqual({ balance: 70 });
-            // `b` learns the outcome from the primary the next time it is asked to do anything.
-            yield* accounts.send(new Deposit({ accountId: b, amount: 1 }));
-            expect(yield* accounts.get(b)).toEqual({ balance: 31 });
-            // Sent again with the same id, the transfer is not decided twice.
-            const transfer = yield* Transfer;
-            const again = yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }), {
-              commandId: "t-1",
-            });
-            expect(again.commits).toEqual([
-              { stream: "Account/a", version: 2 },
-              { stream: "Account/b", version: 1 },
-            ]);
-            expect(yield* accounts.get(a)).toEqual({ balance: 70 });
-          }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
-        },
-        { timeout: 60_000 },
-      );
+    it.live(
+      "a command that finds the primary held carries the decision on first",
+      () => {
+        const crash = dieAt("txPrepare", "b");
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          yield* detached("t-1");
+          yield* eventually(Effect.sync(crash.died));
+          // The deposit waits for the transfer, then lands on top of it.
+          yield* accounts.send(new Deposit({ accountId: a, amount: 1 }));
+          expect(yield* accounts.get(a)).toEqual({ balance: 71 });
+          expect(yield* accounts.get(b)).toEqual({ balance: 30 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
+      },
+      { timeout: 60_000 },
+    );
 
-      it.live(
-        "the commit's answer is lost once: the decision still commits once, on both",
-        () => {
-          // The commit lands, and its answer doesn't: the sender asks again.
-          let lost = false;
-          const intercept: Intercept = (call, run) =>
-            call.method !== "txCommit" || call.args[0] !== "a"
-              ? run
-              : // Decided each time the call is made: a retry is the same Effect, run again.
-                Effect.suspend(() => {
-                  if (lost) return run;
-                  lost = true;
-                  return Effect.andThen(run, Effect.fail(new Error("the answer was lost")));
-                });
-          return Effect.gen(function* () {
-            const accounts = yield* funded;
-            const transfer = yield* Transfer;
-            const receipt = yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }));
-            expect(lost).toBe(true);
-            expect(receipt.commits).toEqual([
-              { stream: "Account/a", version: 2 },
-              { stream: "Account/b", version: 1 },
-            ]);
-            expect(yield* accounts.get(a)).toEqual({ balance: 70 });
-            expect(yield* accounts.get(b)).toEqual({ balance: 30 });
-          }).pipe(Effect.scoped, Effect.provide(onSimHost(intercept)));
-        },
-        { timeout: 60_000 },
-      );
-
-      it.live(
-        "told to abort after the commit landed, the second instance applies it instead",
-        () => {
-          // The commit lands on `a` and the sender never hears of it. Whatever it
-          // does next, it can't make `b` drop a decision that happened.
-          let txId: string | undefined;
-          let committed = false;
-          const intercept: Intercept = (call, run) => {
-            if (call.method === "txPrepare") {
-              txId = (call.args[1] as { readonly txId: string }).txId;
-            }
-            if (committed || call.method !== "txCommit" || call.args[0] !== "a") return run;
-            committed = true;
-            return Effect.andThen(run, Effect.never);
-          };
-          const sim = simHost({ rowsRead: 0 }, { inputGate, intercept });
-          return Effect.gen(function* () {
-            const accounts = yield* funded;
-            yield* doomed("t-1");
-            yield* eventually(Effect.sync(() => committed));
-            expect(yield* accounts.get(a)).toEqual({ balance: 70 });
-            const accountObjects = sim.host.lookup!(
-              { modelName: "DecisionBank", id: {}, sagas: [], legacyData: false },
-              "AccountAggregate",
-            )!;
-            yield* accountObjects.getByName("b").txAbort!("b", txId);
-            expect(yield* accounts.get(b)).toEqual({ balance: 30 });
-          }).pipe(
-            Effect.scoped,
-            Effect.provide(
-              Bank.layer(Layer.empty).pipe(
-                Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
-                Layer.provideMerge(SecureRandom.layerWebCrypto),
-              ),
+    it.live(
+      "every object is evicted midway: the primary finishes from its storage",
+      () => {
+        // `b` is prepared, and the primary never hears that it is.
+        let prepared = false;
+        const intercept: Intercept = (call, run) => {
+          if (prepared || call.method !== "txPrepare" || call.args[0] !== "b") return run;
+          prepared = true;
+          return Effect.andThen(run, Effect.never);
+        };
+        const sim = simHost({ rowsRead: 0 }, { inputGate, intercept });
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          yield* detached("t-1");
+          yield* eventually(Effect.sync(() => prepared));
+          // What the objects held in memory is gone; their storage and alarms stay.
+          yield* sim.evict;
+          yield* eventually(Effect.map(accounts.get(b), (state) => state.balance === 30));
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            Bank.layer(Layer.empty).pipe(
+              Layer.provideMerge(DurableObjects.makePlatform(sim.host)),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
             ),
-          );
-        },
-        { timeout: 60_000 },
-      );
+          ),
+        );
+      },
+      { timeout: 60_000 },
+    );
 
-      it.live(
-        "an instance nobody touches again still applies a committed decision",
-        () => {
-          const crash = dieAt("txCommit", "b");
-          return Effect.gen(function* () {
-            const accounts = yield* funded;
-            yield* doomed("t-1");
-            yield* eventually(Effect.sync(crash.died));
-            // No command reaches `b`: it settles itself once the deadline has passed.
-            yield* eventually(Effect.map(accounts.get(b), (state) => state.balance === 30));
-          }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
-        },
-        { timeout: 60_000 },
-      );
-    },
-  );
+    it.live(
+      "the primary stops after the commit: the second instance is told on its wake-up",
+      () => {
+        const crash = dieAt("txCommit", "b");
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          yield* detached("t-1");
+          yield* eventually(Effect.sync(crash.died));
+          // The decision happened: it is on `a`, and nobody touches `b`.
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+          yield* eventually(Effect.map(accounts.get(b), (state) => state.balance === 30));
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
+      },
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "the second instance, not yet told of the commit, asks the primary before its next command",
+      () => {
+        const crash = dieAt("txCommit", "b");
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          yield* detached("t-1");
+          yield* eventually(Effect.sync(crash.died));
+          yield* accounts.send(new Deposit({ accountId: b, amount: 1 }));
+          expect(yield* accounts.get(b)).toEqual({ balance: 31 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(crash.intercept)));
+      },
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "the second instance can't be reached: the attempt aborts, and the next one commits",
+      () => {
+        // More failures than one attempt retries.
+        const lost = failAt("txPrepare", "b", 6);
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          const transfer = yield* Transfer;
+          const receipt = yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }));
+          expect(lost.failed()).toBe(6);
+          // Decided once, however many attempts it took.
+          expect(receipt.commits).toEqual(both);
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+          expect(yield* accounts.get(b)).toEqual({ balance: 30 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(lost.intercept)));
+      },
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "an instance prepared for an attempt that aborted without it hearing drops what it holds",
+      () => {
+        // `b` holds the intent, but the primary never hears that it does, and
+        // the abort it then sends is lost too.
+        const prepares = failAt("txPrepare", "b", 6, true);
+        const aborts = failAt("txAbort", "b", 1);
+        const intercept: Intercept = (call, run) =>
+          prepares.intercept(call, aborts.intercept(call, run));
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          const transfer = yield* Transfer;
+          // The next attempt reads `b`, which asks the primary and lets go.
+          const receipt = yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }));
+          expect(aborts.failed()).toBe(1);
+          expect(receipt.commits).toEqual(both);
+          expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+          expect(yield* accounts.get(b)).toEqual({ balance: 30 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(intercept)));
+      },
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "the commit reaches the second instance and its answer is lost: it is recorded once",
+      () => {
+        const lost = failAt("txCommit", "b", 1, true);
+        return Effect.gen(function* () {
+          const accounts = yield* funded;
+          const transfer = yield* Transfer;
+          yield* transfer.send(new TransferMoney({ from: a, to: b, amount: 30 }));
+          expect(lost.failed()).toBe(1);
+          expect(yield* accounts.get(b)).toEqual({ balance: 30 });
+          // The primary tells it again on its wake-up, which changes nothing.
+          yield* Effect.sleep("5 seconds");
+          const receipt = yield* accounts.send(new Deposit({ accountId: b, amount: 0 }));
+          expect(receipt.version).toBe(2);
+          expect(yield* accounts.get(b)).toEqual({ balance: 30 });
+        }).pipe(Effect.scoped, Effect.provide(onSimHost(lost.intercept)));
+      },
+      { timeout: 60_000 },
+    );
+  });
 }
