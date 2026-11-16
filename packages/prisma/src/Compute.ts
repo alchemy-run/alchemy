@@ -89,7 +89,19 @@ import {
 } from "./internal/Refs.ts";
 import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
 import { ensureServiceImmutableIdentity } from "./internal/ServiceIdentity.ts";
-import { promoteVersionObserved, waitForActiveVersion } from "./internal/ServicePromotion.ts";
+import {
+  checkStableEndpoint,
+  promoteVersionObserved,
+  waitForActiveVersion,
+} from "./internal/ServicePromotion.ts";
+import {
+  ComputeInvalidProps,
+  ComputeOperationFailed,
+  ComputeUnexpectedResponse,
+  type ComputeHealthCheck,
+  validateComputeHealthCheck,
+  waitForComputeUrl,
+} from "./internal/UrlCheck.ts";
 import { ensureVersionMembership } from "./internal/VersionIdentity.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
@@ -101,29 +113,9 @@ export class ComputeConflict extends Data.TaggedError("ComputeConflict")<{
   readonly cause?: unknown;
 }> {}
 
-export class ComputeInvalidProps extends Data.TaggedError("ComputeInvalidProps")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
 export class ComputeNotReady extends Data.TaggedError("ComputeNotReady")<{
   readonly message: string;
   readonly cause?: unknown;
-}> {}
-
-export class ComputeOperationFailed extends Data.TaggedError("ComputeOperationFailed")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export class ComputeUnexpectedResponse extends Data.TaggedError("ComputeUnexpectedResponse")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-/** The Compute stable endpoint never became reachable before the wait timed out. */
-export class ComputeUrlTimeout extends Data.TaggedError("ComputeUrlTimeout")<{
-  readonly message: string;
 }> {}
 
 /** A Compute environment key is managed by Prisma and cannot be managed by Alchemy. */
@@ -359,23 +351,6 @@ export interface ComputeDev {
    * `Redacted.make(secret)`.
    */
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
-}
-
-export interface ComputeHealthCheck {
-  /**
-   * Absolute application path to probe after the deployment starts and after
-   * promotion.
-   *
-   * @example "/api/health"
-   */
-  path: string;
-  /**
-   * Exact HTTP status codes that indicate readiness. When omitted, any 2xx
-   * response is healthy.
-   *
-   * @default Any status from 200 through 299
-   */
-  statusCodes?: readonly number[];
 }
 
 export interface ComputeProps extends PlatformProps {
@@ -1200,34 +1175,6 @@ const validateComputeEnvironmentWrite = (key: string, value: string | Redacted.R
     }
   });
 
-const validateComputeHealthCheck = (healthCheck: ComputeHealthCheck | undefined) =>
-  Effect.gen(function* () {
-    if (healthCheck === undefined) return;
-    if (
-      !healthCheck.path.startsWith("/") ||
-      healthCheck.path.startsWith("//") ||
-      healthCheck.path.includes("\\") ||
-      /\s/.test(healthCheck.path)
-    ) {
-      return yield* new ComputeInvalidProps({
-        message: "healthCheck.path must be an absolute application path beginning with one '/'.",
-      });
-    }
-    if (healthCheck.statusCodes !== undefined && healthCheck.statusCodes.length === 0) {
-      return yield* new ComputeInvalidProps({
-        message: "healthCheck.statusCodes must contain at least one status.",
-      });
-    }
-    for (const status of healthCheck.statusCodes ?? []) {
-      if (!Number.isInteger(status) || status < 100 || status > 599) {
-        return yield* new ComputeInvalidProps({
-          message:
-            "healthCheck.statusCodes must contain HTTP status integers from 100 through 599.",
-        });
-      }
-    }
-  });
-
 const validateComputeProps = (props: ComputeProps) =>
   Effect.gen(function* () {
     yield* validateComputeHealthCheck(props.healthCheck);
@@ -1345,154 +1292,6 @@ const processEnv = (
         : [[key, Redacted.isRedacted(value) ? Redacted.value(value) : value]],
     ),
   ) as Record<string, string>;
-
-const isPrismaEdgeServiceNotFound = (status: number, body: string) =>
-  status === 404 &&
-  (body.includes("There is no service on this URL") ||
-    body.includes("<title>Service not found</title>"));
-
-const URL_READINESS_BODY_PREFIX_BYTES = 64 * 1024;
-
-const readResponseBodyPrefix = (response: HttpClientResponse) =>
-  Effect.gen(function* () {
-    const chunks: Uint8Array[] = [];
-    let bytes = 0;
-    yield* Stream.runForEachWhile(response.stream, (chunk) =>
-      Effect.sync(() => {
-        const remaining = URL_READINESS_BODY_PREFIX_BYTES - bytes;
-        if (remaining <= 0) return false;
-        const kept = chunk.byteLength > remaining ? chunk.slice(0, remaining) : chunk;
-        chunks.push(kept);
-        bytes += kept.byteLength;
-        return bytes < URL_READINESS_BODY_PREFIX_BYTES;
-      }),
-    );
-    const prefix = new Uint8Array(bytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      prefix.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return new TextDecoder().decode(prefix);
-  });
-
-export const waitForDeploymentUrl = Effect.fn(function* (
-  url: string | undefined,
-  props: ComputeProps,
-) {
-  yield* validateComputeHealthCheck(props.healthCheck);
-  if (props.healthCheck !== undefined && props.verifyUrl === false) {
-    return yield* new ComputeInvalidProps({
-      message: "healthCheck cannot be combined with verifyUrl: false.",
-    });
-  }
-  if (props.verifyUrl === false) return;
-  if (!url) {
-    return yield* new ComputeUnexpectedResponse({
-      message:
-        props.healthCheck === undefined
-          ? "Prisma Compute did not return a public URL for readiness verification."
-          : "Prisma Compute did not return a public URL for the configured healthCheck.",
-    });
-  }
-  const httpOption = yield* Effect.serviceOption(HttpClient.HttpClient);
-  if (Option.isNone(httpOption)) {
-    return props.healthCheck === undefined
-      ? undefined
-      : yield* new ComputeOperationFailed({
-          message: "Prisma Compute healthCheck requires an HTTP client service.",
-        });
-  }
-
-  const http = httpOption.value;
-  const probeUrl =
-    props.healthCheck === undefined ? url : new URL(props.healthCheck.path, url).toString();
-  const acceptsStatus = (status: number) =>
-    props.healthCheck === undefined ||
-    (props.healthCheck.statusCodes === undefined
-      ? status >= 200 && status <= 299
-      : props.healthCheck.statusCodes.includes(status));
-  const timeoutSeconds = props.urlReadinessTimeoutSeconds ?? 60;
-  const intervalMs = props.pollIntervalMs ?? 1_000;
-  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* new ComputeInvalidProps({
-      message: "urlReadinessTimeoutSeconds must be a positive finite number.",
-    });
-  }
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* new ComputeInvalidProps({
-      message: "pollIntervalMs must be a positive finite number.",
-    });
-  }
-  const timeoutMs = timeoutSeconds * 1_000;
-  const startedAt = yield* Clock.currentTimeMillis;
-  let lastStatus: number | undefined;
-  let lastBody = "";
-
-  while (true) {
-    const beforeRequest = yield* Clock.currentTimeMillis;
-    const remainingBeforeRequest = timeoutMs - (beforeRequest - startedAt);
-    if (remainingBeforeRequest <= 0) {
-      return yield* deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody);
-    }
-    const requestTimeoutMs = Math.min(5_000, remainingBeforeRequest);
-    const response = yield* http.execute(HttpClientRequest.get(probeUrl)).pipe(
-      Effect.provideService(FetchHttpClient.RequestInit, {
-        redirect: "manual",
-      }),
-      Effect.timeoutOption(Duration.millis(requestTimeoutMs)),
-      Effect.map(Option.getOrUndefined),
-      Effect.orElseSucceed(() => undefined),
-    );
-    if (response) {
-      lastStatus = response.status;
-      // Without an application health check, any non-404 response proves that
-      // edge routing is live. A configured health check must also match its
-      // status contract. Do not consume non-404 bodies: application responses
-      // may intentionally stream.
-      if (response.status !== 404 && acceptsStatus(response.status)) {
-        return;
-      }
-      const beforeBody = yield* Clock.currentTimeMillis;
-      const remainingBeforeBody = timeoutMs - (beforeBody - startedAt);
-      if (remainingBeforeBody > 0) {
-        const bodyPrefix = yield* readResponseBodyPrefix(response).pipe(
-          Effect.timeoutOption(Duration.millis(Math.min(2_000, remainingBeforeBody))),
-          Effect.orElseSucceed(() => Option.none<string>()),
-        );
-        if (Option.isSome(bodyPrefix)) {
-          lastBody = bodyPrefix.value;
-          if (
-            !isPrismaEdgeServiceNotFound(response.status, lastBody) &&
-            acceptsStatus(response.status)
-          ) {
-            return;
-          }
-        }
-      }
-    }
-
-    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
-    if (elapsed >= timeoutMs) {
-      return yield* deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody);
-    }
-
-    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
-  }
-});
-
-const deploymentUrlTimeoutError = (url: string, lastStatus: number | undefined, lastBody: string) =>
-  new ComputeUrlTimeout({
-    message: [
-      `Timed out waiting for Prisma Compute URL '${url}' to become reachable.`,
-      lastStatus ? `Last response: HTTP ${lastStatus}.` : "No HTTP response was received.",
-      lastBody.includes("There is no service on this URL")
-        ? "The Prisma edge returned: There is no service on this URL."
-        : undefined,
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join(" "),
-  });
 
 const isAutoBuild = (build: ComputeProps["build"]): build is "auto" | ComputeAutoBuild =>
   build === "auto" ||
@@ -2668,7 +2467,7 @@ const ProviderLive = () =>
                   "running",
                   effectiveNews,
                 );
-                yield* waitForDeploymentUrl(toComputeUrl(running.previewDomain), effectiveNews);
+                yield* waitForComputeUrl(toComputeUrl(running.previewDomain), effectiveNews);
                 return running;
               }).pipe(
                 Effect.catch((error) =>
@@ -2699,41 +2498,30 @@ const ProviderLive = () =>
               toComputeUrl(serviceEndpointDomain) ?? toComputeUrl(deployment.previewDomain);
             let readinessStatus: "ready" | "pending" | "skipped" = "skipped";
             if (promoted && effectiveNews.verifyUrl !== false) {
-              const readiness = yield* waitForDeploymentUrl(appUrl, effectiveNews).pipe(
-                Effect.result,
+              const check = yield* checkStableEndpoint(
+                app.id,
+                appUrl,
+                rollbackDeploymentId || undefined,
+                effectiveNews,
               );
-              if (Result.isSuccess(readiness)) {
+              if (check._tag === "Ready") {
                 readinessStatus = "ready";
-              } else if (rollbackDeploymentId) {
-                const rollback = yield* createServiceRollback({
-                  serviceId: app.id,
-                  deploymentId: rollbackDeploymentId,
-                }).pipe(
-                  Effect.map((response) => response.data),
-                  Effect.result,
+              } else if (check._tag === "RolledBack") {
+                return yield* cleanupCreatedDeploymentOnFailure(
+                  deployment.id,
+                  check.rollbackFailure === undefined
+                    ? check.readinessFailure
+                    : new ComputeDeploymentRecoveryFailed({
+                        errors: [check.readinessFailure, check.rollbackFailure],
+                        message: `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
+                      }),
                 );
-                const observedAfterRollback = yield* waitForActiveVersion(
-                  app.id,
-                  rollbackDeploymentId,
-                  effectiveNews,
-                ).pipe(Effect.result);
-                if (Result.isSuccess(observedAfterRollback)) {
-                  return yield* cleanupCreatedDeploymentOnFailure(
-                    deployment.id,
-                    Result.isSuccess(rollback)
-                      ? readiness.failure
-                      : new ComputeDeploymentRecoveryFailed({
-                          errors: [readiness.failure, rollback.failure],
-                          message: `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
-                        }),
-                  );
-                }
-
+              } else if (check._tag === "RollbackNotConverged") {
                 return yield* new ComputeDeploymentRecoveryFailed({
                   errors: [
-                    readiness.failure,
-                    ...(Result.isFailure(rollback) ? [rollback.failure] : []),
-                    observedAfterRollback.failure,
+                    check.readinessFailure,
+                    ...(check.rollbackFailure === undefined ? [] : [check.rollbackFailure]),
+                    check.observationFailure,
                   ],
                   message: `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
                 });
@@ -2749,11 +2537,11 @@ const ProviderLive = () =>
                 }
                 if (terminalFailedDeploymentId !== undefined) {
                   return yield* new ComputeDeploymentRecoveryFailed({
-                    errors: [readiness.failure],
+                    errors: [check.readinessFailure],
                     message: `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
                   });
                 }
-                return yield* readiness.failure;
+                return yield* Effect.fail(check.readinessFailure);
               }
             }
 

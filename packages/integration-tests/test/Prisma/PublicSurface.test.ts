@@ -228,7 +228,7 @@ const publicExports = [
   "parseDeploymentLogRecord",
   "tailDeploymentLogs",
   "waitForComputeVersionStatus",
-  "waitForDeploymentUrl",
+  "waitForComputeUrl",
   "destroyComputeVersion",
   "destroyComputeService",
   "destroyProjectComputeServices",

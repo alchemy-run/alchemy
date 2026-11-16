@@ -390,3 +390,12 @@ export const toComputeUrl = (domain: string | null | undefined) =>
       ? domain
       : `https://${domain}`
     : undefined;
+
+export {
+  ComputeInvalidProps,
+  ComputeOperationFailed,
+  ComputeUnexpectedResponse,
+  ComputeUrlTimeout,
+  waitForComputeUrl,
+} from "./internal/UrlCheck.ts";
+export type { ComputeHealthCheck, ComputeUrlCheck } from "./internal/UrlCheck.ts";

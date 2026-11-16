@@ -9,11 +9,11 @@ import {
   ComputeDevProvider,
   ComputeProvider,
   syncComputeEnvironment,
-  waitForDeploymentUrl,
   type ComputeDeploymentRecoveryFailed,
   type ComputeEnvironmentRollbackFailed,
   type ComputeProps,
 } from "@alchemy.run/prisma/Compute";
+import { waitForComputeUrl } from "@alchemy.run/prisma/ComputeLifecycle";
 import type { Branch as ApiBranch } from "@alchemy.run/prisma/Types";
 import { describe, expect, it } from "@alchemy.run/test";
 import { fromApiToken } from "@distilled.cloud/prisma";
@@ -467,9 +467,7 @@ describe(
         Effect.succeed(HttpClientResponse.fromWeb(request, new Response(body, { status: 200 }))),
       );
 
-      return waitForDeploymentUrl("https://app.prisma.build", {
-        project: "project-1",
-        serviceName: "api",
+      return waitForComputeUrl("https://app.prisma.build", {
         urlReadinessTimeoutSeconds: 0.05,
       }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
     });
@@ -487,9 +485,7 @@ describe(
       });
 
       return Effect.gen(function* () {
-        yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        yield* waitForComputeUrl("https://app.prisma.build", {
           healthCheck: { path: "/api/health" },
           pollIntervalMs: 1,
           // Wall-clock deadline (live clock). The mock succeeds on the second
@@ -508,14 +504,10 @@ describe(
 
     it.effect("rejects unsafe application health contracts", () =>
       Effect.gen(function* () {
-        const pathError = yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        const pathError = yield* waitForComputeUrl("https://app.prisma.build", {
           healthCheck: { path: "//attacker.example/health" },
         }).pipe(Effect.flip);
-        const statusError = yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        const statusError = yield* waitForComputeUrl("https://app.prisma.build", {
           healthCheck: { path: "/health", statusCodes: [] },
         }).pipe(Effect.flip);
 
@@ -531,16 +523,13 @@ describe(
           serviceName: "api",
           healthCheck: { path: "/health" },
         } as const;
-        const missingUrl = yield* waitForDeploymentUrl(undefined, props).pipe(Effect.flip);
-        const missingRoutingUrl = yield* waitForDeploymentUrl(undefined, {
-          project: "project-1",
-          serviceName: "api",
-        }).pipe(Effect.flip);
-        const disabled = yield* waitForDeploymentUrl("https://app.prisma.build", {
+        const missingUrl = yield* waitForComputeUrl(undefined, props).pipe(Effect.flip);
+        const missingRoutingUrl = yield* waitForComputeUrl(undefined, {}).pipe(Effect.flip);
+        const disabled = yield* waitForComputeUrl("https://app.prisma.build", {
           ...props,
           verifyUrl: false,
         }).pipe(Effect.flip);
-        const missingClient = yield* waitForDeploymentUrl("https://app.prisma.build", props).pipe(
+        const missingClient = yield* waitForComputeUrl("https://app.prisma.build", props).pipe(
           Effect.flip,
         );
 
@@ -564,16 +553,12 @@ describe(
       }) as typeof globalThis.fetch;
 
       return Effect.gen(function* () {
-        yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        yield* waitForComputeUrl("https://app.prisma.build", {
           healthCheck: { path: "/health", statusCodes: [302] },
           pollIntervalMs: 1,
           urlReadinessTimeoutSeconds: 0.05,
         });
-        const defaultStatusError = yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        const defaultStatusError = yield* waitForComputeUrl("https://app.prisma.build", {
           healthCheck: { path: "/health" },
           pollIntervalMs: 1,
           urlReadinessTimeoutSeconds: 0.01,
@@ -613,11 +598,11 @@ describe(
       } as const;
 
       return Effect.gen(function* () {
-        const requestError = yield* waitForDeploymentUrl(
-          "https://request.prisma.build",
-          props,
-        ).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, stalledRequest)), Effect.flip);
-        const bodyError = yield* waitForDeploymentUrl("https://body.prisma.build", props).pipe(
+        const requestError = yield* waitForComputeUrl("https://request.prisma.build", props).pipe(
+          Effect.provide(Layer.succeed(HttpClient.HttpClient, stalledRequest)),
+          Effect.flip,
+        );
+        const bodyError = yield* waitForComputeUrl("https://body.prisma.build", props).pipe(
           Effect.provide(Layer.succeed(HttpClient.HttpClient, stalledBody)),
           Effect.flip,
         );
@@ -640,9 +625,7 @@ describe(
       });
 
       return Effect.gen(function* () {
-        const error = yield* waitForDeploymentUrl("https://missing.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        const error = yield* waitForComputeUrl("https://missing.prisma.build", {
           pollIntervalMs: 1,
           urlReadinessTimeoutSeconds: 0.05,
         }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)), Effect.flip);
@@ -656,9 +639,7 @@ describe(
       const http = HttpClient.make(() => Effect.die("invalid readiness options must fail first"));
 
       return Effect.gen(function* () {
-        const error = yield* waitForDeploymentUrl("https://app.prisma.build", {
-          project: "project-1",
-          serviceName: "api",
+        const error = yield* waitForComputeUrl("https://app.prisma.build", {
           pollIntervalMs: 0,
         }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)), Effect.flip);
 

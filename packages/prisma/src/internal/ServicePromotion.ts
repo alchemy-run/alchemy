@@ -9,6 +9,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import { type ComputeUrlCheck, waitForComputeUrl } from "./UrlCheck.ts";
 
 export class ComputeServicePromotionInvalidProps extends Data.TaggedError(
   "ComputeServicePromotionInvalidProps",
@@ -196,4 +197,81 @@ export const promoteVersionObserved = Effect.fn(function* (
     ],
     message: `Prisma Compute service '${appId}' promotion of deployment '${deploymentId}' failed and canonical recovery also failed. The deployment was not deleted because endpoint commit state is ambiguous.`,
   });
+});
+
+/**
+ * What {@link checkStableEndpoint} found after a promotion.
+ *
+ * - `Ready`: the stable URL answered.
+ * - `NoRollbackTarget`: it did not, and there was no earlier version to restore.
+ * - `RolledBack`: it did not, and the service reports the earlier version as
+ *   live again. `rollbackFailure` is set when the rollback call itself failed
+ *   but the service converged anyway.
+ * - `RollbackNotConverged`: it did not, and the service never reported the
+ *   earlier version as live.
+ */
+type ReadinessFailure = Effect.Error<ReturnType<typeof waitForComputeUrl>>;
+type RollbackFailure = Effect.Error<ReturnType<typeof createServiceRollback>>;
+type ObservationFailure = Effect.Error<ReturnType<typeof waitForActiveVersion>>;
+
+export type StableEndpointCheck =
+  | { readonly _tag: "Ready" }
+  | { readonly _tag: "NoRollbackTarget"; readonly readinessFailure: ReadinessFailure }
+  | {
+      readonly _tag: "RolledBack";
+      readonly readinessFailure: ReadinessFailure;
+      readonly rollbackFailure: RollbackFailure | undefined;
+    }
+  | {
+      readonly _tag: "RollbackNotConverged";
+      readonly readinessFailure: ReadinessFailure;
+      readonly rollbackFailure: RollbackFailure | undefined;
+      readonly observationFailure: ObservationFailure;
+    };
+
+/**
+ * Wait for a promoted service's stable URL. When it never answers and an
+ * earlier version is known, roll the service back to it and wait until the
+ * service reports it as live again.
+ */
+export const checkStableEndpoint = Effect.fn(function* (
+  serviceId: string,
+  url: string | undefined,
+  rollbackVersionId: string | undefined,
+  options: ComputeUrlCheck & ActiveVersionObservationOptions,
+): Effect.fn.Return<
+  StableEndpointCheck,
+  never,
+  | Effect.Services<ReturnType<typeof waitForComputeUrl>>
+  | Effect.Services<ReturnType<typeof waitForActiveVersion>>
+  | Effect.Services<ReturnType<typeof createServiceRollback>>
+> {
+  const readiness = yield* waitForComputeUrl(url, options).pipe(Effect.result);
+  if (Result.isSuccess(readiness)) return { _tag: "Ready" } satisfies StableEndpointCheck;
+  if (rollbackVersionId === undefined) {
+    return {
+      _tag: "NoRollbackTarget",
+      readinessFailure: readiness.failure,
+    } satisfies StableEndpointCheck;
+  }
+  const rollback = yield* createServiceRollback({
+    serviceId,
+    deploymentId: rollbackVersionId,
+  }).pipe(Effect.result);
+  const rollbackFailure = Result.isFailure(rollback) ? rollback.failure : undefined;
+  const observed = yield* waitForActiveVersion(serviceId, rollbackVersionId, options).pipe(
+    Effect.result,
+  );
+  return Result.isSuccess(observed)
+    ? ({
+        _tag: "RolledBack",
+        readinessFailure: readiness.failure,
+        rollbackFailure,
+      } satisfies StableEndpointCheck)
+    : ({
+        _tag: "RollbackNotConverged",
+        readinessFailure: readiness.failure,
+        rollbackFailure,
+        observationFailure: observed.failure,
+      } satisfies StableEndpointCheck);
 });
