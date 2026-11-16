@@ -211,7 +211,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
         expect(app.serviceId).toBe("dev:app:App");
         expect(env.projectId).toBe(project.projectId);
         expect(env.branchId).toBe("branch-preview");
-        expect(Redacted.value(env.value)).toBe("secret");
+        expect(Redacted.value(env.value!)).toBe("secret");
         expect(branch.role).toBe("production");
         expect(bucket.bucketId).toBe("dev:bucket:Bucket");
         expect(bucket.name).toBe("uploads");

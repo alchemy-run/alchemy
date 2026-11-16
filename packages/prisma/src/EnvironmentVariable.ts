@@ -12,8 +12,10 @@ import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import type { ObservedEnvironmentVariable } from "./internal/Observed.ts";
@@ -59,9 +61,11 @@ export interface EnvironmentVariableProps {
   key: string;
   /**
    * Secret value. Must be wrapped with `Redacted.make(...)` so the engine
-   * redacts it before resource props are persisted to state.
+   * redacts it before resource props are persisted to state. A value that
+   * resolves to `undefined`, such as an output a resource leaves unset,
+   * declares no variable: one this resource wrote before is deleted.
    */
-  value: Redacted.Redacted<string>;
+  value: Redacted.Redacted<string> | undefined;
 }
 
 export interface EnvironmentVariable extends Resource<
@@ -69,9 +73,10 @@ export interface EnvironmentVariable extends Resource<
   EnvironmentVariableProps,
   {
     /**
-     * Prisma environment variable ID.
+     * Prisma environment variable ID, or null while the value is `undefined`
+     * and no variable exists.
      */
-    environmentVariableId: string;
+    environmentVariableId: string | null;
     /**
      * Project ID that owns the variable.
      */
@@ -91,11 +96,11 @@ export interface EnvironmentVariable extends Resource<
     /**
      * Secret value, redacted in state.
      */
-    value: Redacted.Redacted<string>;
+    value: Redacted.Redacted<string> | undefined;
     /**
      * Key identifier for the encrypted stored value.
      */
-    valueKid: string;
+    valueKid: string | null;
     /**
      * Whether Prisma manages this variable internally.
      */
@@ -103,11 +108,11 @@ export interface EnvironmentVariable extends Resource<
     /**
      * ISO timestamp when the variable was created.
      */
-    createdAt: string;
+    createdAt: string | null;
     /**
      * ISO timestamp when the variable was last updated.
      */
-    updatedAt: string;
+    updatedAt: string | null;
   },
   never,
   Providers
@@ -147,6 +152,49 @@ export interface EnvironmentVariable extends Resource<
  * @product Compute
  */
 export const EnvironmentVariable = Resource<EnvironmentVariable>("Prisma.EnvironmentVariable");
+
+/** The resources in this stack, other than `fqn`, that declare a variable with `key`. */
+const otherDeclarers = Effect.fn(function* (fqn: string, key: string) {
+  const stack = yield* Effect.serviceOption(Stack);
+  if (Option.isNone(stack)) return [];
+  return Object.values(stack.value.resources).flatMap((resource) =>
+    resource.Type === "Prisma.EnvironmentVariable" &&
+    resource.FQN !== fqn &&
+    (resource.Props as Partial<EnvironmentVariableProps> | undefined)?.key === key
+      ? [resource.FQN]
+      : [],
+  );
+});
+
+const scopeOf = (projectId: string, cls: string, branchId: string | null | undefined) =>
+  `project '${projectId}', class '${cls}', ${branchId ? `Branch '${branchId}'` : "project level"}`;
+
+/** The same key in one project and Branch scope, explained. */
+const sharedKeyError = Effect.fn(function* (
+  fqn: string,
+  key: string,
+  scope: string,
+  cause?: unknown,
+) {
+  const others = yield* otherDeclarers(fqn, key);
+  return new EnvironmentVariableConflict({
+    message:
+      `Prisma environment variable '${key}' already exists in ${scope}. A variable belongs to its project and Branch, not to one service: every service on that Branch reads it. ` +
+      (others.length > 0
+        ? `This stack declares '${key}' at '${fqn}' and also at '${others.join("', '")}', for example two Prisma.Compute that both list '${key}' in env; they would write the same variable. Declare it in one of them, or as one Prisma.EnvironmentVariable that both services read.`
+        : `It appeared after the adoption check and was not written by '${fqn}'. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable, or remove it first.`),
+    cause,
+  });
+});
+
+const validateEnvironmentVariableClass = (key: string, cls: unknown) =>
+  cls === "production" || cls === "preview"
+    ? Effect.void
+    : Effect.fail(
+        new EnvironmentVariableInvalidProps({
+          message: `Prisma environment variable '${key}' has class '${String(cls)}'; it must be "production" or "preview". A Prisma.Compute variable takes its class from the role of its service's Branch, and that service is attached to no Branch.`,
+        }),
+      );
 
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const ENV_VALUE_MAX_BYTES = 8 * 1024;
@@ -288,6 +336,23 @@ const ensureVariableIdentity = (
         }),
       );
 
+/** The attributes while the value is `undefined` and no variable exists. */
+const absentAttrs = (
+  projectId: string,
+  news: EnvironmentVariableProps,
+): EnvironmentVariable["Attributes"] => ({
+  environmentVariableId: null,
+  projectId,
+  branchId: news.branchId ?? null,
+  class: news.class,
+  key: news.key,
+  value: undefined,
+  valueKid: null,
+  isManagedBySystem: false,
+  createdAt: null,
+  updatedAt: null,
+});
+
 const ProviderLive = () =>
   Provider.effect(
     EnvironmentVariable,
@@ -330,12 +395,17 @@ const ProviderLive = () =>
           // plaintext, so equality with `olds` cannot prove the live secret
           // is still correct. Re-apply every resolved desired value to heal
           // out-of-band secret drift on ordinary deploys.
+          if (isResolved(news.class) && isResolved(news.key)) {
+            yield* validateEnvironmentVariableClass(String(news.key), news.class);
+          }
           if (isResolved(news.value)) {
             return { action: "update" } as const;
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ output, olds }) {
+        read: Effect.fn(function* ({ fqn, output, olds }) {
+          // No variable exists while the value is `undefined`.
+          if (output?.environmentVariableId === null) return output;
           const variableId = isPrismaDevId(output?.environmentVariableId)
             ? undefined
             : output?.environmentVariableId;
@@ -354,6 +424,13 @@ const ProviderLive = () =>
               )
             : yield* findVariableInProject;
           if (!variable) return undefined;
+          if (variableId === undefined && (yield* otherDeclarers(fqn, olds.key)).length > 0) {
+            return yield* yield* sharedKeyError(
+              fqn,
+              olds.key,
+              scopeOf(variable.projectId, variable.class, variable.branchId),
+            );
+          }
           const attrs = attrsFrom(
             variable,
             // A cold read cannot observe the secret. Never copy the desired
@@ -363,13 +440,14 @@ const ProviderLive = () =>
           );
           return variableId === undefined ? Unowned(attrs) : attrs;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ fqn, news, output }) {
+          yield* validateEnvironmentVariableClass(news.key, news.class);
           if (news.branchId !== undefined && news.class !== "preview") {
             return yield* new EnvironmentVariableInvalidProps({
               message: 'Prisma branch-scoped environment variables must use class: "preview".',
             });
           }
-          yield* validateEnvironmentVariableWrite(news.key, news.value);
+          yield* validateEnvironmentVariableKey(news.key);
           const projectId = yield* resolveProjectId(news.project);
           const variableId = isPrismaDevId(output?.environmentVariableId)
             ? undefined
@@ -383,6 +461,23 @@ const ProviderLive = () =>
               )
             : undefined;
           const value = news.value;
+          if (value === undefined) {
+            // No variable: delete the one this resource wrote, if it is still there.
+            if (variable) {
+              yield* ensureVariableIdentity(variable, {
+                projectId,
+                branchId: news.branchId ?? null,
+                class: news.class,
+                key: news.key,
+              });
+              yield* ensureUserManagedVariable(variable);
+              yield* deleteEnvironmentVariable({ envVarId: variable.id }).pipe(
+                Effect.catchTag("NotFound", () => Effect.void),
+              );
+            }
+            return absentAttrs(projectId, news);
+          }
+          yield* validateEnvironmentVariableWrite(news.key, value);
           let created = false;
           if (!variable) {
             const result = yield* createEnvironmentVariable({
@@ -399,11 +494,15 @@ const ProviderLive = () =>
                 variable: response.data,
                 created: true,
               })),
-              Effect.catchTag("Conflict", () =>
-                Effect.fail(
-                  new EnvironmentVariableConflict({
-                    message: `Prisma environment variable '${news.key}' appeared after the adoption check. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable.`,
-                  }),
+              Effect.catchTag("Conflict", (conflict) =>
+                Effect.flatMap(
+                  sharedKeyError(
+                    fqn,
+                    news.key,
+                    scopeOf(projectId, news.class, news.branchId),
+                    conflict,
+                  ),
+                  Effect.fail,
                 ),
               ),
             );
@@ -426,6 +525,7 @@ const ProviderLive = () =>
           return attrsFrom(variable, value);
         }),
         delete: Effect.fn(function* ({ output, session }) {
+          if (output.environmentVariableId === null) return;
           if (isPrismaDevId(output.environmentVariableId)) return;
           const variable = yield* getEnvironmentVariable({
             envVarId: output.environmentVariableId,

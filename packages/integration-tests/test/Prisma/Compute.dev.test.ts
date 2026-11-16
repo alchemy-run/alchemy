@@ -192,7 +192,7 @@ test.provider(
       expect(output.deployment.serviceId).toBe(output.appResource.serviceId);
       expect(output.env.projectId).toBe(output.project.projectId);
       expect(output.env.key).toBe("TOKEN");
-      expect(Redacted.value(output.env.value)).toBe("secret");
+      expect(Redacted.value(output.env.value!)).toBe("secret");
       expect(output.repo.projectId).toBe(output.project.projectId);
       expect(output.repo.repoId).toBe(123);
 

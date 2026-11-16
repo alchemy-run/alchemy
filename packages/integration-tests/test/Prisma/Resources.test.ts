@@ -1960,7 +1960,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(service.serviceId).toBe("service-1");
         expect(version.versionId).toBe("version-1");
         expect(env.environmentVariableId).toBe("env-1");
-        expect(Redacted.value(env.value)).toBe("secret");
+        expect(Redacted.value(env.value!)).toBe("secret");
         expectJsonNotToContain(env, "secret");
         expect(repo.sourceRepositoryId).toBe("repo-1");
 
@@ -3303,7 +3303,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(service.name).toBe("web");
         expect(service.branchId).toBe("branch-1");
         expect(env.valueKid).toBe("kid-new");
-        expect(Redacted.value(env.value)).toBe("new-secret");
+        expect(Redacted.value(env.value!)).toBe("new-secret");
         expectJsonNotToContain(env, "new-secret");
         expect(calls).toEqual([
           ["getDatabase", "database-1"],
