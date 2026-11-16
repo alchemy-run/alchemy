@@ -19,6 +19,7 @@ import { Cluster, FRONT_PORT, Services } from "./cluster.ts";
 import Counter from "./counter.ts";
 import GatedTally from "./gated-tally.ts";
 import Greeter from "./greeter.ts";
+import Lifecycle from "./lifecycle.ts";
 import { Reentrant } from "./reentrant-declaration.ts";
 import Room from "./room.ts";
 import SocketRoom from "./socket-room.ts";
@@ -40,6 +41,7 @@ export default class Front extends Docker.Service<Front>()(
   Effect.gen(function* () {
     const counters = yield* Counter;
     const greeters = yield* Greeter;
+    const lifecycles = yield* Lifecycle;
     const parallelTallies = yield* Tally;
     const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
@@ -156,6 +158,28 @@ export default class Front extends Docker.Service<Front>()(
         if (group === "socket-count" && name !== undefined) {
           return yield* HttpServerResponse.json({
             sockets: yield* socketRooms.getByName(name).sockets().pipe(Effect.orDie),
+          });
+        }
+        // `/lifecycle/<name>/<step>`: `put` stores a value, `destroy` destroys
+        // the instance, `value` reads it back, and `hooks` counts the hooks
+        // that ran without waking it.
+        if (group === "lifecycle" && name !== undefined) {
+          const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
+          const instance = lifecycles.getByName(name);
+          if (step === "put") {
+            yield* instance.put(Number(url.searchParams.get("value") ?? "1"));
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "destroy") {
+            yield* instance.destroyNow();
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "value") {
+            return yield* HttpServerResponse.json({ value: yield* instance.get() });
+          }
+          return yield* HttpServerResponse.json({
+            slept: yield* counters.getByName(`slept-${name}`).get(),
+            destroyed: yield* counters.getByName(`destroyed-${name}`).get(),
           });
         }
         if (group === "greet" && name !== undefined) {
