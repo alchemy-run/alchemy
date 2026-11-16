@@ -72,7 +72,61 @@ export type BucketProps = {
    * Omitting it removes the configuration.
    */
   website?: BucketWebsite;
+  /**
+   * Object lifecycle rules (`lifecycle.rule`), e.g. delete objects older
+   * than 30 days. An empty array removes every rule.
+   * @default unset — existing rules are left alone
+   */
+  lifecycle?: BucketLifecycleRule[];
+  /**
+   * Public access prevention. `"enforced"` blocks `allUsers` and
+   * `allAuthenticatedUsers` grants and public ACLs; `"inherited"` follows
+   * the organization policy.
+   * @default unset — the observed setting is left alone
+   */
+  publicAccessPrevention?: "enforced" | "inherited";
+  /**
+   * How long deleted objects are kept recoverable, in seconds
+   * (`softDeletePolicy.retentionDurationSeconds`). `0` turns soft delete
+   * off; otherwise 7-90 days (604800-7776000).
+   * @default unset — the observed policy is left alone (Cloud Storage creates buckets with 7 days)
+   */
+  softDeleteRetentionSeconds?: number;
 };
+
+export interface BucketLifecycleRule {
+  action: {
+    /** `Delete`, `SetStorageClass`, or `AbortIncompleteMultipartUpload`. */
+    type: "Delete" | "SetStorageClass" | "AbortIncompleteMultipartUpload";
+    /** Target storage class. Required for `SetStorageClass`. */
+    storageClass?: string;
+  };
+  /** Every condition set must hold for the action to run. */
+  condition: {
+    /** Object age in days. */
+    age?: number;
+    /** Objects created before this date (`YYYY-MM-DD`). */
+    createdBefore?: string;
+    /** Objects whose custom time is before this date (`YYYY-MM-DD`). */
+    customTimeBefore?: string;
+    /** Days since the object's custom time. */
+    daysSinceCustomTime?: number;
+    /** Days since the object version became noncurrent. */
+    daysSinceNoncurrentTime?: number;
+    /** `true` matches live objects, `false` noncurrent versions. */
+    isLive?: boolean;
+    /** Object name prefixes. */
+    matchesPrefix?: string[];
+    /** Object name suffixes. */
+    matchesSuffix?: string[];
+    /** Storage classes, e.g. `["STANDARD"]`. */
+    matchesStorageClass?: string[];
+    /** Noncurrent versions made noncurrent before this date (`YYYY-MM-DD`). */
+    noncurrentTimeBefore?: string;
+    /** Keep at most this many newer versions. */
+    numNewerVersions?: number;
+  };
+}
 
 export interface BucketWebsite {
   /**
@@ -112,6 +166,12 @@ export type Bucket = Resource<
     hierarchicalNamespace: boolean;
     /** Static website configuration, if set. */
     website: BucketWebsite | undefined;
+    /** Lifecycle rules (empty when none). */
+    lifecycle: BucketLifecycleRule[];
+    /** Public access prevention (`enforced` or `inherited`). */
+    publicAccessPrevention: string | undefined;
+    /** Soft delete retention in seconds (`0` when soft delete is off). */
+    softDeleteRetentionSeconds: number;
   },
   never,
   Providers,
@@ -174,6 +234,17 @@ export interface BucketLookup {
  *   name: site.bucketName,
  *   role: "roles/storage.objectViewer",
  *   member: "allUsers",
+ * });
+ * ```
+ *
+ * **Example:** Private bucket that expires objects and keeps no soft-deleted copies
+ * ```typescript
+ * const bucket = yield* GCP.Storage.Bucket("scratch", {
+ *   uniformBucketLevelAccess: true,
+ *   publicAccessPrevention: "enforced",
+ *   softDeleteRetentionSeconds: 0,
+ *   lifecycle: [{ action: { type: "Delete" }, condition: { age: 30 } }],
+ *   forceDestroy: true,
  * });
  * ```
  *
@@ -265,7 +336,46 @@ const toAttrs = (bucket: storage.Bucket) => ({
   uniformBucketLevelAccess: bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true,
   hierarchicalNamespace: bucket.hierarchicalNamespace?.enabled === true,
   website: toWebsite(bucket.website),
+  lifecycle: toLifecycle(bucket.lifecycle),
+  publicAccessPrevention: toPublicAccessPrevention(bucket.iamConfiguration?.publicAccessPrevention),
+  softDeleteRetentionSeconds: Number(bucket.softDeletePolicy?.retentionDurationSeconds ?? 0),
 });
+
+// Older buckets report `unspecified`, which behaves as `inherited`.
+const toPublicAccessPrevention = (value: string | undefined) =>
+  value === "unspecified" ? "inherited" : value;
+
+const CONDITION_KEYS = [
+  "age",
+  "createdBefore",
+  "customTimeBefore",
+  "daysSinceCustomTime",
+  "daysSinceNoncurrentTime",
+  "isLive",
+  "matchesPrefix",
+  "matchesSuffix",
+  "matchesStorageClass",
+  "noncurrentTimeBefore",
+  "numNewerVersions",
+] as const;
+
+/** Keep only the fields Alchemy models, in a fixed order, so rules compare by value. */
+const toLifecycle = (
+  lifecycle: storage.BucketLifecycle | BucketLifecycleRule[] | undefined,
+): BucketLifecycleRule[] =>
+  (Array.isArray(lifecycle) ? lifecycle : (lifecycle?.rule ?? [])).map((rule) => ({
+    action: {
+      type: rule.action?.type as BucketLifecycleRule["action"]["type"],
+      ...(rule.action?.storageClass !== undefined
+        ? { storageClass: rule.action.storageClass }
+        : {}),
+    },
+    condition: Object.fromEntries(
+      CONDITION_KEYS.flatMap((key) =>
+        rule.condition?.[key] === undefined ? [] : [[key, rule.condition[key]]],
+      ),
+    ),
+  }));
 
 const toWebsite = (website: storage.BucketWebsite | undefined): BucketWebsite | undefined =>
   website === undefined ||
@@ -432,6 +542,8 @@ export const BucketProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
       const desiredWebsite = toWebsite(news.website);
+      const desiredLifecycle =
+        news.lifecycle === undefined ? undefined : toLifecycle(news.lifecycle);
 
       let current = yield* getByName(bucketName);
 
@@ -448,13 +560,23 @@ export const BucketProvider = () =>
               labels: desiredLabels,
               hierarchicalNamespace: hierarchicalNamespace ? { enabled: true } : undefined,
               website: desiredWebsite,
-              iamConfiguration: configureIam
-                ? {
-                    uniformBucketLevelAccess: {
-                      enabled: uniformBucketLevelAccess,
-                    },
-                  }
-                : undefined,
+              iamConfiguration:
+                configureIam || news.publicAccessPrevention !== undefined
+                  ? {
+                      uniformBucketLevelAccess: configureIam
+                        ? { enabled: uniformBucketLevelAccess }
+                        : undefined,
+                      publicAccessPrevention: news.publicAccessPrevention,
+                    }
+                  : undefined,
+              lifecycle:
+                desiredLifecycle !== undefined && desiredLifecycle.length > 0
+                  ? { rule: desiredLifecycle }
+                  : undefined,
+              softDeletePolicy:
+                news.softDeleteRetentionSeconds !== undefined
+                  ? { retentionDurationSeconds: String(news.softDeleteRetentionSeconds) }
+                  : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(bucketName)));
@@ -478,13 +600,27 @@ export const BucketProvider = () =>
       const websiteChanged =
         observedWebsite?.mainPageSuffix !== desiredWebsite?.mainPageSuffix ||
         observedWebsite?.notFoundPage !== desiredWebsite?.notFoundPage;
+      const lifecycleChanged =
+        desiredLifecycle !== undefined &&
+        JSON.stringify(toLifecycle(current.lifecycle)) !== JSON.stringify(desiredLifecycle);
+      const papChanged =
+        news.publicAccessPrevention !== undefined &&
+        toPublicAccessPrevention(current.iamConfiguration?.publicAccessPrevention) !==
+          news.publicAccessPrevention;
+      const softDeleteChanged =
+        news.softDeleteRetentionSeconds !== undefined &&
+        Number(current.softDeletePolicy?.retentionDurationSeconds ?? 0) !==
+          news.softDeleteRetentionSeconds;
 
       if (
         labelsChanged ||
         storageClassChanged ||
         versioningChanged ||
         ublChanged ||
-        websiteChanged
+        websiteChanged ||
+        lifecycleChanged ||
+        papChanged ||
+        softDeleteChanged
       ) {
         const nextLabels: Record<string, string | null> = { ...desiredLabels };
         for (const key of removed) {
@@ -497,12 +633,22 @@ export const BucketProvider = () =>
             storageClass,
             versioning: { enabled: versioning },
             labels: nextLabels as unknown as Record<string, string>,
-            iamConfiguration: ublChanged
-              ? {
-                  uniformBucketLevelAccess: {
-                    enabled: uniformBucketLevelAccess,
-                  },
-                }
+            iamConfiguration:
+              ublChanged || papChanged
+                ? {
+                    uniformBucketLevelAccess: ublChanged
+                      ? { enabled: uniformBucketLevelAccess }
+                      : undefined,
+                    publicAccessPrevention: papChanged ? news.publicAccessPrevention : undefined,
+                  }
+                : undefined,
+            lifecycle: lifecycleChanged
+              ? ((desiredLifecycle!.length === 0
+                  ? null
+                  : { rule: desiredLifecycle }) as unknown as storage.BucketLifecycle)
+              : undefined,
+            softDeletePolicy: softDeleteChanged
+              ? { retentionDurationSeconds: String(news.softDeleteRetentionSeconds) }
               : undefined,
             // PATCH merges nested objects and clears a field only when it
             // is sent as JSON null.

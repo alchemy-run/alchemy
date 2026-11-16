@@ -95,3 +95,59 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 120_000 },
 );
+
+test.provider(
+  "manage lifecycle rules, public access prevention, and soft delete",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        GCP.Storage.Bucket("Hardened", {
+          uniformBucketLevelAccess: true,
+          publicAccessPrevention: "enforced",
+          softDeleteRetentionSeconds: 0,
+          lifecycle: [{ action: { type: "Delete" }, condition: { age: 30 } }],
+          forceDestroy: true,
+        }),
+      );
+      expect(created.publicAccessPrevention).toEqual("enforced");
+      expect(created.softDeleteRetentionSeconds).toEqual(0);
+      expect(created.lifecycle).toEqual([{ action: { type: "Delete" }, condition: { age: 30 } }]);
+
+      const fetched = yield* storage.getBuckets({
+        bucket: created.bucketName,
+        projection: "full",
+      });
+      expect(fetched.iamConfiguration?.publicAccessPrevention).toEqual("enforced");
+      expect(Number(fetched.softDeletePolicy?.retentionDurationSeconds ?? 0)).toEqual(0);
+      expect(fetched.lifecycle?.rule).toHaveLength(1);
+
+      const updated = yield* stack.deploy(
+        GCP.Storage.Bucket("Hardened", {
+          uniformBucketLevelAccess: true,
+          publicAccessPrevention: "inherited",
+          softDeleteRetentionSeconds: 604800,
+          lifecycle: [],
+          forceDestroy: true,
+        }),
+      );
+      expect(updated.bucketName).toEqual(created.bucketName);
+      expect(updated.publicAccessPrevention).toEqual("inherited");
+      expect(updated.softDeleteRetentionSeconds).toEqual(604800);
+      expect(updated.lifecycle).toEqual([]);
+
+      const fetchedUpdate = yield* storage.getBuckets({
+        bucket: created.bucketName,
+        projection: "full",
+      });
+      expect(fetchedUpdate.lifecycle?.rule ?? []).toHaveLength(0);
+      expect(fetchedUpdate.iamConfiguration?.uniformBucketLevelAccess?.enabled).toEqual(true);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.bucketName);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 120_000 },
+);
