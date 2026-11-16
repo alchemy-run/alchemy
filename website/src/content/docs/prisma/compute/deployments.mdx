@@ -93,18 +93,21 @@ platform's variable record but never reaches the running app.
 
 Declare the values the version must be recreated for with
 `triggers`. When the resolved value changes, the next deploy
-replaces the version (create-before-delete) even though the
-artifact is unchanged:
+creates a new version even though the artifact is unchanged, and
+the service promotes it:
 
 ```typescript
 const version = yield* Prisma.ComputeVersion("web", {
-  service,
+  service: service.serviceId,
   artifactPath: "./dist/app.tar.gz",
   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
   start: true,
-  promote: true,
 });
+yield* Prisma.activateVersion(service, version);
 ```
+
+The previous version is kept on the platform, so Prisma can roll the
+service back to it.
 
 The values are folded into the version fingerprint as a salted
 hash and persisted `Redacted`; the plaintext never lands in state.
