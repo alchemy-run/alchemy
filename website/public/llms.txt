@@ -241,7 +241,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 ## Prisma — start here
 
 - [Prisma](https://alchemy.run/prisma) — Declare Prisma Postgres databases, connections, branches and Compute apps as Stack resources with Alchemy, and run the same Stack against a local Postgres in dev.
-- [What is Prisma?](https://alchemy.run/prisma/what-is-prisma) — The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute apps, deployments and buckets — and how @alchemy.run/prisma models each of them.
+- [What is Prisma?](https://alchemy.run/prisma/what-is-prisma) — The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute services and versions, and buckets — and how @alchemy.run/prisma models each of them.
 - [Workspaces and tokens](https://alchemy.run/prisma/workspaces-and-tokens) — How a Prisma workspace holds your projects and billing, how a service token decides where Alchemy deploys, and how apps get their own database connections.
 - [Setup](https://alchemy.run/prisma/setup) — Connect alchemy to Prisma — account, service tokens, and profiles.
 
@@ -256,8 +256,8 @@ A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and 
 
 ## Prisma — Compute
 
-- [Apps](https://alchemy.run/prisma/compute/apps) — Prisma Compute apps as Stack resources — framework builds or Effect-native services, env wiring, custom domains, and a local dev command.
-- [Deployments](https://alchemy.run/prisma/compute/deployments) — The fail-closed Compute deployment lifecycle — health-checked promotion, rollback recovery, old-generation cleanup, and env-only redeploys.
+- [Apps](https://alchemy.run/prisma/compute/apps) — Deploy an app to Prisma Compute with Prisma.Compute — builds, static sites, Effect-native services, environment variables, custom domains, and a local dev command.
+- [Services and versions](https://alchemy.run/prisma/compute/deployments) — Serve a version on a Compute service's stable URL, ship new versions, keep the old ones for rollback, and upgrade stacks from the earlier resource names.
 
 ## Prisma — Data
 
