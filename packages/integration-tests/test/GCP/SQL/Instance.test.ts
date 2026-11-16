@@ -135,6 +135,50 @@ test.provider.skipIf(!runLifecycle)(
 );
 
 test.provider.skipIf(!runLifecycle)(
+  "requires the Cloud SQL connectors, then allows direct connections again",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const instance = (connectorEnforcement: "REQUIRED" | "NOT_REQUIRED", instanceName?: string) =>
+        GCP.SQL.Instance("ConnectorDb", {
+          instanceName,
+          region: "us-central1",
+          databaseVersion: "POSTGRES_17",
+          tier: "db-f1-micro",
+          edition: "ENTERPRISE",
+          backup: { enabled: false },
+          deletionProtectionEnabled: false,
+          connectorEnforcement,
+        });
+
+      const created = yield* stack.deploy(instance("REQUIRED"));
+      expect(created.connectorEnforcement).toEqual("REQUIRED");
+
+      const fetched = yield* sqladmin.getInstances({
+        project: created.project,
+        instance: created.instanceName,
+      });
+      expect(fetched.settings?.connectorEnforcement).toEqual("REQUIRED");
+
+      const relaxed = yield* stack.deploy(instance("NOT_REQUIRED", created.instanceName));
+      expect(relaxed.instanceName).toEqual(created.instanceName);
+      expect(relaxed.connectorEnforcement).toEqual("NOT_REQUIRED");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.project, created.instanceName);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  // Create 5–15 minutes, settings patch, delete a few minutes.
+  {
+    tags: ["provider:gcp", "provider:gcp:sql", "live"],
+    timeout: 2_400_000,
+    retry: 0,
+  },
+);
+
+test.provider.skipIf(!runLifecycle)(
   "upgrades databaseVersion in place within the same engine",
   (stack) =>
     Effect.gen(function* () {
