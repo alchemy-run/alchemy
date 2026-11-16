@@ -149,21 +149,20 @@ export interface ComputeVersionProps {
    */
   pollIntervalMs?: number;
   /**
-   * Opaque key/value map; when any resolved value changes, a replacement
-   * deployment is planned (create-before-delete) even if the artifact is
-   * unchanged — the same contract as `AWS.ApiGateway.Deployment.triggers`.
-   * Because values here may be secrets, they are folded into the deployment
-   * fingerprint as a salted hash and persisted `Redacted` rather than
-   * compared as plaintext; plaintext never lands in state.
+   * Opaque key/value map; when any resolved value changes, a new version is
+   * created even if the artifact is unchanged — the same contract as
+   * `AWS.ApiGateway.Deployment.triggers`. The version compares a salted hash
+   * of the values, recorded as `triggersHash`. The map itself is stored in
+   * Alchemy state as a prop, and a `Redacted` member is stored there as plain
+   * text inside a redaction marker, so pass a digest of a secret rather than
+   * the secret, as `Prisma.Compute` does for its environment variables.
    *
    * Prisma snapshots environment variables into a deployment when the
    * deployment is created, so changing only an environment variable's value
    * updates the platform's variable record but never reaches the running app.
    * Pass those values here to make such a change take effect.
    *
-   * Members may be wrapped in `Redacted.make(secret)`; they are unwrapped only
-   * to compute the fingerprint.
-   *
+
    * If the value cannot be resolved while the deploy is being planned —
    * because it reads an attribute of another resource that the same deploy is
    * changing — the diff cannot prove the fingerprint is unchanged, and the
@@ -180,7 +179,7 @@ export interface ComputeVersionProps {
    * const version = yield* Prisma.ComputeVersion("web", {
    *   service,
    *   artifactPath: "./dist/app.tar.gz",
-   *   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
+   *   triggers: { schemaVersion: "42" },
    * });
    * ```
    */
@@ -296,6 +295,33 @@ export interface ComputeVersion extends Resource<
  *   artifactPath: "./dist/app.tar.gz",
  *   healthCheck: { path: "/api/health" },
  * });
+ * ```
+ *
+ * ### Shipping Environment Changes
+ * Prisma copies the Branch's environment variables into a version when it
+ * creates it. A changed value reaches the app only in a new version, so put
+ * what must ship a new version in `triggers`. `Prisma.Compute` does this for
+ * the variables it declares.
+ *
+ * **Example:** Create a new version when a variable's value changes
+ * ```typescript
+ * const logLevel = "debug";
+ * const variable = yield* Prisma.EnvironmentVariable("log-level", {
+ *   project,
+ *   class: "production",
+ *   key: "LOG_LEVEL",
+ *   value: Redacted.make(logLevel),
+ * });
+ * const version = yield* Prisma.ComputeVersion("web-version", {
+ *   // Created after the variable is written, so it copies the new value.
+ *   service: Output.map(
+ *     Output.all(service.serviceId, Output.of(variable)),
+ *     ([serviceId]) => serviceId,
+ *   ),
+ *   artifactPath: "./dist/app.tar.gz",
+ *   triggers: { LOG_LEVEL: logLevel },
+ * });
+ * yield* Prisma.activateVersion(service, version);
  * ```
  *
  * ### Deleting Superseded Versions

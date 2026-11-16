@@ -130,11 +130,29 @@ export interface CustomDomain extends Resource<
  * API cannot replace a live domain atomically. Create a second resource,
  * verify DNS and TLS, cut traffic over, and then remove the old resource.
  *
+ * `service` takes a service ID, a `Prisma.ComputeService`, or a
+ * `Prisma.Compute`, whose service it uses. A new version of that service
+ * keeps the domain.
+ *
  * ### Creating a Custom Domain
- * **Example:** Attach a hostname to a service
+ * **Example:** Attach a hostname to a Compute
+ * ```typescript
+ * const api = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ * });
+ * const domain = yield* Prisma.CustomDomain("api-domain", {
+ *   service: api,
+ *   hostname: "api.example.com",
+ * });
+ * // Publish domain.dnsRecords, then wait for domain.status to be "active".
+ * ```
+ *
+ * **Example:** Attach a hostname to a service by ID
  * ```typescript
  * const domain = yield* Prisma.CustomDomain("api-domain", {
- *   service: api.serviceId,
+ *   service: "cps_cmabc123def456ghi789jkl0",
  *   hostname: "api.example.com",
  * });
  * ```
