@@ -174,7 +174,8 @@ The command names both accounts in its input. The decision says which instances 
 
 ```typescript title="src/Transfer.decision.ts"
 export class Transfer extends Domain.Decision(TransferMoney, {
-  reads: (cmd) => ({ from: Account.ref(cmd.from), to: Account.ref(cmd.to) }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: ({ from, to }, cmd) =>
     from.state._tag !== "Open" || to.state._tag !== "Open"
       ? new NotOpen()

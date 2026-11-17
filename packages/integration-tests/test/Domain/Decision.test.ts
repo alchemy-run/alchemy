@@ -19,6 +19,8 @@ import {
   Deposit,
   InsufficientFunds,
   NotOwner,
+  PayOut,
+  Payout,
   Refund,
   RefundMoney,
   RegisterCustomer,
@@ -35,6 +37,7 @@ import {
 
 const a = AccountId.make("a");
 const b = AccountId.make("b");
+const c = AccountId.make("c");
 
 const hosted = Bank.layer(Layer.empty).pipe(Layer.provide(InMemory));
 
@@ -112,6 +115,30 @@ describe("Domain decision", { tags: ["unit", "local"] }, () => {
       const receipt = yield* transfer.send(new TransferMoney({ from: a, to: a, amount: 30 }));
       expect(receipt.commits).toEqual([{ stream: "Account/a", version: 3 }]);
       expect(yield* accounts.get(a)).toEqual({ balance: 100 });
+    }).pipe(Effect.provide(hosted)),
+  );
+
+  it.effect("a name can stand for several instances", () =>
+    Effect.gen(function* () {
+      const accounts = yield* funded;
+      const payout = yield* Payout;
+      const receipt = yield* payout.send(new PayOut({ from: a, to: [b, c, b], amount: 10 }));
+      expect(receipt.commits).toEqual([
+        { stream: "Account/a", version: 4 },
+        { stream: "Account/b", version: 2 },
+        { stream: "Account/c", version: 1 },
+      ]);
+      expect(receipt.reply).toEqual({ balance: 70, paid: [20, 10, 20] });
+      expect(yield* accounts.get(a)).toEqual({ balance: 70 });
+      expect(yield* accounts.get(b)).toEqual({ balance: 20 });
+      expect(yield* accounts.get(c)).toEqual({ balance: 10 });
+      const short = yield* Effect.flip(
+        payout.send(new PayOut({ from: a, to: [b, c], amount: 40 })),
+      );
+      expect(short).toEqual(new InsufficientFunds({ balance: 70 }));
+      expect(yield* accounts.get(c)).toEqual({ balance: 10 });
+      const none = yield* payout.send(new PayOut({ from: a, to: [], amount: 10 }));
+      expect(none.commits).toEqual([{ stream: "Account/a", version: 4 }]);
     }).pipe(Effect.provide(hosted)),
   );
 
@@ -222,15 +249,18 @@ describe("Domain decision, definitions", { tags: ["unit"] }, () => {
     evolve: { Opened: () => ({ open: true }) },
   }) {}
   class Both extends Domain.Decision(OpenBoth, {
-    reads: (cmd) => ({ left: Door.ref(cmd.left), right: Door.ref(cmd.right) }),
+    reads: { left: Door, right: Door },
+    keyOf: (cmd) => ({ left: cmd.left, right: cmd.right }),
     decide: ({ left, right }) => [left.record(new Opened()), right.record(new Opened())],
   }) {}
   class BothAgain extends Domain.Decision(OpenBoth, {
-    reads: (cmd) => ({ left: Door.ref(cmd.left) }),
+    reads: { left: Door },
+    keyOf: (cmd) => ({ left: cmd.left }),
     decide: ({ left }) => [left.record(new Opened())],
   }) {}
   class Stray extends Domain.Decision(OpenBoth, {
-    reads: (cmd) => ({ left: Door.ref(cmd.left), window: Window.ref(cmd.right) }),
+    reads: { left: Door, window: Window },
+    keyOf: (cmd) => ({ left: cmd.left, window: cmd.right }),
     decide: ({ left }) => [left.record(new Opened())],
   }) {}
 
@@ -251,14 +281,20 @@ describe("Domain decision, definitions", { tags: ["unit"] }, () => {
     ]);
   });
 
-  it.effect("reading an aggregate the model doesn't host dies when the command is sent", () =>
-    Effect.gen(function* () {
-      class House extends Domain.Model("House", { aggregates: [Door], decisions: [Stray] }) {}
-      const exit = yield* Effect.gen(function* () {
-        const stray = yield* Stray;
-        return yield* stray.send(new OpenBoth({ left: "l", right: "r" }));
-      }).pipe(Effect.provide(House.layer(Layer.empty).pipe(Layer.provide(InMemory))), Effect.exit);
-      expect(Exit.isFailure(exit) && String(exit.cause)).toContain("not in the Domain");
-    }),
-  );
+  it("reading an aggregate the model doesn't host is a definition error", () => {
+    class House extends Domain.Model("House", {
+      aggregates: [Door],
+      // @ts-expect-error OpenBoth reads Window, which is not in the model's aggregates
+      decisions: [Stray],
+    }) {}
+    expect(Domain.verify(House).map((problem) => problem.reason._tag)).toEqual(["UnknownRead"]);
+    expect(Domain.verify(House).map((problem) => problem.reason.message)).toEqual([
+      "OpenBoth reads Window, which is not in the Domain",
+    ]);
+  });
+
+  it("a decision's reads are known without a command", () => {
+    expect(Both.reads).toEqual({ left: Door, right: Door });
+    expect(Stray.reads).toEqual({ left: Door, window: Window });
+  });
 });

@@ -18,10 +18,8 @@ import { UsernameClaim } from "./UsernameClaim.aggregate.ts";
  * customers who ask for one name at the same moment can't both get it.
  */
 export class Registration extends Domain.Decision(RegisterCustomer, {
-  reads: (cmd) => ({
-    customer: Customer.ref(cmd.customerId),
-    claim: UsernameClaim.ref(cmd.username),
-  }),
+  reads: { customer: Customer, claim: UsernameClaim },
+  keyOf: (cmd) => ({ customer: cmd.customerId, claim: cmd.username }),
   decide: Effect.fn(function* ({ customer, claim }, cmd) {
     const actor = yield* CurrentActor;
     if (actor._tag === "Customer" && actor.customerId !== customer.id) {

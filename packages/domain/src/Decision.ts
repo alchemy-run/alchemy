@@ -15,14 +15,17 @@ const RecordedOn = Symbol.for("alchemy/Domain/Decision/RecordedOn");
  */
 export interface Recorded<E = unknown> {
   readonly event: E;
-  /** The key, in `reads`, of the instance the event is recorded on. */
+  /** The stream of the instance the event is recorded on. */
   readonly [RecordedOn]: string;
 }
 
-/** Record `event` on the instance read under `key`. @internal */
-export const recorded = <E>(key: string, event: E): Recorded<E> => ({ event, [RecordedOn]: key });
+/** Record `event` on the instance with this `stream`. @internal */
+export const recorded = <E>(stream: string, event: E): Recorded<E> => ({
+  event,
+  [RecordedOn]: stream,
+});
 
-/** The key, in `reads`, a recorded event goes to; `undefined` for any other value. @internal */
+/** The stream a recorded event goes to; `undefined` for any other value. @internal */
 export const recordedOn = (value: unknown): string | undefined =>
   typeof value === "object" && value !== null && RecordedOn in value
     ? (value as Recorded)[RecordedOn]
@@ -45,17 +48,28 @@ export interface Read<A extends Aggregate.Any> {
   readonly record: <E extends Aggregate.EventOf<A>>(event: E) => Recorded<E>;
 }
 
-/** The instances a decision involves, each under a name `decide` reads it by. */
-export type Reads = { readonly [key: string]: Aggregate.Ref<any> };
+/** The aggregates a decision reads, each under a name `decide` reads it by. */
+export type Reads = { readonly [name: string]: Aggregate.Any };
 
-/** What `decide` receives for the instances named in `reads`. */
-export type ReadsOf<R extends Reads> = {
-  readonly [K in keyof R]: R[K] extends Aggregate.Ref<infer A> ? Read<A> : never;
+/**
+ * The instances one command involves: for each name in `reads`, the id of
+ * one instance of that aggregate, or an array of ids for several.
+ */
+export type KeysOf<R extends Reads> = {
+  readonly [N in keyof R]: Aggregate.IdOf<R[N]> | ReadonlyArray<Aggregate.IdOf<R[N]>>;
 };
 
-/** The state of each instance named in `reads`, after the decision's events. */
-export type StatesOf<R extends Reads> = {
-  readonly [K in keyof R]: R[K] extends Aggregate.Ref<infer A> ? Aggregate.StateOf<A> : never;
+/** One `T` for a name `keyOf` gives one id, an array for a name it gives several. */
+type OneOrMany<Key, T> = Key extends ReadonlyArray<unknown> ? ReadonlyArray<T> : T;
+
+/** What `decide` receives for the instances `keyOf` names. */
+export type ReadsOf<R extends Reads, K extends KeysOf<R> = KeysOf<R>> = {
+  readonly [N in keyof R]: OneOrMany<K[N], Read<R[N]>>;
+};
+
+/** The state of each instance `keyOf` names, after the decision's events. */
+export type StatesOf<R extends Reads, K extends KeysOf<R> = KeysOf<R>> = {
+  readonly [N in keyof R]: OneOrMany<K[N], Aggregate.StateOf<R[N]>>;
 };
 
 /** Context passed to a decision's `decide`. */
@@ -83,16 +97,22 @@ export type Outcome<C extends Command.Any> =
 type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
 
 /**
- * The definition of a decision: the instances its command involves, and what
- * it records on them.
+ * The definition of a decision: the aggregates it reads, the instances of
+ * them its command involves, and what it records on them.
  */
-export type Definition<C extends Command.Any, R extends Reads> = {
+export type Definition<C extends Command.Any, R extends Reads, K extends KeysOf<R>> = {
   /**
-   * The aggregate instances the command involves, each under a name. They
-   * are read together, and nothing commits unless every one of them is still
-   * as it was read.
+   * The aggregates the decision reads, each under a name. Known without a
+   * command, so a model can check that it hosts every one of them.
    */
-  readonly reads: (command: InstanceOf<C>) => R;
+  readonly reads: R;
+  /**
+   * The instances a command involves: an id for each name in `reads`, or an
+   * array of ids for a name that stands for several instances. They are read
+   * together, and nothing commits unless every one of them is still as it
+   * was read.
+   */
+  readonly keyOf: (command: InstanceOf<C>) => K;
   /**
    * Decide the command against every instance it read: the events to record
    * (each on one instance, with its `record`), an empty array for an accepted
@@ -101,7 +121,7 @@ export type Definition<C extends Command.Any, R extends Reads> = {
    * else.
    */
   readonly decide: (
-    reads: ReadsOf<R>,
+    reads: ReadsOf<R, K>,
     command: InstanceOf<C>,
     context: DecideContext,
   ) => Outcome<C>;
@@ -109,7 +129,7 @@ export type Definition<C extends Command.Any, R extends Reads> = {
   ? {
       /** The command's reply, from each instance's state after the events. */
       readonly reply: (
-        states: StatesOf<R>,
+        states: StatesOf<R, K>,
         events: ReadonlyArray<InstanceOf<C["events"][number]>>,
       ) => ReplyOf<C>;
     }
@@ -117,7 +137,8 @@ export type Definition<C extends Command.Any, R extends Reads> = {
 
 /** The widened shape of every {@link Definition}. */
 export interface AnyDefinition {
-  readonly reads: (command: any) => Reads;
+  readonly reads: Reads;
+  readonly keyOf: (command: any) => { readonly [name: string]: string | ReadonlyArray<string> };
   readonly decide: (reads: any, command: any, context: DecideContext) => unknown;
   readonly reply?: ((states: any, events: ReadonlyArray<any>) => unknown) | undefined;
 }
@@ -185,19 +206,21 @@ export interface Any extends Context.Key<unknown, unknown> {
   /** The tag of the command it implements. */
   readonly decisionName: string;
   readonly command: Command.Any;
+  /** The aggregates it reads, each under the name `decide` reads it by. */
+  readonly reads: Reads;
   readonly definition: AnyDefinition;
 }
 
 /** The class type returned by {@link make}. */
-export interface DecisionClass<C extends Command.Any> extends Context.ServiceClass<
-  Key<C["tag"]>,
-  string,
-  Client<C>
-> {
+export interface DecisionClass<
+  C extends Command.Any,
+  R extends Reads = Reads,
+> extends Context.ServiceClass<Key<C["tag"]>, string, Client<C>> {
   readonly kind: "Decision";
   readonly annotations: Annotations;
   readonly decisionName: C["tag"];
   readonly command: C;
+  readonly reads: R;
   readonly definition: AnyDefinition;
 }
 
@@ -243,7 +266,8 @@ export interface DecisionClass<C extends Command.Any> extends Context.ServiceCla
  * }) {}
  *
  * export class Transfer extends Domain.Decision(TransferMoney, {
- *   reads: (cmd) => ({ from: Account.ref(cmd.from), to: Account.ref(cmd.to) }),
+ *   reads: { from: Account, to: Account },
+ *   keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
  *   decide: ({ from, to }, cmd) =>
  *     cmd.amount > from.state.balance
  *       ? new InsufficientFunds()
@@ -251,6 +275,31 @@ export interface DecisionClass<C extends Command.Any> extends Context.ServiceCla
  *           from.record(new TransferSent({ amount: cmd.amount })),
  *           to.record(new TransferReceived({ amount: cmd.amount })),
  *         ],
+ * }) {}
+ * ```
+ *
+ * `reads` names the aggregates and `keyOf` the instance of each a command
+ * is for. A model checks that it hosts every aggregate in `reads`.
+ *
+ * ### Reading several instances under one name
+ * `keyOf` may return an array of ids for a name. `decide` then receives an
+ * array for it.
+ *
+ * **Example:** Paying out to many accounts
+ * ```typescript
+ * export class PayOut extends Domain.Command("PayOut", {
+ *   input: { from: AccountId, to: Schema.Array(AccountId), amount: Schema.Int },
+ *   events: [TransferSent, TransferReceived],
+ * }) {}
+ *
+ * export class Payout extends Domain.Decision(PayOut, {
+ *   reads: { from: Account, to: Account },
+ *   keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
+ *   decide: ({ from, to }, cmd) =>
+ *     to.flatMap((account) => [
+ *       from.record(new TransferSent({ amount: cmd.amount })),
+ *       account.record(new TransferReceived({ amount: cmd.amount })),
+ *     ]),
  * }) {}
  * ```
  *
@@ -287,17 +336,18 @@ export interface DecisionClass<C extends Command.Any> extends Context.ServiceCla
  *
  * @primitive
  */
-export const make = <C extends Command.Any, const R extends Reads>(
+export const make = <C extends Command.Any, const R extends Reads, K extends KeysOf<R>>(
   command: C,
-  definition: Definition<C, R>,
+  definition: Definition<C, R, K>,
   annotations: Annotations = {},
-): DecisionClass<C> => {
+): DecisionClass<C, R> => {
   const Tag = Context.Service<Key<C["tag"]>, Client<C>>()(`alchemy/Domain/Decision/${command.tag}`);
   return class extends Tag {
     static readonly kind = "Decision" as const;
     static readonly annotations: Annotations = annotations;
     static readonly decisionName: C["tag"] = command.tag;
     static readonly command: C = command;
+    static readonly reads: R = definition.reads;
     static readonly definition = definition as unknown as AnyDefinition;
-  } as unknown as DecisionClass<C>;
+  } as unknown as DecisionClass<C, R>;
 };

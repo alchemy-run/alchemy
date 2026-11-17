@@ -99,7 +99,7 @@ The account still decides its own commands. `DepositMoney` goes to one account, 
 
 ## Decide against every instance
 
-A decision takes the command it implements, the instances it reads, and how it decides.
+A decision takes the command it implements, the aggregates it reads, which instances of them a command names, and how it decides.
 
 ```typescript title="src/Account/Transfer.decision.ts"
 import * as Domain from "@alchemy.run/domain";
@@ -112,10 +112,8 @@ import {
 } from "./TransferMoney.command.ts";
 
 export class Transfer extends Domain.Decision(TransferMoney, {
-  reads: (cmd) => ({
-    from: Account.ref(cmd.from),
-    to: Account.ref(cmd.to),
-  }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: ({ from, to }, cmd) =>
     cmd.amount > from.state.balance
       ? new InsufficientFunds({ balance: from.state.balance })
@@ -126,7 +124,9 @@ export class Transfer extends Domain.Decision(TransferMoney, {
 }) {}
 ```
 
-`reads` names the instances, each under a key. It depends only on the command, so the same command always involves the same instances.
+`reads` names the aggregates, each under a key. It is a plain value, so the model knows which aggregates a decision touches before any command arrives.
+
+`keyOf` gives the id of the instance behind each key. It depends only on the command, so the same command always involves the same instances.
 
 `decide` receives each instance under its key, with its `id`, its `state` and its `version`. It returns one of the command's rejections, or the events to record.
 
@@ -154,6 +154,8 @@ export class Bank extends Domain.Model("Bank", {
 ```
 
 Every command has one implementation: an aggregate or a decision. A second one is a type error on its entry in the model, and `Domain.verify` reports it as `ImplementedTwice`.
+
+A decision that reads an aggregate the model leaves out is a type error on its entry too, and `Domain.verify` reports it as `UnknownRead`.
 
 ## Send it
 
@@ -253,10 +255,8 @@ import {
 } from "./TransferMoney.command.ts";
 
 export class Transfer extends Domain.Decision(TransferMoney, {
-  reads: (cmd) => ({
-    from: Account.ref(cmd.from),
-    to: Account.ref(cmd.to),
-  }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: ({ from, to }, cmd) =>
     cmd.amount > from.state.balance
       ? new InsufficientFunds({ balance: from.state.balance })
@@ -320,10 +320,8 @@ import {
 } from "./TransferMoney.command.ts";
 
 export class Transfer extends Domain.Decision(TransferMoney, {
-  reads: (cmd) => ({
-    from: Account.ref(cmd.from),
-    to: Account.ref(cmd.to),
-  }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: Effect.fn(function* ({ from, to }, cmd) {
     const actor = yield* CurrentActor;
     if (actor._tag !== "Customer") return yield* new NotACustomer();
@@ -427,6 +425,46 @@ While an instance holds a decision's events, its own commands wait: a few millis
 If the primary's object can't be reached at all, the instances it prepared stay held until it can. A command to one of them fails after about 13 seconds of waiting, and succeeds once the primary is back.
 
 An instance that many decisions read becomes the place they queue. Two transfers out of the same account run one after the other, as two withdrawals do. A decision that keeps losing that race for about 20 seconds fails, and nothing of it is recorded.
+
+## Read as many instances as the command names
+
+A key can stand for several instances of its aggregate. Return an array of ids for it, and `decide` receives an array.
+
+```typescript title="src/Account/PayOut.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { AccountId } from "./Account.aggregate.ts";
+import { InsufficientFunds, TransferReceived, TransferSent } from "./TransferMoney.command.ts";
+
+export class PayOut extends Domain.Command("PayOut", {
+  input: { from: AccountId, to: Schema.Array(AccountId), amount: Schema.Int },
+  events: [TransferSent, TransferReceived],
+  rejects: [InsufficientFunds],
+}) {}
+```
+
+`to` is one key in `reads`, and `keyOf` returns the whole list for it.
+
+```typescript title="src/Account/Payout.decision.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+import { PayOut } from "./PayOut.command.ts";
+import { InsufficientFunds, TransferReceived, TransferSent } from "./TransferMoney.command.ts";
+
+export class Payout extends Domain.Decision(PayOut, {
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
+  decide: ({ from, to }, cmd) =>
+    cmd.amount * to.length > from.state.balance
+      ? new InsufficientFunds({ balance: from.state.balance })
+      : to.flatMap((account) => [
+          from.record(new TransferSent({ to: account.id, amount: cmd.amount })),
+          account.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+        ]),
+}) {}
+```
+
+Every account is paid, or none is. An instance named twice is read once.
 
 ## What it can't do yet
 

@@ -138,10 +138,8 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
 
 // Customer/Registration.decision.ts
 export class Registration extends Domain.Decision(RegisterCustomer, {
-  reads: (cmd) => ({
-    customer: Customer.ref(cmd.customerId),
-    claim: UsernameClaim.ref(cmd.username),
-  }),
+  reads: { customer: Customer, claim: UsernameClaim },
+  keyOf: (cmd) => ({ customer: cmd.customerId, claim: cmd.username }),
   decide: ({ customer, claim }, cmd) =>
     customer.state._tag === "Registered"
       ? new AlreadyRegistered()
@@ -157,7 +155,7 @@ const registration = yield* Registration;
 yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", username }));
 ```
 
-- **`reads` depends only on the command.** Each instance arrives in `decide` under its key, with `id`, `state`, `version` and `record`.
+- **`reads` is static, `keyOf` depends only on the command.** `reads` maps a key to an aggregate; `keyOf` gives each key an id, or an array of ids for several instances. Each instance arrives in `decide` under its key, with `id`, `state`, `version` and `record`. Reading an aggregate the model leaves out is a type error.
 - **`record` puts an event on one instance**, which folds it with its own `evolve`. An aggregate lists such events in `events`. Views and policies see them like any other.
 - **`decide` follows an aggregate's rules:** events, `[]`, or a declared rejection; pure, or an `Effect.fn` that reads only middleware context. A command with a `reply` needs the decision's `reply`, from each instance's state after the events.
 - **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.

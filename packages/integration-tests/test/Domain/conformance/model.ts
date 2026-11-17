@@ -67,7 +67,8 @@ export class Counter extends Domain.Aggregate("Counter", {
 }) {}
 
 export class Giving extends Domain.Decision(Give, {
-  reads: (command) => ({ from: Counter.ref(command.from), to: Counter.ref(command.to) }),
+  reads: { from: Counter, to: Counter },
+  keyOf: (command) => ({ from: command.from, to: command.to }),
   decide: ({ from, to }, command) =>
     command.by > from.state.total
       ? new Short({ total: from.state.total })

@@ -54,7 +54,8 @@ class Window extends Domain.Aggregate("Window", {
 }) {}
 
 class Both extends Domain.Decision(OpenBoth, {
-  reads: (cmd) => ({ left: Door.ref(cmd.left), right: Window.ref(cmd.right) }),
+  reads: { left: Door, right: Window },
+  keyOf: (cmd) => ({ left: cmd.left, right: cmd.right }),
   decide: ({ left, right }, cmd) =>
     left.state.open
       ? Stuck.make()
@@ -68,7 +69,8 @@ class Both extends Domain.Decision(OpenBoth, {
 }) {}
 
 class Shut extends Domain.Decision(CloseBoth, {
-  reads: (cmd) => ({ left: Door.ref(cmd.left), right: Door.ref(cmd.right) }),
+  reads: { left: Door, right: Door },
+  keyOf: (cmd) => ({ left: cmd.left, right: cmd.right }),
   decide: Effect.fn(function* ({ left, right }) {
     return [left.record(Closed.make()), right.record(Closed.make())];
   }),
@@ -126,7 +128,8 @@ class Gate extends Domain.Aggregate("Gate", {
 }) {}
 
 class BothAgain extends Domain.Decision(OpenBoth, {
-  reads: (cmd) => ({ left: Door.ref(cmd.left) }),
+  reads: { left: Door },
+  keyOf: (cmd) => ({ left: cmd.left }),
   decide: ({ left }) => [left.record(Painted.make({ color: "blue" }))],
   reply: () => ({ open: 0 }),
 }) {}
@@ -134,6 +137,54 @@ class BothAgain extends Domain.Decision(OpenBoth, {
 export class House extends Domain.Model("House", {
   aggregates: [Door, Window],
   decisions: [Both, Shut],
+}) {}
+
+class Garage extends Domain.Aggregate("Garage", {
+  id: Schema.String,
+  state: Schema.Struct({ open: Schema.Boolean }),
+  initial: { open: false },
+  events: [Closed],
+  evolve: { Closed: () => ({ open: false }) },
+}) {}
+
+/** One name for one instance, another for several. */
+class ShutAll extends Domain.Decision(CloseBoth, {
+  reads: { left: Door, rest: Door },
+  keyOf: (cmd) => ({ left: cmd.left, rest: [cmd.right] }),
+  decide: ({ left, rest }) => [
+    left.record(Closed.make()),
+    ...rest.map((door) => door.record(Closed.make())),
+    // @ts-expect-error several instances, not one
+    rest.record(Closed.make()),
+  ],
+}) {}
+
+class ShutGarage extends Domain.Decision(CloseBoth, {
+  reads: { left: Door, right: Garage },
+  keyOf: (cmd) => ({ left: cmd.left, right: cmd.right }),
+  decide: ({ left, right }) => [left.record(Closed.make()), right.record(Closed.make())],
+}) {}
+
+// Every name in `reads` gets an id.
+class Unkeyed extends Domain.Decision(CloseBoth, {
+  reads: { left: Door, right: Door },
+  // @ts-expect-error Property 'right' is missing
+  keyOf: (cmd) => ({ left: cmd.left }),
+  decide: () => [],
+}) {}
+
+// The id is of the aggregate's id type.
+class Miskeyed extends Domain.Decision(OpenGate, {
+  reads: { gate: Gate, door: Door },
+  // @ts-expect-error a number is not a Door id
+  keyOf: (cmd) => ({ gate: cmd.id, door: cmd.limit }),
+  decide: () => [],
+}) {}
+
+export class Elsewhere extends Domain.Model("Elsewhere", {
+  aggregates: [Door, Window],
+  // @ts-expect-error CloseBoth reads Garage, which is not in the model's aggregates
+  decisions: [ShutGarage],
 }) {}
 
 export class Twice extends Domain.Model("Twice", {
@@ -151,5 +202,5 @@ export const program = Effect.gen(function* () {
   const shut = yield* Shut;
   // @ts-expect-error the command a decision implements, and no other
   yield* shut.send(OpenBoth.make({ left: "d-1", right: "w-1" }));
-  return [open, Untargeted, Shed, Undecided, Gate] as const;
+  return [open, Untargeted, Shed, Undecided, Gate, ShutAll, Unkeyed, Miskeyed] as const;
 });

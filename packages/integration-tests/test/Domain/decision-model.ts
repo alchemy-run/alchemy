@@ -64,7 +64,8 @@ export class Account extends Domain.Aggregate("Account", {
 }) {}
 
 export class Transfer extends Domain.Decision(TransferMoney, {
-  reads: (cmd) => ({ from: Account.ref(cmd.from), to: Account.ref(cmd.to) }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: ({ from, to }, cmd) =>
     cmd.amount > from.state.balance
       ? new InsufficientFunds({ balance: from.state.balance })
@@ -126,10 +127,8 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
 }) {}
 
 export class Registration extends Domain.Decision(RegisterCustomer, {
-  reads: (cmd) => ({
-    customer: Customer.ref(cmd.customerId),
-    claim: UsernameClaim.ref(cmd.username),
-  }),
+  reads: { customer: Customer, claim: UsernameClaim },
+  keyOf: (cmd) => ({ customer: cmd.customerId, claim: cmd.username }),
   decide: ({ customer, claim }, cmd) =>
     customer.state._tag === "Registered"
       ? new AlreadyRegistered()
@@ -153,7 +152,8 @@ export class RefundMoney extends Domain.Command("RefundMoney", {
 
 /** `decide` as an `Effect.fn`: it reads who is sending, and fails with a rejection. */
 export class Refund extends Domain.Decision(RefundMoney, {
-  reads: (cmd) => ({ from: Account.ref(cmd.from), to: Account.ref(cmd.to) }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: Effect.fn(function* ({ from, to }, cmd) {
     const actor = yield* Effect.serviceOption(CurrentActor);
     if (actor._tag === "None" || actor.value.accountId !== from.id) return yield* new NotOwner();
@@ -162,6 +162,29 @@ export class Refund extends Domain.Decision(RefundMoney, {
       to.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
     ];
   }),
+}) {}
+
+// ---------------------------------------------------------------- several instances under one name
+
+export class PayOut extends Domain.Command("PayOut", {
+  input: { from: AccountId, to: Schema.Array(AccountId), amount: Schema.Int },
+  events: [TransferSent, TransferReceived],
+  rejects: [InsufficientFunds],
+  reply: { balance: Schema.Int, paid: Schema.Array(Schema.Int) },
+}) {}
+
+/** `to` stands for as many accounts as the command names. */
+export class Payout extends Domain.Decision(PayOut, {
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
+  decide: ({ from, to }, cmd) =>
+    cmd.amount * to.length > from.state.balance
+      ? new InsufficientFunds({ balance: from.state.balance })
+      : to.flatMap((account) => [
+          from.record(new TransferSent({ to: account.id, amount: cmd.amount })),
+          account.record(new TransferReceived({ from: from.id, amount: cmd.amount })),
+        ]),
+  reply: ({ from, to }) => ({ balance: from.balance, paid: to.map((account) => account.balance) }),
 }) {}
 
 // ---------------------------------------------------------------- what follows the events
@@ -181,6 +204,6 @@ export class Balance extends Domain.View("Balance", {
 
 export class Bank extends Domain.Model("DecisionBank", {
   aggregates: [Account, Customer, UsernameClaim],
-  decisions: [Transfer, Registration, Refund],
+  decisions: [Transfer, Registration, Refund, Payout],
   views: [Balance],
 }) {}

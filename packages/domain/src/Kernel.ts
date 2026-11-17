@@ -431,6 +431,13 @@ const build = (
       continue;
     }
     implement(command.tag, `the decision ${decision.decisionName}`);
+    for (const aggregate of new Set(Object.values(decision.reads))) {
+      if (aggregateByName.get(aggregate.aggregateName) !== aggregate) {
+        problem(
+          new UnknownRead({ decision: decision.decisionName, aggregate: aggregate.aggregateName }),
+        );
+      }
+    }
     const rejections = new Map<string, JsonCodec>();
     for (const rejection of command.rejects) {
       const tag = rejectionTag(rejection);
@@ -1321,42 +1328,57 @@ const build = (
       new DefinitionError({
         reason: new UndeclaredDecision({ aggregate: name, command: command.tag, returned, list }),
       });
-    /** The instances a decoded command involves: each once, by stream, with the names it has. */
-    const readsOf = Effect.fnUntraced(function* (decoded: unknown) {
+    const named = Object.entries(def.reads);
+    /**
+     * The instances a decoded command involves: each once, in stream order,
+     * and the stream (or streams) each name in `reads` stands for.
+     */
+    const readsOf = (decoded: unknown) => {
+      const ids = def.keyOf(decoded);
       const byStream = new Map<
         string,
         { keys: Array<string>; aggregate: Aggregate.Any; id: string }
       >();
-      for (const [key, ref] of Object.entries(def.reads(decoded))) {
-        const aggregate = aggregateByName.get(ref.aggregate);
-        if (aggregate === undefined) {
-          return yield* Effect.die(
-            new DefinitionError({
-              reason: new UnknownRead({ decision: name, aggregate: ref.aggregate }),
-            }),
-          );
-        }
-        const stream = `${ref.aggregate}/${ref.id}`;
-        const found = byStream.get(stream);
-        if (found) found.keys.push(key);
-        else byStream.set(stream, { keys: [key], aggregate, id: ref.id });
+      const streams: Record<string, string | ReadonlyArray<string>> = {};
+      for (const [key, aggregate] of named) {
+        const streamOf = (id: string) => {
+          const stream = `${aggregate.aggregateName}/${id}`;
+          const found = byStream.get(stream);
+          if (found === undefined) byStream.set(stream, { keys: [key], aggregate, id });
+          else if (!found.keys.includes(key)) found.keys.push(key);
+          return stream;
+        };
+        const id = ids[key]!;
+        streams[key] = typeof id === "string" ? streamOf(id) : id.map(streamOf);
       }
-      return [...byStream.entries()]
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([stream, read]) => ({ ...read, stream }));
-    });
+      return {
+        streams,
+        reads: [...byStream.entries()]
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([stream, read]) => ({ ...read, stream })),
+      };
+    };
+    /** One value per name in `reads`: of its instance, or of each of its instances. */
+    const byName = (
+      streams: Record<string, string | ReadonlyArray<string>>,
+      of: (stream: string) => unknown,
+    ): Record<string, unknown> =>
+      Object.fromEntries(
+        Object.entries(streams).map(([key, stream]) => [
+          key,
+          typeof stream === "string" ? of(stream) : stream.map(of),
+        ]),
+      );
     return {
       name,
       reads: (json) =>
-        Effect.map(
-          Effect.suspend(() => readsOf(codecs.command.decode(json))),
-          (reads): ReadonlyArray<DecisionRead> =>
-            reads.map(({ keys, aggregate, id, stream }) => ({
-              keys,
-              aggregate: aggregate.aggregateName,
-              id,
-              stream,
-            })),
+        Effect.sync((): ReadonlyArray<DecisionRead> =>
+          readsOf(codecs.command.decode(json)).reads.map(({ keys, aggregate, id, stream }) => ({
+            keys,
+            aggregate: aggregate.aggregateName,
+            id,
+            stream,
+          })),
         ),
       decide: (input) => {
         const correlationId = input.correlationId ?? input.commandId;
@@ -1368,12 +1390,11 @@ const build = (
         };
         const decide = Effect.gen(function* () {
           const decoded = codecs.command.decode(input.command) as { readonly _tag: string };
-          const reads = yield* readsOf(decoded);
+          const { streams, reads } = readsOf(decoded);
           const now = DateTime.makeUnsafe(input.now);
           const states = new Map(input.states.map((state) => [state.stream, state]));
-          // What `decide` sees: each instance under every name `reads` gives it.
-          const seen: Record<string, unknown> = {};
-          const streamOf = new Map<string, string>();
+          // What `decide` sees of each instance, under every name that stands for it.
+          const seen = new Map<string, unknown>();
           const current = new Map<string, { state: unknown; version: number }>();
           for (const read of reads) {
             const stored = states.get(read.stream);
@@ -1382,18 +1403,19 @@ const build = (
             );
             const version = stored?.version ?? 0;
             current.set(read.stream, { state, version });
-            for (const key of read.keys) {
-              streamOf.set(key, read.stream);
-              seen[key] = {
-                id: read.id,
-                stream: read.stream,
-                state,
-                version,
-                record: (event: unknown) => Decision.recorded(key, event),
-              };
-            }
+            seen.set(read.stream, {
+              id: read.id,
+              stream: read.stream,
+              state,
+              version,
+              record: (event: unknown) => Decision.recorded(read.stream, event),
+            });
           }
-          let decision = def.decide(seen, decoded, { commandId: input.commandId, now });
+          let decision = def.decide(
+            byName(streams, (stream) => seen.get(stream)),
+            decoded,
+            { commandId: input.commandId, now },
+          );
           // An effectful decision runs inside the decide span, with the context
           // the command was sent with (its only requirement).
           if (Effect.isEffect(decision)) {
@@ -1418,9 +1440,8 @@ const build = (
           const recorded = new Map<string, Array<{ readonly _tag: string }>>();
           const events: Array<{ readonly _tag: string }> = [];
           for (const item of decision as ReadonlyArray<unknown>) {
-            const key = Decision.recordedOn(item);
-            const stream = key === undefined ? undefined : streamOf.get(key);
-            if (stream === undefined) {
+            const stream = Decision.recordedOn(item);
+            if (stream === undefined || !current.has(stream)) {
               return yield* Effect.die(
                 new DefinitionError({
                   reason: new UnreadRecord({
@@ -1441,7 +1462,7 @@ const build = (
           }
           const trace = yield* Telemetry.currentTrace;
           const writes: Array<DecisionWrite> = [];
-          const after: Record<string, unknown> = {};
+          const after = new Map<string, unknown>();
           for (const read of reads) {
             const { state, version } = current.get(read.stream)!;
             const decided = recorded.get(read.stream) ?? [];
@@ -1471,7 +1492,7 @@ const build = (
                     false,
                     correlationId,
                   )).next;
-            for (const key of read.keys) after[key] = next;
+            after.set(read.stream, next);
             writes.push({
               keys: read.keys,
               aggregate: read.aggregate.aggregateName,
@@ -1501,7 +1522,14 @@ const build = (
               })),
               events: yield* Effect.forEach(events, encodeEvent),
               reply:
-                def.reply && codecs.reply ? codecs.reply.encode(def.reply(after, events)) : null,
+                def.reply && codecs.reply
+                  ? codecs.reply.encode(
+                      def.reply(
+                        byName(streams, (stream) => after.get(stream)),
+                        events,
+                      ),
+                    )
+                  : null,
             },
             correlationId,
             ...(trace ? { trace } : {}),

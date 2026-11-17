@@ -41,7 +41,8 @@ export class TransferMoney extends Domain.Command("TransferMoney", {
 }) {}
 
 export class Transfer extends Domain.Decision(TransferMoney, {
-  reads: (cmd) => ({ from: Account.ref(cmd.from), to: Account.ref(cmd.to) }),
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
   decide: ({ from, to }, cmd) =>
     cmd.amount > from.state.balance
       ? new InsufficientFunds()
@@ -52,13 +53,14 @@ export class Transfer extends Domain.Decision(TransferMoney, {
 }) {}
 ```
 
-- **`reads`** names the instances the command involves. It is a pure function of the command, so the set is known before anything is read.
+- **`reads`** names the aggregates the decision reads, each under a key. It is a value, not a function, so the model checks at type level and in `Domain.verify` that it hosts every one (`UnknownRead`), and tooling can see which aggregates a decision touches without a command.
+- **`keyOf`** gives the id behind each key, or an array of ids for a key that stands for several instances. It is a pure function of the command, so the set of instances is known before anything is read.
 - **`decide`** sees every instance's state and version together and returns events, each recorded on one instance with that instance's `record`, or a rejection. It is pure, or an `Effect.fn` that reads only what the command's middleware provides, exactly like an aggregate's `decide`.
 - **A decision has no state.** Each instance folds what is recorded on it with its own `evolve`.
 
 Three things change around it:
 
-- **A command has no `target`.** Its input names every instance it involves. An aggregate that implements it says which field is its instance, with `keyOf`; a decision names them in `reads`. So an implementation can move from an aggregate to a decision without changing the command or its callers.
+- **A command has no `target`.** Its input names every instance it involves. An aggregate that implements it says which field is its instance, with `keyOf`; a decision names them with `reads` and `keyOf`. So an implementation can move from an aggregate to a decision without changing the command or its callers.
 - **An aggregate lists `events` it folds but doesn't decide.** `evolve` covers them. An aggregate that only takes part in decisions leaves out `commands` and `decide`.
 - **A model lists `decisions`.** Every command has exactly one implementation. A second one is a type error on its entry in the model (`"OpenBoth is already implemented by Door"`) and a `DefinitionError` (`ImplementedTwice`) from `Domain.verify`.
 

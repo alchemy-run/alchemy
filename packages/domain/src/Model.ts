@@ -209,8 +209,9 @@ type OtherDecisions<D extends ReadonlyArray<Decision.Any>, K> = {
 
 /**
  * A model's decisions, each implementing a command nothing else in the
- * model implements. An entry whose command an aggregate or another decision
- * implements becomes a message naming it.
+ * model implements, and reading only the model's aggregates. An entry whose
+ * command an aggregate or another decision implements, or that reads an
+ * aggregate the model leaves out, becomes a message naming it.
  */
 export type ImplementedOnce<
   A extends ReadonlyArray<Aggregate.Any>,
@@ -222,9 +223,17 @@ export type ImplementedOnce<
     : [ImplementerOf<A, D[K]["decisionName"]>] extends [never]
       ? D[K]["decisionName"] extends OtherDecisions<D, K>["decisionName"]
         ? `${D[K]["decisionName"]} is already implemented by another decision`
-        : D[K]
+        : [UnhostedRead<A, D[K]>] extends [never]
+          ? D[K]
+          : `${D[K]["decisionName"]} reads ${UnhostedRead<A, D[K]>}, which is not in the model's aggregates`
       : `${D[K]["decisionName"]} is already implemented by ${ImplementerOf<A, D[K]["decisionName"]>}`;
 };
+
+/** The names of the aggregates `D` reads that are not among `A`. */
+type UnhostedRead<A extends ReadonlyArray<Aggregate.Any>, D extends Decision.Any> = Exclude<
+  D["reads"][keyof D["reads"]]["aggregateName"],
+  A[number]["aggregateName"]
+>;
 
 /** What a model's members serve. */
 export interface ServableBy<

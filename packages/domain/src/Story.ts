@@ -1038,7 +1038,11 @@ const instancesOf = (
     if (id !== undefined) return [Aggregate.makeRef(aggregate, id)];
   }
   const decision = definitions.decisions?.find((d) => d.decisionName === command._tag);
-  return decision === undefined ? [] : Object.values(decision.definition.reads(command));
+  if (decision === undefined) return [];
+  const ids = decision.definition.keyOf(command);
+  return Object.entries(decision.reads).flatMap(([name, aggregate]) =>
+    [ids[name]!].flat().map((id) => Aggregate.makeRef(aggregate, id)),
+  );
 };
 
 const isStoryFailure = (error: unknown): error is StoryFailure =>
