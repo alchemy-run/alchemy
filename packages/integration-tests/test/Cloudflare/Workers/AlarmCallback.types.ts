@@ -23,7 +23,14 @@ const registration = Alchemy.makeCallback(
   Effect.fn(function* (payload: { value: string }) {
     yield* Effect.succeed(payload.value.toUpperCase());
   }),
-  { retry: { delay: Duration.seconds(1) } },
+);
+
+const failingRegistration = Alchemy.makeCallback(
+  "failing",
+  // @ts-expect-error A handler can't fail: typed errors are its own to handle.
+  Effect.fn(function* (_payload: { value: string }) {
+    return yield* new TransactionFailure({ value: "nope" });
+  }),
 );
 
 const contextualRegistration = Alchemy.makeCallback(
@@ -42,15 +49,13 @@ const scopedRegistration = Alchemy.makeCallback(
   }),
 );
 
-type _PortableRegistration = Assert<
-  Equal<RequirementsOf<typeof registration>, Alchemy.RuntimeContext>
->;
+type _PortableRegistration = Assert<Equal<RequirementsOf<typeof registration>, Alchemy.Callbacks>>;
 type _RegistrationHasNoTypedError = Assert<Equal<ErrorOf<typeof registration>, never>>;
 type _PreservesHandlerRequirements = Assert<
-  Equal<RequirementsOf<typeof contextualRegistration>, Alchemy.RuntimeContext | Marker>
+  Equal<RequirementsOf<typeof contextualRegistration>, Alchemy.Callbacks | Marker>
 >;
 type _SuppliesHandlerScope = Assert<
-  Equal<RequirementsOf<typeof scopedRegistration>, Alchemy.RuntimeContext>
+  Equal<RequirementsOf<typeof scopedRegistration>, Alchemy.Callbacks>
 >;
 
 type Handle = SuccessOf<typeof registration>;
@@ -59,9 +64,7 @@ type Options = Parameters<Handle["schedule"]>[1];
 type _PortableScheduleOptions = Assert<
   Equal<Options, Alchemy.CallbackScheduleOptions<{ value: string }>>
 >;
-type _PortableRegistrationOptions = Assert<
-  Equal<Parameters<typeof Alchemy.makeCallback>[2], Alchemy.CallbackOptions | undefined>
->;
+type _TakesNameAndHandler = Assert<Equal<Parameters<typeof Alchemy.makeCallback>["length"], 2>>;
 type _InfersPayload = Assert<Equal<Options["payload"], { value: string }>>;
 type _RequiresStringId = Assert<Equal<Parameters<Handle["schedule"]>[0], string>>;
 type _ScheduleIsRuntimeOnly = Assert<
@@ -88,7 +91,9 @@ const instance = Effect.gen(function* () {
   yield* registration;
   yield* scopedRegistration;
   return { ping: () => Effect.succeed("pong") };
-});
+}).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
+
+void failingRegistration;
 
 class CallbackObject extends Cloudflare.DurableObject<CallbackObject>()(
   "CallbackTypes",

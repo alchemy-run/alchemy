@@ -89,9 +89,8 @@ export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 }) {}
 
 export class DepositMoney extends Domain.Command("DepositMoney", {
-  target: AccountId,
 +  middleware: [Session],
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyDeposited],
 -  rejects: [NotOpen],
 +  rejects: [NotOpen, NotOwner],
@@ -111,9 +110,8 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 }) {}
 
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
 +  middleware: [Session],
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyWithdrawn],
 -  rejects: [NotOpen, InsufficientFunds],
 +  rejects: [NotOpen, NotOwner, InsufficientFunds],
@@ -196,9 +194,8 @@ export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
 +export class NotYou extends Domain.Rejection("NotYou") {}
 +
 export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
-  target: CustomerId,
 +  middleware: [Session],
-  input: { name: Schema.String },
+  input: { customerId: CustomerId, name: Schema.String },
   events: [CustomerRegistered],
 -  rejects: [AlreadyRegistered],
 +  rejects: [AlreadyRegistered, NotYou],
@@ -227,6 +224,7 @@ import { CustomerId } from "./Customer.id.ts";
 export class Customer extends Domain.Aggregate("Customer", {
   // ...
   commands: [RegisterCustomer],
+  keyOf: (cmd) => cmd.customerId,
   decide: {
 -    RegisterCustomer: (customer, cmd) =>
 -      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
@@ -327,27 +325,27 @@ const account = Account.ref("a-1");
 it.effect("opens an account", () =>
   story(
 +    asSam,
-    Story.when(account, new OpenAccount({ owner: "sam" })),
+    Story.when(new OpenAccount({ accountId: account.id, owner: "sam" })),
     Story.then(account, new AccountOpened({ owner: "sam" })),
 // ...
 it.effect("refuses to open an account twice", () =>
   story(
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new OpenAccount({ owner: "sam" })),
+    Story.when(new OpenAccount({ accountId: account.id, owner: "sam" })),
 // ...
 it.effect("deposits into an open account and replies with the balance", () =>
   story(
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new DepositMoney({ amount: 100 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
 // ...
 
 it.effect("refuses a deposit into an account that isn't open", () =>
--  story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
+-  story(Story.when(new DepositMoney({ accountId: account.id, amount: 100 })), Story.rejected(new NotOpen())),
 +  story(
 +    asSam,
-+    Story.when(account, new DepositMoney({ amount: 100 })),
++    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
 +    Story.rejected(new NotOpen()),
 +  ),
 );
@@ -377,13 +375,13 @@ it.effect("the summary follows the balance", () =>
   story(
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new DepositMoney({ amount: 100 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
 // ...
 it.effect("the statement has one line per movement", () =>
   story(
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new DepositMoney({ amount: 100 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
 ```
 
 ```diff lang="typescript"
@@ -406,14 +404,14 @@ const samsAccount = Account.ref("c-1-main");
 it.effect("registering opens a main account", () =>
   story(
 +    as("c-1"),
-    Story.when(sam, new RegisterCustomer({ name: "sam" })),
+    Story.when(new RegisterCustomer({ customerId: sam.id, name: "sam" })),
     Story.then(sam, new CustomerRegistered({ name: "sam" })),
     // ...
   ),
 );
 +
 +it.effect("a customer can only register themselves", () =>
-+  story(as("c-2"), Story.when(sam, new RegisterCustomer({ name: "sam" })), Story.rejected(new NotYou())),
++  story(as("c-2"), Story.when(new RegisterCustomer({ customerId: sam.id, name: "sam" })), Story.rejected(new NotYou())),
 +);
 ```
 
@@ -466,7 +464,7 @@ it.live("a customer registers, deposits, and reads only their own balance", () =
   inBank(
     Effect.gen(function* () {
       const sam = yield* signedInAs("c-1");
-      yield* sam.RegisterCustomer(CustomerId.make("c-1"), { name: "sam" });
+      yield* sam.RegisterCustomer({ customerId: CustomerId.make("c-1"), name: "sam" });
 
       // The policy opens the account shortly after; wait for its summary.
       const accountId = AccountId.make("c-1-main");
@@ -476,7 +474,7 @@ it.live("a customer registers, deposits, and reads only their own balance", () =
         Stream.runHead,
       );
 
-      const { reply } = yield* sam.DepositMoney(accountId, { amount: 100 });
+      const { reply } = yield* sam.DepositMoney({ accountId, amount: 100 });
       expect(reply.balance).toBe(100);
 
       const alex = yield* signedInAs("c-2");

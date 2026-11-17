@@ -83,7 +83,7 @@ const asSystem = Layer.succeed(Session, (effect) =>
   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
 );
 const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));   // per request, in Effect.scoped
-yield* bank.DepositMoney(accountId, { amount });
+yield* bank.DepositMoney({ accountId, amount });
 ```
 
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
@@ -202,7 +202,7 @@ A command is a `POST` with the RPC payload as its JSON body, and answers with it
 
 ```sh
 curl -X POST /DepositMoney -H "cookie: $SESSION" \
-  -d '{ "target": "a-1", "commandId": "d-1", "input": { "amount": 1000 } }'
+  -d '{ "commandId": "d-1", "input": { "accountId": "a-1", "amount": 1000 } }'
 # { "reply": { "balance": 1000 }, "stream": "Account/a-1", "version": 3 }
 ```
 
@@ -298,7 +298,7 @@ Command.run(bank, { version: "1.0.0" }).pipe(
 Fields are flags, and the result is JSON on stdout; a rejection is its wire JSON on stderr with exit code 1:
 
 ```sh
-$ bank deposit-money --target a-1 --amount 1000
+$ bank deposit-money --account-id a-1 --amount 1000
 $ bank account-summary get --key a-1
 ```
 

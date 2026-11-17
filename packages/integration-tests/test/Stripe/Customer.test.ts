@@ -1,8 +1,13 @@
+import { randomBytes } from "node:crypto";
 import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { GetCustomer } from "@distilled.cloud/stripe/stripe";
+import {
+  CreateTestHelpersTestClock,
+  DeleteTestHelpersTestClock,
+  GetCustomer,
+} from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -138,6 +143,169 @@ test.provider(
 
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:customer", "live"],
+    timeout: 120_000,
+  },
+);
+
+/**
+ * Invoice prefixes are unique across the Stripe account, and a deleted
+ * customer keeps its prefix reserved, so every run needs fresh ones (3–12
+ * uppercase letters or digits). They are property values, not resources:
+ * nothing leaks.
+ */
+const invoicePrefix = (letter: string) =>
+  Effect.sync(() => `${letter}${randomBytes(4).toString("hex").slice(0, 7).toUpperCase()}`);
+
+const address = {
+  line1: "123 Main Street",
+  city: "San Francisco",
+  state: "CA",
+  postalCode: "94111",
+  country: "US",
+};
+
+test.provider(
+  "set, change, and clear a customer's billing, shipping, tax, and invoice settings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const firstPrefix = yield* invoicePrefix("A");
+      const secondPrefix = yield* invoicePrefix("B");
+
+      const deployCustomer = (props: Partial<Stripe.CustomerProps>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Customer("BillingCustomer", {
+              email: "alchemy.billing.customer@example.com",
+              ...props,
+            });
+          }),
+        );
+
+      const created = yield* deployCustomer({
+        address,
+        shipping: { name: "Alchemy Receiving", address, phone: "+15555550102" },
+        businessName: "Alchemy Inc",
+        individualName: "Ada Alchemy",
+        preferredLocales: ["en", "fr"],
+        taxExempt: "reverse",
+        invoicePrefix: firstPrefix,
+        nextInvoiceSequence: 10,
+        invoiceSettings: {
+          footer: "Thanks for your business",
+          customFields: [{ name: "PO", value: "1234" }],
+          renderingOptions: { amountTaxDisplay: "include_inclusive_tax" },
+        },
+        cashBalanceReconciliationMode: "manual",
+      });
+      expect(created.address).toEqual(address);
+      expect(created.shipping).toEqual({
+        name: "Alchemy Receiving",
+        address,
+        phone: "+15555550102",
+      });
+      expect(created.businessName).toEqual("Alchemy Inc");
+      expect(created.individualName).toEqual("Ada Alchemy");
+      expect(created.preferredLocales).toEqual(["en", "fr"]);
+      expect(created.taxExempt).toEqual("reverse");
+      expect(created.invoicePrefix).toEqual(firstPrefix);
+      expect(created.nextInvoiceSequence).toEqual(10);
+      expect(created.invoiceSettings).toEqual({
+        footer: "Thanks for your business",
+        customFields: [{ name: "PO", value: "1234" }],
+        renderingOptions: { amountTaxDisplay: "include_inclusive_tax" },
+      });
+      expect(created.cashBalanceReconciliationMode).toEqual("manual");
+
+      const fetched = yield* GetCustomer({ customer: created.id, expand: ["cash_balance"] });
+      const live = "deleted" in fetched ? undefined : fetched;
+      expect(live?.address?.postal_code).toEqual("94111");
+      expect(live?.tax_exempt).toEqual("reverse");
+      expect(live?.invoice_settings?.footer).toEqual("Thanks for your business");
+      expect(live?.cash_balance?.settings.reconciliation_mode).toEqual("manual");
+
+      const changed = yield* deployCustomer({
+        address: { ...address, line2: "Suite 5" },
+        businessName: "Alchemy Labs",
+        preferredLocales: ["de"],
+        taxExempt: "exempt",
+        invoicePrefix: secondPrefix,
+        nextInvoiceSequence: 20,
+        invoiceSettings: { footer: "Net 30" },
+        cashBalanceReconciliationMode: "automatic",
+      });
+      expect(changed.id).toEqual(created.id);
+      expect(changed.address).toEqual({ ...address, line2: "Suite 5" });
+      expect(changed.shipping).toBeUndefined();
+      expect(changed.businessName).toEqual("Alchemy Labs");
+      expect(changed.individualName).toBeUndefined();
+      expect(changed.preferredLocales).toEqual(["de"]);
+      expect(changed.taxExempt).toEqual("exempt");
+      expect(changed.invoicePrefix).toEqual(secondPrefix);
+      expect(changed.nextInvoiceSequence).toEqual(20);
+      expect(changed.invoiceSettings).toEqual({ footer: "Net 30" });
+      expect(changed.cashBalanceReconciliationMode).toEqual("automatic");
+
+      const cleared = yield* deployCustomer({ nextInvoiceSequence: 15 });
+      expect(cleared.id).toEqual(created.id);
+      expect(cleared.address).toBeUndefined();
+      expect(cleared.businessName).toBeUndefined();
+      expect(cleared.preferredLocales).toEqual([]);
+      expect(cleared.taxExempt).toEqual("none");
+      expect(cleared.invoicePrefix).toEqual(secondPrefix);
+      expect(cleared.nextInvoiceSequence).toEqual(20);
+      expect(cleared.invoiceSettings).toBeUndefined();
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:customer", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "attach a customer to a test clock and replace it when the clock changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const frozenTime = 1_800_000_000;
+      const first = yield* CreateTestHelpersTestClock({ frozen_time: frozenTime });
+      const second = yield* CreateTestHelpersTestClock({ frozen_time: frozenTime });
+
+      const deployCustomer = (testClock: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Customer("ClockCustomer", {
+              email: "alchemy.clock.customer@example.com",
+              testClock,
+            });
+          }),
+        );
+
+      const created = yield* deployCustomer(first.id);
+      expect(created.testClock).toEqual(first.id);
+
+      const unchanged = yield* deployCustomer(first.id);
+      expect(unchanged.id).toEqual(created.id);
+
+      const replaced = yield* deployCustomer(second.id);
+      expect(replaced.id).not.toEqual(created.id);
+      expect(replaced.testClock).toEqual(second.id);
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(replaced.id)).toEqual("gone");
+      yield* DeleteTestHelpersTestClock({ test_clock: first.id });
+      yield* DeleteTestHelpersTestClock({ test_clock: second.id });
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:customer", "live"],
