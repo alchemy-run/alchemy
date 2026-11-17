@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   lastSegment,
@@ -181,8 +182,31 @@ export type Instance = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `organizations/{org}/instances/{instance}`).
+   */
+  instanceId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee runtime instance.
@@ -229,22 +253,32 @@ export type Instance = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Apigee.Instance.lookup({ instanceId: "my-instance" });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Instance = Resource<Instance>("GCP.Apigee.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Apigee.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Apigee.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Apigee.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, instanceId: string) =>
@@ -324,7 +358,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstances({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 /** Instance provisioning and deletion take 30–60 minutes. */
 const INSTANCE_BUDGET = "75 minutes";
@@ -332,7 +366,9 @@ const INSTANCE_BUDGET = "75 minutes";
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.InstanceNotResolved",
@@ -345,13 +381,13 @@ const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is apigee.GoogleCloudApigeeV1Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "STATE_UNSPECIFIED") === "ACTIVE",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -367,7 +403,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.InstanceStillExists",
@@ -441,6 +479,16 @@ export const InstanceProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ instanceId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, instanceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization, env.region);
+      return attrs;
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
@@ -505,7 +553,7 @@ export const InstanceProvider = () =>
             parent: orgParent(organization),
             body: toBody(news, instanceId, desiredDescription, location),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -516,7 +564,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") === "CREATING") {
@@ -579,9 +627,7 @@ export const InstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstances({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, {
           notFoundOk: true,

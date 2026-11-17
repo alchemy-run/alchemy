@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -134,8 +135,32 @@ export type Release = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReleaseLookup
 >;
+
+/**
+ * Props for {@link Release.lookup}: find a release this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ReleaseLookup {
+  /**
+   * Release id (the `{release}` segment of
+   * `projects/{project}/locations/{location}/releases/{release}`).
+   */
+  releaseId: string;
+  /**
+   * Region of the release (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Lifecycle Manager release — a version of a UnitKind packaged
@@ -163,6 +188,18 @@ export type Release = Resource<
  *   unitKind: kind.name,
  *   blueprint: { package: "us-central1-docker.pkg.dev/proj/blueprints/store:v1" },
  *   inputVariableDefaults: [{ variable: "region", type: "STRING", value: "us-central1" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing release
+ * `Release.lookup` references a release Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared release.
+ *
+ * **Example:** Reference an existing release
+ * ```typescript
+ * const release = GCP.SaasServiceManagement.Release.lookup({
+ *   releaseId: "my-release",
  * });
  * ```
  *
@@ -206,10 +243,10 @@ const toAttrs = (item: saasservicemgmt.Release, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : saasservicemgmt
         .getProjectsLocationsReleases({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, location: string) =>
   collectPages(
@@ -258,6 +295,15 @@ export const ReleaseProvider = () =>
             previousPackage !== nextPackage),
       });
     }),
+
+    lookup: Effect.fn(function* ({ releaseId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, releaseId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -317,7 +363,7 @@ export const ReleaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

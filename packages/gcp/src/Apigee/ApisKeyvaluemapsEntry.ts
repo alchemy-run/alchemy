@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -89,7 +89,7 @@ export const ApisKeyvaluemapsEntry = Resource<ApisKeyvaluemapsEntry>(
 export class ApisKeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApisKeyvaluemapsEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, apiId: string, mapId: string, entryId: string) =>
@@ -118,7 +118,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApisKeyvaluemapsEntries({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const mapIsOwned = (parent: string) =>
   apigee
@@ -153,7 +153,7 @@ export const ApisKeyvaluemapsEntryProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
         olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
@@ -166,7 +166,7 @@ export const ApisKeyvaluemapsEntryProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, organizationId, apiId, mapId, name);
       const owned = yield* mapIsOwned(mapName(organizationId, apiId, mapId));
-      return owned ? attrs : Unowned(attrs);
+      return owned ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -245,7 +245,7 @@ export const ApisKeyvaluemapsEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApisKeyvaluemapsEntryNotResolved({ name });
+        return yield* new ApisKeyvaluemapsEntryNotResolved({ resourceName: name });
       }
 
       if ((current.value ?? "") !== news.value) {

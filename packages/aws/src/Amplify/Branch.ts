@@ -103,8 +103,20 @@ export interface Branch extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  BranchLookup
 > {}
+
+/**
+ * Props for {@link Branch.lookup}: find a branch this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface BranchLookup {
+  /** The id of the app it belongs to. */
+  appId: string;
+  /** The name of the existing branch. */
+  branchName: string;
+}
 
 /**
  * A branch of an AWS Amplify Hosting app.
@@ -136,6 +148,16 @@ export interface Branch extends Resource<
  *   // base64 of "user:password"
  *   basicAuthCredentials: Redacted.make(credentials),
  * });
+ * ```
+ *
+ * ### Looking up an existing branch
+ * `Branch.lookup` references a branch Alchemy doesn't manage (created in the
+ * console or by another stack), found by `appId` and `branchName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing branch
+ * ```typescript
+ * const existing = AWS.Amplify.Branch.lookup({ appId: "...", branchName: "..." });
  * ```
  *
  * @resource
@@ -170,7 +192,7 @@ export const BranchProvider = () =>
             schedule: Schedule.exponential("2 seconds"),
             times: 3,
           }),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const syncTags = Effect.fn(function* (
@@ -200,6 +222,17 @@ export const BranchProvider = () =>
           if (somePropsAreDifferent(olds, news, ["appId", "branchName"])) {
             return { action: "replace" };
           }
+        }),
+        lookup: Effect.fn(function* ({ appId, branchName }) {
+          const branch = yield* observe(appId, branchName);
+          if (!branch) return undefined;
+          const attrs = {
+            appId: appId,
+            branchName: branch.branchName,
+            branchArn: branch.branchArn,
+            tags: tagRecord(branch.tags),
+          };
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.appId || !output.branchName) return undefined;

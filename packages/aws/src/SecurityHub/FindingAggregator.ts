@@ -82,15 +82,15 @@ export const FindingAggregatorProvider = () =>
         securityhub.getFindingAggregator({ FindingAggregatorArn: arn }).pipe(
           Effect.map((r) => r as securityhub.GetFindingAggregatorResponse | undefined),
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            InvalidAccessException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            InvalidAccessException: () => Effect.undefined,
           }),
         );
 
       // At most one aggregator exists per account — a single page suffices.
       const findAggregator = securityhub.listFindingAggregators({}).pipe(
         Effect.map((r) => r.FindingAggregators?.[0]?.FindingAggregatorArn),
-        Effect.catchTag("InvalidAccessException", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidAccessException", () => Effect.undefined),
       );
 
       const buildAttrs = (r: securityhub.GetFindingAggregatorResponse) => ({

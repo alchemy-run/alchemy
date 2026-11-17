@@ -67,17 +67,17 @@ export const toGeneratedPath = (id: string, requested: string | undefined) =>
 
 export const getKey = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : recaptchaenterprise
         .getProjectsKeys({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getFirewallPolicy = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : recaptchaenterprise
         .getProjectsFirewallpolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listKeys = (project: string) =>
   recaptchaenterprise.listProjectsKeys

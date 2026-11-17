@@ -602,7 +602,7 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     // the deprecated array form retains create()'s option validation behavior.
     for (const instanceOptions of batch) {
       if (!isLegacyBatch) {
-        const validation = Schema.decodeUnknownResult(workflowInstanceCreateOptionsSchema)(
+        const validation = Schema.decodeResult(workflowInstanceCreateOptionsSchema)(
           instanceOptions,
         );
         if (Result.isFailure(validation)) {
@@ -859,7 +859,7 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     const stubId = this.env.ENGINE.idFromName(instanceId);
     const stub = this.env.ENGINE.get(stubId);
 
-    return await stub.waitForStepResult(name, index);
+    return stub.waitForStepResult(name, index);
   }
 
   public async unsafeAbort(instanceId: string, reason?: string): Promise<void> {
@@ -882,7 +882,7 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
   public async unsafeGetOutputOrError(instanceId: string, isOutput: boolean): Promise<unknown> {
     const stubId = this.env.ENGINE.idFromName(instanceId);
     const stub = this.env.ENGINE.get(stubId);
-    return await stub.getOutputOrError(isOutput);
+    return stub.getOutputOrError(isOutput);
   }
 }
 

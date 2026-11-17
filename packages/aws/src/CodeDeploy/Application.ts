@@ -42,8 +42,18 @@ export interface Application extends Resource<
     computePlatform: string;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApplicationLookup {
+  /** The name of the existing application. */
+  applicationName: string;
+}
 
 /**
  * An AWS CodeDeploy application — a logical container that groups the
@@ -65,6 +75,16 @@ export interface Application extends Resource<
  *   computePlatform: "Server",
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.CodeDeploy.Application.lookup({ applicationName: "..." });
  * ```
  *
  * @resource
@@ -100,9 +120,7 @@ export const ApplicationProvider = () =>
       const getApplication = Effect.fn(function* (name: string) {
         const response = yield* codedeploy
           .getApplication({ applicationName: name })
-          .pipe(
-            Effect.catchTag("ApplicationDoesNotExistException", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ApplicationDoesNotExistException", () => Effect.undefined));
         return response?.application;
       });
 
@@ -134,6 +152,20 @@ export const ApplicationProvider = () =>
           if ((news?.computePlatform ?? "Server") !== (olds?.computePlatform ?? "Server")) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ applicationName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const application = yield* getApplication(name);
+          if (application?.applicationId === undefined) return undefined;
+          const arn = applicationArn(region, accountId, name);
+          const attrs = {
+            applicationName: application.applicationName ?? name,
+            applicationId: application.applicationId,
+            applicationArn: arn,
+            computePlatform: application.computePlatform ?? "Server",
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -177,11 +209,7 @@ export const ApplicationProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ApplicationAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ApplicationAlreadyExistsException", () => Effect.undefined));
             application = yield* getApplication(name);
           }
 

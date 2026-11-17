@@ -1,12 +1,26 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiError from "effect/http-api/HttpApiError";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as OpenApi from "effect/http-api/OpenApi";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
+import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
@@ -19,52 +33,57 @@ class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
 class AccountClosed extends Domain.Rejection("AccountClosed") {}
 
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
   rejects: [AccountClosed],
 }) {}
 class Withdraw extends Domain.Command("Withdraw", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Withdrawn],
   rejects: [InsufficientFunds, AccountClosed],
 }) {}
-class Close extends Domain.Command("Close", { target: Schema.String, events: [Closed] }) {}
+class Close extends Domain.Command("Close", { input: { id: Schema.String }, events: [Closed] }) {}
 
 class Account extends Domain.Aggregate("Account", {
   id: Schema.String,
   state: Schema.Struct({ balance: Schema.Number, closed: Schema.Boolean }),
   initial: { balance: 0, closed: false },
   commands: [Deposit, Withdraw, Close],
+  keyOf: (command) => command.id,
   decide: {
-    Deposit: (s, { amount }) => (s.closed ? new AccountClosed() : [new Deposited({ amount })]),
-    Withdraw: (s, { amount }) =>
-      s.closed
+    Deposit: (account, { amount }) =>
+      account.closed ? new AccountClosed() : [new Deposited({ amount })],
+    Withdraw: (account, { amount }) =>
+      account.closed
         ? new AccountClosed()
-        : amount > s.balance
-          ? new InsufficientFunds({ balance: s.balance, requested: amount })
+        : amount > account.balance
+          ? new InsufficientFunds({ balance: account.balance, requested: amount })
           : [new Withdrawn({ amount })],
-    Close: (s) => (s.closed ? [] : [new Closed()]),
+    Close: (account) => (account.closed ? [] : [new Closed()]),
   },
   evolve: {
     Deposited: (s, e) => ({ ...s, balance: s.balance + e.amount }),
     Withdrawn: (s, e) => ({ ...s, balance: s.balance - e.amount }),
     Closed: (s) => ({ ...s, closed: true }),
   },
-  read: {},
 }) {}
 
 class Bank extends Domain.Model("Bank", { aggregates: [Account] }) {}
 
-class BankApi extends Domain.Api("BankApi", Deposit, Account, Withdraw) {}
-class CloseApi extends Domain.Api("CloseApi", Close, Account) {}
+class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  commands: ["Deposit", "Withdraw"],
+}) {}
+class CloseApi extends Domain.Api("CloseApi", {
+  model: Bank,
+  commands: ["Close"],
+}) {}
 
 /** A helper written once for every Api: the tags of its commands. */
 const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
   api.commands.map((command) => command.tag);
 
-describe("Domain Api", () => {
+describe("Domain Api", { tags: ["unit", "local"] }, () => {
   it.effect("a concrete Api is an Api.Any", () =>
     Effect.sync(() => {
       const any: Domain.Api.Any = BankApi;
@@ -118,7 +137,7 @@ describe("Domain Api", () => {
     Effect.gen(function* () {
       const bank: Domain.Api.ClientOf<typeof BankApi> = yield* BankApi.Client;
       const isRejection = Schema.is(BankApi.rejections);
-      const refused = yield* bank.Withdraw("a-1", { amount: 5 }).pipe(Effect.flip);
+      const refused = yield* bank.Withdraw({ id: "a-1", amount: 5 }).pipe(Effect.flip);
       expect(isRejection(refused)).toBe(true);
       expect(refused).toBeInstanceOf(InsufficientFunds);
     }).pipe(
@@ -129,6 +148,136 @@ describe("Domain Api", () => {
         ),
       ),
     ),
+  );
+
+  it.effect("an Api serves everything of a kind it does not list", () =>
+    Effect.sync(() => {
+      class Everything extends Domain.Api("Everything", { model: Bank }) {}
+      expect(Bank.commands).toEqual([Deposit, Withdraw, Close]);
+      expect(Everything.commands).toEqual([Deposit, Withdraw, Close]);
+      // An aggregate's state is never served: a view projects what clients see of it.
+      expect(Everything.serves).toEqual([Deposit, Withdraw, Close]);
+    }),
+  );
+
+  it.effect("an Api takes no aggregates to read", () =>
+    Effect.sync(() => {
+      // @ts-expect-error an Api serves commands, views, streams and queries; never an aggregate's state
+      Domain.Api("AccountReads", { model: Bank, aggregates: ["Account"] });
+    }),
+  );
+
+  it.effect("an Api serves none of a kind it lists as empty", () =>
+    Effect.sync(() => {
+      class Reads extends Domain.Api("Reads", { model: Bank, commands: [] }) {}
+      expect(Reads.commands).toEqual([]);
+      expect(Reads.serves).toEqual([]);
+    }),
+  );
+
+  it.effect("naming something its model does not hold is a type error", () =>
+    Effect.sync(() => {
+      class Vaulted extends Domain.Model("Vaulted", { aggregates: [Vault] }) {}
+      // @ts-expect-error Deposit is not a command of the Vaulted model
+      const api = Domain.Api("Wrong", { model: Vaulted, commands: ["Deposit"] });
+      expect(api.serves).toEqual([]);
+      // @ts-expect-error Account is an aggregate, not a command
+      Domain.Api("Mixed", { model: Bank, commands: ["Account"] });
+    }),
+  );
+
+  it.live("naming something its model does not hold dies with a DefinitionError", () =>
+    Effect.gen(function* () {
+      // Typed as any model, so only serving it can tell.
+      const model: Domain.Model.Any = Vaults;
+      class LooseApi extends Domain.Api("LooseApi", { model, commands: ["Deposit"] }) {}
+      const exit = yield* LooseApi.clientInProcess.pipe(Effect.scoped, Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag !== "Failure") return;
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Deposit is not part of the Vaults model",
+      });
+    }).pipe(Effect.provide(Bank.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
+  );
+});
+
+// ---------------------------------------------------------------- rejections
+
+/** A plain Effect tagged error, and a Domain shorthand with Effect's annotations. */
+class Frozen extends Schema.TaggedError<Frozen>()("Frozen", { until: Schema.String }) {}
+class NotOwner extends Domain.Rejection(
+  "NotOwner",
+  {},
+  { httpApiStatus: 403, description: "Only the vault's owner may do this." },
+) {}
+
+class Stored extends Domain.Event("Stored", { item: Schema.String }) {}
+class Store extends Domain.Command("Store", {
+  input: { id: Schema.String, item: Schema.String },
+  events: [Stored],
+  // Any tagged error class can be a rejection, Effect's own HttpApiError included.
+  rejects: [Frozen, NotOwner, HttpApiError.Forbidden],
+}) {}
+class Vault extends Domain.Aggregate("Vault", {
+  id: Schema.String,
+  state: Schema.Struct({ items: Schema.Array(Schema.String) }),
+  initial: { items: [] },
+  commands: [Store],
+  keyOf: (command) => command.id,
+  decide: {
+    Store: (_, { item }) =>
+      item === "ice"
+        ? new Frozen({ until: "spring" })
+        : item === "gold"
+          ? new HttpApiError.Forbidden()
+          : item === "keys"
+            ? new NotOwner()
+            : [new Stored({ item })],
+  },
+  evolve: { Stored: (s, e) => ({ items: [...s.items, e.item] }) },
+}) {}
+class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
+class VaultApi extends Domain.Api("VaultApi", { model: Vaults, commands: ["Store"] }) {}
+
+describe("Domain Rejection", { tags: ["unit", "local"] }, () => {
+  it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
+    Effect.gen(function* () {
+      const vaults = yield* VaultApi.clientInProcess;
+      const frozen = yield* vaults.Store({ id: "v-1", item: "ice" }).pipe(Effect.flip);
+      expect(frozen).toBeInstanceOf(Frozen);
+      expect(frozen).toMatchObject({ until: "spring" });
+      const forbidden = yield* vaults.Store({ id: "v-1", item: "gold" }).pipe(Effect.flip);
+      expect(forbidden).toBeInstanceOf(HttpApiError.Forbidden);
+      expect((yield* vaults.Store({ id: "v-1", item: "keys" }).pipe(Effect.flip))._tag).toBe(
+        "NotOwner",
+      );
+      const { reply } = yield* vaults.Store({ id: "v-1", item: "coat" });
+      expect(reply).toBeUndefined();
+      // The Api's rejections decode every one of them.
+      expect(Schema.decodeUnknownSync(VaultApi.rejections)({ _tag: "Forbidden" })).toBeInstanceOf(
+        HttpApiError.Forbidden,
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provideMerge(InMemory))),
+    ),
+  );
+
+  it.effect(
+    "a Domain.Rejection takes Schema.TaggedError's annotations, read as Effect reads them",
+    () =>
+      Effect.sync(() => {
+        // An Effect HttpApi endpoint that declares the rejection gives it its status and description.
+        const api = HttpApi.make("Vaults").add(
+          HttpApiGroup.make("vaults").add(
+            HttpApiEndpoint.post("store", "/store", { error: [NotOwner, Frozen] }),
+          ),
+        );
+        const responses = OpenApi.fromApi(api).paths["/store"]!.post!.responses;
+        expect(Object.keys(responses).sort()).toEqual(["204", "403", "500"]);
+        expect(responses["403"]!.description).toBe("Only the vault's owner may do this.");
+      }),
   );
 });
 
@@ -158,9 +307,8 @@ const trustedAuthor = (name: string) =>
 
 class Written extends Domain.Event("Written", { text: Schema.String, by: Schema.String }) {}
 class Write extends Domain.Command("Write", {
-  target: Schema.String,
   middleware: [AuthorSession],
-  input: { text: Schema.String },
+  input: { id: Schema.String, text: Schema.String },
   events: [Written],
   reply: { by: Schema.String },
 }) {}
@@ -169,6 +317,7 @@ class Note extends Domain.Aggregate("Note", {
   state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
   initial: { text: "", by: null },
   commands: [Write],
+  keyOf: (command) => command.id,
   decide: {
     Write: Effect.fn(function* (_, cmd) {
       return [new Written({ text: cmd.text, by: yield* Author })];
@@ -176,36 +325,56 @@ class Note extends Domain.Aggregate("Note", {
   },
   evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
   reply: { Write: (s) => ({ by: s.by ?? "" }) },
-  read: {
-    middleware: [AuthorSession],
-    rejects: [NotYours],
-    validate: Effect.fn(function* (_request, s) {
-      if (s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
-    }),
-  },
+}) {}
+/** What a client reads of a note: only its author may. */
+class NoteView extends Domain.View("NoteView", {
+  from: [Note],
+  key: Note,
+  middleware: [AuthorSession],
+  rejects: [NotYours],
+  state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
+  initial: { text: "", by: null },
+  evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
 }) {}
 
-class Notes extends Domain.Model("Notes", { aggregates: [Note] }) {}
-class NotesApi extends Domain.Api("NotesApi", Write, Note) {}
+/** Who may read each key of NoteView. */
+const NoteViewLive = NoteView.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, s) {
+      if (s !== null && s.by !== null && s.by !== (yield* Author)) return yield* new NotYours();
+    }),
+  ),
+);
 
-const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
+class Notes extends Domain.Model("Notes", { aggregates: [Note], views: [NoteView] }) {}
+class NotesApi extends Domain.Api("NotesApi", {
+  model: Notes,
+  commands: ["Write"],
+  views: ["NoteView"],
+}) {}
 
-describe("Domain Api in process", () => {
+const World = Notes.layer(NoteViewLive).pipe(Layer.provideMerge(InMemory));
+
+describe("Domain Api in process", { tags: ["unit", "local"] }, () => {
   it.live("clientInProcess calls an Api in process, through every entry's middleware", () =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.clientInProcess;
       const asSam = { headers: { "x-author": "sam" } };
 
-      const refused = yield* notes.Write("n-1", { text: "hi" }).pipe(Effect.flip);
+      const refused = yield* notes.Write({ id: "n-1", text: "hi" }).pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
 
-      const { reply } = yield* notes.Write("n-1", { text: "hi" }, asSam);
-      expect(reply).toEqual({ by: "sam" });
-      expect(yield* notes.Note.get("n-1", asSam)).toEqual({ text: "hi", by: "sam" });
+      const receipt = yield* notes.Write({ id: "n-1", text: "hi" }, asSam);
+      expect(receipt.reply).toEqual({ by: "sam" });
+      expect(yield* notes.NoteView.get("n-1", { ...asSam, atLeast: receipt })).toEqual({
+        text: "hi",
+        by: "sam",
+      });
 
-      const notYours = yield* notes.Note.get("n-1", { headers: { "x-author": "kim" } }).pipe(
-        Effect.flip,
-      );
+      const notYours = yield* notes.NoteView.get("n-1", {
+        headers: { "x-author": "kim" },
+        atLeast: receipt,
+      }).pipe(Effect.flip);
       expect(notYours._tag).toBe("NotYours");
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
   );
@@ -214,11 +383,11 @@ describe("Domain Api in process", () => {
     Effect.gen(function* () {
       // The served Api keeps checking headers; only this client trusts its caller.
       const asKim = yield* NotesApi.clientInProcess.pipe(Effect.provide(trustedAuthor("kim")));
-      const { reply } = yield* asKim.Write("n-2", { text: "from a webhook" });
+      const { reply } = yield* asKim.Write({ id: "n-2", text: "from a webhook" });
       expect(reply).toEqual({ by: "kim" });
 
       const anonymous = yield* NotesApi.clientInProcess;
-      const refused = yield* anonymous.Note.get("n-2").pipe(Effect.flip);
+      const refused = yield* anonymous.NoteView.get("n-2").pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
   );
@@ -228,8 +397,7 @@ describe("Domain Api in process", () => {
     const writeAs = Effect.fn(function* (author: string) {
       const notes = yield* NotesApi.Client;
       return yield* notes.Write(
-        "n-3",
-        { text: "shared code" },
+        { id: "n-3", text: "shared code" },
         { headers: { "x-author": author } },
       );
     });
@@ -247,9 +415,12 @@ describe("Domain Api in process", () => {
     Effect.gen(function* () {
       const notes = yield* NotesApi.client;
       const asSam = { headers: { "x-author": "sam" } };
-      const { reply } = yield* notes.Write("n-4", { text: "over a protocol" }, asSam);
-      expect(reply).toEqual({ by: "sam" });
-      expect(yield* notes.Note.get("n-4", asSam)).toEqual({ text: "over a protocol", by: "sam" });
+      const receipt = yield* notes.Write({ id: "n-4", text: "over a protocol" }, asSam);
+      expect(receipt.reply).toEqual({ by: "sam" });
+      expect(yield* notes.NoteView.get("n-4", { ...asSam, atLeast: receipt })).toEqual({
+        text: "over a protocol",
+        by: "sam",
+      });
     }).pipe(
       Effect.scoped,
       Effect.provide(
@@ -258,5 +429,262 @@ describe("Domain Api in process", () => {
         ),
       ),
     ),
+  );
+});
+
+// ---------------------------------------------------------------- defects
+
+/** What a session adapter's defect says: a client must never receive it. */
+const SESSION_SECRET = "secret: session store at 10.0.0.7 refused SELECT";
+/** A session middleware whose adapter dies. */
+const CrashingSession = Layer.succeed(AuthorSession, () => Effect.die(new Error(SESSION_SECRET)));
+const CrashingWorld = Layer.mergeAll(Notes.layer(NoteViewLive), CrashingSession).pipe(
+  Layer.provideMerge(InMemory),
+);
+
+/** The Api served over HTTP (RPC and live reads) on a real port, with a client for each protocol. */
+const Served = Layer.unwrap(Effect.map(NotesApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+  Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: "200 millis" })),
+  Layer.provideMerge(CrashingWorld),
+);
+const clientOver = (protocol: "http" | "webSocket") =>
+  Effect.gen(function* () {
+    const server = yield* HttpServer.HttpServer;
+    const port = "port" in server.address ? server.address.port : 0;
+    const url = `http://127.0.0.1:${port}`;
+    return yield* NotesApi.client.pipe(
+      Effect.provide(
+        (protocol === "http" ? Domain.protocolHttp(url) : Domain.protocolWebSocket(url)).pipe(
+          Layer.provide(
+            Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal),
+          ),
+        ),
+      ),
+    );
+  });
+
+/** A client's view of a call that died: one generic defect, and nothing of the cause. */
+const expectGenericDefect = (exit: Exit.Exit<unknown, unknown>) => {
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (!Exit.isFailure(exit)) return;
+  expect(Cause.hasDies(exit.cause)).toBe(true);
+  expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
+    "Internal server error",
+  );
+  expect(Cause.pretty(exit.cause)).not.toContain(SESSION_SECRET);
+};
+
+describe("Domain Api defects", { tags: ["unit", "local"] }, () => {
+  it.live("a middleware's defect reaches an in-process client as a generic error", () =>
+    Effect.gen(function* () {
+      const notes = yield* NotesApi.clientInProcess;
+      expectGenericDefect(yield* notes.Write({ id: "d-1", text: "hi" }).pipe(Effect.exit));
+      expectGenericDefect(yield* notes.NoteView.get("d-1").pipe(Effect.exit));
+    }).pipe(Effect.scoped, Effect.provide(CrashingWorld)),
+  );
+
+  it.live("a middleware's defect reaches a client over HTTP as a generic error", () =>
+    Effect.gen(function* () {
+      const notes = yield* clientOver("http");
+      expectGenericDefect(yield* notes.Write({ id: "d-2", text: "hi" }).pipe(Effect.exit));
+      expectGenericDefect(yield* notes.NoteView.get("d-2").pipe(Effect.exit));
+      expectGenericDefect(yield* notes.NoteView.events("d-2").pipe(Stream.runHead, Effect.exit));
+    }).pipe(Effect.scoped, Effect.provide(Served)),
+  );
+
+  it.live("a middleware's defect ends a live read over a WebSocket with a generic error", () =>
+    Effect.gen(function* () {
+      const notes = yield* clientOver("webSocket");
+      expectGenericDefect(
+        yield* notes.NoteView.watch("d-3").pipe(
+          Stream.runHead,
+          Effect.timeout("5 seconds"),
+          Effect.exit,
+        ),
+      );
+      expectGenericDefect(
+        yield* notes.NoteView.events("d-3").pipe(
+          Stream.runHead,
+          Effect.timeout("5 seconds"),
+          Effect.exit,
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(Served)),
+  );
+});
+
+// ---------------------------------------------------------------- middleware order
+
+class Banned extends Domain.Rejection("Banned") {}
+/** Refuses banned authors. It reads the Author that AuthorSession provides. */
+class BanCheck extends RpcMiddleware.Service<BanCheck>()("Test/BanCheck", { error: Banned }) {}
+const BanCheckLive = Layer.succeed(BanCheck, (effect) =>
+  Effect.serviceOption(Author).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.die("BanCheck ran before AuthorSession provided Author"),
+        onSome: (author) => (author === "mallory" ? Effect.fail(new Banned()) : effect),
+      }),
+    ),
+  ),
+);
+
+class Posted extends Domain.Event("Posted", { text: Schema.String, by: Schema.String }) {}
+class Post extends Domain.Command("Post", {
+  middleware: [AuthorSession, BanCheck],
+  input: { id: Schema.String, text: Schema.String },
+  events: [Posted],
+}) {}
+class Board extends Domain.Aggregate("Board", {
+  id: Schema.String,
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  commands: [Post],
+  keyOf: (command) => command.id,
+  decide: {
+    Post: Effect.fn(function* (_, cmd) {
+      return [new Posted({ text: cmd.text, by: yield* Author })];
+    }),
+  },
+  evolve: { Posted: (_, e) => ({ text: e.text }) },
+}) {}
+class BoardView extends Domain.View("BoardView", {
+  from: [Board],
+  key: Board,
+  middleware: [AuthorSession, BanCheck],
+  rejects: [NotYours],
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  evolve: { Posted: (_, e) => ({ text: e.text }) },
+}) {}
+const BoardViewLive = BoardView.toLayer(
+  Effect.succeed(
+    Effect.fn(function* () {
+      yield* Author;
+    }),
+  ),
+);
+class Boards extends Domain.Model("Boards", { aggregates: [Board], views: [BoardView] }) {}
+class BoardsApi extends Domain.Api("BoardsApi", {
+  model: Boards,
+  commands: ["Post"],
+  views: ["BoardView"],
+}) {}
+const BoardsWorld = Layer.mergeAll(
+  Boards.layer(BoardViewLive),
+  AuthorSessionLive,
+  BanCheckLive,
+).pipe(Layer.provideMerge(InMemory));
+
+describe("Domain middleware order", { tags: ["unit", "local"] }, () => {
+  it.live("the first middleware listed runs first and provides to the ones after it", () =>
+    Effect.gen(function* () {
+      const boards = yield* BoardsApi.clientInProcess;
+      const asSam = { headers: { "x-author": "sam" } };
+      const asMallory = { headers: { "x-author": "mallory" } };
+
+      // AuthorSession runs first, so an anonymous caller is refused by it, not BanCheck.
+      expect((yield* boards.Post({ id: "b-1", text: "hi" }).pipe(Effect.flip))._tag).toBe(
+        "Unauthenticated",
+      );
+      expect((yield* boards.BoardView.get("b-1").pipe(Effect.flip))._tag).toBe("Unauthenticated");
+
+      // BanCheck runs second and reads the Author that AuthorSession provided.
+      expect(
+        (yield* boards.Post({ id: "b-1", text: "hi" }, asMallory).pipe(Effect.flip))._tag,
+      ).toBe("Banned");
+      expect((yield* boards.BoardView.get("b-1", asMallory).pipe(Effect.flip))._tag).toBe("Banned");
+
+      const receipt = yield* boards.Post({ id: "b-1", text: "hi" }, asSam);
+      expect(yield* boards.BoardView.get("b-1", { ...asSam, atLeast: receipt })).toEqual({
+        text: "hi",
+      });
+    }).pipe(Effect.scoped, Effect.provide(BoardsWorld)),
+  );
+});
+
+// ---------------------------------------------------------------- a view's Layer
+
+/** Authors an editor has suspended: kept outside the model. */
+class Suspended extends Context.Service<Suspended, ReadonlySet<string>>()("Test/Suspended") {}
+
+/** A note's text: anyone with a session reads it, unless its author is suspended. */
+class NoteText extends Domain.View("NoteText", {
+  from: [Note],
+  key: Note,
+  middleware: [AuthorSession],
+  rejects: [NotYours],
+  state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
+  initial: { text: "", by: null },
+  evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
+}) {}
+// The Layer resolves what `validate` reads once; `validate` itself needs only the session.
+const NoteTextLive = NoteText.toLayer(
+  Effect.gen(function* () {
+    const suspended = yield* Suspended;
+    return Effect.fn(function* (_request, s) {
+      yield* Author;
+      if (s?.by && suspended.has(s.by)) return yield* new NotYours();
+    });
+  }),
+);
+class Texts extends Domain.Model("Texts", { aggregates: [Note], views: [NoteText] }) {}
+class TextsApi extends Domain.Api("TextsApi", {
+  model: Texts,
+  commands: ["Write"],
+  views: ["NoteText"],
+}) {}
+const TextsWorld = Layer.mergeAll(
+  Texts.layer(NoteTextLive).pipe(Layer.provide(Layer.succeed(Suspended, new Set(["kim"])))),
+  AuthorSessionLive,
+).pipe(Layer.provideMerge(InMemory));
+
+describe("Domain View validate on its Layer", { tags: ["unit", "local"] }, () => {
+  it.live("validate reads a service its Layer resolved, traced as Domain.validate", () =>
+    Effect.gen(function* () {
+      const spans: Array<Tracer.NativeSpan> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
+      const texts = yield* TextsApi.clientInProcess;
+      const asSam = { headers: { "x-author": "sam" } };
+      const asKim = { headers: { "x-author": "kim" } };
+      const fromSam = yield* texts.Write({ id: "t-1", text: "hi" }, asSam);
+      const fromKim = yield* texts.Write({ id: "t-2", text: "spam" }, asKim);
+
+      expect(
+        yield* texts.NoteText.get("t-1", { ...asKim, atLeast: fromSam }).pipe(
+          Effect.withTracer(tracer),
+        ),
+      ).toEqual({ text: "hi", by: "sam" });
+      const suspended = yield* texts.NoteText.get("t-2", { ...asSam, atLeast: fromKim }).pipe(
+        Effect.flip,
+      );
+      expect(suspended._tag).toBe("NotYours");
+
+      const [validated] = spans.filter((span) => span.name === "Domain.validate NoteText");
+      expect(validated!.attributes.get("domain.mode")).toBe("get");
+    }).pipe(Effect.scoped, Effect.provide(TextsWorld)),
+  );
+
+  it.live(
+    "a view that guards its reads needs its Layer: a type error, then a DefinitionError",
+    () =>
+      Effect.gen(function* () {
+        // @ts-expect-error NoteText declares middleware and rejects, so the model needs NoteText's Layer
+        Texts.layer(Layer.empty);
+        const exit = yield* Layer.build(Texts.layer(Layer.empty as never)).pipe(
+          Effect.provide(InMemory),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+          _tag: "DefinitionError",
+          reason: { _tag: "UnvalidatedRead", entity: "NoteText" },
+        });
+      }).pipe(Effect.scoped),
   );
 });

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -116,8 +117,32 @@ export type ContentPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ContentPolicyLookup
 >;
+
+/**
+ * Props for {@link ContentPolicy.lookup}: find a content policy this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ContentPolicyLookup {
+  /**
+   * Content policy id (the `{contentPolicy}` segment of
+   * `projects/{project}/locations/{location}/contentPolicies/{id}`). Must
+   * match `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  contentPolicyId: string;
+  /**
+   * Processing location (`us`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A location-scoped Cloud DLP content policy.
@@ -149,13 +174,26 @@ export type ContentPolicy = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing content policy
+ * `ContentPolicy.lookup` references a content policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * content policy.
+ *
+ * **Example:** Reference an existing content policy
+ * ```typescript
+ * const contentPolicy = GCP.DLP.ContentPolicy.lookup({
+ *   contentPolicyId: "my-content-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category DLP
  */
 export const ContentPolicy = Resource<ContentPolicy>("GCP.DLP.ContentPolicy");
 
 export class ContentPolicyNotResolved extends Data.TaggedError("GCP.DLP.ContentPolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, contentPolicyId: string) =>
@@ -184,10 +222,10 @@ const toAttrs = (policy: dlp.GooglePrivacyDlpV2ContentPolicy, project: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsContentPolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ContentPolicyProvider = () =>
   Provider.succeed(ContentPolicy, {
@@ -208,6 +246,15 @@ export const ContentPolicyProvider = () =>
           normalizeLocation(previousLocation, DEFAULT_REGIONAL_LOCATION);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
+
+    lookup: Effect.fn(function* ({ contentPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_REGIONAL_LOCATION);
+      const name = resourceName(env.project, location, contentPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -291,7 +338,7 @@ export const ContentPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ContentPolicyNotResolved({ name });
+        return yield* new ContentPolicyNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

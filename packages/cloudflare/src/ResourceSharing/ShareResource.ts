@@ -309,7 +309,7 @@ const getEntry = (accountId: string, shareId: string, shareResourceId: string) =
     Effect.map((entry): ObservedEntry | undefined =>
       entry.status === "deleted" ? undefined : entry,
     ),
-    Effect.catchTag("ShareResourceNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ShareResourceNotFound", () => Effect.undefined),
   );
 
 /**
@@ -328,7 +328,7 @@ const findEntry = (
         (r) => r.resourceId === resourceId && r.status !== "deleted" && r.status !== "deleting",
       ),
     ),
-    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ShareNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

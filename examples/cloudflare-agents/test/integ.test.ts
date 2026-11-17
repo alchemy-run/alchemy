@@ -26,6 +26,11 @@ const base = Effect.gen(function* () {
   const base = String(url).replace(/\/+$/, "");
   const res = yield* getWhenReady(base);
   expect(res.status).toBe(200);
+  // `/` is served by static assets, which can answer before the Worker
+  // script has propagated; the agent routes then still return Cloudflare's
+  // 1042 "No Workers script was found". Wait until an agent route answers.
+  const agent = yield* getWhenReady(`${base}/agents/counter/readiness`);
+  expect(agent.status).toBe(200);
   return base;
 });
 

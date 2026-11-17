@@ -4,10 +4,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { Providers } from "../Providers.ts";
+
+export class NeptuneDBSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "NeptuneDBSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBSubnetGroupProps {
   /**
@@ -48,8 +56,18 @@ export interface DBSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBSubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link DBSubnetGroup.lookup}: find a Neptune subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBSubnetGroupLookup {
+  /** The db subnet group name of the existing Neptune subnet group. */
+  dbSubnetGroupName: string;
+}
 
 /**
  * An Amazon Neptune DB subnet group — the set of VPC subnets a Neptune
@@ -62,6 +80,16 @@ export interface DBSubnetGroup extends Resource<
  * const subnetGroup = yield* DBSubnetGroup("NeptuneSubnets", {
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune subnet group
+ * `DBSubnetGroup.lookup` references a Neptune subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbSubnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune subnet group
+ * ```typescript
+ * const existing = AWS.Neptune.DBSubnetGroup.lookup({ dbSubnetGroupName: "my-neptune-subnet-group" });
  * ```
  *
  * @resource
@@ -82,7 +110,7 @@ export const DBSubnetGroupProvider = () =>
           .describeDBSubnetGroups({
             DBSubnetGroupName: groupName,
           })
-          .pipe(Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.DBSubnetGroups?.[0];
       });
 
@@ -93,6 +121,20 @@ export const DBSubnetGroupProvider = () =>
           if ((yield* toName(id, olds ?? { subnetIds: [] })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbSubnetGroupName }) {
+          const group = yield* readGroup(dbSubnetGroupName);
+          if (!group?.DBSubnetGroupName) return undefined;
+          return {
+            dbSubnetGroupName: group.DBSubnetGroupName,
+            dbSubnetGroupArn: group.DBSubnetGroupArn,
+            vpcId: group.VpcId,
+            subnetIds: (group.Subnets ?? []).flatMap((subnet) =>
+              subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
+            ),
+            status: group.SubnetGroupStatus,
+            tags: {},
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
@@ -139,9 +181,9 @@ export const DBSubnetGroupProvider = () =>
               .pipe(Effect.catchTag("DBSubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(dbSubnetGroupName);
             if (!observed?.DBSubnetGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create DB subnet group '${dbSubnetGroupName}'`),
-              );
+              return yield* new NeptuneDBSubnetGroupUnexpectedResponse({
+                message: `Failed to create DB subnet group '${dbSubnetGroupName}'`,
+              });
             }
           } else {
             // Sync description and subnet membership — `modifyDBSubnetGroup`
@@ -154,9 +196,9 @@ export const DBSubnetGroupProvider = () =>
             });
             observed = yield* readGroup(dbSubnetGroupName);
             if (!observed?.DBSubnetGroupName) {
-              return yield* Effect.fail(
-                new Error(`DB subnet group '${dbSubnetGroupName}' not found after update`),
-              );
+              return yield* new NeptuneDBSubnetGroupUnexpectedResponse({
+                message: `DB subnet group '${dbSubnetGroupName}' not found after update`,
+              });
             }
           }
 

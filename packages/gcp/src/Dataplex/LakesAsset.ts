@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -148,8 +149,33 @@ export type LakesAsset = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesAssetLookup
 >;
+
+/**
+ * Props for {@link LakesAsset.lookup}: find a lakes asset this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LakesAssetLookup {
+  /**
+   * Asset id. Must contain only lowercase letters, numbers, and hyphens;
+   * start with a letter; end with a letter or number; and be 1-63
+   * characters.
+   */
+  assetId: string;
+  /**
+   * Parent zone. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}`.
+   */
+  zone: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex asset — a Cloud Storage bucket or BigQuery dataset managed
@@ -185,17 +211,31 @@ export type LakesAsset = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing lakes asset
+ * `LakesAsset.lookup` references a lakes asset Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes asset.
+ *
+ * **Example:** Reference an existing lakes asset
+ * ```typescript
+ * const lakesAsset = GCP.Dataplex.LakesAsset.lookup({
+ *   assetId: "my-asset",
+ *   zone: "us-central1-a",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
 export const LakesAsset = Resource<LakesAsset>("GCP.Dataplex.LakesAsset");
 
 export class LakesAssetNotResolved extends Data.TaggedError("GCP.Dataplex.LakesAssetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LakesAssetStillExists extends Data.TaggedError("GCP.Dataplex.LakesAssetStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const zoneOf = (zone: string) => zone;
@@ -226,20 +266,20 @@ const toAttrs = (asset: dataplex.GoogleCloudDataplexV1Asset, project: string) =>
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataplex
         .getProjectsLocationsLakesZonesAssets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (asset): asset is dataplex.GoogleCloudDataplexV1Asset => asset !== undefined,
-      () => new LakesAssetNotResolved({ name }),
+      () => new LakesAssetNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (asset) => !isPendingState(asset.state),
-      () => new DataplexNotResolved({ name }),
+      () => new DataplexNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -255,7 +295,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((asset) =>
-      asset === undefined ? Effect.void : Effect.fail(new LakesAssetStillExists({ name })),
+      asset === undefined
+        ? Effect.void
+        : Effect.fail(new LakesAssetStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesAssetStillExists",
@@ -324,6 +366,15 @@ export const LakesAssetProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ assetId, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = zoneOf(lookupZone ?? "");
+      const name = resourceNameOf(zone, assetId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = zoneOf(olds?.zone ?? output?.zone ?? "");
@@ -384,7 +435,7 @@ export const LakesAssetProvider = () =>
               discoverySpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -392,7 +443,7 @@ export const LakesAssetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesAssetNotResolved({ name });
+        return yield* new LakesAssetNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -449,8 +500,8 @@ export const LakesAssetProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadRequest: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadRequest: () => Effect.undefined,
           }),
         );
       if (operation !== undefined) {

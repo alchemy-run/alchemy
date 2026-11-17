@@ -60,8 +60,18 @@ export interface PlatformApplication extends Resource<
     attributes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PlatformApplicationLookup
 > {}
+
+/**
+ * Props for {@link PlatformApplication.lookup}: find a platform application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PlatformApplicationLookup {
+  /** The platform application arn of the existing platform application. */
+  platformApplicationArn: string;
+}
 
 /**
  * An Amazon SNS platform application for mobile push notifications (FCM,
@@ -108,6 +118,16 @@ export interface PlatformApplication extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing platform application
+ * `PlatformApplication.lookup` references a platform application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `platformApplicationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing platform application
+ * ```typescript
+ * const existing = AWS.SNS.PlatformApplication.lookup({ platformApplicationArn: "my-platform-application" });
+ * ```
+ *
  * @resource
  */
 export const PlatformApplication = Resource<PlatformApplication>("AWS.SNS.PlatformApplication");
@@ -125,6 +145,9 @@ export const PlatformApplicationProvider = () =>
         if (!arn) return [];
         return [toApplicationAttributes(arn, application.Attributes)];
       });
+    }),
+    lookup: Effect.fn(function* ({ platformApplicationArn: arn }) {
+      return yield* readApplication(arn);
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const arn =
@@ -153,7 +176,7 @@ export const PlatformApplicationProvider = () =>
         .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
         .pipe(
           Effect.map((response) => toAttributeMap(response.Attributes)),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const credentialAttributes: Record<string, string> = {
@@ -274,7 +297,7 @@ const readApplication = Effect.fn(function* (arn: string) {
     .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
     .pipe(
       Effect.map((response) => toAttributeMap(response.Attributes)),
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFoundException", () => Effect.undefined),
     );
   if (observed === undefined) {
     return undefined;

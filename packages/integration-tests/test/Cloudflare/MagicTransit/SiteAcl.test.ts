@@ -6,6 +6,7 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -46,7 +47,6 @@ test.provider(
 
       const site = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSite("ListSite", {
-          name: "alch-acl-list-site",
           description: "alchemy site acl list test",
         }),
       );
@@ -54,7 +54,6 @@ test.provider(
         Cloudflare.MagicTransit.MagicSiteLan("ListLan1", {
           siteId: site.siteId,
           physport: 2,
-          name: "alch-acl-list-lan1",
           vlanTag: 10,
           staticAddressing: { address: "192.168.30.1/24" },
         }),
@@ -63,7 +62,6 @@ test.provider(
         Cloudflare.MagicTransit.MagicSiteLan("ListLan2", {
           siteId: site.siteId,
           physport: 3,
-          name: "alch-acl-list-lan2",
           vlanTag: 20,
           staticAddressing: { address: "192.168.40.1/24" },
         }),
@@ -71,7 +69,7 @@ test.provider(
       const acl = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSiteAcl("ListAcl", {
           siteId: site.siteId,
-          name: "alch-acl-list",
+          name: testName("alch-acl-list"),
           lan1: { lanId: lan1.lanId, ports: [443] },
           lan2: { lanId: lan2.lanId },
           protocols: ["tcp"],
@@ -80,7 +78,9 @@ test.provider(
 
       const all = yield* provider.list();
       expect(all.some((a) => a.aclId === acl.aclId)).toBe(true);
-      expect(all.some((a) => a.name === "alch-acl-list" && a.siteId === site.siteId)).toBe(true);
+      expect(
+        all.some((a) => a.name === testName("alch-acl-list") && a.siteId === site.siteId),
+      ).toBe(true);
       // Every hydrated row carries the ambient account scope.
       expect(all.every((a) => a.accountId === accountId)).toBe(true);
 

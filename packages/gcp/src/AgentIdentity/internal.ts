@@ -13,7 +13,7 @@ export const COLLECTION = "authProviders";
 export class AuthProviderNotResolved extends Data.TaggedError(
   "GCP.AgentIdentity.AuthProviderNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -249,10 +249,10 @@ export const typeParamsBody = (
 
 export const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : agentidentity
         .getProjectsLocationsAuthProviders({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPages = (parent: string) =>
   agentidentity.listProjectsLocationsAuthProviders

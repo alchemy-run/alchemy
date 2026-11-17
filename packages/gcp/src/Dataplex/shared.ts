@@ -10,11 +10,11 @@ export const MAX_ID_LENGTH = 63;
 export const MAX_ENTITY_ID_LENGTH = 256;
 
 export class DataplexNotResolved extends Data.TaggedError("GCP.Dataplex.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DataplexStillExists extends Data.TaggedError("GCP.Dataplex.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

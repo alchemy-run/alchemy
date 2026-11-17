@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "golang:1.22",
+      "name": "build",
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "go build -o /out/app ."
+          }
+        }
+      ]
+    },
+    {
+      "line": 3,
+      "image": "gcr.io/distroless/static",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "COPY",
+          "line": 4,
+          "flags": [
+            {
+              "name": "from",
+              "value": "build"
+            }
+          ],
+          "sources": [
+            "/out/app"
+          ],
+          "destination": "/app"
+        }
+      ]
+    }
+  ]
+}

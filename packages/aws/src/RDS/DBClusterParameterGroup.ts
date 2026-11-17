@@ -4,9 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class RDSDBClusterParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "RDSDBClusterParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBClusterParameterGroupProps {
   /**
@@ -53,8 +61,18 @@ export interface DBClusterParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link DBClusterParameterGroup.lookup}: find a DB cluster parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterParameterGroupLookup {
+  /** The db cluster parameter group name of the existing DB cluster parameter group. */
+  dbClusterParameterGroupName: string;
+}
 
 /**
  * An Aurora cluster parameter group — cluster-wide engine settings shared by
@@ -79,6 +97,16 @@ export interface DBClusterParameterGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing DB cluster parameter group
+ * `DBClusterParameterGroup.lookup` references a DB cluster parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB cluster parameter group
+ * ```typescript
+ * const existing = AWS.RDS.DBClusterParameterGroup.lookup({ dbClusterParameterGroupName: "my-db-cluster-parameter-group" });
+ * ```
+ *
  * @resource
  */
 export const DBClusterParameterGroup = Resource<DBClusterParameterGroup>(
@@ -99,7 +127,7 @@ export const DBClusterParameterGroupProvider = () =>
           .describeDBClusterParameterGroups({
             DBClusterParameterGroupName: name,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBClusterParameterGroups?.[0];
       });
 
@@ -152,6 +180,17 @@ export const DBClusterParameterGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ dbClusterParameterGroupName }) {
+          const group = yield* readGroup(dbClusterParameterGroupName);
+          if (!group?.DBClusterParameterGroupName) return undefined;
+          return {
+            dbClusterParameterGroupName: group.DBClusterParameterGroupName,
+            dbClusterParameterGroupArn: group.DBClusterParameterGroupArn,
+            family: group.DBParameterGroupFamily ?? "",
+            description: group.Description,
+            tags: {},
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbClusterParameterGroupName ??
@@ -193,9 +232,9 @@ export const DBClusterParameterGroupProvider = () =>
               .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBClusterParameterGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create DB cluster parameter group '${name}'`),
-              );
+              return yield* new RDSDBClusterParameterGroupUnexpectedResponse({
+                message: `Failed to create DB cluster parameter group '${name}'`,
+              });
             }
           }
 

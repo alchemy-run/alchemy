@@ -3,10 +3,23 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import { createInternalTags, createTagsList, diffTags, hasTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ScheduleGroupConflict extends Data.TaggedError("ScheduleGroupConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ScheduleGroupUnexpectedResponse extends Data.TaggedError(
+  "ScheduleGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ScheduleGroupProps {
   /**
@@ -52,10 +65,42 @@ export interface ScheduleGroup extends Resource<
      * Current state of the schedule group (`ACTIVE` or `DELETING`).
      */
     state: string | undefined;
+    /**
+     * Tags on the schedule group, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ScheduleGroupLookup
 > {}
+
+/**
+ * Props for {@link ScheduleGroup.lookup}: find a schedule group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScheduleGroupLookup {
+  /** The name of the existing schedule group. *
+   * ### Looking up an existing schedule group
+   * `ScheduleGroup.lookup` references a schedule group Alchemy doesn't manage (created in the
+   * console or by another stack), found by `scheduleGroupName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Put a schedule in an existing group
+   * ```typescript
+   * const group = AWS.Scheduler.ScheduleGroup.lookup({ scheduleGroupName: "billing" });
+   *
+   * const schedule = yield* AWS.Scheduler.Schedule("Invoices", {
+   *   groupName: group.scheduleGroupName,
+   *   scheduleExpression: "cron(0 6 * * ? *)",
+   *   target: { Arn: fn.functionArn, RoleArn: role.roleArn },
+   *   flexibleTimeWindow: { Mode: "OFF" },
+   * });
+   * ```
+   */
+  scheduleGroupName: string;
+}
 
 export const ScheduleGroup = Resource<ScheduleGroup>("AWS.Scheduler.ScheduleGroup");
 
@@ -74,22 +119,45 @@ export const ScheduleGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ scheduleGroupName }) {
+          const described = yield* scheduler
+            .getScheduleGroup({
+              Name: scheduleGroupName,
+            })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Arn || !described.Name) {
+            return undefined;
+          }
+          const { Tags } = yield* scheduler
+            .listTagsForResource({ ResourceArn: described.Arn })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Tags: [] })));
+          return {
+            scheduleGroupArn: described.Arn,
+            scheduleGroupName: described.Name,
+            state: described.State,
+            tags: tagRecord(Tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const scheduleGroupName = output?.scheduleGroupName ?? (yield* toName(id, olds));
           const described = yield* scheduler
             .getScheduleGroup({
               Name: scheduleGroupName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
           }
 
+          const { Tags } = yield* scheduler
+            .listTagsForResource({ ResourceArn: described.Arn })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Tags: [] })));
           return {
             scheduleGroupArn: described.Arn,
             scheduleGroupName: described.Name,
             state: described.State,
+            tags: tagRecord(Tags),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -100,7 +168,7 @@ export const ScheduleGroupProvider = () =>
           // Observe — fetch live group; gracefully handle missing.
           let observed = yield* scheduler
             .getScheduleGroup({ Name: scheduleGroupName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // Ensure — create if missing. Tolerate `ConflictException` as a
           // race or adoption case: verify ownership via tags before
@@ -120,16 +188,16 @@ export const ScheduleGroupProvider = () =>
                             Effect.filterOrFail(
                               ({ Tags }) => hasTags(internalTags, Tags),
                               () =>
-                                new Error(
-                                  `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
-                                ),
+                                new ScheduleGroupConflict({
+                                  message: `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
+                                }),
                             ),
                             Effect.asVoid,
                           )
                         : Effect.fail(
-                            new Error(
-                              `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,
-                            ),
+                            new ScheduleGroupConflict({
+                              message: `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,
+                            }),
                           ),
                     ),
                   ),
@@ -137,13 +205,13 @@ export const ScheduleGroupProvider = () =>
               );
             observed = yield* scheduler
               .getScheduleGroup({ Name: scheduleGroupName })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
 
           if (!observed?.Arn) {
-            return yield* Effect.fail(
-              new Error(`Failed to read created ScheduleGroup '${scheduleGroupName}'`),
-            );
+            return yield* new ScheduleGroupUnexpectedResponse({
+              message: `Failed to read created ScheduleGroup '${scheduleGroupName}'`,
+            });
           }
 
           const groupArn = observed.Arn;
@@ -181,6 +249,7 @@ export const ScheduleGroupProvider = () =>
             scheduleGroupArn: groupArn,
             scheduleGroupName,
             state: observed?.State,
+            tags: desiredTags,
           };
         }),
         list: () =>
@@ -217,7 +286,7 @@ export const ScheduleGroupProvider = () =>
                         }
                       : undefined,
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );

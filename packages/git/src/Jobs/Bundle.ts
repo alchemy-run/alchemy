@@ -1,4 +1,5 @@
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 /**
@@ -169,7 +170,7 @@ export const runBundleJob = (
       objectCount: options.entries.length,
       size,
       refs: options.refs,
-      createdAt: Date.now(),
+      createdAt: yield* Clock.currentTimeMillis,
     } satisfies BundleInfo;
   });
 

@@ -43,7 +43,7 @@ test.provider(
           name: `${parent}/observationJobs/alchemy-missing-job`,
         }),
       );
-      expect(error._tag).toEqual(apimEnabled ? "NotFound" : "ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

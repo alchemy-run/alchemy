@@ -1416,38 +1416,6 @@ const customDomainClient = {
             }),
           );
     }),
-  getApp: (appId: string) =>
-    Effect.sync(() => {
-      customDomainCalls.push(["getApp", appId]);
-      return {
-        id: appId,
-        type: "app" as const,
-        url: `https://api.prisma.test/v1/services/${appId}`,
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId: "branch-1",
-        latestDeploymentId: null,
-        appEndpointDomain: "api.prisma.build",
-        createdAt,
-      };
-    }),
-  getBranch: (branchId: string) =>
-    Effect.succeed({
-      id: branchId,
-      type: "branch" as const,
-      url: `https://api.prisma.test/v1/branches/${branchId}`,
-      gitName: "main",
-      isDefault: true,
-      role: "production" as const,
-      createdAt,
-      updatedAt: createdAt,
-      project: {
-        id: "project-1",
-        url: "https://api.prisma.test/v1/projects/project-1",
-        name: "app",
-      },
-    }),
   createAppDomain: (appId: string, input: { hostname: string }) =>
     Effect.sync(() => {
       customDomainCalls.push(["createAppDomain", { appId, input }]);

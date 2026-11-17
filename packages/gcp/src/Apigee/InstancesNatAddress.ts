@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, toResourceId } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
@@ -59,8 +60,36 @@ export type InstancesNatAddress = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesNatAddressLookup
 >;
+
+/**
+ * Props for {@link InstancesNatAddress.lookup}: find an instances nat
+ * address this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InstancesNatAddressLookup {
+  /**
+   * NAT address id (the `{nataddress}` segment of
+   * `organizations/{org}/instances/{instance}/natAddresses/{nataddress}`).
+   */
+  natAddressId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Parent instance id or full name
+   * (`organizations/{org}/instances/{instance}`).
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A static NAT address on an Apigee runtime instance.
@@ -89,6 +118,20 @@ export type InstancesNatAddress = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances nat address
+ * `InstancesNatAddress.lookup` references an instances nat address Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared instances nat address.
+ *
+ * **Example:** Reference an existing instances nat address
+ * ```typescript
+ * const instancesNatAddress = GCP.Apigee.InstancesNatAddress.lookup({
+ *   natAddressId: "my-nat-address",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -97,13 +140,13 @@ export const InstancesNatAddress = Resource<InstancesNatAddress>("GCP.Apigee.Ins
 export class InstancesNatAddressNotResolved extends Data.TaggedError(
   "GCP.Apigee.InstancesNatAddressNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstancesNatAddressNotReady extends Data.TaggedError(
   "GCP.Apigee.InstancesNatAddressNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -135,7 +178,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesNatAddresses({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesNatAddresses
@@ -156,13 +199,13 @@ const waitUntilState = (name: string, allowed: ReadonlySet<string>) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (address): address is apigee.GoogleCloudApigeeV1NatAddress => address !== undefined,
-      () => new InstancesNatAddressNotResolved({ name }),
+      () => new InstancesNatAddressNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (address) => allowed.has(address.state ?? "STATE_UNSPECIFIED"),
       (address) =>
         new InstancesNatAddressNotReady({
-          name,
+          resourceName: name,
           state: address.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -198,6 +241,17 @@ export const InstancesNatAddressProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ natAddressId, organization: lookupOrganization, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = resourceName(organization, instanceId, natAddressId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, instanceId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -259,7 +313,7 @@ export const InstancesNatAddressProvider = () =>
             parent,
             body: { name: natAddressId },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -267,7 +321,7 @@ export const InstancesNatAddressProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstancesNatAddressNotResolved({ name });
+        return yield* new InstancesNatAddressNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") === "CREATING") {
@@ -292,9 +346,7 @@ export const InstancesNatAddressProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstancesNatAddresses({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

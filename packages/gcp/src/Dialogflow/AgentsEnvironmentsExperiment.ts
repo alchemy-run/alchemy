@@ -139,7 +139,7 @@ export const AgentsEnvironmentsExperiment = Resource<AgentsEnvironmentsExperimen
 export class AgentsEnvironmentsExperimentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsExperimentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const definitionOf = (
@@ -180,10 +180,10 @@ const toAttrs = (experiment: dialogflow.GoogleCloudDialogflowCxV3Experiment, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsEnvironmentsExperiments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, environment: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -294,7 +294,8 @@ export const AgentsEnvironmentsExperimentProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentsExperimentNotResolved({
-          name: output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
+          resourceName:
+            output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
         });
       }
 

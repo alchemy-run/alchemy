@@ -8,6 +8,7 @@ import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -99,6 +100,9 @@ test.provider(
             return {
               pathRuleArn: pathRule.ruleArn,
               hostRuleArn: hostRule.ruleArn,
+              listenerArn: listener.listenerArn,
+              targetGroupArn: tg.targetGroupArn,
+              loadBalancerArn: lb.loadBalancerArn,
             };
           }),
         );
@@ -116,6 +120,42 @@ test.provider(
       expect(rule?.Conditions?.[0]?.Field).toBe("path-pattern");
       expect(rule?.Conditions?.[0]?.PathPatternConfig?.Values).toEqual(["/api/*"]);
       expect(rule?.Actions?.some((x) => x.Type === "forward")).toBe(true);
+
+      // #2688: the load balancer, target group, listener and rules must read
+      // a fresh deploy as `unchanged` and report out-of-band changes to their
+      // actions, conditions and tags.
+      const allUnchanged = (actions: Record<string, string | undefined>) =>
+        Object.values(actions).every((action) => action === "unchanged");
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      yield* elbv2.modifyRule({
+        RuleArn: pathRuleArn,
+        Conditions: [{ Field: "path-pattern", PathPatternConfig: { Values: ["/oob/*"] } }],
+      });
+      yield* elbv2.modifyListener({
+        ListenerArn: s1.listenerArn,
+        DefaultActions: [
+          {
+            Type: "fixed-response",
+            FixedResponseConfig: { StatusCode: "503", ContentType: "text/plain" },
+          },
+        ],
+      });
+      for (const arn of [s1.targetGroupArn, s1.loadBalancerArn]) {
+        yield* elbv2.addTags({
+          ResourceArns: [arn],
+          Tags: [{ Key: "team", Value: "out-of-band" }],
+        });
+      }
+      expect((yield* waitForDrift(stack, "RPathRule", "drifted"))?.action).toBe("drifted");
+      expect((yield* waitForDrift(stack, "RListener", "drifted"))?.action).toBe("drifted");
+      expect((yield* waitForDrift(stack, "RTg", "drifted"))?.attr?.tags?.team).toBe("out-of-band");
+      expect((yield* waitForDrift(stack, "RLb", "drifted"))?.attr?.tags?.team).toBe("out-of-band");
+      yield* repairDrift(stack);
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      rule = yield* describePath;
+      expect(rule?.Conditions?.[0]?.PathPatternConfig?.Values).toEqual(["/api/*"]);
+      const listener = yield* elbv2.describeListeners({ ListenerArns: [s1.listenerArn] });
+      expect(listener.Listeners?.[0]?.DefaultActions?.[0]?.Type).toBe("forward");
 
       // STAGE 2: change the path value + action (forward -> fixedResponse) in
       // place, and bump priority 10 -> 15 via setRulePriorities.

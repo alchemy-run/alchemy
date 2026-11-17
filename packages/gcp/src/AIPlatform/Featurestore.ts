@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -96,8 +97,31 @@ export type Featurestore = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeaturestoreLookup
 >;
+
+/**
+ * Props for {@link Featurestore.lookup}: find a featurestore this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FeaturestoreLookup {
+  /**
+   * Featurestore id. Valid characters `[a-z0-9_]`, must start with a
+   * letter, max 60.
+   */
+  featurestoreId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Store (legacy) — a container for Entity Types and
@@ -122,6 +146,19 @@ export type Featurestore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing featurestore
+ * `Featurestore.lookup` references a featurestore Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * featurestore.
+ *
+ * **Example:** Reference an existing featurestore
+ * ```typescript
+ * const featurestore = GCP.AIPlatform.Featurestore.lookup({
+ *   featurestoreId: "my-featurestore",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -130,13 +167,13 @@ export const Featurestore = Resource<Featurestore>("GCP.AIPlatform.Featurestore"
 export class FeaturestoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -185,12 +222,14 @@ const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1Featurestore, project:
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeaturestores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new FeaturestoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new FeaturestoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreNotResolved",
@@ -202,7 +241,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined ? Effect.void : Effect.fail(new FeaturestoreStillExists({ name })),
+      store === undefined
+        ? Effect.void
+        : Effect.fail(new FeaturestoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreStillExists",
@@ -220,11 +261,11 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1Featurestore => store !== undefined,
-      () => new FeaturestoreNotResolved({ name }),
+      () => new FeaturestoreNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (store) => isReady(store.state),
-      () => new FeaturestoreNotResolved({ name }),
+      () => new FeaturestoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreNotResolved",
@@ -258,6 +299,15 @@ export const FeaturestoreProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ featurestoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, featurestoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -323,7 +373,7 @@ export const FeaturestoreProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -331,7 +381,7 @@ export const FeaturestoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeaturestoreNotResolved({ name });
+        return yield* new FeaturestoreNotResolved({ resourceName: name });
       }
 
       if (!isReady(current.state)) {
@@ -391,7 +441,7 @@ export const FeaturestoreProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

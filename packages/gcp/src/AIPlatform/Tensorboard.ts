@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -85,8 +86,30 @@ export type Tensorboard = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TensorboardLookup
 >;
+
+/**
+ * Props for {@link Tensorboard.lookup}: find a tensorboard this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TensorboardLookup {
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * User-facing display name.
+   */
+  displayName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Tensorboard, the physical store for training metrics.
@@ -109,6 +132,17 @@ export type Tensorboard = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tensorboard
+ * `Tensorboard.lookup` references a tensorboard Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * tensorboard.
+ *
+ * **Example:** Reference an existing tensorboard
+ * ```typescript
+ * const tensorboard = GCP.AIPlatform.Tensorboard.lookup({ displayName: "training" });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -117,7 +151,7 @@ export const Tensorboard = Resource<Tensorboard>("GCP.AIPlatform.Tensorboard");
 export class TensorboardNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -147,15 +181,17 @@ const toAttrs = (board: aiplatform.GoogleCloudAiplatformV1Tensorboard, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboards({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((board) =>
-      board ? Effect.succeed(board) : Effect.fail(new TensorboardNotResolved({ name })),
+      board
+        ? Effect.succeed(board)
+        : Effect.fail(new TensorboardNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.TensorboardNotResolved",
@@ -182,7 +218,7 @@ const findByDisplayName = (parent: string, displayName: string, project: string)
     Stream.filter((board) => board.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? toAttrs(option.value, project) : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const TensorboardProvider = () =>
@@ -203,6 +239,16 @@ export const TensorboardProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ location: lookupLocation, displayName }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = locationParent(env.project, lookupLocation ?? env.region);
+      const match = yield* findByDisplayName(parent, displayName, env.project);
+      if (match === undefined) return undefined;
+      const existing = yield* getByName(match.name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -258,7 +304,7 @@ export const TensorboardProvider = () =>
               isDefault: desiredDefault ? true : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -278,7 +324,7 @@ export const TensorboardProvider = () =>
 
       if (current === undefined) {
         return yield* new TensorboardNotResolved({
-          name: output?.name ?? `${parent}/tensorboards/-`,
+          resourceName: output?.name ?? `${parent}/tensorboards/-`,
         });
       }
 
@@ -320,7 +366,7 @@ export const TensorboardProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsTensorboards({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

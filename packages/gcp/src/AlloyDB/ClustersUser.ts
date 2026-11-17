@@ -132,7 +132,7 @@ export const ClustersUser = Resource<ClustersUser>("GCP.AlloyDB.ClustersUser");
 export class ClustersUserNotResolved extends Data.TaggedError(
   "GCP.AlloyDB.ClustersUserNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClustersUserClusterMissing extends Data.TaggedError(
@@ -144,7 +144,7 @@ export class ClustersUserClusterMissing extends Data.TaggedError(
 export class ClustersUserStillExists extends Data.TaggedError(
   "GCP.AlloyDB.ClustersUserStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -276,12 +276,14 @@ const toAttrs = (user: alloydb.User, project: string) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsClustersUsers({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((user) =>
-      user ? Effect.succeed(user) : Effect.fail(new ClustersUserNotResolved({ name })),
+      user
+        ? Effect.succeed(user)
+        : Effect.fail(new ClustersUserNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClustersUserNotResolved",
@@ -293,7 +295,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((user) =>
-      user === undefined ? Effect.void : Effect.fail(new ClustersUserStillExists({ name })),
+      user === undefined
+        ? Effect.void
+        : Effect.fail(new ClustersUserStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClustersUserStillExists",
@@ -451,12 +455,12 @@ export const ClustersUserProvider = () =>
               includeKeepExtraRoles: true,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created !== undefined ? created : yield* waitUntilExists(name);
       }
 
       if (current === undefined) {
-        return yield* new ClustersUserNotResolved({ name });
+        return yield* new ClustersUserNotResolved({ resourceName: name });
       }
 
       const passwordChanged =

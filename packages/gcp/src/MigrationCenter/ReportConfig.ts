@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,32 @@ export type ReportConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReportConfigLookup
 >;
+
+/**
+ * Props for {@link ReportConfig.lookup}: find a report config this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ReportConfigLookup {
+  /**
+   * Report config id (the `{reportConfig}` segment of
+   * `projects/{project}/locations/{location}/reportConfigs/{reportConfig}`).
+   */
+  reportConfigId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Migration Center report configuration that binds asset groups to
@@ -113,6 +138,19 @@ export type ReportConfig = Resource<
  *   groupPreferencesetAssignments: [
  *     { group: group.name, preferenceSet: prefs.name },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing report config
+ * `ReportConfig.lookup` references a report config Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * report config.
+ *
+ * **Example:** Reference an existing report config
+ * ```typescript
+ * const reportConfig = GCP.MigrationCenter.ReportConfig.lookup({
+ *   reportConfigId: "my-report-config",
  * });
  * ```
  *
@@ -163,10 +201,10 @@ const toAttrs = (item: mc.ReportConfig, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : mc
         .getProjectsLocationsReportConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsReportConfigs
@@ -225,6 +263,15 @@ export const ReportConfigProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ reportConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, reportConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const reportConfigId = yield* toPhysicalId(
@@ -280,7 +327,7 @@ export const ReportConfigProvider = () =>
               groupPreferencesetAssignments,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -288,7 +335,7 @@ export const ReportConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -306,7 +353,7 @@ export const ReportConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -7,6 +7,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -102,6 +103,14 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECU
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.OrganizationsFirewallEndpoint.lookup({
+          firewallEndpointId: created.firewallEndpointId,
+          organization: created.organization,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/firewallEndpoints/");

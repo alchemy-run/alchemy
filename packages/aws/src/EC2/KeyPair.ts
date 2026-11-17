@@ -69,8 +69,24 @@ export interface KeyPair extends Resource<
     privateKey?: Redacted.Redacted<string>;
   },
   never,
-  Providers
+  Providers,
+  KeyPairLookup
 > {}
+
+/**
+ * Props for {@link KeyPair.lookup}: find a key pair this stack doesn't
+ * manage, in the ambient account and region. Its private key is never
+ * available to a lookup.
+ */
+export type KeyPairLookup =
+  | {
+      /** The key pair's name. */
+      keyName: string;
+    }
+  | {
+      /** The key pair's id. */
+      keyPairId: string;
+    };
 
 /**
  * An EC2 key pair used to grant SSH access to instances launched with its
@@ -95,6 +111,21 @@ export interface KeyPair extends Resource<
  * ```typescript
  * const keyPair = yield* AWS.EC2.KeyPair("ImportedKey", {
  *   publicKeyMaterial: "ssh-ed25519 AAAAC3Nz... user@host",
+ * });
+ * ```
+ *
+ * ### Looking up an existing key pair
+ * `KeyPair.lookup` references a key pair Alchemy doesn't manage (imported in the
+ * console or by another stack), found by `keyName` or `keyPairId`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Launch an instance with an existing key pair
+ * ```typescript
+ * const key = AWS.EC2.KeyPair.lookup({ keyName: "ops" });
+ *
+ * const instance = yield* AWS.EC2.Instance("Bastion", {
+ *   imageId,
+ *   keyName: key.keyName,
  * });
  * ```
  *
@@ -141,6 +172,26 @@ export const KeyPairProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const info = yield* ec2
+            .describeKeyPairs(
+              "keyName" in props
+                ? { KeyNames: [props.keyName] }
+                : { KeyPairIds: [props.keyPairId] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidKeyPair.NotFound", () => Effect.succeed({ KeyPairs: [] })),
+              Effect.map((r) => r.KeyPairs?.[0]),
+            );
+          if (!info?.KeyPairId || !info.KeyName) return undefined;
+          return {
+            keyPairId: info.KeyPairId as KeyPairId,
+            keyName: info.KeyName,
+            keyFingerprint: info.KeyFingerprint ?? "",
+            keyType: (info.KeyType ?? "rsa") as KeyPairType,
+          };
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -217,7 +268,7 @@ export const KeyPairProvider = () =>
                     },
                   ],
                 })
-                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.succeed(undefined)));
+                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.undefined));
               if (imported?.KeyPairId) {
                 info = {
                   KeyPairId: imported.KeyPairId,
@@ -241,7 +292,7 @@ export const KeyPairProvider = () =>
                     },
                   ],
                 })
-                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.succeed(undefined)));
+                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.undefined));
               if (created?.KeyPairId) {
                 privateKey = asRedacted(created.KeyMaterial) ?? privateKey;
                 info = {

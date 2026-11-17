@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -94,8 +95,32 @@ export type Mesh = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MeshLookup
 >;
+
+/**
+ * Props for {@link Mesh.lookup}: find a mesh this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface MeshLookup {
+  /**
+   * Mesh id (the `{mesh}` segment of
+   * `projects/{project}/locations/{location}/meshes/{mesh}`). Must be 1-63
+   * characters and not start with a number.
+   */
+  meshId: string;
+  /**
+   * Location (`global`, `us-central1`, …). Meshes are typically `global`.
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Service Mesh configuration grouping for workload-to-workload
@@ -119,6 +144,16 @@ export type Mesh = Resource<
  *   interceptionPort: 15001,
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing mesh
+ * `Mesh.lookup` references a mesh Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared mesh.
+ *
+ * **Example:** Reference an existing mesh
+ * ```typescript
+ * const mesh = GCP.NetworkServices.Mesh.lookup({ meshId: "my-mesh" });
  * ```
  *
  * @resource
@@ -147,7 +182,7 @@ const toAttrs = (mesh: networkservices.Mesh, project: string) => {
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsMeshes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MeshProvider = () =>
   Provider.succeed(Mesh, {
@@ -173,6 +208,15 @@ export const MeshProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ meshId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, meshId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -231,7 +275,7 @@ export const MeshProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -277,7 +321,7 @@ export const MeshProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

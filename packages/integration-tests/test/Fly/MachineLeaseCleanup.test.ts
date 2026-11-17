@@ -12,8 +12,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Scope from "effect/Scope";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
+import { flyApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 test.provider(
   "native lease cleanup waits for an in-flight renewal before releasing authority",

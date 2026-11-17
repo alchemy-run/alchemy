@@ -55,12 +55,32 @@ export interface VirtualNetworkAttributes {
   createdAt: string;
 }
 
+/**
+ * Props for {@link VirtualNetwork.lookup}: find a virtual network this stack
+ * doesn't manage, by its id or its name.
+ */
+export type VirtualNetworkLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID (UUID) of the existing virtual network.
+       */
+      virtualNetworkId: string;
+    }
+  | {
+      /**
+       * The name of the existing virtual network (every account has one
+       * named `default`).
+       */
+      name: string;
+    };
+
 export type VirtualNetwork = Resource<
   TypeId,
   VirtualNetworkProps,
   VirtualNetworkAttributes,
   never,
-  Providers
+  Providers,
+  VirtualNetworkLookup
 >;
 
 /**
@@ -103,6 +123,23 @@ export type VirtualNetwork = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Virtual Network
+ * `VirtualNetwork.lookup` reads a virtual network Alchemy doesn't manage
+ * (the account's `default` network, or one created in the dashboard or by
+ * another stack), found by `virtualNetworkId` or `name`, so routes can
+ * target it. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Route a CIDR through an existing virtual network
+ * ```typescript
+ * const vnet = Cloudflare.Tunnel.VirtualNetwork.lookup({ name: "staging" });
+ * yield* Cloudflare.Tunnel.Route("StagingNet", {
+ *   tunnelId: tunnel.tunnelId,
+ *   network: "10.4.0.0/16",
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/cloudflared/tunnel-virtual-networks/
  *
  * @resource
@@ -130,6 +167,15 @@ export const VirtualNetworkProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "virtualNetworkId" in props
+          ? yield* getVnet(accountId, props.virtualNetworkId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
+
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -149,7 +195,7 @@ export const VirtualNetworkProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
 
@@ -169,7 +215,7 @@ export const VirtualNetworkProvider = () =>
           .createNetworkVirtualNetwork({
             accountId,
             name,
-            comment: news.comment,
+            comment: news.comment ?? "",
             isDefaultNetwork: news.isDefaultNetwork,
           })
           .pipe(
@@ -267,7 +313,7 @@ type ObservedVnet = zeroTrust.GetNetworkVirtualNetworkResponse;
 const getVnet = (accountId: string, virtualNetworkId: string) =>
   zeroTrust.getNetworkVirtualNetwork({ accountId, virtualNetworkId }).pipe(
     Effect.map((v): ObservedVnet | undefined => (v.deletedAt ? undefined : v)),
-    Effect.catchTag("VirtualNetworkNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("VirtualNetworkNotFound", () => Effect.undefined),
   );
 
 /**

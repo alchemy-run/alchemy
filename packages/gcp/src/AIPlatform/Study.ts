@@ -131,7 +131,7 @@ export type Study = Resource<
 export const Study = Resource<Study>("GCP.AIPlatform.Study");
 
 export class StudyNotResolved extends Data.TaggedError("GCP.AIPlatform.StudyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toStudySpec = (spec: StudySpec): aiplatform.GoogleCloudAiplatformV1StudySpec => ({
@@ -211,10 +211,10 @@ const toAttrs = (study: aiplatform.GoogleCloudAiplatformV1Study, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsStudies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // `lookupProjectsLocationsStudies` answers a missing display name with a
 // 500 ("There was an issue when sending 'LookupStudyRequest'"), so scan
@@ -225,7 +225,7 @@ const lookupByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((study) => study.displayName === displayName),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listAt = (parent: string, project: string) =>
@@ -308,7 +308,7 @@ export const StudyProvider = () =>
 
       if (current === undefined) {
         return yield* new StudyNotResolved({
-          name: output?.name ?? `${parent}/studies/-`,
+          resourceName: output?.name ?? `${parent}/studies/-`,
         });
       }
 

@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "mount",
+              "value": "type=tmpfs,target=/a,size=1.5GiB"
+            },
+            {
+              "name": "mount",
+              "value": "type=tmpfs,target=/b,size=512"
+            },
+            {
+              "name": "mount",
+              "value": "type=tmpfs,target=/c,size=10kb"
+            },
+            {
+              "name": "mount",
+              "value": "type=tmpfs,target=/d,size=2"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "m --mount=type=tmpfs,target=/e,size=1b true"
+          }
+        }
+      ]
+    }
+  ]
+}

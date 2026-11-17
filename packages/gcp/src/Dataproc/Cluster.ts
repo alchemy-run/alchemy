@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -282,8 +283,33 @@ export type Cluster = Resource<
     httpPorts: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id unique within the project. Must start with a lowercase
+   * letter, contain only lowercase letters, numbers, and hyphens, and not
+   * end with a hyphen (up to 51 characters).
+   */
+  clusterName: string;
+  /**
+   * Dataproc region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc cluster of Compute Engine VMs.
@@ -326,6 +352,16 @@ export type Cluster = Resource<
  *   workerMachineType: "e2-standard-2",
  *   workerBootDiskSizeGb: 30,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.Dataproc.Cluster.lookup({ clusterName: "my-cluster" });
  * ```
  *
  * @resource
@@ -512,7 +548,7 @@ const toAttrs = (cluster: dataproc.Cluster, project: string, region: string) => 
 const getById = (projectId: string, region: string, clusterName: string) =>
   dataproc
     .getProjectsRegionsClusters({ projectId, region, clusterName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (projectId: string, region: string, clusterName: string) =>
   getById(projectId, region, clusterName).pipe(
@@ -580,7 +616,7 @@ const deleteCluster = (projectId: string, region: string, clusterName: string) =
     const operation = yield* dataproc
       .deleteProjectsRegionsClusters({ projectId, region, clusterName })
       .pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,
@@ -604,6 +640,19 @@ const isSubnetNotReady = (error: { readonly _tag: string }) =>
   error.message.includes("/subnetworks/") &&
   error.message.includes("is not ready");
 
+// Dataproc checks the VM service account's access to its staging and temp
+// buckets on create, and a just-granted role takes up to a minute to reach
+// that check: `BadRequest: Multiple validation errors: - Permissions are
+// missing for the custom service account ...`.
+const isGrantNotPropagated = (error: { readonly _tag: string; readonly message?: string }) =>
+  error._tag === "BadRequest" && (error.message ?? "").includes("Permissions are missing for the");
+
+// A RUNNING cluster can still be finishing an operation of its own:
+// `BadRequest: Cannot update cluster '…' while it has other pending update
+// operations.`
+const isUpdatePending = (error: { readonly _tag: string; readonly message?: string }) =>
+  error._tag === "BadRequest" && (error.message ?? "").includes("other pending update operations");
+
 /**
  * Create the cluster and wait for the create operation. A create that fails
  * on a busy subnet leaves the cluster in `ERROR`; it is deleted and the
@@ -622,13 +671,13 @@ const createCluster = (
     }
     const created = yield* dataproc
       .createProjectsRegionsClusters({ projectId, region, body })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
       yield* waitForOperation(created);
     }
   }).pipe(
     Effect.retry({
-      while: isSubnetNotReady,
+      while: (error) => isSubnetNotReady(error) || isGrantNotPropagated(error),
       times: 6,
       schedule: Schedule.spaced("30 seconds"),
     }),
@@ -874,6 +923,14 @@ export const ClusterProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ clusterName, region }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeRegion(region, env.region);
+      const existing = yield* getById(env.project, location, clusterName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterName = yield* toId(id, olds?.clusterName, output?.clusterName);
@@ -998,9 +1055,9 @@ export const ClusterProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              while: (error) => error._tag === "Conflict" || isUpdatePending(error),
+              times: 12,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);

@@ -130,8 +130,28 @@ export type EnvironmentsTargetserver = Resource<
     sSLInfo: TargetServerTlsInfo | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsTargetserverLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsTargetserver.lookup}: find an environments
+ * targetserver this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsTargetserverLookup {
+  /**
+   * Target server id.
+   */
+  targetserverId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
 
 /**
  * An Apigee environment TargetServer — a named backend host:port used by
@@ -153,6 +173,20 @@ export type EnvironmentsTargetserver = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environments targetserver
+ * `EnvironmentsTargetserver.lookup` references an environments targetserver
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared environments targetserver.
+ *
+ * **Example:** Reference an existing environments targetserver
+ * ```typescript
+ * const environmentsTargetserver = GCP.Apigee.EnvironmentsTargetserver.lookup({
+ *   targetserverId: "my-targetserver",
+ *   environment: "my-environment",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -163,7 +197,7 @@ export const EnvironmentsTargetserver = Resource<EnvironmentsTargetserver>(
 export class EnvironmentsTargetserverNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsTargetserverNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, targetserverId: string) =>
@@ -253,6 +287,16 @@ export const EnvironmentsTargetserverProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ targetserverId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, targetserverId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(
@@ -326,7 +370,7 @@ export const EnvironmentsTargetserverProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsTargetserverNotResolved({ name });
+        return yield* new EnvironmentsTargetserverNotResolved({ resourceName: name });
       }
 
       const hostChanged = !sameText(current.host, news.host);

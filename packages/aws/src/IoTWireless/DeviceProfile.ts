@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
+
+export class DeviceProfileUnexpectedResponse extends Data.TaggedError(
+  "DeviceProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DeviceProfileProps {
   /**
@@ -47,8 +55,18 @@ export interface DeviceProfile extends Resource<
     deviceProfileName: string;
   },
   never,
-  Providers
+  Providers,
+  DeviceProfileLookup
 > {}
+
+/**
+ * Props for {@link DeviceProfile.lookup}: find a device profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeviceProfileLookup {
+  /** The name of the existing device profile. */
+  deviceProfileName: string;
+}
 
 /**
  * An AWS IoT Core for LoRaWAN device profile — the hardware-level LoRaWAN
@@ -80,6 +98,16 @@ export interface DeviceProfile extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing device profile
+ * `DeviceProfile.lookup` references a device profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deviceProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing device profile
+ * ```typescript
+ * const lorawan = AWS.IoTWireless.DeviceProfile.lookup({ deviceProfileName: "lorawan-us915" });
+ * ```
+ *
  * @resource
  */
 export const DeviceProfile = Resource<DeviceProfile>("AWS.IoTWireless.DeviceProfile");
@@ -95,7 +123,7 @@ export const DeviceProfileProvider = () =>
       const getById = (deviceProfileId: string) =>
         iotw
           .getDeviceProfile({ Id: deviceProfileId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Device profiles have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -125,9 +153,9 @@ export const DeviceProfileProvider = () =>
 
       const toAttrs = Effect.fn(function* (profile: iotw.GetDeviceProfileResponse, name: string) {
         if (profile.Id === undefined || profile.Arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`IoT Wireless device profile '${name}' returned without Id/Arn`),
-          );
+          return yield* new DeviceProfileUnexpectedResponse({
+            message: `IoT Wireless device profile '${name}' returned without Id/Arn`,
+          });
         }
         return {
           deviceProfileId: profile.Id,
@@ -159,6 +187,10 @@ export const DeviceProfileProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ deviceProfileName }) {
+          const profile = yield* observe(undefined, deviceProfileName);
+          return profile === undefined ? undefined : yield* toAttrs(profile, deviceProfileName);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.deviceProfileName ?? (yield* createName(id, olds ?? {}));
           const profile = yield* observe(output, name);
@@ -204,16 +236,16 @@ export const DeviceProfileProvider = () =>
                 Sidewalk: news.sidewalk,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             profile =
               created?.Id !== undefined
                 ? yield* getById(created.Id)
                 : yield* observe(undefined, name);
           }
           if (profile === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless device profile '${name}' not found after create`),
-            );
+            return yield* new DeviceProfileUnexpectedResponse({
+              message: `IoT Wireless device profile '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — only tags are mutable; diff against OBSERVED tags.

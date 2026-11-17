@@ -1,9 +1,5 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  Credentials,
-  DEFAULT_API_BASE_URL,
-  type Config as TursoClientConfig,
-} from "@distilled.cloud/turso/Credentials";
+import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/turso/Credentials";
 import * as turso from "@distilled.cloud/turso/turso";
 import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
@@ -63,8 +59,9 @@ const make = (
     }));
     // `Organization` is typed as never failing, so a credentials failure dies
     // here; the engine still reports it as `CredentialsRequired`.
-    const organization = yield* Effect.cached(
-      Effect.flatMap(Effect.orDie(resolve), (creds) =>
+    const organization = yield* resolve.pipe(
+      Effect.orDie,
+      Effect.flatMap((creds) =>
         creds.organization !== undefined && creds.organization.length > 0
           ? Effect.succeed(creds.organization)
           : discoverOrganization.pipe(
@@ -73,6 +70,7 @@ const make = (
               orDieCredentialsUnavailable(TURSO_AUTH_PROVIDER_NAME),
             ),
       ),
+      Effect.cached,
     );
     return Context.make(Credentials, credentials).pipe(Context.add(Organization, organization));
   });
@@ -91,18 +89,13 @@ export const fromToken = (input: {
   organization?: string;
   apiBaseUrl?: string;
 }) =>
-  Layer.effectContext(
-    make(
-      Effect.succeed({
-        type: "apiToken",
-        apiToken:
-          typeof input.apiToken === "string" ? Redacted.make(input.apiToken) : input.apiToken,
-        apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
-        organization: input.organization,
-        source: { type: "stored" },
-      }),
-    ),
-  );
+  Effect.succeed<TursoResolvedCredentials>({
+    type: "apiToken",
+    apiToken: typeof input.apiToken === "string" ? Redacted.make(input.apiToken) : input.apiToken,
+    apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    organization: input.organization,
+    source: { type: "stored" },
+  }).pipe(make, Layer.effectContext);
 
 /**
  * Build Turso `Credentials` + `Organization` that resolve through the

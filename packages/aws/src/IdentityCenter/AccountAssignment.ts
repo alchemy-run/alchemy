@@ -2,11 +2,26 @@ import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { listInstances, resolveInstance, retryIdentityCenter } from "./common.ts";
+
+export class AccountAssignmentUnexpectedResponse extends Data.TaggedError(
+  "AccountAssignmentUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AccountAssignmentOperationFailed extends Data.TaggedError(
+  "AccountAssignmentOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AccountAssignmentProps {
   /**
@@ -182,7 +197,9 @@ export const AccountAssignmentProvider = () =>
             instanceArn: instance.InstanceArn,
           });
           if (!created) {
-            return yield* Effect.fail(new Error("account assignment not found after create"));
+            return yield* new AccountAssignmentUnexpectedResponse({
+              message: "account assignment not found after create",
+            });
           }
 
           yield* session.note(
@@ -205,7 +222,7 @@ export const AccountAssignmentProvider = () =>
                 TargetId: output.targetId,
                 TargetType: "AWS_ACCOUNT",
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
           );
 
           const requestId = response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
@@ -358,11 +375,9 @@ const waitForAssignmentCreation = (instanceArn: string, requestId: string) =>
     }
 
     if (status.Status === "FAILED") {
-      return yield* Effect.fail(
-        new Error(
-          `account assignment creation failed: ${status.FailureReason ?? "unknown failure"}`,
-        ),
-      );
+      return yield* new AccountAssignmentOperationFailed({
+        message: `account assignment creation failed: ${status.FailureReason ?? "unknown failure"}`,
+      });
     }
 
     return status;
@@ -390,11 +405,9 @@ const waitForAssignmentDeletion = (instanceArn: string, requestId: string) =>
     }
 
     if (status.Status === "FAILED") {
-      return yield* Effect.fail(
-        new Error(
-          `account assignment deletion failed: ${status.FailureReason ?? "unknown failure"}`,
-        ),
-      );
+      return yield* new AccountAssignmentOperationFailed({
+        message: `account assignment deletion failed: ${status.FailureReason ?? "unknown failure"}`,
+      });
     }
 
     return status;

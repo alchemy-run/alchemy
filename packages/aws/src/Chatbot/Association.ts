@@ -99,7 +99,7 @@ export const AssociationProvider = () =>
           Effect.map((listings) =>
             Array.from(listings).find((listing) => listing.Resource === resource),
           ),
-          Effect.catchTag("InvalidRequestException", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidRequestException", () => Effect.undefined),
         );
       });
 

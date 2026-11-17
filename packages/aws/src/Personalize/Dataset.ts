@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readPersonalizeTags, syncPersonalizeTags } from "./internal.ts";
+
+export class PersonalizeDatasetNotReady extends Data.TaggedError("PersonalizeDatasetNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DatasetProps {
   /**
@@ -68,8 +74,18 @@ export interface Dataset extends Resource<
     datasetGroupArn: string;
   },
   never,
-  Providers
+  Providers,
+  DatasetLookup
 > {}
+
+/**
+ * Props for {@link Dataset.lookup}: find a dataset this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatasetLookup {
+  /** The ARN of the existing dataset. */
+  datasetArn: string;
+}
 
 /**
  * An Amazon Personalize dataset — a typed collection (Interactions, Items,
@@ -87,6 +103,16 @@ export interface Dataset extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datasetArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dataset
+ * ```typescript
+ * const existing = AWS.Personalize.Dataset.lookup({ datasetArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const Dataset = Resource<Dataset>("AWS.Personalize.Dataset");
@@ -102,7 +128,7 @@ export const DatasetProvider = () =>
       const describe = Effect.fn(function* (datasetArn: string) {
         const response = yield* personalize
           .describeDataset({ datasetArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.dataset;
       });
 
@@ -114,11 +140,9 @@ export const DatasetProvider = () =>
           }),
         );
         if (dataset?.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `Personalize dataset ${datasetArn} did not become ACTIVE (status: ${dataset?.status})`,
-            ),
-          );
+          return yield* new PersonalizeDatasetNotReady({
+            message: `Personalize dataset ${datasetArn} did not become ACTIVE (status: ${dataset?.status})`,
+          });
         }
         return dataset;
       });
@@ -157,6 +181,13 @@ export const DatasetProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ datasetArn }) {
+          const dataset = yield* describe(datasetArn);
+          if (dataset === undefined) return undefined;
+          const attrs = toAttrs(dataset);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {
@@ -230,11 +261,9 @@ export const DatasetProvider = () =>
             }),
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `Personalize dataset ${output.datasetArn} was not deleted (status: ${remaining.status})`,
-              ),
-            );
+            return yield* new PersonalizeDatasetNotReady({
+              message: `Personalize dataset ${output.datasetArn} was not deleted (status: ${remaining.status})`,
+            });
           }
         }),
 

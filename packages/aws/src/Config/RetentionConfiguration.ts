@@ -68,7 +68,7 @@ export const RetentionConfigurationProvider = () =>
       // filter returns it (or nothing).
       const observeRetention = config.describeRetentionConfigurations({}).pipe(
         Effect.map((r) => (r.RetentionConfigurations ?? []).at(0)),
-        Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.undefined),
       );
 
       const toAttrs = (retention: config.RetentionConfiguration) => ({

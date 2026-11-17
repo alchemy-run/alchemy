@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -112,8 +113,31 @@ export type PublicDelegatedPrefix = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PublicDelegatedPrefixLookup
 >;
+
+/**
+ * Props for {@link PublicDelegatedPrefix.lookup}: find a public delegated
+ * prefix this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface PublicDelegatedPrefixLookup {
+  /**
+   * Prefix name (RFC1035, 1-63 characters).
+   */
+  prefixName: string;
+  /**
+   * Region the prefix lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional public delegated prefix (BYOIP).
@@ -145,6 +169,19 @@ export type PublicDelegatedPrefix = Resource<
  *   region: "us-central1",
  *   parentPrefix: pap.selfLink,
  *   ipCidrRange: "203.0.113.0/26",
+ * });
+ * ```
+ *
+ * ### Looking up an existing public delegated prefix
+ * `PublicDelegatedPrefix.lookup` references a public delegated prefix
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared public delegated prefix.
+ *
+ * **Example:** Reference an existing public delegated prefix
+ * ```typescript
+ * const publicDelegatedPrefix = GCP.Compute.PublicDelegatedPrefix.lookup({
+ *   prefixName: "my-prefix",
  * });
  * ```
  *
@@ -197,7 +234,7 @@ const getByName = (project: string, region: string, name: string) =>
       region,
       publicDelegatedPrefix: name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, prefixName: string) =>
   getByName(project, region, prefixName).pipe(
@@ -254,6 +291,14 @@ export const PublicDelegatedPrefixProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ prefixName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, prefixName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -317,7 +362,7 @@ export const PublicDelegatedPrefixProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, prefixName);
       }
 
@@ -360,6 +405,6 @@ export const PublicDelegatedPrefixProvider = () =>
           publicDelegatedPrefix: output.prefixName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

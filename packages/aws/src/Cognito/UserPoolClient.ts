@@ -144,8 +144,27 @@ export interface UserPoolClient extends Resource<
     userPoolId: string;
   },
   never,
-  Providers
+  Providers,
+  UserPoolClientLookup
 > {}
+
+/**
+ * Props for {@link UserPoolClient.lookup}: find an app client this stack
+ * doesn't manage, in a user pool.
+ */
+export type UserPoolClientLookup =
+  | {
+      /** The user pool the client belongs to. */
+      userPoolId: string;
+      /** The client's id. */
+      clientId: string;
+    }
+  | {
+      /** The user pool the client belongs to. */
+      userPoolId: string;
+      /** The client's name. */
+      clientName: string;
+    };
 
 /**
  * An app client of an Amazon Cognito user pool. Applications authenticate
@@ -199,6 +218,17 @@ export interface UserPoolClient extends Resource<
  *   callbackUrls: ["https://example.com/callback"],
  *   supportedIdentityProviders: ["COGNITO"],
  * });
+ * ```
+ *
+ * ### Looking up an existing app client
+ * `UserPoolClient.lookup` references an app client Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userPoolId` with `clientId` or
+`clientName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing app client
+ * ```typescript
+ * const web = AWS.Cognito.UserPoolClient.lookup({ userPoolId, clientName: "web" });
  * ```
  *
  * @resource
@@ -300,7 +330,7 @@ export const UserPoolClientProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.UserPoolClient),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 
@@ -340,6 +370,14 @@ export const UserPoolClientProvider = () =>
         // parent pool's deletion, so enumeration returns empty per the
         // ProviderService doctrine.
         list: () => Effect.succeed([]),
+
+        lookup: Effect.fn(function* (props) {
+          const observed =
+            "clientId" in props
+              ? yield* describeClient(props.userPoolId, props.clientId)
+              : yield* findClientByName(props.userPoolId, props.clientName);
+          return observed === undefined ? undefined : attributesOf(observed);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;

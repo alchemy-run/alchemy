@@ -6,6 +6,7 @@ import * as vmwareengine from "@distilled.cloud/gcp/vmwareengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -79,6 +80,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { ven, cloud, cluster };
         }),
+      );
+      yield* expectFound(
+        GCP.VMwareEngine.PrivateCloudsCluster.lookup({
+          clusterId: created.cluster.clusterId,
+          location: created.cluster.location,
+          privateCloud: created.cluster.privateCloud,
+        }),
+        created.cluster,
       );
 
       expect(created.cluster.name).toContain("/clusters/");

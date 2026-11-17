@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -174,8 +175,33 @@ export type WorkstationCluster = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkstationClusterLookup
 >;
+
+/**
+ * Props for {@link WorkstationCluster.lookup}: find a workstation cluster
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface WorkstationClusterLookup {
+  /**
+   * Cluster id (the `{workstationCluster}` segment of
+   * `projects/{project}/lo
+   * cations/{location}/workstationClusters/{workstationCluster}`).
+   */
+  workstationClusterId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Workstations cluster — a regional group of workstations
@@ -211,6 +237,19 @@ export type WorkstationCluster = Resource<
  * const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
  *   displayName: "app-dev workstations v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing workstation cluster
+ * `WorkstationCluster.lookup` references a workstation cluster Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared workstation cluster.
+ *
+ * **Example:** Reference an existing workstation cluster
+ * ```typescript
+ * const workstationCluster = GCP.Workstations.WorkstationCluster.lookup({
+ *   workstationClusterId: "my-workstation-cluster",
  * });
  * ```
  *
@@ -273,7 +312,7 @@ const toAttrs = (item: workstations.WorkstationCluster, project: string, region:
 const getByName = (name: string) =>
   workstations
     .getProjectsLocationsWorkstationClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -329,6 +368,15 @@ export const WorkstationClusterProvider = () =>
             fingerprint(previousTags) !== fingerprint(news.tags)),
       });
     }),
+
+    lookup: Effect.fn(function* ({ workstationClusterId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(
+        resourceName(env.project, normalizeLocation(location, env.region), workstationClusterId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -396,7 +444,7 @@ export const WorkstationClusterProvider = () =>
               privateClusterConfig: news.privateClusterConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -409,7 +457,7 @@ export const WorkstationClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -480,7 +528,7 @@ export const WorkstationClusterProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

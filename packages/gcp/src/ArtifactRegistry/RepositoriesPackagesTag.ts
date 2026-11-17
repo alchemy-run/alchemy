@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -78,8 +79,42 @@ export type RepositoriesPackagesTag = Resource<
     version: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesPackagesTagLookup
 >;
+
+/**
+ * Props for {@link RepositoriesPackagesTag.lookup}: find a repositories
+ * packages tag this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RepositoriesPackagesTagLookup {
+  /**
+   * Tag id (the `{tag}` segment of `.../packages/{package}/tags/{tag}`).
+   * Allowed characters: `[a-zA-Z0-9-._~:@]`.
+   */
+  tagId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Package that owns the tag. Full name
+   * `.../repositories/{repository}/packages/{package}` or the package id.
+   */
+  packageId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Artifact Registry package tag — an alternate name for a version.
@@ -109,6 +144,21 @@ export type RepositoriesPackagesTag = Resource<
  *   packageId: "app",
  *   tagId: "stable",
  *   version: "sha256:def456",
+ * });
+ * ```
+ *
+ * ### Looking up an existing repositories packages tag
+ * `RepositoriesPackagesTag.lookup` references a repositories packages tag
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared repositories packages tag.
+ *
+ * **Example:** Reference an existing repositories packages tag
+ * ```typescript
+ * const repositoriesPackagesTag = GCP.ArtifactRegistry.RepositoriesPackagesTag.lookup({
+ *   tagId: "my-tag",
+ *   repository: "my-repository",
+ *   packageId: "my-package",
  * });
  * ```
  *
@@ -182,6 +232,25 @@ export const RepositoriesPackagesTagProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({
+      tagId,
+      location: lookupLocation,
+      repository: lookupRepository,
+      packageId,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? locationFromRepository(lookupRepository, env.region),
+        env.region,
+      );
+      const repository = expandRepository(lookupRepository ?? "", env.project, location);
+      const packageName = expandPackage(repository, packageId ?? "");
+      const name = resourceNameOf(packageName, tagId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
@@ -242,7 +311,7 @@ export const RepositoriesPackagesTagProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observed = current.name ?? name;

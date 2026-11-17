@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -182,8 +183,31 @@ export type Endpoint = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 >;
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface EndpointLookup {
+  /**
+   * Endpoint id (the `{endpoint}` segment of
+   * `projects/{project}/locations/{location}/endpoints/{endpoint}`).
+   */
+  endpointId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Endpoint for online prediction.
@@ -218,17 +242,29 @@ export type Endpoint = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared endpoint.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const endpoint = GCP.AIPlatform.Endpoint.lookup({
+ *   endpointId: "my-endpoint",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
 export const Endpoint = Resource<Endpoint>("GCP.AIPlatform.Endpoint");
 
 export class EndpointNotResolved extends Data.TaggedError("GCP.AIPlatform.EndpointNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EndpointStillExists extends Data.TaggedError("GCP.AIPlatform.EndpointStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, endpointId: string) =>
@@ -348,7 +384,7 @@ const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1Endpoint, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Look an endpoint up by name. An endpoint is invisible while its create
@@ -372,7 +408,9 @@ const getSettled = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint ? Effect.succeed(endpoint) : Effect.fail(new EndpointNotResolved({ name })),
+      endpoint
+        ? Effect.succeed(endpoint)
+        : Effect.fail(new EndpointNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointNotResolved",
@@ -384,7 +422,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint === undefined ? Effect.void : Effect.fail(new EndpointStillExists({ name })),
+      endpoint === undefined
+        ? Effect.void
+        : Effect.fail(new EndpointStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointStillExists",
@@ -449,6 +489,15 @@ export const EndpointProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ endpointId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, endpointId);
+      const existing = yield* getSettled(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const endpointId = yield* toPhysicalRfc1035(
@@ -509,7 +558,7 @@ export const EndpointProvider = () =>
             endpointId,
             body: toCreateBody(news, endpointId, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -517,7 +566,7 @@ export const EndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointNotResolved({ name });
+        return yield* new EndpointNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -614,7 +663,7 @@ export const EndpointProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsEndpoints({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

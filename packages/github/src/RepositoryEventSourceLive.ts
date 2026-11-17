@@ -121,12 +121,9 @@ const handleDelivery = <Req>(
     const name = request.headers.get("x-github-event") ?? "unknown";
     const id = request.headers.get("x-github-delivery") ?? "";
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      payload = body;
-    }
+    const payload: unknown = yield* Effect.try(() => JSON.parse(body) as unknown).pipe(
+      Effect.orElseSucceed(() => body),
+    );
 
     // The wire shape matches `WebhookEvent`, but the runtime can't
     // statically prove `name`/`payload` line up with a specific member of

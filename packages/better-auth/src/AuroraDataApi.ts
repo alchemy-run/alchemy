@@ -238,18 +238,15 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * @peer @distilled.cloud/aws
  * @product Aurora
  */
-export const AuroraDataApi = (
-  cluster:
-    | AWS.RDS.DBCluster
-    | AuroraLike
-    | Effect.Effect<AWS.RDS.DBCluster | AuroraLike, never, any>,
+export const AuroraDataApi = <R = never>(
+  cluster: AWS.RDS.DBCluster | AuroraLike | Effect.Effect<AWS.RDS.DBCluster | AuroraLike, never, R>,
   options?: AuroraDataApiOptions,
 ) =>
   Layer.effect(
     Database,
     Effect.gen(function* () {
       const source = Effect.isEffect(cluster)
-        ? yield* cluster as Effect.Effect<AWS.RDS.DBCluster | AuroraLike>
+        ? yield* cluster as Effect.Effect<AWS.RDS.DBCluster | AuroraLike, never, R>
         : cluster;
       const composite = isAuroraLike(source) ? source : undefined;
       const db = composite?.cluster ?? (source as AWS.RDS.DBCluster);
@@ -273,7 +270,7 @@ export const AuroraDataApi = (
       const runtime = Effect.gen(function* () {
         const context = yield* Effect.context<RuntimeContext>();
         const run = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> =>
-          Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
+          Effect.runPromiseWith(context)(effect);
         const dialect = yield* makeDataApiDialect({
           execute: (request) =>
             executeStatement(request as AWS.RDSData.ExecuteStatementRequest).pipe(
@@ -327,9 +324,8 @@ export const AuroraDataApi = (
                   ...(options?.database === undefined ? {} : { database: options.database }),
                 };
                 const run = <A>(effect: Effect.Effect<A, any, any>) =>
-                  Effect.runPromise(
-                    effect.pipe(Effect.provideContext(ambient)) as Effect.Effect<A>,
-                  );
+                  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the dialect runs each Effect on the ambient runtime, which carries its requirements
+                  Effect.runPromiseWith(ambient)(effect as Effect.Effect<A, any, never>);
                 const dialect = yield* makeDataApiDialect({
                   execute: (request) =>
                     rdsdata

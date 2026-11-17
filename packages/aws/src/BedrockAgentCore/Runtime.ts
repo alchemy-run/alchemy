@@ -109,8 +109,20 @@ export interface Runtime extends Resource<
      * Current status of the agent runtime (e.g. `READY`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  RuntimeLookup
 > {}
+
+/**
+ * Props for {@link Runtime.lookup}: find a runtime this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuntimeLookup {
+  /** The id of the existing runtime. */
+  agentRuntimeId: string;
+}
 
 /**
  * An Amazon Bedrock AgentCore Runtime — serverless hosting for containerized
@@ -154,6 +166,16 @@ export interface Runtime extends Resource<
  * };
  * ```
  *
+ * ### Looking up an existing runtime
+ * `Runtime.lookup` references a runtime Alchemy doesn't manage (created in the
+ * console or by another stack), found by `agentRuntimeId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing runtime
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.Runtime.lookup({ agentRuntimeId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Runtime = Resource<Runtime>("AWS.BedrockAgentCore.Runtime");
@@ -175,7 +197,7 @@ export const RuntimeProvider = () =>
       const getRuntimeOrUndefined = Effect.fn(function* (agentRuntimeId: string) {
         return yield* control
           .getAgentRuntime({ agentRuntimeId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -220,6 +242,15 @@ export const RuntimeProvider = () =>
             );
             return hydrated.filter((r) => r !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ agentRuntimeId }) {
+          const runtime = yield* getRuntimeOrUndefined(agentRuntimeId);
+          if (runtime === undefined || runtime.status === "DELETING") {
+            return undefined;
+          }
+          const attrs = toAttributes(runtime);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const runtime = output?.agentRuntimeId
@@ -282,7 +313,7 @@ export const RuntimeProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             runtime =
               created === undefined
@@ -354,7 +385,7 @@ export const RuntimeProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteAgentRuntime({ agentRuntimeId: output.agentRuntimeId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* control.getAgentRuntime({ agentRuntimeId: output.agentRuntimeId }).pipe(
             Effect.map((r) => r.status as string),

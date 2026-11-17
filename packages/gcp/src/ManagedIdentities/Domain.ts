@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -116,8 +117,30 @@ export type Domain = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DomainLookup
 >;
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DomainLookup {
+  /**
+   * Fully-qualified domain name (the `{domain}` segment of
+   * `projects/{project}/locations/global/domains/{domain}`). Example:
+   * `corp.example.com`. Must be 2-64 characters, start with a letter, use
+   * only lowercase letters, numbers, periods, and hyphens, and the first
+   * label must be 15 characters or fewer.
+   */
+  domainName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Managed Microsoft Active Directory domain.
@@ -162,6 +185,18 @@ export type Domain = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared domain.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const domain = GCP.ManagedIdentities.Domain.lookup({
+ *   domainName: "my-domain",
+ * });
+ * ```
+ *
  * @resource
  * @category ManagedIdentities
  */
@@ -203,10 +238,10 @@ const toAttrs = (item: managedidentities.Domain, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : managedidentities
         .getProjectsLocationsGlobalDomains({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
@@ -230,6 +265,14 @@ export const DomainProvider = () =>
           (news.admin !== undefined && adminOf(news.admin) !== previousAdmin),
       });
     }),
+
+    lookup: Effect.fn(function* ({ domainName }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, domainName);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -279,7 +322,7 @@ export const DomainProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -287,7 +330,7 @@ export const DomainProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -344,7 +387,7 @@ export const DomainProvider = () =>
             times: 8,
             schedule: Schedule.spaced("5 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

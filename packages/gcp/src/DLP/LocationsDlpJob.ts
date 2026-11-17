@@ -1,5 +1,5 @@
 import * as dlp from "@distilled.cloud/gcp/dlp_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -117,8 +118,37 @@ export type LocationsDlpJob = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsDlpJobLookup
 >;
+
+/**
+ * Props for {@link LocationsDlpJob.lookup}: find a locations dlp job this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LocationsDlpJobLookup {
+  /**
+   * Job id (the `{dlpJob}` segment of
+   * `projects/{project}/locations/{location}/dlpJobs/{dlpJob}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 64 characters.
+   */
+  jobId: string;
+  /**
+   * Processing location (`global`, `us`, `europe-west1`, …). `us-central1`
+   * is not a valid DLP job location.
+   */
+  location?: string;
+  /**
+   * Risk-analysis job configuration. Mutually exclusive with `inspectJob`.
+   */
+  riskJob?: RiskAnalysisJobConfig;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud DLP job (`projects.locations.dlpJobs`).
@@ -141,6 +171,17 @@ export type LocationsDlpJob = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing locations dlp job
+ * `LocationsDlpJob.lookup` references a locations dlp job Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * locations dlp job.
+ *
+ * **Example:** Reference an existing locations dlp job
+ * ```typescript
+ * const locationsDlpJob = GCP.DLP.LocationsDlpJob.lookup({ jobId: "my-job" });
+ * ```
+ *
  * @resource
  * @category DLP
  */
@@ -149,7 +190,7 @@ export const LocationsDlpJob = Resource<LocationsDlpJob>("GCP.DLP.LocationsDlpJo
 export class LocationsDlpJobNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDlpJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, jobId: string, risk = false) =>
@@ -231,10 +272,10 @@ const toAttrs = (job: dlp.GooglePrivacyDlpV2DlpJob, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDlpJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listType = (parent: string, type: "INSPECT_JOB" | "RISK_ANALYSIS_JOB") =>
   collectPages(
@@ -277,7 +318,17 @@ export const LocationsDlpJobProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation, riskJob }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, LOCATION);
+      const name = resourceName(env.project, location, jobId, riskJob !== undefined);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, LOCATION);
       const jobId = yield* toJobId(id, olds?.jobId, output?.jobId);
@@ -294,7 +345,9 @@ export const LocationsDlpJobProvider = () =>
       const attrs = toAttrs(existing, env.project);
       const hybrid = hybridOf(existing);
       const owned = yield* ownedByAlchemy(id, hybrid?.description);
-      return owned || hasHybridOwnership(hybrid?.labels) ? attrs : Unowned(attrs);
+      return owned || hasHybridOwnership(hybrid?.labels)
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -351,7 +404,7 @@ export const LocationsDlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsDlpJobNotResolved({ name });
+        return yield* new LocationsDlpJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

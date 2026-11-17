@@ -47,6 +47,20 @@ describe("rewrittenMigrationHistory", (it) => {
   );
 
   it.effect(
+    "treats a file renamed with unchanged contents as not rewritten",
+    () =>
+      Effect.sync(() => {
+        expect(
+          rewrittenMigrationHistory(
+            { "0001.sql": "aaa", "0002.sql": "bbb" },
+            { "0002.sql": "bbb", "0003.sql": "aaa" },
+          ),
+        ).toBeUndefined();
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
     "detects a removed already-applied file",
     () =>
       Effect.sync(() => {

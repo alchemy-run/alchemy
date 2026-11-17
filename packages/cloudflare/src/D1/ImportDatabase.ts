@@ -46,33 +46,32 @@ export const importD1Database = Effect.fn(function* (options: ImportDatabaseOpti
 
   const sqlData = options.sqlData;
   const uploadUrl = init.uploadUrl;
-  const firstPoll = uploadUrl
-    ? yield* Effect.gen(function* () {
-        const bytes =
-          typeof sqlData === "string"
-            ? yield* Effect.sync(() => new TextEncoder().encode(sqlData))
-            : sqlData;
-        const putRes = yield* client.execute(
-          HttpClientRequest.put(uploadUrl).pipe(
-            HttpClientRequest.bodyUint8Array(bytes, "application/sql"),
-          ),
-        );
-        if (putRes.status < 200 || putRes.status >= 300) {
-          const text = yield* putRes.text.pipe(Effect.orElseSucceed(() => ""));
-          return yield* new D1ImportError({
-            databaseId,
-            message: `Failed to upload SQL file to D1 (${putRes.status}): ${text}`,
-          });
-        }
-        return yield* importDb({
-          accountId,
-          databaseId,
-          action: "ingest",
-          etag,
-          filename: init.filename ?? undefined,
-        });
-      })
-    : init;
+  let firstPoll = init;
+  if (uploadUrl) {
+    const bytes =
+      typeof sqlData === "string"
+        ? yield* Effect.sync(() => new TextEncoder().encode(sqlData))
+        : sqlData;
+    const putRes = yield* client.execute(
+      HttpClientRequest.put(uploadUrl).pipe(
+        HttpClientRequest.bodyUint8Array(bytes, "application/sql"),
+      ),
+    );
+    if (putRes.status < 200 || putRes.status >= 300) {
+      const text = yield* putRes.text.pipe(Effect.orElseSucceed(() => ""));
+      return yield* new D1ImportError({
+        databaseId,
+        message: `Failed to upload SQL file to D1 (${putRes.status}): ${text}`,
+      });
+    }
+    firstPoll = yield* importDb({
+      accountId,
+      databaseId,
+      action: "ingest",
+      etag,
+      filename: init.filename ?? undefined,
+    });
+  }
 
   const poll = (
     response: d1.ImportDatabaseResponse,

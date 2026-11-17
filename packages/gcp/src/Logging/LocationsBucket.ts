@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -137,8 +138,39 @@ export type LocationsBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsBucketLookup
 >;
+
+/**
+ * Props for {@link LocationsBucket.lookup}: find a locations bucket this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LocationsBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `{parent}/locations/{location}/buckets/{bucket}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Parent resource (`projects/{project}`, `folders/{folder}`,
+   * `organizations/{organization}`, or `billingAccounts/{account}`).
+   */
+  parent?: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log bucket addressed through the generic locations APIs.
@@ -177,6 +209,19 @@ export type LocationsBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing locations bucket
+ * `LocationsBucket.lookup` references a locations bucket Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * locations bucket.
+ *
+ * **Example:** Reference an existing locations bucket
+ * ```typescript
+ * const locationsBucket = GCP.Logging.LocationsBucket.lookup({
+ *   bucketId: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -185,11 +230,11 @@ export const LocationsBucket = Resource<LocationsBucket>("GCP.Logging.LocationsB
 export class LocationsBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.LocationsBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LocationsBucketFailed extends Data.TaggedError("GCP.Logging.LocationsBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -237,9 +282,7 @@ const toAttrs = (bucket: logging.LogBucket, parent: string, location: string) =>
 };
 
 const getByName = (name: string) =>
-  logging
-    .getLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  logging.getLocationsBuckets({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -250,16 +293,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeletedBucket(bucket)) {
-      return yield* new LocationsBucketNotResolved({ name });
+      return yield* new LocationsBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new LocationsBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPendingBucket(bucket.lifecycleState)) {
-      return yield* new LocationsBucketNotResolved({ name });
+      return yield* new LocationsBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -273,7 +316,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeletedBucket(bucket) ? Effect.void : Effect.fail(new LocationsBucketNotResolved({ name })),
+      isDeletedBucket(bucket)
+        ? Effect.void
+        : Effect.fail(new LocationsBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.LocationsBucketNotResolved",
@@ -321,6 +366,16 @@ export const LocationsBucketProvider = () =>
       if (!idChanged && !locationChanged && !parentChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ bucketId, parent: lookupParent, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = normalizeParent(env.project, lookupParent);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(parent, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeletedBucket(existing)) return undefined;
+      return toAttrs(existing, parent, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -394,7 +449,7 @@ export const LocationsBucketProvider = () =>
       }
 
       if (isDeletedBucket(current)) {
-        return yield* new LocationsBucketNotResolved({ name });
+        return yield* new LocationsBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

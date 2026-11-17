@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -120,8 +121,31 @@ export type RegionSnapshot = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionSnapshotLookup
 >;
+
+/**
+ * Props for {@link RegionSnapshot.lookup}: find a region snapshot this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionSnapshotLookup {
+  /**
+   * Snapshot name (RFC1035, 1-63 characters).
+   */
+  snapshotName: string;
+  /**
+   * Region the snapshot lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine persistent-disk snapshot.
@@ -142,6 +166,19 @@ export type RegionSnapshot = Resource<
  * const snapshot = yield* GCP.Compute.RegionSnapshot("nightly", {
  *   region: "us-central1",
  *   sourceDisk: disk.selfLink,
+ * });
+ * ```
+ *
+ * ### Looking up an existing region snapshot
+ * `RegionSnapshot.lookup` references a region snapshot Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * region snapshot.
+ *
+ * **Example:** Reference an existing region snapshot
+ * ```typescript
+ * const regionSnapshot = GCP.Compute.RegionSnapshot.lookup({
+ *   snapshotName: "my-snapshot",
  * });
  * ```
  *
@@ -243,7 +280,7 @@ const toAttrs = (snapshot: compute.Snapshot, project: string) => ({
 const getByName = (project: string, region: string, snapshot: string) =>
   compute
     .getRegionSnapshots({ project, region, snapshot })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitSnapshotReady = (project: string, region: string, snapshotName: string) =>
   getByName(project, region, snapshotName).pipe(
@@ -351,6 +388,14 @@ export const RegionSnapshotProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ snapshotName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, snapshotName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const snapshotName = yield* toName(id, olds?.snapshotName, output?.snapshotName);
@@ -414,7 +459,7 @@ export const RegionSnapshotProvider = () =>
               guestFlush: news.guestFlush,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -468,7 +513,7 @@ export const RegionSnapshotProvider = () =>
           snapshot: output.snapshotName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

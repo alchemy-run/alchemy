@@ -75,8 +75,18 @@ export interface SequenceStore extends Resource<
     creationTime: string;
   },
   never,
-  Providers
+  Providers,
+  SequenceStoreLookup
 > {}
+
+/**
+ * Props for {@link SequenceStore.lookup}: find a sequence store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SequenceStoreLookup {
+  /** The id of the existing sequence store. */
+  sequenceStoreId: string;
+}
 
 /**
  * An Amazon HealthOmics sequence store — a container for genomics read sets
@@ -115,6 +125,16 @@ export interface SequenceStore extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing sequence store
+ * `SequenceStore.lookup` references a sequence store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `sequenceStoreId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing sequence store
+ * ```typescript
+ * const existing = AWS.Omics.SequenceStore.lookup({ sequenceStoreId: "..." });
+ * ```
+ *
  * @resource
  */
 export const SequenceStore = Resource<SequenceStore>("AWS.Omics.SequenceStore");
@@ -142,11 +162,19 @@ export const SequenceStoreProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),
+        lookup: Effect.fn(function* ({ sequenceStoreId }) {
+          const found = yield* omics
+            .getSequenceStore({ id: sequenceStoreId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (output?.sequenceStoreId === undefined) return undefined;
           const found = yield* omics
             .getSequenceStore({ id: output.sequenceStoreId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* fetchOmicsTags(found.arn);
@@ -180,9 +208,7 @@ export const SequenceStoreProvider = () =>
               ? undefined
               : yield* omics
                   .getSequenceStore({ id: output.sequenceStoreId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (store === undefined) {
             store = yield* omics.createSequenceStore({

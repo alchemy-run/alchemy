@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -200,8 +201,34 @@ export type InternalRange = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InternalRangeLookup
 >;
+
+/**
+ * Props for {@link InternalRange.lookup}: find an internal range this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InternalRangeLookup {
+  /**
+   * Internal range id (the `{internal_range}` segment of
+   * `projects/{project}
+   * /locations/{location}/internalRanges/{internal_range}`). Must be 1-63
+   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  internalRangeId: string;
+  /**
+   * Location of the range. Internal ranges are global — always `"global"`.
+   * `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Connectivity internal range — an IPAM reservation inside a
@@ -278,6 +305,19 @@ export type InternalRange = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing internal range
+ * `InternalRange.lookup` references an internal range Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * internal range.
+ *
+ * **Example:** Reference an existing internal range
+ * ```typescript
+ * const internalRange = GCP.NetworkConnectivity.InternalRange.lookup({
+ *   internalRangeId: "my-internal-range",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkConnectivity
  */
@@ -286,20 +326,20 @@ export const InternalRange = Resource<InternalRange>("GCP.NetworkConnectivity.In
 export class InternalRangeNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InternalRangeRangeMissing extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeRangeMissing",
 )<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
 export class InternalRangeStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -437,12 +477,14 @@ const toAttrs = (range: networkconnectivity.InternalRange, project: string) => {
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsInternalRanges({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((range) =>
-      range ? Effect.succeed(range) : Effect.fail(new InternalRangeNotResolved({ name })),
+      range
+        ? Effect.succeed(range)
+        : Effect.fail(new InternalRangeNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.InternalRangeNotResolved",
@@ -454,7 +496,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((range) =>
-      range === undefined ? Effect.void : Effect.fail(new InternalRangeStillExists({ name })),
+      range === undefined
+        ? Effect.void
+        : Effect.fail(new InternalRangeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.InternalRangeStillExists",
@@ -576,6 +620,15 @@ export const InternalRangeProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ internalRangeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, internalRangeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const internalRangeId = yield* toId(id, olds?.internalRangeId, output?.internalRangeId);
@@ -610,7 +663,7 @@ export const InternalRangeProvider = () =>
       if (current === undefined) {
         if (news.ipCidrRange === undefined && news.prefixLength === undefined) {
           return yield* new InternalRangeRangeMissing({
-            name,
+            resourceName: name,
             message: "InternalRange requires ipCidrRange or prefixLength on create",
           });
         }
@@ -626,7 +679,7 @@ export const InternalRangeProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -635,7 +688,7 @@ export const InternalRangeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InternalRangeNotResolved({ name });
+        return yield* new InternalRangeNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -711,7 +764,7 @@ export const InternalRangeProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

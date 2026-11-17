@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,11 @@ import {
   sameShape,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class RuleSetUnexpectedResponse extends Data.TaggedError("RuleSetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RuleSetProps {
   /**
@@ -48,8 +54,18 @@ export interface RuleSet extends Resource<
     ruleSetName: string;
   },
   never,
-  Providers
+  Providers,
+  RuleSetLookup
 > {}
+
+/**
+ * Props for {@link RuleSet.lookup}: find a rule set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuleSetLookup {
+  /** The name of the existing rule set. */
+  ruleSetName: string;
+}
 
 /**
  * An SES Mail Manager rule set — the ordered rules an ingress point applies
@@ -123,6 +139,16 @@ export interface RuleSet extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing rule set
+ * `RuleSet.lookup` references a rule set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleSetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule set
+ * ```typescript
+ * const existing = AWS.MailManager.RuleSet.lookup({ ruleSetName: "inbound-rules" });
+ * ```
+ *
  * @resource
  */
 export const RuleSet = Resource<RuleSet>("AWS.MailManager.RuleSet");
@@ -138,7 +164,7 @@ export const RuleSetProvider = () =>
       const getById = (ruleSetId: string) =>
         mm
           .getRuleSet({ RuleSetId: ruleSetId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Rule sets have no name-keyed Get — enumerate and match. The physical
       // name is deterministic, so this recovers identity after a lost state
@@ -189,6 +215,10 @@ export const RuleSetProvider = () =>
             Effect.map((results) => results.flatMap((r) => (r === undefined ? [] : [toAttrs(r)]))),
           ),
 
+        lookup: Effect.fn(function* ({ ruleSetName }) {
+          const found = yield* observe(undefined, ruleSetName);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.ruleSetName ?? (yield* createName(id, olds ?? {}));
           const ruleSet = yield* observe(output, name);
@@ -220,16 +250,16 @@ export const RuleSetProvider = () =>
                 Rules: desiredRules,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             ruleSet =
               created !== undefined
                 ? yield* getById(created.RuleSetId)
                 : yield* observe(undefined, name);
           }
           if (ruleSet === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager rule set '${name}' not found after create`),
-            );
+            return yield* new RuleSetUnexpectedResponse({
+              message: `Mail Manager rule set '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED name/rules against desired; apply only

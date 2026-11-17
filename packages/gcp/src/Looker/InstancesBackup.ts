@@ -118,7 +118,7 @@ export const InstancesBackup = Resource<InstancesBackup>("GCP.Looker.InstancesBa
 export class InstancesBackupNotResolved extends Data.TaggedError(
   "GCP.Looker.InstancesBackupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstancesBackupInstanceMissing extends Data.TaggedError(
@@ -130,19 +130,19 @@ export class InstancesBackupInstanceMissing extends Data.TaggedError(
 export class InstancesBackupNotReady extends Data.TaggedError(
   "GCP.Looker.InstancesBackupNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstancesBackupFailed extends Data.TaggedError("GCP.Looker.InstancesBackupFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstancesBackupStillExists extends Data.TaggedError(
   "GCP.Looker.InstancesBackupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -294,15 +294,17 @@ const toId = (id: string, backupId: string | undefined, existing?: string) =>
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//") || name.endsWith("/backups/-")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : looker
         .getProjectsLocationsInstancesBackups({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup ? Effect.succeed(backup) : Effect.fail(new InstancesBackupNotResolved({ name })),
+      backup
+        ? Effect.succeed(backup)
+        : Effect.fail(new InstancesBackupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Looker.InstancesBackupNotResolved",
@@ -315,17 +317,17 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const backup = yield* getByName(name);
     if (backup === undefined) {
-      return yield* new InstancesBackupNotReady({ name, state: "MISSING" });
+      return yield* new InstancesBackupNotReady({ resourceName: name, state: "MISSING" });
     }
     if (isFailed(backup.state)) {
       return yield* new InstancesBackupFailed({
-        name,
+        resourceName: name,
         state: backup.state ?? "FAILED",
       });
     }
     if (!isAvailable(backup.state)) {
       return yield* new InstancesBackupNotReady({
-        name,
+        resourceName: name,
         state: backup.state ?? "STATE_UNSPECIFIED",
       });
     }
@@ -341,7 +343,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined ? Effect.void : Effect.fail(new InstancesBackupStillExists({ name })),
+      backup === undefined
+        ? Effect.void
+        : Effect.fail(new InstancesBackupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Looker.InstancesBackupStillExists",
@@ -504,7 +508,7 @@ export const InstancesBackupProvider = () =>
             parent: ref.instanceName,
             body: { name },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -512,7 +516,7 @@ export const InstancesBackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstancesBackupNotResolved({ name });
+        return yield* new InstancesBackupNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -527,7 +531,7 @@ export const InstancesBackupProvider = () =>
       const operation = yield* looker
         .deleteProjectsLocationsInstancesBackups({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

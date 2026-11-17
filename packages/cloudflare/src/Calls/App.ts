@@ -132,7 +132,7 @@ export const AppProvider = () =>
       const observed = yield* getApp(output.accountId, output.appId);
       return observed ? toAttributes(observed, output.accountId, output.secret) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 
@@ -176,7 +176,7 @@ export const AppProvider = () =>
 const getApp = (accountId: string, appId: string) =>
   calls
     .getSfu({ accountId, appId })
-    .pipe(Effect.catchTag("CallsAppNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("CallsAppNotFound", () => Effect.undefined));
 
 const createAppName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

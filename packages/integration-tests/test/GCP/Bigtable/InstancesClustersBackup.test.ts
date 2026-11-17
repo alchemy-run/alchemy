@@ -6,6 +6,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -82,6 +83,21 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { instance, table, backup };
         }),
+      );
+      yield* expectFound(
+        GCP.Bigtable.InstancesClustersBackup.lookup({
+          backupId: created.backup.backupId,
+          instance: created.backup.instance,
+          cluster: created.backup.cluster,
+        }),
+        created.backup,
+      );
+      yield* expectFound(
+        GCP.Bigtable.Table.lookup({
+          tableId: created.table.tableId,
+          instance: created.table.instance,
+        }),
+        created.table,
       );
 
       expect(created.backup.name).toContain("/backups/");

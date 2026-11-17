@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -54,8 +55,31 @@ export type SchemaRegistry = Resource<
     contexts: string[];
   },
   never,
-  Providers
+  Providers,
+  SchemaRegistryLookup
 >;
+
+/**
+ * Props for {@link SchemaRegistry.lookup}: find a schema registry this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SchemaRegistryLookup {
+  /**
+   * Schema registry id. Letters, numbers, and underscores; max 63
+   * characters; must not start with a number.
+   */
+  schemaRegistryId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Managed Kafka schema registry instance.
@@ -78,6 +102,19 @@ export type SchemaRegistry = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing schema registry
+ * `SchemaRegistry.lookup` references a schema registry Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * schema registry.
+ *
+ * **Example:** Reference an existing schema registry
+ * ```typescript
+ * const schemaRegistry = GCP.ManagedKafka.SchemaRegistry.lookup({
+ *   schemaRegistryId: "my-schema-registry",
+ * });
+ * ```
+ *
  * @resource
  * @category ManagedKafka
  */
@@ -86,7 +123,7 @@ export const SchemaRegistry = Resource<SchemaRegistry>("GCP.ManagedKafka.SchemaR
 export class SchemaRegistryNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, schemaRegistryId: string) =>
@@ -120,6 +157,15 @@ export const SchemaRegistryProvider = () =>
         nextLocation: normalizeLocation(news.location ?? output?.location, env.region),
       });
     }),
+
+    lookup: Effect.fn(function* ({ schemaRegistryId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, schemaRegistryId);
+      const existing = yield* getSchemaRegistry(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -182,7 +228,7 @@ export const SchemaRegistryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SchemaRegistryNotResolved({ name });
+        return yield* new SchemaRegistryNotResolved({ resourceName: name });
       }
 
       yield* stampSchemaRegistryOwnership(current.name ?? name, labels);

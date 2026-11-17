@@ -93,8 +93,18 @@ export interface FileSystem extends Resource<
     vpcId: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  FileSystemLookup
 > {}
+
+/**
+ * Props for {@link FileSystem.lookup}: find a file system this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FileSystemLookup {
+  /** The id of the existing file system. */
+  fileSystemId: string;
+}
 
 /**
  * An Amazon FSx file system — fully-managed shared storage for Lustre,
@@ -147,6 +157,17 @@ export interface FileSystem extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing file system
+ * `FileSystem.lookup` references a file system Alchemy doesn't manage (created in the
+ * console or by another stack), found by `fileSystemId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Mount an existing file system
+ * ```typescript
+ * const scratch = AWS.FSx.FileSystem.lookup({ fileSystemId: "fs-0123456789abcdef0" });
+ * const dnsName = scratch.dnsName;
+ * ```
+ *
  * @resource
  */
 export const FileSystem = Resource<FileSystem>("AWS.FSx.FileSystem");
@@ -196,7 +217,7 @@ export const FileSystemProvider = () =>
       const findById = Effect.fn(function* (fileSystemId: string) {
         return yield* fsx.describeFileSystems({ FileSystemIds: [fileSystemId] }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 
@@ -234,6 +255,18 @@ export const FileSystemProvider = () =>
               }),
             );
           }),
+
+        lookup: Effect.fn(function* ({ fileSystemId }) {
+          const fs = yield* findById(fileSystemId);
+          if (fs === undefined || fs.Lifecycle === "DELETING") return undefined;
+          return {
+            fileSystemId: fs.FileSystemId!,
+            fileSystemArn: fs.ResourceARN ?? (yield* fileSystemArnOf(fs.FileSystemId!)),
+            fileSystemType: fs.FileSystemType ?? "LUSTRE",
+            dnsName: fs.DNSName,
+            vpcId: fs.VpcId,
+          };
+        }),
 
         read: Effect.fn(function* ({ id, output }) {
           const fs = output?.fileSystemId

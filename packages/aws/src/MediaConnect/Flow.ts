@@ -11,6 +11,18 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class MediaConnectFlowNotReady extends Data.TaggedError("MediaConnectFlowNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MediaConnectFlowUnexpectedResponse extends Data.TaggedError(
+  "MediaConnectFlowUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Every flow output managed by alchemy must carry a `Name` so the reconciler
  * can converge outputs by identity across updates.
@@ -89,8 +101,23 @@ export interface Flow extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FlowLookup
 > {}
+
+/**
+ * Props for {@link Flow.lookup}: find a flow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FlowLookup =
+  | {
+      /** The ARN of the existing flow. */
+      flowArn: string;
+    }
+  | {
+      /** The name of the existing flow. */
+      flowName: string;
+    };
 
 /**
  * An AWS Elemental MediaConnect flow — a reliable live-video transport
@@ -142,6 +169,16 @@ export interface Flow extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing flow
+ * `Flow.lookup` references a flow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `flowArn` or `flowName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing flow
+ * ```typescript
+ * const existing = AWS.MediaConnect.Flow.lookup({ flowName: "..." });
+ * ```
+ *
  * @resource
  */
 export const Flow = Resource<Flow>("AWS.MediaConnect.Flow");
@@ -170,7 +207,7 @@ export const FlowProvider = () =>
       const readFlow = Effect.fn(function* (flowArn: string) {
         const response = yield* mediaconnect
           .describeFlow({ FlowArn: flowArn })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.Flow;
       });
 
@@ -190,7 +227,7 @@ export const FlowProvider = () =>
       const readFlowTags = Effect.fn(function* (flowArn: string) {
         const response = yield* mediaconnect
           .listTagsForResource({ ResourceArn: flowArn })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         const tags: Record<string, string> = {};
         for (const [key, value] of Object.entries(response?.Tags ?? {})) {
           if (value !== undefined) tags[key] = value;
@@ -205,11 +242,17 @@ export const FlowProvider = () =>
         return yield* readFlow(flowArn).pipe(
           Effect.flatMap((flow) => {
             if (flow === undefined) {
-              return Effect.fail(new Error(`MediaConnect flow '${flowArn}' not found`));
+              return Effect.fail(
+                new MediaConnectFlowNotReady({
+                  message: `MediaConnect flow '${flowArn}' not found`,
+                }),
+              );
             }
             if (flow.Status !== "STANDBY" && flow.Status !== "ACTIVE" && flow.Status !== "ERROR") {
               return Effect.fail(
-                new Error(`MediaConnect flow '${flowArn}' still settling (status: ${flow.Status})`),
+                new MediaConnectFlowNotReady({
+                  message: `MediaConnect flow '${flowArn}' still settling (status: ${flow.Status})`,
+                }),
               );
             }
             return Effect.succeed(flow);
@@ -227,7 +270,9 @@ export const FlowProvider = () =>
             flow === undefined
               ? Effect.void
               : Effect.fail(
-                  new Error(`MediaConnect flow '${flowArn}' still exists (status: ${flow.Status})`),
+                  new MediaConnectFlowNotReady({
+                    message: `MediaConnect flow '${flowArn}' still exists (status: ${flow.Status})`,
+                  }),
                 ),
           ),
           Effect.retry({ schedule: policy }),
@@ -286,6 +331,12 @@ export const FlowProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn = "flowArn" in props ? props.flowArn : yield* findFlowArnByName(props.flowName);
+          if (arn === undefined) return undefined;
+          const flow = yield* readFlow(arn);
+          return flow === undefined ? undefined : yield* toAttrs(flow);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.flowName ?? (yield* toName(id, olds ?? {}));
           const arn = output?.flowArn ?? (yield* findFlowArnByName(name));
@@ -333,7 +384,9 @@ export const FlowProvider = () =>
             arn = created.Flow?.FlowArn;
           }
           if (arn === undefined) {
-            return yield* Effect.fail(new Error(`MediaConnect flow '${name}' is missing its ARN`));
+            return yield* new MediaConnectFlowUnexpectedResponse({
+              message: `MediaConnect flow '${name}' is missing its ARN`,
+            });
           }
           observed = yield* waitUntilSettled(arn);
 

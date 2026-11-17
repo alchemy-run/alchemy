@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -96,8 +97,36 @@ export type AppsDeployment = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppsDeploymentLookup
 >;
+
+/**
+ * Props for {@link AppsDeployment.lookup}: find an apps deployment this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppsDeploymentLookup {
+  /**
+   * Deployment id.
+   */
+  deploymentId: string;
+  /**
+   * Region used when `app` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent CES app. Full name
+   * `projects/{project}/locations/{location}/apps/{app}` or the app id
+   * (combined with `location`).
+   */
+  app: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Customer Engagement Suite deployment — an immutable, queryable
@@ -119,6 +148,20 @@ export type AppsDeployment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing apps deployment
+ * `AppsDeployment.lookup` references an apps deployment Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apps deployment.
+ *
+ * **Example:** Reference an existing apps deployment
+ * ```typescript
+ * const appsDeployment = GCP.CES.AppsDeployment.lookup({
+ *   deploymentId: "my-deployment",
+ *   app: "my-app",
+ * });
+ * ```
+ *
  * @resource
  * @category CES
  */
@@ -127,7 +170,7 @@ export const AppsDeployment = Resource<AppsDeployment>("GCP.CES.AppsDeployment")
 export class AppsDeploymentNotResolved extends Data.TaggedError(
   "GCP.CES.AppsDeploymentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, deploymentId: string) => `${app}/deployments/${deploymentId}`;
@@ -153,10 +196,10 @@ const toAttrs = (deployment: ces.Deployment, project: string, region: string, ap
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsDeployments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -186,6 +229,16 @@ export const AppsDeploymentProvider = () =>
         nextParent: news.app,
       });
     }),
+
+    lookup: Effect.fn(function* ({ deploymentId, location: lookupLocation, app: lookupApp }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const app = lookupApp ? expandApp(lookupApp, env.project, location) : undefined;
+      const name = app !== undefined ? resourceName(app, deploymentId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region, app);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -239,7 +292,7 @@ export const AppsDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsDeploymentNotResolved({ name });
+        return yield* new AppsDeploymentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

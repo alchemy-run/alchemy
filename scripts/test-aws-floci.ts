@@ -38,6 +38,7 @@ import { startFlociForTests } from "./floci-container.ts";
 import { provisionFlociStandingFixtures } from "./floci-fixtures.ts";
 import { preferLocalFlociImage } from "./floci-image.ts";
 import { resolveFlociDefaultNetwork } from "./floci-network.ts";
+import { defaultTestStage } from "./test-stage.ts";
 
 const LABEL = "test:aws:floci";
 
@@ -134,12 +135,7 @@ const flociFixedValues: Record<string, string> = {
  * (registered without `flociDual` in Providers.ts). This runner points every
  * AWS client at the emulator, so they cannot reach the AWS service they test.
  */
-const liveOnlySuites = new Set([
-  // Floci does not emulate Lambda Web Functions.
-  "Lambda/WebFunction.test.ts",
-  "Lambda/WebFunctionEndpoint.test.ts",
-  "Lambda/WebFunctionPermission.test.ts",
-]);
+const liveOnlySuites = new Set<string>([]);
 
 /** alchemy-test flags whose next argument is their value. */
 const flagsWithValue = new Set([
@@ -215,6 +211,29 @@ const findTestFiles = Effect.fn(function* (root: string) {
 });
 
 const optionalEnv = (name: string) => Config.String(name).pipe(Config.withDefault(""));
+
+/**
+ * Removes `stage`'s local state (`<stateDir>/<stack>/<stage>`) from every
+ * stack: the records of an emulator that no longer has the resources.
+ */
+const clearLocalStageState = Effect.fn(function* (stateDir: string, stage: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (!(yield* fs.exists(stateDir))) return;
+  let cleared = 0;
+  for (const stack of yield* fs.readDirectory(stateDir)) {
+    const dir = path.join(stateDir, stack, stage);
+    if (yield* fs.exists(dir)) {
+      yield* fs.remove(dir, { recursive: true });
+      cleared++;
+    }
+  }
+  if (cleared > 0) {
+    yield* Console.log(
+      `${LABEL}: cleared ${cleared} stale local state stack(s) for stage ${stage}`,
+    );
+  }
+});
 
 const command = Command.make(
   "test-aws-floci",
@@ -349,9 +368,19 @@ const command = Command.make(
     const setEnv = (values: Record<string, string>, overwrite: boolean) =>
       Effect.sync(() => {
         for (const [name, value] of Object.entries(values)) {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes the real env so in-process helpers and the child inherit it
           if (overwrite || process.env[name] === undefined) process.env[name] = value;
         }
       });
+    // Floci runs deploy under their own stage. Everything such a stage
+    // describes lives only in the emulator, so its local state (stacks that
+    // use `Alchemy.localState()`) is dropped whenever the emulator starts
+    // fresh; sharing the live stage would let a live run and an emulated one
+    // read each other's records. An explicit ALCHEMY_TEST_STAGE is kept and
+    // never cleared.
+    const explicitStage = yield* optionalEnv("ALCHEMY_TEST_STAGE");
+    const flociStage = explicitStage !== "" ? undefined : `${yield* defaultTestStage()}_floci`;
+    if (flociStage !== undefined) yield* setEnv({ ALCHEMY_TEST_STAGE: flociStage }, true);
     yield* setEnv(
       {
         ALCHEMY_TEST_DEV: "1",
@@ -371,17 +400,22 @@ const command = Command.make(
       false,
     );
 
+    // Every in-process `ensureFloci` below gets this image too: without it they
+    // fall back to the pinned release and recreate the container.
+    const image = external ? undefined : yield* preferLocalFlociImage(LABEL);
     if (external) {
       yield* Console.log(`${LABEL}: using the existing Floci server (no Docker fallback)`);
     } else {
-      yield* preferLocalFlociImage(LABEL);
-      yield* startFlociForTests(LABEL).pipe(
+      const instance = yield* startFlociForTests(LABEL, image).pipe(
         Effect.catch((error) =>
           fail(
             `could not start the Floci container: ${errorMessage(error)}; tests were not started`,
           ),
         ),
       );
+      if (instance.managed && flociStage !== undefined) {
+        yield* clearLocalStageState(path.join(testPackageRoot, ".alchemy", "state"), flociStage);
+      }
     }
 
     // Suites that take subnet/security-group IDs from the environment (e.g.
@@ -390,7 +424,7 @@ const command = Command.make(
     const subnetIds = yield* optionalEnv("AWS_TEST_SUBNET_IDS");
     const securityGroupIds = yield* optionalEnv("AWS_TEST_SECURITY_GROUP_IDS");
     if ((yield* optionalEnv("AWS_TEST_SLOW")) !== "" && (!subnetIds || !securityGroupIds)) {
-      const network = yield* resolveFlociDefaultNetwork(external).pipe(
+      const network = yield* resolveFlociDefaultNetwork(external, image).pipe(
         Effect.catch((error) =>
           fail(
             `could not resolve the emulator's default VPC network: ${errorMessage(error)}; tests were not started`,
@@ -424,7 +458,7 @@ const command = Command.make(
 
     // Provisioned after any reset so the reset cannot wipe them. Interrupting
     // provisioning (Ctrl-C) removes already-created fixtures first.
-    const fixtures = yield* provisionFlociStandingFixtures(external, { files }).pipe(
+    const fixtures = yield* provisionFlociStandingFixtures(external, { files, image }).pipe(
       Effect.catch((error) =>
         fail(
           `could not provision standing fixtures: ${errorMessage(error)}; tests were not started`,

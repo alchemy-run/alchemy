@@ -11,6 +11,7 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { expectUrlRedirect, waitForDns } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -118,20 +119,20 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Cloudflare.Rules.List("UpdateList", {
-          name: "alchemy_rules_list_update",
+          name: testName("alchemy_rules_list_update", "_"),
           kind: "ip",
           description: "v1",
           items: [{ ip: "203.0.113.1" }, { ip: "203.0.113.2" }],
         }),
       );
 
-      expect(initial.name).toEqual("alchemy_rules_list_update");
+      expect(initial.name).toEqual(testName("alchemy_rules_list_update", "_"));
       expect(initial.description).toEqual("v1");
       expect(initial.numItems).toEqual(2);
 
       const updated = yield* stack.deploy(
         Cloudflare.Rules.List("UpdateList", {
-          name: "alchemy_rules_list_update",
+          name: testName("alchemy_rules_list_update", "_"),
           kind: "ip",
           description: "v2",
           items: [{ ip: "203.0.113.2", comment: "kept" }, { ip: "192.0.2.0/24" }],
@@ -152,7 +153,7 @@ test.provider(
       // Redeploying identical props is a no-op (still the same list).
       const noop = yield* stack.deploy(
         Cloudflare.Rules.List("UpdateList", {
-          name: "alchemy_rules_list_update",
+          name: testName("alchemy_rules_list_update", "_"),
           kind: "ip",
           description: "v2",
           items: [{ ip: "203.0.113.2", comment: "kept" }, { ip: "192.0.2.0/24" }],
@@ -177,7 +178,7 @@ test.provider(
 
       const ipList = yield* stack.deploy(
         Cloudflare.Rules.List("ReplaceList", {
-          name: "alchemy_rules_list_replace",
+          name: testName("alchemy_rules_list_replace", "_"),
           kind: "ip",
           items: [{ ip: "203.0.113.9" }],
         }),
@@ -186,7 +187,7 @@ test.provider(
 
       const hostnameList = yield* stack.deploy(
         Cloudflare.Rules.List("ReplaceList", {
-          name: "alchemy_rules_list_replace",
+          name: testName("alchemy_rules_list_replace", "_"),
           kind: "hostname",
           items: [{ hostname: { urlHostname: "example.com" } }],
         }),
@@ -218,7 +219,7 @@ test.provider(
 
       const list = yield* stack.deploy(
         Cloudflare.Rules.List("HealList", {
-          name: "alchemy_rules_list_heal",
+          name: testName("alchemy_rules_list_heal", "_"),
           kind: "ip",
           items: [{ ip: "203.0.113.11" }],
         }),
@@ -237,7 +238,7 @@ test.provider(
 
       const healed = yield* stack.deploy(
         Cloudflare.Rules.List("HealList", {
-          name: "alchemy_rules_list_heal",
+          name: testName("alchemy_rules_list_heal", "_"),
           kind: "ip",
           description: "healed",
           items: [{ ip: "203.0.113.11" }],
@@ -247,7 +248,7 @@ test.provider(
       expect(healed.listId).not.toEqual(list.listId);
       expect(healed.description).toEqual("healed");
       const live = yield* getList(accountId, healed.listId);
-      expect(live.name).toEqual("alchemy_rules_list_heal");
+      expect(live.name).toEqual(testName("alchemy_rules_list_heal", "_"));
 
       yield* stack.destroy();
 
@@ -268,7 +269,7 @@ test.provider(
       // the create conflict (`ListAlreadyExists`, code 10021) must resolve by
       // adopting the existing list.
       const preexisting = yield* rules
-        .createList({ accountId, name: "alchemy_rules_list_adopt", kind: "ip" })
+        .createList({ accountId, name: testName("alchemy_rules_list_adopt", "_"), kind: "ip" })
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
@@ -277,7 +278,7 @@ test.provider(
           }),
           Effect.catchTag("ListAlreadyExists", () =>
             rules.listLists.items({ accountId }).pipe(
-              Stream.filter((l) => l.name === "alchemy_rules_list_adopt"),
+              Stream.filter((l) => l.name === testName("alchemy_rules_list_adopt", "_")),
               Stream.runHead,
               Effect.map(Option.getOrThrow),
             ),
@@ -286,7 +287,7 @@ test.provider(
 
       const adopted = yield* stack.deploy(
         Cloudflare.Rules.List("AdoptList", {
-          name: "alchemy_rules_list_adopt",
+          name: testName("alchemy_rules_list_adopt", "_"),
           kind: "ip",
           description: "adopted",
           items: [{ ip: "203.0.113.21" }],

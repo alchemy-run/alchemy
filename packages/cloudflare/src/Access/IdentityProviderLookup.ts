@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream";
 import type { IdentityProviderAttributes, IdentityProviderType } from "./IdentityProvider.ts";
 
 // Shared observation scaffolding for the IdentityProvider resource provider
-// and the GetIdentityProvider data source. NOT exported from `index.ts`.
+// (its read, reconcile and lookup). NOT exported from `index.ts`.
 
 export interface ObservedIdp {
   readonly id?: string | null;
@@ -44,7 +44,7 @@ export const getIdp = (zoneId: string | undefined, accountId: string, identityPr
     : zeroTrust.getIdentityProviderForAccount({ accountId, identityProviderId })
   ).pipe(
     Effect.map((idp): ObservedIdp | undefined => idp as ObservedIdp),
-    Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.undefined),
   );
 
 /**

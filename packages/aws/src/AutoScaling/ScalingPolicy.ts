@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
+
+export class ScalingPolicyUnexpectedResponse extends Data.TaggedError(
+  "ScalingPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ScalingPolicyName = string;
 
@@ -270,7 +278,9 @@ export const ScalingPolicyProvider = () =>
               policy
                 ? Effect.succeed(policy)
                 : Effect.fail(
-                    new Error(`Scaling policy '${policyName}' was not readable after reconcile`),
+                    new ScalingPolicyUnexpectedResponse({
+                      message: `Scaling policy '${policyName}' was not readable after reconcile`,
+                    }),
                   ),
             ),
           );

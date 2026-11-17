@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { Gateway } from "./fixtures/Gateway.ts";
 import TestWorker from "./fixtures/TestWorker.ts";
 
@@ -188,7 +189,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const gatewayId = "alchemy-test-ai-gateway-list";
+      const gatewayId = testName("alchemy-test-ai-gateway-list");
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {

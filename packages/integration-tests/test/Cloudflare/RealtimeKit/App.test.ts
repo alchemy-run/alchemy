@@ -37,7 +37,8 @@ const listApps = (accountId: string) =>
   );
 
 // Deterministic name — RealtimeKit apps cannot be deleted, so every run of
-// this suite adopts the same app instead of leaking a new one. The Preset
+// this suite adopts the same app instead of leaking a new one, so the name is
+// shared by every user rather than derived from the stage. The Preset
 // and Webhook suites share this name and adopt the same app.
 const APP_NAME = "alchemy-rtk-test-app";
 

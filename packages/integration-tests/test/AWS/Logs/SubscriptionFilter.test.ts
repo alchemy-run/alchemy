@@ -9,6 +9,7 @@ import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -128,4 +129,41 @@ test.provider(
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:kinesis", "provider:aws:logs", "live"],
     timeout: 240_000,
   },
+);
+
+// #2688: `read` and `reconcile` must report the same distribution and
+// applyOnTransformedLogs, and `read` must see out-of-band changes.
+test.provider(
+  "drift detects and repairs an out-of-band subscription filter change",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const filter = yield* stack.deploy(infra({ filterPattern: "?ERROR" }));
+      const actions = yield* driftActions(stack);
+      expect(Object.values(actions).every((action) => action === "unchanged")).toBe(true);
+
+      const observed = yield* describeFilter(filter.logGroupName, filter.filterName);
+      yield* logs.putSubscriptionFilter({
+        logGroupName: filter.logGroupName,
+        filterName: filter.filterName,
+        filterPattern: observed?.filterPattern ?? "",
+        destinationArn: filter.destinationArn,
+        roleArn: filter.roleArn,
+        distribution: "Random",
+      });
+
+      const drifted = yield* waitForDrift(stack, "KinesisFanout", "drifted");
+      expect(drifted?.attr?.distribution).toBe("Random");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.KinesisFanout?.action).toBe("repaired");
+      expect((yield* driftOf(stack, "KinesisFanout"))?.action).toBe("unchanged");
+      const restored = yield* describeFilter(filter.logGroupName, filter.filterName);
+      expect(restored?.distribution).toBe("ByLogStream");
+
+      yield* stack.destroy();
+      yield* assertFilterDeleted(filter.logGroupName, filter.filterName);
+    }),
+  { tags: ["provider:aws", "provider:aws:logs", "provider:aws:kinesis", "live"], timeout: 240_000 },
 );

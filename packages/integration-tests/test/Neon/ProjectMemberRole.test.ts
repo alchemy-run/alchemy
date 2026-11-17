@@ -24,10 +24,13 @@ const member = {
   user_id: "authorized-user",
   org_role: "editor" as const,
 };
-const refused = <A, R>(effect: Effect.Effect<A, GovernanceRoleSafetyError, R>) =>
+const refused = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.as(false),
-    Effect.catchTag("NeonGovernanceRoleSafetyError", () => Effect.succeed(true)),
+    Effect.catchIf(
+      (error) => error instanceof GovernanceRoleSafetyError,
+      () => Effect.succeed(true),
+    ),
   );
 
 unit.effect(
@@ -190,7 +193,7 @@ const context = {
   oldBindings: [],
   newBindings: [],
   bindings: [],
-  session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+  session: { note: () => Effect.void },
 };
 const noCloudCredentials = Effect.die("Safety-only governance tests must not issue Neon requests");
 

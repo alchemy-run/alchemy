@@ -1,18 +1,7 @@
-import { setClipboard, stringWidth, tmuxPassthrough } from "@alchemy.run/sigil/ansi";
 /** Terminal-emulator features shared by CLI components. */
+import { createChalk, truncateAnsi, type ChalkInstance } from "@alchemy.run/sigil/ansi";
 import { detectColorLevel, detectUnicodeSupport } from "@alchemy.run/sigil/capabilities";
-
-export const ANSI_RESET = "\u001B[0m";
-export const ANSI_BOLD = "\u001B[1m";
-export const ANSI_DIM = "\u001B[2m";
-
-/** Truecolor foreground escape for raw, non-layout output. */
-export const ansiFg = (hex: string) => {
-  const red = Number.parseInt(hex.slice(1, 3), 16);
-  const green = Number.parseInt(hex.slice(3, 5), 16);
-  const blue = Number.parseInt(hex.slice(5, 7), 16);
-  return `\u001B[38;2;${red};${green};${blue}m`;
-};
+import { copyToClipboard as copyThroughTerminal } from "@alchemy.run/sigil/terminal";
 
 /**
  * The canonical color-support decision, shared by raw terminal strings and
@@ -25,37 +14,41 @@ export const colorsEnabled = (
 /** The canonical Unicode-support decision for raw terminal strings. */
 export const unicodeEnabled = detectUnicodeSupport;
 
-/** Environment override for child processes whose piped output returns here. */
-export const pipedColorEnv = (): Record<string, string> =>
-  colorsEnabled() ? { FORCE_COLOR: process.env.FORCE_COLOR ?? "1" } : {};
+/**
+ * Environment override for child processes whose piped output returns here:
+ * forwards this terminal's color level, since the child only sees a pipe.
+ */
+export const pipedColorEnv = (): Record<string, string> => {
+  const level = detectColorLevel(process.stdout);
+  return level > 0 ? { FORCE_COLOR: process.env.FORCE_COLOR ?? String(level) } : {};
+};
 
-export const paint = (code: string, value: string): string =>
-  colorsEnabled() ? `${code}${value}${ANSI_RESET}` : value;
+/**
+ * Chainable styles for raw, non-layout output (`style.bold.hex("#e28a5b")(text)`),
+ * with the color level detected for `stream`. `colors` overrides detection:
+ * `true` is truecolor, `false` plain text.
+ */
+export const terminalStyle = (
+  options: {
+    readonly stream?: Pick<NodeJS.WriteStream, "isTTY">;
+    readonly colors?: boolean;
+  } = {},
+): ChalkInstance =>
+  options.colors === undefined
+    ? createChalk({ stream: options.stream ?? process.stdout })
+    : createChalk({ level: options.colors ? "truecolor" : "none" });
 
+/**
+ * Copy to the user's clipboard: OSC 52 (wrapped for tmux or screen), tmux's
+ * own buffer, and the system clipboard tool for local sessions.
+ */
 export const copyToClipboard = (
   text: string,
-  stdout: Pick<NodeJS.WriteStream, "write"> = process.stdout,
+  stdout: { write(data: string): boolean } = process.stdout,
 ): void => {
-  let sequence = setClipboard(text);
-  if (process.env.TMUX !== undefined) {
-    sequence = tmuxPassthrough(sequence);
-  }
-  stdout.write(sequence);
+  copyThroughTerminal(text, { stream: stdout });
 };
-
-const truncateSegmenter = new Intl.Segmenter();
 
 /** Display-width-aware truncation (wide CJK/emoji count by rendered cells). */
-export const truncate = (value: string, width: number): string => {
-  const max = Math.max(4, width);
-  if (stringWidth(value) <= max) return value;
-  let total = 0;
-  let kept = "";
-  for (const { segment } of truncateSegmenter.segment(value)) {
-    const segmentWidth = stringWidth(segment);
-    if (total + segmentWidth > max - 1) break;
-    total += segmentWidth;
-    kept += segment;
-  }
-  return `${kept}…`;
-};
+export const truncate = (value: string, width: number): string =>
+  truncateAnsi(value, Math.max(4, width));

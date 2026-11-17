@@ -18,6 +18,8 @@ import { toWireSeconds } from "alchemy/Util/Duration";
 import type { SourceError } from "effect/ConfigProvider";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as AWSBindings from "../AWSBindings.ts";
 import { PrometheusApiError, type PrometheusTime } from "./PrometheusTypes.ts";
@@ -91,7 +93,7 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
     const services = yield* AWSBindings.withCredentials(
-      Effect.context<Credentials.Credentials | Region.Region>(),
+      Effect.context<Credentials.Credentials | Region.Region | HttpClient.HttpClient>(),
     );
 
     return Effect.fn(function* (workspace: Workspace) {
@@ -142,12 +144,13 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
 
         // Resolve credentials fresh per request (SSO/STS sessions rotate) and
         // sign for the workspace's own region, parsed from its endpoint.
-        const { credentials, region } = yield* Effect.gen(function* () {
+        const { credentials, region, client } = yield* Effect.gen(function* () {
           const credentials = yield* yield* Credentials.Credentials;
           const region =
             /^aps-workspaces\.([a-z0-9-]+)\.amazonaws\.com$/.exec(url.hostname)?.[1] ??
             (yield* yield* Region.Region);
-          return { credentials, region };
+          const client = yield* HttpClient.HttpClient;
+          return { credentials, region, client };
         }).pipe(Effect.provideContext(services));
 
         const signed = yield* SigV4.sign({
@@ -171,19 +174,21 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
             body: cause instanceof Error ? cause.message : String(cause),
           });
 
-        const response = yield* Effect.tryPromise({
-          try: () =>
-            fetch(signed.url, {
-              method: signed.method,
-              headers: signed.headers,
-              body,
-            }),
-          catch: toError(0),
-        });
-        const text = yield* Effect.tryPromise({
-          try: () => response.text(),
-          catch: toError(response.status),
-        });
+        const response = yield* client
+          .execute(
+            HttpClientRequest.make(request.method)(signed.url).pipe(
+              (req) =>
+                body === undefined
+                  ? req
+                  : typeof body === "string"
+                    ? HttpClientRequest.bodyText(req, body)
+                    : HttpClientRequest.bodyUint8Array(req, body),
+              // The signed headers (content-type included) win over the body's.
+              HttpClientRequest.setHeaders(signed.headers),
+            ),
+          )
+          .pipe(Effect.mapError(toError(0)));
+        const text = yield* response.text.pipe(Effect.mapError(toError(response.status)));
 
         if (response.status < 200 || response.status >= 300) {
           return yield* new PrometheusApiError({

@@ -106,13 +106,13 @@ export const CollectionsDataStoresSiteSearchEngineTargetSite =
 export class CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsDataStoresSiteSearchEngineTargetSiteStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSiteSearchEngineTargetSiteStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -140,12 +140,12 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites({
           name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string) =>
   discoveryengine.listProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites
@@ -175,7 +175,7 @@ const waitUntilExists = (name: string) =>
         ? Effect.succeed(site)
         : Effect.fail(
             new CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved({
-              name,
+              resourceName: name,
             }),
           ),
     ),
@@ -195,7 +195,7 @@ const waitUntilGone = (name: string) =>
         ? Effect.void
         : Effect.fail(
             new CollectionsDataStoresSiteSearchEngineTargetSiteStillExists({
-              name,
+              resourceName: name,
             }),
           ),
     ),
@@ -261,7 +261,7 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
               exactMatch: exactMatch ? true : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -270,7 +270,7 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved({
-          name: output?.name ?? `${parent}/targetSites/-`,
+          resourceName: output?.name ?? `${parent}/targetSites/-`,
         });
       }
 
@@ -305,7 +305,7 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
         .deleteProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

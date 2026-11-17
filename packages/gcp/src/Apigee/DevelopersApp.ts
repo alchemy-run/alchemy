@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   attributesToRecord,
@@ -111,8 +112,35 @@ export type DevelopersApp = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DevelopersAppLookup
 >;
+
+/**
+ * Props for {@link DevelopersApp.lookup}: find a developers app this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DevelopersAppLookup {
+  /**
+   * App name (the `{app}` segment of
+   * `organizations/{org}/developers/{email}/apps/{app}`).
+   */
+  appName: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Parent developer email or `organizations/{org}/developers/{email}`.
+   */
+  developer: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee app owned by a developer, used to obtain API keys.
@@ -140,6 +168,20 @@ export type DevelopersApp = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing developers app
+ * `DevelopersApp.lookup` references a developers app Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * developers app.
+ *
+ * **Example:** Reference an existing developers app
+ * ```typescript
+ * const developersApp = GCP.Apigee.DevelopersApp.lookup({
+ *   appName: "my-app",
+ *   developer: "my-developer",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -148,7 +190,7 @@ export const DevelopersApp = Resource<DevelopersApp>("GCP.Apigee.DevelopersApp")
 export class DevelopersAppNotResolved extends Data.TaggedError(
   "GCP.Apigee.DevelopersAppNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const developerEmailOf = (developer: string) => {
@@ -193,7 +235,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopersApps({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listDeveloperEmails = (organization: string) =>
   apigee
@@ -237,6 +279,16 @@ export const DevelopersAppProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ appName, organization: lookupOrganization, developer }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      if (developer === undefined) return undefined;
+      const name = resourceName(organization, developer, appName);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, developer);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -314,7 +366,7 @@ export const DevelopersAppProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DevelopersAppNotResolved({ name });
+        return yield* new DevelopersAppNotResolved({ resourceName: name });
       }
 
       const observedAttributes = attributesToRecord(current.attributes);

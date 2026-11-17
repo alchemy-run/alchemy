@@ -132,7 +132,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -148,7 +148,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 
 export const getMatter = (matterId: string) =>
   matterId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(vault.getMatters({ matterId, view: "FULL" }));
 
 export const listMatters = () =>
@@ -202,7 +202,7 @@ export const closeThenDeleteMatter = (matterId: string) =>
 
 export const getHold = (matterId: string, holdId: string) =>
   matterId.length === 0 || holdId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         vault.getMattersHolds({
           matterId,
@@ -242,7 +242,7 @@ export const findOwnedHold = (id: string, matterId?: string) =>
 
 export const getExport = (matterId: string, exportId: string) =>
   matterId.length === 0 || exportId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(vault.getMattersExports({ matterId, exportId }));
 
 export const listExports = (matterId: string) =>
@@ -276,7 +276,7 @@ export const findOwnedExport = (id: string, matterId?: string) =>
 
 export const getSavedQuery = (matterId: string, savedQueryId: string) =>
   matterId.length === 0 || savedQueryId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(vault.getMattersSavedQueries({ matterId, savedQueryId }));
 
 export const listSavedQueries = (matterId: string) =>

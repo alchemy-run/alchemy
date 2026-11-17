@@ -63,14 +63,12 @@ The generator writes SQL and snapshots to `migrations`; it does not need databas
 
 ## Generate and review migrations
 
-```sh
-bunx drizzle-kit generate
+<PackageManagers script={`{run} drizzle-kit generate
 git diff -- src/schema.ts migrations
 git status --short
 git add src/schema.ts drizzle.config.ts migrations
 git diff --cached
-git commit -m "Add database migration"
-```
+git commit -m "Add database migration"`} />
 
 Generate whenever the schema changes, review the schema, SQL, and snapshots together, and commit them before deployment. The optional [`Drizzle.Schema` resource](/providers/drizzle/schema) is a separate integration, not part of this workflow.
 
@@ -158,9 +156,7 @@ Only the runtime and database providers are needed; committed migration files do
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The configured branch applies pending committed SQL before the Worker serves queries; deployment does not generate new migrations. Keep an existing `drizzle-kit migrate` workflow unless you deliberately choose Alchemy-managed application, as described in [migration ownership](/sql/drizzle/migrations).
 
@@ -213,13 +209,11 @@ The returned client now exposes `db.query.Users` and `db.query.Posts` with typed
 
 ## Iterate on the schema
 
-```sh
-bunx drizzle-kit generate
+<PackageManagers script={`{run} drizzle-kit generate
 git add src/schema.ts migrations
 git diff --cached
 git commit -m "Update database schema"
-bun alchemy deploy
-```
+{run} alchemy deploy`} />
 
 Review each generated change before committing and deploy only those committed files. Reverting a TypeScript schema does not undo applied SQL; author and review a new migration or follow your database's restore procedure.
 
@@ -271,9 +265,7 @@ Select the MySQL resource variant in the [PlanetScale guide](/planetscale/guides
 
 ## Select the MySQL client
 
-```sh
-bun add @effect/sql-mysql2
-```
+<PackageManagers add="@effect/sql-mysql2" />
 
 ```diff lang="typescript"
 // src/Api.ts

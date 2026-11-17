@@ -66,7 +66,6 @@ test.provider.skipIf(!recipientAccountId)(
 
       const share = yield* stack.deploy(
         Cloudflare.ResourceSharing.Share("RecipientListShare", {
-          name: "alchemy-recipient-list-share",
           recipients: [],
           resources: [{ resourceType: "gateway-policy", resourceId: policy.ruleId }],
         }),

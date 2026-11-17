@@ -56,8 +56,23 @@ export interface Application extends Resource<
     namespace: string;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The ARN of the existing application. */
+      applicationArn: string;
+    }
+  | {
+      /** The application's namespace. */
+      namespace: string;
+    };
 
 /**
  * An Amazon AppIntegrations application. Applications register external
@@ -90,6 +105,16 @@ export interface Application extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationArn` or `namespace`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const crm = AWS.AppIntegrations.Application.lookup({ namespace: "crm" });
+ * ```
+ *
  * @resource
  */
 export const Application = Resource<Application>("AWS.AppIntegrations.Application");
@@ -114,7 +139,7 @@ export const ApplicationProvider = () =>
       const observe = (arnOrId: string) =>
         appintegrations
           .getApplication({ Arn: arnOrId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       /**
        * Find an application ARN by namespace via list enumeration. The
@@ -175,6 +200,15 @@ export const ApplicationProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* (props) {
+          const arn =
+            "applicationArn" in props
+              ? props.applicationArn
+              : yield* findByNamespace(props.namespace);
+          if (arn === undefined) return undefined;
+          const live = yield* observe(arn);
+          return live === undefined ? undefined : yield* toAttrs(live);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let arn = output?.applicationArn;
           if (arn === undefined) {

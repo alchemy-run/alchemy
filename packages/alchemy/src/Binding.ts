@@ -106,10 +106,10 @@ export const Service = <
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
-      Effect.all(
-        args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
-        { concurrency: "unbounded" },
-      ).pipe(
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- binding services are generic over any capability; clients are typed per Self
+      Effect.forEach(args, (arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg)), {
+        concurrency: "unbounded",
+      }).pipe(
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             Effect.provideService(Targets, targetsOf(resolved)),
@@ -130,6 +130,7 @@ export const Service = <
   // Output the planner resolves with the stack's services.
   (callable as any).execute = (...args: any[]) =>
     Output.fromEffect(
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- binding services are generic over any capability; clients are typed per Self
       callable(...args).pipe(
         Effect.flatMap((client: any) => client()),
         Effect.orDie,
@@ -192,7 +193,9 @@ const routeClientDataPlane = (
       return Effect.succeed(
         resources.length === 0
           ? client
-          : wrapClientInvocations(client, (effect) =>
+          : // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
+            wrapClientInvocations(client, (effect) =>
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
               Effect.provideService(effect, Targets, resources),
             ),
       );
@@ -206,6 +209,7 @@ const routeClientDataPlane = (
       for (const resource of resources) {
         planes.push(yield* describeDataPlane(resource));
       }
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
       const local = [...new Set(planes.flatMap((p) => (p.kind === "local" ? [p.layer] : [])))];
       if (local.length > 0) {
         if (local.length > 1 || planes.some((p) => p.kind !== "local")) {
@@ -225,6 +229,7 @@ const routeClientDataPlane = (
               "all through Alchemy.remote(), or none).",
           );
         }
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
         return wrapClientInvocations(client, Effect.provide(local[0]!));
       }
       // Live-mode / `Alchemy.remote()`: ambient in a `dev` run is the
@@ -232,9 +237,11 @@ const routeClientDataPlane = (
       // closest (the inverse of the local wrap above).
       const live = [
         ...new Set(
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
           planes.flatMap((p) => (p.kind === "live" && p.layer !== undefined ? [p.layer] : [])),
         ),
       ];
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
       if (live.length === 1) return wrapClientInvocations(client, Effect.provide(live[0]!));
       return client;
     });
@@ -267,7 +274,10 @@ const wrapClientInvocations = (
   client: unknown,
   around: (effect: Effect.Effect<any, any, any>) => Effect.Effect<any, any, any>,
 ): unknown => {
-  const provide = (value: unknown): unknown => (Effect.isEffect(value) ? around(value) : value);
+  const provide = (value: unknown): unknown =>
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
+    Effect.isEffect(value) ? around(value) : value;
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
   if (Effect.isEffect(client)) return provide(client);
   if (typeof client === "function") {
     return new Proxy(client, {

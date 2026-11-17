@@ -23,6 +23,18 @@ import {
   syncDeadlineTags,
 } from "./internal.ts";
 
+export class DeadlineFleetInvalidProps extends Data.TaggedError("DeadlineFleetInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DeadlineFleetUnexpectedResponse extends Data.TaggedError(
+  "DeadlineFleetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type FleetStatus = deadline.FleetStatus;
 
 /**
@@ -263,8 +275,27 @@ export interface Fleet extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FleetLookup
 > {}
+
+/**
+ * Props for {@link Fleet.lookup}: find a fleet this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FleetLookup =
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The id of the existing fleet. */
+      fleetId: string;
+    }
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The display name of the existing fleet. */
+      displayName: string;
+    };
 
 /**
  * An AWS Deadline Cloud fleet — a group of workers (customer-managed hosts
@@ -315,6 +346,16 @@ export interface Fleet extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing fleet
+ * `Fleet.lookup` references a fleet Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` with `fleetId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing fleet
+ * ```typescript
+ * const existing = AWS.Deadline.Fleet.lookup({ farmId, displayName: "main" });
+ * ```
+ *
  * @resource
  */
 export const Fleet = Resource<Fleet>("AWS.Deadline.Fleet");
@@ -336,7 +377,7 @@ const readFleetById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getFleet({ farmId, fleetId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const fleetArn = arnOf(`farm/${described.farmId}/fleet/${described.fleetId}`);
   const state: FleetState = {
@@ -433,7 +474,7 @@ const waitUntilFleetGone = (farmId: string, fleetId: string) =>
     Effect.gen(function* () {
       const described = yield* deadline
         .getFleet({ farmId, fleetId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (described !== undefined) {
         return yield* new FleetNotReady({ fleetId, status: described.status });
       }
@@ -451,6 +492,14 @@ export const FleetProvider = () =>
         stables: ["farmId", "fleetId", "fleetArn", "roleArn"],
         // Keyed by a parent farm — sub-resource list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "fleetId" in props
+              ? yield* readFleetById(props.farmId, props.fleetId, arnOf)
+              : yield* findFleetByDisplayName(props.farmId, props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const farmId = output?.farmId ?? olds?.farmId;
@@ -473,7 +522,9 @@ export const FleetProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Fleet requires props"));
+            return yield* new DeadlineFleetInvalidProps({
+              message: "AWS.Deadline.Fleet requires props",
+            });
           }
           const arnOf = yield* deadlineArnOf;
           const farmId = news.farmId;
@@ -542,7 +593,9 @@ export const FleetProvider = () =>
           yield* session.note(state.attrs.fleetArn);
           const final = yield* readFleetById(farmId, state.attrs.fleetId, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled fleet ${displayName}`));
+            return yield* new DeadlineFleetUnexpectedResponse({
+              message: `failed to read reconciled fleet ${displayName}`,
+            });
           }
           return final.attrs;
         }),

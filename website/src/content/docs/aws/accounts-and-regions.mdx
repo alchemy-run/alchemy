@@ -1,0 +1,165 @@
+---
+title: Accounts and regions
+description: How AWS accounts isolate resources, how regions and Availability Zones place them, and how profiles and stages choose where each Alchemy deploy goes.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Every AWS resource lives in one account and, for most services, one region. Before you create anything, you decide which account and which region it goes to.
+
+## An account is an isolation boundary
+
+An AWS account holds resources, the identities that may use them, and the bill for both. Two accounts share nothing unless you set it up: a role in one can't read a Bucket in the other, and a runaway Lambda in one never touches the other's quotas.
+
+So accounts are how you keep environments apart. Put production in an account of its own. Give staging, shared development and, if you like, each engineer their own accounts too. A mistake in development then can't reach production data, because no policy in the development account can name it.
+
+<Tree
+  nodes={[
+    { id: "root", label: "Root", type: "organization" },
+    { id: "mgmt", label: "management", type: "pays the bill", parent: "root", tone: "accent", side: true },
+    { id: "workloads", label: "Workloads", type: "OU", parent: "root" },
+    { id: "sandbox", label: "Sandbox", type: "OU", parent: "root", side: true },
+    { id: "prodOu", label: "Prod", type: "OU", parent: "workloads" },
+    { id: "nonprod", label: "Non-prod", type: "OU", parent: "workloads" },
+    { id: "prod", label: "prod", type: "account", parent: "prodOu" },
+    { id: "staging", label: "staging", type: "account", parent: "nonprod" },
+    { id: "dev", label: "dev", type: "account", parent: "nonprod" },
+    { id: "sam", label: "sam", type: "account", parent: "sandbox" },
+  ]}
+  scopes={[{ on: "workloads", label: "SCP DenyOtherRegions" }]}
+  caption="An organization is a tree: OUs hold accounts and other OUs. A policy attached to an OU applies to every account inside it, so the Workloads accounts can only use the regions it allows."
+/>
+
+An **organization** groups those accounts under one payer, the **management account**. Under its **root** sit **organizational units** (OUs), which hold accounts and other OUs, so you can shape it like your teams and environments. Declare the tree from a Stack deployed to the management account:
+
+```typescript title="alchemy.run.ts"
+const root = yield* AWS.Organizations.Root("Root", {});
+const workloads = yield* AWS.Organizations.OrganizationalUnit("Workloads", {
+  parentId: root.rootId,
+  name: "workloads",
+});
+const prod = yield* AWS.Organizations.Account("Prod", {
+  name: "prod",
+  email: "aws-prod@example.com",
+  parentId: workloads.ouId,
+});
+```
+
+A **service control policy** (SCP) attached to an OU caps what every account below it may do, whatever those accounts' own IAM policies say. Turn SCPs on for the root once, then attach one:
+
+```typescript title="alchemy.run.ts"
+yield* AWS.Organizations.RootPolicyType("ScpEnabled", {
+  rootId: root.rootId,
+  policyType: "SERVICE_CONTROL_POLICY",
+});
+const denyRegions = yield* AWS.Organizations.Policy("DenyOtherRegions", {
+  type: "SERVICE_CONTROL_POLICY",
+  document: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Deny",
+        NotAction: ["iam:*", "organizations:*", "sts:*"],
+        Resource: "*",
+        Condition: { StringNotEquals: { "aws:RequestedRegion": ["us-east-1", "us-west-2"] } },
+      },
+    ],
+  },
+});
+yield* AWS.Organizations.PolicyAttachment("DenyRegionsOnWorkloads", {
+  policyId: denyRegions.policyId,
+  targetId: workloads.ouId,
+});
+```
+
+People sign in once, through **IAM Identity Center**, and pick the account and role they want to work in.
+
+## Connect an account with a profile
+
+Alchemy reaches an account through a [profile](/environments/profiles). Add AWS to your `default` profile and choose how you sign in:
+
+```sh
+alchemy profile edit --add AWS
+```
+
+Console login is the simplest choice: you sign in to the AWS Console in your browser, and Alchemy gets short-lived credentials for that identity, with no access keys to store. Organizations that use IAM Identity Center sign in through SSO instead. Either way, Alchemy runs the login for you. See [Setup](/aws/setup).
+
+Make a profile per account, and name it after the account it reaches:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add AWS
+```
+
+## Choose the stage and the account separately
+
+A [stage](/environments/stages) decides **what** you deploy: its own state and its own resource names. A profile decides **where**: which account, and the default region. The two are independent.
+
+```sh
+alchemy deploy --stage prod --profile prod
+alchemy deploy --stage pr-42 --profile default
+```
+
+Many stages can share one account. Each pull request gets its own stage, with its own Bucket and its own Function, in the development account. Production gets the `prod` stage in the `prod` account.
+
+## A region is where a resource runs
+
+A region is a separate deployment of AWS in one part of the world. A Queue in `us-east-1` and a Queue in `eu-west-1` are two different Queues, with different ARNs, and messages never flow between them unless you send them.
+
+Your profile sets the default region, and every regional resource in the Stack is created there. Pick the one closest to your users, or the one your data must stay in. To deploy the same Stack to another region, use a profile that points at it.
+
+In CI, the region comes from the environment instead:
+
+```sh
+export AWS_REGION=eu-west-1
+```
+
+Read the current region inside your Stack when another resource needs it:
+
+```typescript title="alchemy.run.ts"
+const region = yield* AWS.Region;
+```
+
+## Availability Zones spread a region out
+
+A region is made of several **Availability Zones**: data centers far enough apart to fail independently, close enough to replicate quickly. Their names add a letter to the region: `us-east-1a`, `us-east-1b`.
+
+Serverless services spread across zones for you. A Bucket, a Table, a Queue or a Function survives the loss of a zone without any setup. Networks don't: a subnet sits in exactly one zone, so anything in a VPC chooses its zones through its subnets. The `Network` helper puts a public and a private subnet in two zones by default. See [VPC & networking](/aws/networking).
+
+## Some services are global
+
+IAM, CloudFront and Route 53 aren't regional. A role, a distribution or a hosted zone belongs to the account as a whole, and its ARN has no region in it:
+
+```text
+arn:aws:iam::123456789012:role/myapp-api-role
+```
+
+One rule follows from this. CloudFront only uses TLS certificates from `us-east-1`, wherever the rest of your Stack runs. A Certificate defaults to that region for you:
+
+```typescript title="src/site.ts"
+export const Cert = AWS.ACM.Certificate("Cert", { domainName: "app.example.com" });
+```
+
+Give a certificate for a regional load balancer the load balancer's region instead, with `region`. See [Custom domains](/aws/networking/custom-domains).
+
+## Keep Alchemy's state in the account
+
+Each account and region holds its own copy of Alchemy's state: a DynamoDB table named `alchemy-state`, created on the first deploy. A stage's record lives in the account it deploys to, next to its resources.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+In CI, create the table once before the first deploy:
+
+```sh
+alchemy state bootstrap --backend aws
+```
+
+See [State store](/state-store).

@@ -78,7 +78,7 @@ export const LoginProfileProvider = () =>
         .getLoginProfile({
           UserName: output.userName,
         })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       if (!response?.LoginProfile) {
         return undefined;
       }
@@ -92,7 +92,7 @@ export const LoginProfileProvider = () =>
       // Observe — read the live login profile (or absence) for the user.
       const observed = yield* iam
         .getLoginProfile({ UserName: news.userName })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
       // Ensure / Sync — the password is write-only, so we always send the
       // desired value. Use `createLoginProfile` when the profile is
@@ -165,7 +165,7 @@ export const LoginProfileProvider = () =>
             })),
             // The user has no console login profile, or was deleted between
             // enumeration and the per-user probe.
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

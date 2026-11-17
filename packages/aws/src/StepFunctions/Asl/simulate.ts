@@ -107,7 +107,6 @@ const evalExprNode = (node: ExprNode, env: Env): unknown => {
         case "token":
           return env.taskToken;
       }
-    // eslint-disable-next-line no-fallthrough
     case "prop": {
       const parent = evalExprNode(node.parent, env) as Record<string, unknown> | null | undefined;
       return parent == null ? undefined : parent[node.name];
@@ -136,7 +135,6 @@ const evalExprNode = (node: ExprNode, env: Env): unknown => {
           return Boolean(left) || Boolean(right);
       }
     }
-    // eslint-disable-next-line no-fallthrough
     case "not":
       return !evalExprNode(node.inner, env);
     case "raw":

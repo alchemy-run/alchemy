@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,36 @@ export type VolumesQuotaRule = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumesQuotaRuleLookup
 >;
+
+/**
+ * Props for {@link VolumesQuotaRule.lookup}: find a volumes quota rule this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface VolumesQuotaRuleLookup {
+  /**
+   * Quota rule id (the `{quotaRule}` segment).
+   */
+  quotaRuleId: string;
+  /**
+   * Region used when `volume` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent volume. Full name
+   * `projects/{project}/locations/{location}/volumes/{volume}` or the
+   * volume id (combined with `location`).
+   */
+  volume: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes quota rule that caps disk usage for a user or
@@ -148,6 +177,20 @@ export type VolumesQuotaRule = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing volumes quota rule
+ * `VolumesQuotaRule.lookup` references a volumes quota rule Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * volumes quota rule.
+ *
+ * **Example:** Reference an existing volumes quota rule
+ * ```typescript
+ * const volumesQuotaRule = GCP.NetApp.VolumesQuotaRule.lookup({
+ *   quotaRuleId: "my-quota-rule",
+ *   volume: "my-volume",
+ * });
+ * ```
+ *
  * @resource
  * @category NetApp
  */
@@ -178,7 +221,7 @@ const toAttrs = (item: netapp.QuotaRule, project: string, region: string) => {
 const getByName = (name: string) =>
   netapp
     .getProjectsLocationsVolumesQuotaRules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "volumes/-", (parent) =>
@@ -217,6 +260,18 @@ export const VolumesQuotaRuleProvider = () =>
           (previousTarget ?? "") !== (news.target ?? previousTarget ?? ""),
       });
     }),
+
+    lookup: Effect.fn(function* ({ quotaRuleId, location: lookupLocation, volume: lookupVolume }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A row whose lookupVolume never resolved (failed create) has nothing to read.
+      if (!lookupVolume) return undefined;
+      const volume = expandParent(lookupVolume ?? "", env.project, location, "volumes");
+      const name = resourceName(volume, quotaRuleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -278,7 +333,7 @@ export const VolumesQuotaRuleProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -286,7 +341,7 @@ export const VolumesQuotaRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -336,7 +391,7 @@ export const VolumesQuotaRuleProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

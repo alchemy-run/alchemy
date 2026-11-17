@@ -65,8 +65,18 @@ export interface LocationEfs extends Resource<
     locationUri: string;
   },
   {},
-  Providers
+  Providers,
+  LocationEfsLookup
 > {}
+
+/**
+ * Props for {@link LocationEfs.lookup}: find a location efs this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface LocationEfsLookup {
+  /** The ARN of the existing location efs. */
+  locationArn: string;
+}
 
 /**
  * A DataSync location backed by an Amazon EFS file system. Used as a source
@@ -105,6 +115,16 @@ export interface LocationEfs extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing location efs
+ * `LocationEfs.lookup` references a location efs Alchemy doesn't manage (created in the
+ * console or by another stack), found by `locationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing location efs
+ * ```typescript
+ * const existing = AWS.DataSync.LocationEfs.lookup({ locationArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const LocationEfs = Resource<LocationEfs>("AWS.DataSync.LocationEfs");
@@ -116,7 +136,7 @@ export const LocationEfsProvider = () =>
       const describe = Effect.fn(function* (locationArn: string) {
         return yield* datasync
           .describeLocationEfs({ LocationArn: locationArn })
-          .pipe(Effect.catchTag("LocationNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LocationNotFound", () => Effect.undefined));
       });
 
       return LocationEfs.Provider.of({
@@ -135,6 +155,15 @@ export const LocationEfsProvider = () =>
                 })),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ locationArn }) {
+          const loc = yield* describe(locationArn);
+          if (loc === undefined) return undefined;
+          return {
+            locationArn: loc.LocationArn!,
+            locationUri: loc.LocationUri!,
+          };
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (output?.locationArn === undefined) return undefined;

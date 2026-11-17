@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -70,8 +71,33 @@ export type AclPolicy = Resource<
     version: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AclPolicyLookup
 >;
+
+/**
+ * Props for {@link AclPolicy.lookup}: find an acl policy this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AclPolicyLookup {
+  /**
+   * ACL policy id (the `{acl_policy}` segment of
+   * `projects/{project}/locations/{location}/aclPolicies/{acl_policy}`).
+   * Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$` (1-63 characters).
+   */
+  aclPolicyId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Memorystore for Redis Cluster ACL policy.
@@ -117,22 +143,35 @@ export type AclPolicy = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing acl policy
+ * `AclPolicy.lookup` references an acl policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * acl policy.
+ *
+ * **Example:** Reference an existing acl policy
+ * ```typescript
+ * const aclPolicy = GCP.Redis.AclPolicy.lookup({
+ *   aclPolicyId: "my-acl-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category Redis
  */
 export const AclPolicy = Resource<AclPolicy>("GCP.Redis.AclPolicy");
 
 export class AclPolicyNotResolved extends Data.TaggedError("GCP.Redis.AclPolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AclPolicyNotReady extends Data.TaggedError("GCP.Redis.AclPolicyNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class AclPolicyStillExists extends Data.TaggedError("GCP.Redis.AclPolicyStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -235,7 +274,7 @@ const isPlaceholder = (policy: redis.AclPolicy) => {
 const getByName = (name: string) =>
   redis
     .getProjectsLocationsAclPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Wait for an operation through the shared GCP waiter. */
 const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: boolean }) =>
@@ -266,7 +305,9 @@ const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: b
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy ? Effect.succeed(policy) : Effect.fail(new AclPolicyNotResolved({ name })),
+      policy
+        ? Effect.succeed(policy)
+        : Effect.fail(new AclPolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.AclPolicyNotResolved",
@@ -279,7 +320,7 @@ const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (policy): policy is redis.AclPolicy => policy !== undefined,
-      () => new AclPolicyNotResolved({ name }),
+      () => new AclPolicyNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (policy) => {
@@ -288,7 +329,7 @@ const waitUntilActive = (name: string) =>
       },
       (policy) =>
         new AclPolicyNotReady({
-          name,
+          resourceName: name,
           state: policy.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -304,7 +345,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy === undefined ? Effect.void : Effect.fail(new AclPolicyStillExists({ name })),
+      policy === undefined
+        ? Effect.void
+        : Effect.fail(new AclPolicyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.AclPolicyStillExists",
@@ -331,6 +374,15 @@ export const AclPolicyProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ aclPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, aclPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -364,7 +416,7 @@ export const AclPolicyProvider = () =>
             aclPolicyId,
             body: { rules: bodyRules },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created && created.name && !isPlaceholder(created)
             ? created
@@ -372,7 +424,7 @@ export const AclPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AclPolicyNotResolved({ name });
+        return yield* new AclPolicyNotResolved({ resourceName: name });
       }
 
       const state = current.state ?? "ACTIVE";
@@ -410,7 +462,7 @@ export const AclPolicyProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

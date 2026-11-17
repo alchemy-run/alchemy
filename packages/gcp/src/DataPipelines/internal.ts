@@ -3,12 +3,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 
 export const DEFAULT_TYPE = "PIPELINE_TYPE_BATCH";
 export const DEFAULT_STATE = "STATE_ACTIVE";
@@ -144,7 +139,7 @@ export const ownershipSources = (
   labels: Record<string, string>,
   user?: Record<string, string>,
 ): Record<string, string> => ({
-  ...(user ?? {}),
+  ...user,
   [alchemyLabelKeys.stack]: labels[alchemyLabelKeys.stack] ?? "x",
   [alchemyLabelKeys.stage]: labels[alchemyLabelKeys.stage] ?? "x",
   [alchemyLabelKeys.id]: labels[alchemyLabelKeys.id] ?? "x",
@@ -200,10 +195,10 @@ export const replaceOnIdentity = (input: {
 
 export const getPipeline = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datapipelines
         .getProjectsLocationsPipelines({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ignoreMissing = <A, R>(
   effect: Effect.Effect<A, datapipelines.DeleteProjectsLocationsPipelinesError, R>,

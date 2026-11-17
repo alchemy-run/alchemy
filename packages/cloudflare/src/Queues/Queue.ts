@@ -106,8 +106,27 @@ export type Queue = Resource<
     deliveryPaused: boolean;
   },
   never,
-  Providers
+  Providers,
+  QueueLookup
 >;
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't manage, by
+ * its id or its name.
+ */
+export type QueueLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing queue.
+       */
+      queueId: string;
+    }
+  | {
+      /**
+       * The name of the existing queue.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Queue for reliable message passing between Workers.
@@ -197,6 +216,30 @@ export type Queue = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing queue
+ * `Queue.lookup` binds a queue Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `queueId` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** By name
+ * ```typescript
+ * const jobs = yield* Cloudflare.Queues.WriteQueue(
+ *   Cloudflare.Queues.Queue.lookup({ name: "jobs" }),
+ * );
+ * ```
+ *
+ * **Example:** By ID, in an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     JOBS: Cloudflare.Queues.Queue.lookup({
+ *       queueId: "023e105f4ecef8ad9ca31a8372d0c353",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @resource
  * @product Queues
  * @category Storage & Databases
@@ -248,9 +291,7 @@ export const ProviderLive = () =>
             accountId: acct,
             queueId: output.queueId,
           })
-          .pipe(
-            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined));
       }
       if (!observed) {
         observed = yield* findQueueByName(queueName);
@@ -385,7 +426,18 @@ export const ProviderLive = () =>
         ),
       );
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const queue =
+        "queueId" in props
+          ? yield* queues
+              .getQueue({ accountId, queueId: props.queueId })
+              .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined))
+          : yield* findQueueByName(props.name);
+      if (!queue?.queueId || !queue.queueName) return undefined;
+      return toAttributes(queue, accountId);
+    }),
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.queueId && isLiveId(output.queueId)) {
         return yield* queues
@@ -395,7 +447,7 @@ export const ProviderLive = () =>
           })
           .pipe(
             Effect.map((queue) => toAttributes(queue, output.accountId)),
-            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined),
           );
       }
       const queueName = yield* createQueueName(id, olds?.name);
@@ -406,7 +458,9 @@ export const ProviderLive = () =>
         // Report it as foreign so the engine refuses it without `--adopt`
         // (and still admits our own previous generation on replacement).
         const attrs = toAttributes(match, accountId);
-        return attrs.jurisdiction !== olds?.jurisdiction ? Unowned(attrs) : attrs;
+        return attrs.jurisdiction !== olds?.jurisdiction && attrs.queueId !== previous?.queueId
+          ? Unowned(attrs)
+          : attrs;
       }
       return undefined;
     }),
@@ -494,7 +548,7 @@ const deleteOwnedProducerScripts = Effect.fn(function* (accountId: string, queue
   const stack = yield* Stack;
   const queue = yield* queues
     .getQueue({ accountId, queueId })
-    .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined));
   const producerScripts = Array.from(
     new Set(
       (queue?.producers ?? []).flatMap((producer) =>
@@ -508,9 +562,7 @@ const deleteOwnedProducerScripts = Effect.fn(function* (accountId: string, queue
   for (const scriptName of producerScripts) {
     const settings = yield* workers
       .getScriptScriptAndVersionSetting({ accountId, scriptName })
-      .pipe(
-        Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined));
     const tags = new Set(settings?.tags ?? []);
     if (!tags.has(`alchemy:stack:${stack.name}`) || !tags.has(`alchemy:stage:${stack.stage}`)) {
       continue;

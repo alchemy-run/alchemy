@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -81,8 +82,30 @@ export type WireGroup = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WireGroupLookup
 >;
+
+/**
+ * Props for {@link WireGroup.lookup}: find a wire group this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface WireGroupLookup {
+  /**
+   * Wire group name (RFC1035, 1-63 characters).
+   */
+  wireGroupName: string;
+  /**
+   * Parent cross-site network name.
+   */
+  crossSiteNetwork: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine wire group on a cross-site network.
@@ -117,6 +140,20 @@ export type WireGroup = Resource<
  *       },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing wire group
+ * `WireGroup.lookup` references a wire group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * wire group.
+ *
+ * **Example:** Reference an existing wire group
+ * ```typescript
+ * const wireGroup = GCP.Compute.WireGroup.lookup({
+ *   wireGroupName: "my-wire-group",
+ *   crossSiteNetwork: "my-cross-site-network",
  * });
  * ```
  *
@@ -225,7 +262,7 @@ const toAttrs = (
 const getByName = (project: string, crossSiteNetwork: string, wireGroup: string) =>
   compute
     .getWireGroups({ project, crossSiteNetwork, wireGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitGroupGone = (project: string, crossSiteNetwork: string, wireGroupName: string) =>
   getByName(project, crossSiteNetwork, wireGroupName).pipe(
@@ -286,6 +323,30 @@ export const WireGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ wireGroupName, crossSiteNetwork }) {
+      const env = yield* GcpEnvironment.current;
+      const preferredParent = lastSegment(crossSiteNetwork);
+
+      if (preferredParent.length > 0) {
+        const existing = yield* getByName(env.project, preferredParent, wireGroupName);
+        if (existing !== undefined) {
+          const attrs = toAttrs(existing, env.project, preferredParent);
+          return attrs;
+        }
+      }
+
+      const parents = yield* listParents(env.project);
+      for (const parent of parents) {
+        const parentName = parent.name;
+        if (parentName === undefined) continue;
+        const existing = yield* getByName(env.project, parentName, wireGroupName);
+        if (existing === undefined) continue;
+        const attrs = toAttrs(existing, env.project, parentName);
+        return attrs;
+      }
+      return undefined;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -361,7 +422,7 @@ export const WireGroupProvider = () =>
             crossSiteNetwork,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -429,7 +490,7 @@ export const WireGroupProvider = () =>
           wireGroup: output.wireGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

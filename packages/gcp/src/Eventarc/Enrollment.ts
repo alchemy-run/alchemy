@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -117,8 +118,33 @@ export type Enrollment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnrollmentLookup
 >;
+
+/**
+ * Props for {@link Enrollment.lookup}: find an enrollment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EnrollmentLookup {
+  /**
+   * Enrollment id (the `{enrollment}` segment of
+   * `projects/{project}/locations/{location}/enrollments/{enrollment}`).
+   * Must match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  enrollmentId: string;
+  /**
+   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc Advanced enrollment that subscribes to messages on a
@@ -162,6 +188,19 @@ export type Enrollment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing enrollment
+ * `Enrollment.lookup` references an enrollment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * enrollment.
+ *
+ * **Example:** Reference an existing enrollment
+ * ```typescript
+ * const enrollment = GCP.Eventarc.Enrollment.lookup({
+ *   enrollmentId: "my-enrollment",
+ * });
+ * ```
+ *
  * @resource
  * @category Eventarc
  */
@@ -191,7 +230,7 @@ const toAttrs = (enrollment: eventarc.Enrollment, project: string, region: strin
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsEnrollments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const EnrollmentProvider = () =>
   Provider.succeed(Enrollment, {
@@ -225,6 +264,15 @@ export const EnrollmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ enrollmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, enrollmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -298,7 +346,7 @@ export const EnrollmentProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -346,7 +394,7 @@ export const EnrollmentProvider = () =>
               name: output.name,
               allowMissing: true,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

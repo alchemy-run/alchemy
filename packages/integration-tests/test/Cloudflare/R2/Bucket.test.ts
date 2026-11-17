@@ -1,34 +1,25 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import type { CloudflareResolvedCredentials } from "@alchemy.run/cloudflare/Auth/AuthConfig";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
-import { describe, expect, it } from "@alchemy.run/test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import { NodeServices } from "@effect/platform-node";
-import { AlchemyContext } from "alchemy/AlchemyContext";
-import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import * as Drift from "alchemy/Drift";
-import { Provider } from "alchemy/Provider";
+import * as Nuke from "alchemy/Nuke";
+import { findProviderByType } from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
-import { ResourceContext } from "alchemy/ResourceContext";
-import { Stack, type StackSpec } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
 import { type ResourceState, State } from "alchemy/State";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
-import * as MutableHashMap from "effect/MutableHashMap";
-import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { resourceContext } from "../../Util/ResourceContext.ts";
+import { stageSuffix, testName } from "../../names.ts";
 import MultipartWorker, { MultipartBucket } from "./fixtures/multipart-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -293,6 +284,50 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
 );
 
+// `alchemy unsafe nuke` lists buckets from the cloud, so its deletes carry
+// Attributes and never `forceDestroy`: the operator's confirmation (`force`)
+// is what opts into emptying the bucket.
+test.provider(
+  "nuke empties a non-empty bucket without forceDestroy",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("NukedBucket");
+        }),
+      );
+
+      yield* putObject(accountId, bucket.bucketName, "precious.txt", "precious");
+      yield* listKeysWhenReady(accountId, bucket.bucketName, 1);
+
+      // The nuke engine, over the one target `alchemy unsafe nuke` would list.
+      const result = yield* Nuke.destroy({
+        targets: [
+          {
+            key: bucket.bucketName,
+            providerId: Cloudflare.R2.Bucket.Type,
+            displayName: bucket.bucketName,
+            attributes: { ...bucket },
+            provider: yield* findProviderByType(Cloudflare.R2.Bucket.Type),
+          },
+        ],
+        context: yield* Effect.context<never>(),
+        strategy: { type: "independent", retries: 0 },
+      });
+      expect(result.failed).toEqual([]);
+      expect(result.deleted).toHaveLength(1);
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+
+      // The stack's row now names a deleted bucket; destroy is idempotent.
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
 // The incident behind https://github.com/alchemy-run/alchemy/issues/1248,
 // end to end against a real bucket: `retain` is added to an
 // already-deployed bucket (a props-identical, noop deploy), the bucket's
@@ -308,7 +343,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-retained-move";
+      const bucketName = testName("alchemy-test-retained-move");
 
       // A retained bucket is alchemy's to forget, not to delete, so an
       // interrupted earlier run can leave a NON-EMPTY bucket behind — which
@@ -383,8 +418,8 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const oldName = "alchemy-test-retained-replace-old";
-      const newName = "alchemy-test-retained-replace-new";
+      const oldName = testName("alchemy-test-retained-replace-old");
+      const newName = testName("alchemy-test-retained-replace-new");
 
       // Same reason as above: retained leftovers from an interrupted run are
       // never reclaimed by the engine.
@@ -418,6 +453,75 @@ test.provider(
       // suite reclaims both out of band.
       yield* forceDeleteBucket(accountId, oldName);
       yield* forceDeleteBucket(accountId, newName);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"], timeout: 180_000 },
+);
+
+// `protect()` is the policy for resources whose replacement is itself the
+// damage. Every plan that would replace or delete the bucket — a name change,
+// removing the declaration, `destroy` — must fail before anything reaches
+// R2, until a deploy of its own drops the protection.
+test.provider(
+  "a protected bucket refuses replacement, removal and destroy until unprotected",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const oldName = testName("alchemy-test-protected-old");
+      const newName = testName("alchemy-test-protected-new");
+
+      const declare = (name: string, protect: boolean) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("Protected", { name, forceDestroy: true }).pipe(
+            RemovalPolicy.protect(protect),
+          );
+        });
+
+      // An interrupted run can leave the row protected, and destroy refuses
+      // it by design. Unprotect it first — the state only ever holds the old
+      // name while protected, so this deploy is a noop or an allowed replace.
+      yield* stack.deploy(declare(oldName, false));
+      yield* stack.destroy();
+
+      // ── 1. deploy protected ──
+      const bucket = yield* stack.deploy(declare(oldName, true));
+      expect(bucket.bucketName).toEqual(oldName);
+      yield* getBucketWhenReady(oldName, accountId);
+      expect(yield* removalPolicyOf(stack, "Protected")).toEqual("protect");
+
+      // ── 2. a name change is a replacement: refused, nothing created ──
+      const replace = yield* refusalOf(stack.deploy(declare(newName, true)));
+      expect(replace).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(replace).toMatchObject({ resources: [{ fqn: "Protected", action: "replace" }] });
+      expect(yield* bucketExists(accountId, newName)).toBe(false);
+      expect((yield* stateOf(stack, "Protected"))?.attr).toMatchObject({ bucketName: oldName });
+
+      // Dropping protect() in the same deploy is still refused: the
+      // persisted policy counts.
+      const sameDeploy = yield* refusalOf(stack.deploy(declare(newName, false)));
+      expect(sameDeploy).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(yield* bucketExists(accountId, newName)).toBe(false);
+
+      // ── 3. removing the declaration and destroy: refused ──
+      const removed = yield* refusalOf(stack.plan(Effect.void));
+      expect(removed).toMatchObject({ resources: [{ fqn: "Protected", action: "delete" }] });
+      const destroyed = yield* refusalOf(stack.destroy());
+      expect(destroyed).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(yield* bucketExists(accountId, oldName)).toBe(true);
+
+      // ── 4. unprotect with its own deploy: a noop that re-commits the policy ──
+      const plan = yield* stack.plan(declare(oldName, false));
+      expect((Object.values(plan.resources) as { action: string }[])[0]?.action).toEqual("noop");
+      yield* stack.deploy(declare(oldName, false));
+      expect(yield* removalPolicyOf(stack, "Protected")).toEqual("destroy");
+
+      // ── 5. now the replacement goes through and deletes the old bucket ──
+      const replaced = yield* stack.deploy(declare(newName, false));
+      expect(replaced.bucketName).toEqual(newName);
+      yield* getBucketWhenReady(newName, accountId);
+      yield* waitForBucketToBeDeleted(oldName, accountId);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(newName, accountId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"], timeout: 180_000 },
 );
@@ -676,6 +780,122 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
 );
 
+// A lock is protection: reconcile must never clear rules a stack did not
+// declare, since another tool may have set them.
+test.provider(
+  "lock rules set out of band stay unmanaged until declared",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const declaration = (locks?: Cloudflare.R2.BucketLockRule[]) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("UnmanagedLockBucket", { forceDestroy: true, locks });
+        });
+
+      const bucket = yield* stack.deploy(declaration());
+      expect(bucket.locks).toBeUndefined();
+
+      // Another tool locks the bucket.
+      yield* r2.putBucketLock({
+        accountId,
+        bucketName: bucket.bucketName,
+        rules: [
+          {
+            id: "raw-retention",
+            enabled: true,
+            prefix: "raw/",
+            condition: { type: "Age", maxAgeSeconds: 60 },
+          },
+        ],
+      });
+
+      // A forced redeploy runs reconcile, which leaves the foreign rule alone.
+      const redeployed = yield* stack.deploy(declaration(), { force: true });
+      expect(redeployed.locks).toBeUndefined();
+      const untouched = yield* r2.getBucketLock({ accountId, bucketName: bucket.bucketName });
+      expect(untouched.rules?.map((rule) => rule.id)).toEqual(["raw-retention"]);
+
+      // Declaring `locks` takes the rule set over and replaces it.
+      const declared = yield* stack.deploy(
+        declaration([
+          { id: "all-objects", enabled: true, condition: { type: "Age", maxAgeSeconds: 30 } },
+        ]),
+      );
+      expect(declared.locks?.map((rule) => rule.id)).toEqual(["all-objects"]);
+      const managed = yield* r2.getBucketLock({ accountId, bucketName: bucket.bucketName });
+      expect(managed.rules?.map((rule) => rule.id)).toEqual(["all-objects"]);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+// R2 lists rules sorted by id with an omitted prefix as "". Declared rules
+// that differ from that listing only in order or prefix spelling must
+// converge, not churn on every deploy.
+test.provider(
+  "lock rules declared out of order converge to R2's listing",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const declaration = Effect.gen(function* () {
+        return yield* Cloudflare.R2.Bucket("OrderedLockBucket", {
+          forceDestroy: true,
+          // Declared out of id order; `all-objects` omits its prefix.
+          locks: [
+            {
+              id: "raw-retention",
+              enabled: true,
+              prefix: "raw/",
+              condition: { type: "Age", maxAgeSeconds: 60 },
+            },
+            { id: "all-objects", enabled: true, condition: { type: "Age", maxAgeSeconds: 30 } },
+          ],
+        });
+      });
+      const expected = [
+        {
+          id: "all-objects",
+          enabled: true,
+          prefix: "",
+          condition: { type: "Age", maxAgeSeconds: 30 },
+        },
+        {
+          id: "raw-retention",
+          enabled: true,
+          prefix: "raw/",
+          condition: { type: "Age", maxAgeSeconds: 60 },
+        },
+      ];
+
+      const bucket = yield* stack.deploy(declaration);
+      expect(bucket.locks).toEqual(expected);
+      const observed = yield* r2.getBucketLock({ accountId, bucketName: bucket.bucketName });
+      expect(observed.rules?.map((rule) => rule.id)).toEqual(["all-objects", "raw-retention"]);
+
+      // Redeploying the same declaration plans nothing.
+      const plan = yield* stack.plan(declaration);
+      expect(plan.resources.OrderedLockBucket?.action).toBe("noop");
+
+      // A forced reconcile converges to the same rules.
+      const redeployed = yield* stack.deploy(declaration, { force: true });
+      expect(redeployed.locks).toEqual(expected);
+      const reobserved = yield* r2.getBucketLock({ accountId, bucketName: bucket.bucketName });
+      expect(reobserved.rules?.map((rule) => rule.id)).toEqual(["all-objects", "raw-retention"]);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
 test.provider(
   "cors reconciliation converges drift and adoption",
   (stack) =>
@@ -684,7 +904,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const bucketName = "alchemy-test-r2-cors-drift";
+      const bucketName = testName("alchemy-test-r2-cors-drift");
       const rangeReads = {
         id: "range-reads",
         allowedMethods: ["GET", "HEAD"] as ("GET" | "HEAD")[],
@@ -766,7 +986,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-r2-drift-repair";
+      const bucketName = testName("alchemy-test-r2-drift-repair");
 
       yield* forceDeleteBucket(accountId, bucketName);
       yield* stack.destroy();
@@ -810,7 +1030,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const bucketName = "alchemy-test-r2-drift-recreate";
+      const bucketName = testName("alchemy-test-r2-drift-recreate");
 
       yield* forceDeleteBucket(accountId, bucketName);
       yield* stack.destroy();
@@ -859,8 +1079,8 @@ test.provider(
 
       yield* stack.destroy();
 
-      const oldName = "alchemy-test-r2-cors-replace-a";
-      const newName = "alchemy-test-r2-cors-replace-b";
+      const oldName = testName("alchemy-test-r2-cors-replace-a");
+      const newName = testName("alchemy-test-r2-cors-replace-b");
       const cors = [
         {
           id: "range-reads",
@@ -1026,6 +1246,51 @@ test.provider(
 );
 
 test.provider(
+  "create and delete bucket in the us jurisdiction",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("UsBucket", {
+            forceDestroy: true,
+            jurisdiction: "us",
+          });
+        }),
+      );
+      expect(bucket.jurisdiction).toEqual("us");
+
+      const actual = yield* getBucketWhenReady(bucket.bucketName, accountId, "us");
+      expect(actual.jurisdiction).toEqual("us");
+
+      // The bucket lives only in the `us` partition, not the default one.
+      const outsideUs = yield* r2
+        .getBucket({ accountId, bucketName: bucket.bucketName })
+        .pipe(Effect.flip);
+      expect(outsideUs._tag).toEqual("NoSuchBucket");
+
+      // An unchanged redeploy reads the bucket back from the `us` partition.
+      const plan = yield* stack.plan(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("UsBucket", {
+            forceDestroy: true,
+            jurisdiction: "us",
+          });
+        }),
+      );
+      expect(plan.resources.UsBucket?.action).toEqual("noop");
+
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId, "us");
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
   "managed r2.dev domain is enabled and disabled",
   (stack) =>
     Effect.gen(function* () {
@@ -1088,7 +1353,7 @@ test.provider(
       // Pin the physical name on every deploy so adding `name` cannot be
       // what schedules the update — same shape as the CORS drift case
       // above. A PR/user suffix keeps concurrent runs from colliding.
-      const suffix = (process.env.PULL_REQUEST ?? process.env.USER ?? "local")
+      const suffix = stageSuffix()
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "")
         .slice(0, 24);
@@ -1206,8 +1471,12 @@ test.provider(
 
 // R2 bucket creates are eventually consistent — a read immediately after
 // deploy can briefly return NoSuchBucket until the bucket propagates.
-const getBucketWhenReady = Effect.fn(function* (bucketName: string, accountId: string) {
-  return yield* r2.getBucket({ accountId, bucketName }).pipe(
+const getBucketWhenReady = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+  jurisdiction?: Cloudflare.R2.Bucket.Jurisdiction,
+) {
+  return yield* r2.getBucket({ accountId, bucketName, jurisdiction }).pipe(
     Effect.retry({
       while: (e) => e._tag === "NoSuchBucket",
       // Cap the backoff at 2s so we keep sampling instead of sleeping
@@ -1220,12 +1489,19 @@ const getBucketWhenReady = Effect.fn(function* (bucketName: string, accountId: s
   );
 });
 
-const waitForBucketToBeDeleted = Effect.fn(function* (bucketName: string, accountId: string) {
-  yield* r2.getBucket({ accountId, bucketName }).pipe(
+const waitForBucketToBeDeleted = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+  jurisdiction?: Cloudflare.R2.Bucket.Jurisdiction,
+) {
+  yield* r2.getBucket({ accountId, bucketName, jurisdiction }).pipe(
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
-      while: (e): e is BucketStillExists => e instanceof BucketStillExists,
-      schedule: Schedule.exponential(100),
+      while: (e) => e._tag === "BucketStillExists",
+      schedule: Schedule.max([
+        Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
+        Schedule.recurs(20),
+      ]),
     }),
     Effect.catchTag("NoSuchBucket", () => Effect.void),
   );
@@ -1303,343 +1579,16 @@ const forceDeleteBucket = Effect.fn(function* (accountId: string, bucketName: st
     .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
 });
 
-// ── destructive deletes require explicit opt-in ────────────────────────
-//
-// DATA-PROTECTION INVARIANT: `delete` may remove the bucket, but it must
-// NEVER destroy the bucket's CONTENTS unless the user opted in on the
-// resource (`forceDestroy`) or an operator ran `alchemy unsafe nuke`
-// (which passes `force: true`).
-//
-// R2 refuses to delete a non-empty bucket (409 "is not empty", typed
-// `BucketNotEmpty`). That refusal is the last line of defense for
-// production data, and emptying the bucket first silently converts a
-// routine teardown into irreversible data loss — which is what happened
-// in https://github.com/alchemy-run/alchemy/issues/1248, where a stale
-// removal policy orphaned a bucket and the delete wiped 60k objects the
-// API would otherwise have protected.
-//
-// The live test above can only observe that the bucket survived, not that
-// no destructive request was ever issued. These run the REAL provider
-// `delete` against a recording transport and assert on the wire traffic.
-
-type Recorded = { method: string; url: string; body: string | undefined };
-
-/** Fetch transport that records every request and answers from `respond`. */
-const recordingTransport = (respond: (call: Recorded) => Response) => {
-  const calls: Recorded[] = [];
-  const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const body = init?.body;
-    calls.push({
-      method: (input instanceof Request ? input.method : init?.method) ?? "GET",
-      url: input instanceof Request ? input.url : String(input),
-      body:
-        typeof body === "string"
-          ? body
-          : body instanceof Uint8Array
-            ? new TextDecoder().decode(body)
-            : undefined,
-    });
-    return respond(calls[calls.length - 1]!);
-  };
-  return {
-    calls,
-    layer: FetchHttpClient.layer.pipe(
-      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch)),
+/** The typed failure of `effect`, or `undefined` when it succeeds. */
+const refusalOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.exit(effect).pipe(
+    Effect.map((exit) =>
+      Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined,
     ),
-  };
-};
-
-const TEST_ACCOUNT = "test-account-id";
-const INSTANCE_ID = "0123456789abcdef0123456789abcdef";
-
-const testStack: Omit<StackSpec, "output"> = {
-  name: "my-stack",
-  stage: "dev",
-  resources: {},
-  bindings: {},
-  actions: {},
-};
-
-const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
-  Layer.mergeAll(
-    Layer.succeed(
-      CloudflareEnvironment,
-      Effect.succeed({
-        type: "apiToken",
-        apiToken: Redacted.make("test-token"),
-        accountId: TEST_ACCOUNT,
-        source: { type: "env" },
-      } satisfies CloudflareResolvedCredentials),
-    ),
-    Layer.succeed(
-      Credentials,
-      Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
-    ),
-    Layer.succeed(
-      LocalRuntimeState,
-      LocalRuntimeState.of({
-        queues: MutableHashMap.empty(),
-        queueConsumers: MutableHashMap.empty(),
-        workerRestarts: MutableHashMap.empty(),
-      }),
-    ),
-    Layer.succeed(Stack, testStack),
-    Layer.succeed(Stage, testStack.stage),
-    Layer.succeed(ResourceContext, resourceContext(INSTANCE_ID)),
-    Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
-    Layer.sync(ArtifactStore, createArtifactStore),
-    NodeServices.layer,
-  ).pipe(Layer.provideMerge(transport));
-
-const stubbedOutput = {
-  bucketName: "my-bucket",
-  storageClass: "Standard" as const,
-  jurisdiction: "default" as const,
-  location: undefined,
-  accountId: TEST_ACCOUNT,
-  domains: [],
-  lifecycleRules: [],
-  cors: [],
-  locks: undefined,
-  localUploads: undefined,
-  publicDomain: undefined,
-};
-
-/** `DELETE .../r2/buckets/{name}/objects` — the request that wipes data. */
-const objectDeletes = (calls: Recorded[]) =>
-  calls.filter((c) => c.method === "DELETE" && c.url.includes("/objects"));
-
-/** `DELETE .../r2/buckets/{name}` — deleting the bucket itself. */
-const bucketDeletes = (calls: Recorded[]) =>
-  calls.filter(
-    (c) => c.method === "DELETE" && c.url.endsWith(`/r2/buckets/${stubbedOutput.bucketName}`),
   );
 
-/** One object in the bucket, so the empty path has something to delete. */
-const stubResponse = (call: Recorded) =>
-  new Response(
-    JSON.stringify(
-      call.method === "GET" && call.url.includes("/objects")
-        ? { success: true, result: [{ key: "precious.txt" }] }
-        : { success: true, result: {} },
-    ),
-    { status: 200, headers: { "content-type": "application/json" } },
+const bucketExists = (accountId: string, bucketName: string) =>
+  r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.as(true),
+    Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
   );
-
-/** Run the real provider delete; return every request it made. */
-const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boolean }) =>
-  Effect.gen(function* () {
-    const transport = recordingTransport(stubResponse);
-    yield* Effect.gen(function* () {
-      const provider = yield* Provider<Cloudflare.R2.Bucket>("Cloudflare.R2.Bucket");
-      yield* provider.delete({
-        id: "Bucket",
-        fqn: "Bucket",
-        instanceId: INSTANCE_ID,
-        olds: props,
-        output: stubbedOutput,
-        bindings: [] as never,
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
-        force: options?.force,
-      });
-    }).pipe(
-      Effect.provide(Cloudflare.R2.BucketProvider()),
-      Effect.provide(stubbedEnv(transport.layer)),
-    );
-    return transport.calls;
-  });
-
-describe(
-  "destructive delete requires explicit opt-in",
-  {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:auth",
-      "provider:cloudflare:r2",
-      "local",
-    ],
-  },
-  () => {
-    it.effect("no forceDestroy never empties the bucket", () =>
-      Effect.gen(function* () {
-        const calls = yield* recordDelete({});
-
-        expect(objectDeletes(calls)).toEqual([]);
-        // The bucket delete itself is still attempted — R2 answers 409
-        // "is not empty" (`BucketNotEmpty`), which is the protection.
-        expect(bucketDeletes(calls)).toHaveLength(1);
-      }),
-    );
-
-    it.effect("forceDestroy empties the bucket first", () =>
-      Effect.gen(function* () {
-        const calls = yield* recordDelete({ forceDestroy: true });
-
-        expect(objectDeletes(calls).length).toBeGreaterThan(0);
-        expect(bucketDeletes(calls)).toHaveLength(1);
-      }),
-    );
-
-    // Nuke enumerates buckets from the cloud, so `olds` carries Attributes and
-    // never has `forceDestroy` — the operator's confirmation IS the flag.
-    it.effect("nuke's force empties without the prop", () =>
-      Effect.gen(function* () {
-        const calls = yield* recordDelete({}, { force: true });
-
-        expect(objectDeletes(calls).length).toBeGreaterThan(0);
-      }),
-    );
-  },
-);
-
-// ── lock rules are managed only once declared ──────────────────────────
-//
-// A lock is protection: reconcile must never clear rules a stack did not
-// declare (another tool may have set them), and a PUT replaces the whole
-// rule set. These run the REAL provider `reconcile` against a recording
-// transport and assert on the `/lock` traffic.
-
-const retention: Cloudflare.R2.BucketLockRule = {
-  id: "raw-retention",
-  enabled: true,
-  prefix: "raw/",
-  condition: { type: "Age", maxAgeSeconds: 60 },
-};
-
-/** Answers every read reconcile makes; `GET /lock` returns `observedLocks`. */
-const reconcileResponse =
-  (observedLocks: Cloudflare.R2.BucketLockRule[]) =>
-  (call: Recorded): Response => {
-    const path = new URL(call.url).pathname;
-    const result =
-      call.method !== "GET"
-        ? {}
-        : path.endsWith("/lock")
-          ? { rules: observedLocks }
-          : path.endsWith("/domains/custom")
-            ? { domains: [] }
-            : path.endsWith("/domains/managed")
-              ? { bucketId: "bucket-id", domain: "my-bucket.r2.dev", enabled: false }
-              : path.endsWith("/lifecycle") || path.endsWith("/cors")
-                ? { rules: [] }
-                : { name: stubbedOutput.bucketName, storageClass: "Standard" };
-    return new Response(JSON.stringify({ success: true, result }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  };
-
-/** Run the real provider reconcile; return its output and every `/lock` request. */
-const recordReconcile = (input: {
-  news: Cloudflare.R2.BucketProps;
-  olds: Cloudflare.R2.BucketProps;
-  observedLocks: Cloudflare.R2.BucketLockRule[];
-}) =>
-  Effect.gen(function* () {
-    const transport = recordingTransport(reconcileResponse(input.observedLocks));
-    const output = yield* Effect.gen(function* () {
-      const provider = yield* Provider<Cloudflare.R2.Bucket>("Cloudflare.R2.Bucket");
-      return yield* provider.reconcile({
-        id: "Bucket",
-        fqn: "Bucket",
-        instanceId: INSTANCE_ID,
-        news: input.news,
-        olds: input.olds,
-        output: stubbedOutput,
-        bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
-      });
-    }).pipe(
-      Effect.provide(Cloudflare.R2.BucketProvider()),
-      Effect.provide(stubbedEnv(transport.layer)),
-    );
-    const lockCalls = transport.calls.filter((c) => new URL(c.url).pathname.endsWith("/lock"));
-    return { output, lockCalls };
-  });
-
-describe(
-  "lock rules are managed only once declared",
-  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:r2", "local"] },
-  () => {
-    it.effect("omitted locks never touch the lock endpoint", () =>
-      Effect.gen(function* () {
-        const { output, lockCalls } = yield* recordReconcile({
-          news: {},
-          olds: {},
-          observedLocks: [retention],
-        });
-
-        expect(lockCalls).toEqual([]);
-        expect(output.locks).toBeUndefined();
-      }),
-    );
-
-    it.effect("matching rules are not re-sent", () =>
-      Effect.gen(function* () {
-        const { output, lockCalls } = yield* recordReconcile({
-          // An omitted prefix equals the observed "".
-          news: { locks: [{ ...retention, prefix: undefined }] },
-          olds: {},
-          observedLocks: [{ ...retention, prefix: "" }],
-        });
-
-        expect(lockCalls.map((c) => c.method)).toEqual(["GET"]);
-        expect(output.locks).toEqual([{ ...retention, prefix: "" }]);
-      }),
-    );
-
-    it.effect("rules declared out of id order match R2's sorted listing", () =>
-      Effect.gen(function* () {
-        const allObjects: Cloudflare.R2.BucketLockRule = {
-          id: "all-objects",
-          enabled: true,
-          prefix: "",
-          condition: { type: "Age", maxAgeSeconds: 30 },
-        };
-        const { output, lockCalls } = yield* recordReconcile({
-          // Declared raw-retention first; R2 lists rules sorted by id.
-          news: { locks: [retention, allObjects] },
-          olds: { locks: [retention, allObjects] },
-          observedLocks: [allObjects, retention],
-        });
-
-        expect(lockCalls.map((c) => c.method)).toEqual(["GET"]);
-        expect(output.locks?.map((r) => r.id)).toEqual(["all-objects", "raw-retention"]);
-      }),
-    );
-
-    it.effect("a changed rule replaces the whole set", () =>
-      Effect.gen(function* () {
-        const changed: Cloudflare.R2.BucketLockRule = {
-          ...retention,
-          condition: { type: "Indefinite" },
-        };
-        const { lockCalls } = yield* recordReconcile({
-          news: { locks: [changed] },
-          olds: { locks: [retention] },
-          observedLocks: [retention],
-        });
-
-        const puts = lockCalls.filter((c) => c.method === "PUT");
-        expect(puts).toHaveLength(1);
-        expect(JSON.parse(puts[0]?.body ?? "null")).toEqual({ rules: [changed] });
-      }),
-    );
-
-    it.effect("removing declared locks clears every rule", () =>
-      Effect.gen(function* () {
-        const { output, lockCalls } = yield* recordReconcile({
-          news: {},
-          olds: { locks: [retention] },
-          observedLocks: [retention],
-        });
-
-        const puts = lockCalls.filter((c) => c.method === "PUT");
-        expect(puts).toHaveLength(1);
-        expect(JSON.parse(puts[0]?.body ?? "null")).toEqual({ rules: [] });
-        expect(output.locks).toEqual([]);
-      }),
-    );
-  },
-);

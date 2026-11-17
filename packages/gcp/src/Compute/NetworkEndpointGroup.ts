@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -121,8 +122,33 @@ export type NetworkEndpointGroup = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkEndpointGroupLookup
 >;
+
+/**
+ * Props for {@link NetworkEndpointGroup.lookup}: find a network endpoint
+ * group this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface NetworkEndpointGroupLookup {
+  /**
+   * Name of the network endpoint group. Must be 1–63 characters and comply
+   * with RFC1035.
+   */
+  networkEndpointGroupName: string;
+  /**
+   * Zone of the group (e.g. `"us-central1-a"`). This resource maps to the
+   * zonal `networkEndpointGroups` collection (regional/global NEGs are
+   * separate).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine network endpoint group (NEG).
@@ -161,6 +187,19 @@ export type NetworkEndpointGroup = Resource<
  *   networkEndpoints: [
  *     { instance: vm.instanceName, port: 80 },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing network endpoint group
+ * `NetworkEndpointGroup.lookup` references a network endpoint group Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared network endpoint group.
+ *
+ * **Example:** Reference an existing network endpoint group
+ * ```typescript
+ * const networkEndpointGroup = GCP.Compute.NetworkEndpointGroup.lookup({
+ *   networkEndpointGroupName: "my-network-endpoint-group",
  * });
  * ```
  *
@@ -317,7 +356,7 @@ const toAttrs = (
 const getByName = (project: string, zone: string, networkEndpointGroup: string) =>
   compute
     .getNetworkEndpointGroups({ project, zone, networkEndpointGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toApiEndpoint = (
   project: string,
@@ -462,6 +501,14 @@ export const NetworkEndpointGroupProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ networkEndpointGroupName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone ?? DEFAULT_ZONE);
+      const existing = yield* getByName(env.project, zone, networkEndpointGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const networkEndpointGroupName = yield* toName(
@@ -536,7 +583,7 @@ export const NetworkEndpointGroupProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -561,9 +608,7 @@ export const NetworkEndpointGroupProvider = () =>
             times: 8,
             schedule: Schedule.exponential("250 millis"),
           }),
-          Effect.catchTag("GCP.Compute.NetworkEndpointGroupNotResolved", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("GCP.Compute.NetworkEndpointGroupNotResolved", () => Effect.undefined),
         );
       }
 
@@ -621,7 +666,7 @@ export const NetworkEndpointGroupProvider = () =>
           networkEndpointGroup: output.networkEndpointGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

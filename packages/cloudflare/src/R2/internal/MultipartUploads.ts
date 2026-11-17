@@ -43,7 +43,7 @@ export const abortMultipartUploads = Effect.fn("R2.abortMultipartUploads")(
     const { id: accessKeyId } = yield* accounts
       .verifyToken({ accountId })
       .pipe(Effect.catch(() => user.verifyToken({})));
-    const secretAccessKey = yield* sha256(Redacted.value(resolved.apiToken));
+    const secretAccessKey = yield* resolved.apiToken.pipe(Redacted.value, sha256);
     const r2S3 = Layer.mergeAll(
       Layer.succeed(
         AwsCredentials.Credentials,

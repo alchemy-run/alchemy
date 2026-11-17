@@ -90,7 +90,7 @@ export const ResourcePolicyProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         return yield* amp
           .describeResourcePolicy({ workspaceId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (

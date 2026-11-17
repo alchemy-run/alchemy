@@ -83,8 +83,28 @@ export type EnvironmentsReference = Resource<
     description: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsReferenceLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsReference.lookup}: find an environments
+ * reference this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsReferenceLookup {
+  /**
+   * Reference id.
+   */
+  referenceId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
 
 /**
  * An Apigee environment reference to a keystore or truststore.
@@ -106,6 +126,20 @@ export type EnvironmentsReference = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environments reference
+ * `EnvironmentsReference.lookup` references an environments reference
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared environments reference.
+ *
+ * **Example:** Reference an existing environments reference
+ * ```typescript
+ * const environmentsReference = GCP.Apigee.EnvironmentsReference.lookup({
+ *   referenceId: "my-reference",
+ *   environment: "my-environment",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -116,7 +150,7 @@ export const EnvironmentsReference = Resource<EnvironmentsReference>(
 export class EnvironmentsReferenceNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsReferenceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, referenceId: string) =>
@@ -169,6 +203,16 @@ export const EnvironmentsReferenceProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ referenceId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, referenceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -239,7 +283,7 @@ export const EnvironmentsReferenceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsReferenceNotResolved({ name });
+        return yield* new EnvironmentsReferenceNotResolved({ resourceName: name });
       }
 
       if (

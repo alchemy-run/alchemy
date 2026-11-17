@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
@@ -95,8 +96,31 @@ export type SecurityFeedback = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityFeedbackLookup
 >;
+
+/**
+ * Props for {@link SecurityFeedback.lookup}: find a security feedback this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityFeedbackLookup {
+  /**
+   * Feedback id (the `{feedback}` segment of
+   * `organizations/{org}/securityFeedback/{feedback}`).
+   */
+  securityFeedbackId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Advanced API Security customer feedback report.
@@ -118,6 +142,19 @@ export type SecurityFeedback = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing security feedback
+ * `SecurityFeedback.lookup` references a security feedback Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security feedback.
+ *
+ * **Example:** Reference an existing security feedback
+ * ```typescript
+ * const securityFeedback = GCP.Apigee.SecurityFeedback.lookup({
+ *   securityFeedbackId: "my-security-feedback",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -126,7 +163,7 @@ export const SecurityFeedback = Resource<SecurityFeedback>("GCP.Apigee.SecurityF
 export class SecurityFeedbackNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityFeedbackNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, feedbackId: string) =>
@@ -180,7 +217,7 @@ const toAttrs = (feedback: apigee.GoogleCloudApigeeV1SecurityFeedback, organizat
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityFeedback({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityFeedbackProps,
@@ -214,7 +251,17 @@ export const SecurityFeedbackProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ securityFeedbackId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, securityFeedbackId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization);
+      return attrs;
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityFeedbackId = yield* toResourceId(
@@ -228,7 +275,9 @@ export const SecurityFeedbackProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
       const { labels } = parseOwnership(existing.comment);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -279,7 +328,7 @@ export const SecurityFeedbackProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityFeedbackNotResolved({ name });
+        return yield* new SecurityFeedbackNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");

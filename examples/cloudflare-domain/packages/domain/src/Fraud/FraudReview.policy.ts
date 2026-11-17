@@ -21,11 +21,13 @@ export const FraudReviewLive = FraudReview.toLayer(
       const { risk } = yield* fraud.score({ accountId: source.id, amount: event.total });
       if (risk > 0.8) {
         // No session here: the policy acts as the system, in place of FreezeAccount's middleware.
-        yield* accounts.send(source, new FreezeAccount({ reason: `fraud risk ${risk}` })).pipe(
-          Effect.provideService(CurrentActor, system("FraudReview")),
-          Effect.catchTag("NotOpen", () => Effect.void),
-          Effect.catchTag("NotOwner", () => Effect.void),
-        );
+        yield* accounts
+          .send(new FreezeAccount({ accountId: source.id, reason: `fraud risk ${risk}` }))
+          .pipe(
+            Effect.provideService(CurrentActor, system("FraudReview")),
+            Effect.catchTag("NotOpen", () => Effect.void),
+            Effect.catchTag("NotOwner", () => Effect.void),
+          );
       }
     });
   }),

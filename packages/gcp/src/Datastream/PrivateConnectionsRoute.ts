@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -95,8 +96,38 @@ export type PrivateConnectionsRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateConnectionsRouteLookup
 >;
+
+/**
+ * Props for {@link PrivateConnectionsRoute.lookup}: find a private
+ * connections route this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface PrivateConnectionsRouteLookup {
+  /**
+   * Route id (the `{route}` segment of
+   * `{privateConnection}/routes/{route}`).
+   */
+  routeId: string;
+  /**
+   * Region used when `privateConnection` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent private connection. Full name
+   * `projects/{project}/locations/{loca
+   * tion}/privateConnections/{privateConnection}` or the connection id
+   * (combined with `location`).
+   */
+  privateConnection: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Datastream route attached to a private connection. Routes advertise
@@ -121,6 +152,20 @@ export type PrivateConnectionsRoute = Resource<
  *   destinationAddress: "10.0.0.8",
  *   destinationPort: 3306,
  *   labels: { env: "test" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing private connections route
+ * `PrivateConnectionsRoute.lookup` references a private connections route
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared private connections route.
+ *
+ * **Example:** Reference an existing private connections route
+ * ```typescript
+ * const privateConnectionsRoute = GCP.Datastream.PrivateConnectionsRoute.lookup({
+ *   routeId: "my-route",
+ *   privateConnection: "my-private-connection",
  * });
  * ```
  *
@@ -154,10 +199,10 @@ const toAttrs = (item: ds.Route, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsPrivateConnectionsRoutes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRoutes = (parent: string) =>
   collectPages(
@@ -215,6 +260,21 @@ export const PrivateConnectionsRouteProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ routeId, location: lookupLocation, privateConnection }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // Recovering an interrupted create whose parent never resolved: no
+      // route can exist without its private connection.
+      if (typeof privateConnection !== "string" || privateConnection.length === 0) {
+        return undefined;
+      }
+      const parent = privateConnectionOf(privateConnection, env.project, location);
+      const name = resourceName(parent, routeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -266,13 +326,13 @@ export const PrivateConnectionsRouteProvider = () =>
               destinationPort: news.destinationPort,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* settleOperation(created);
         current = yield* waitUntilExists(getByName(name), name);
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -289,7 +349,7 @@ export const PrivateConnectionsRouteProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name);

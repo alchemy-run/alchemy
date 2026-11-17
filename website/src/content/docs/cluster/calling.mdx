@@ -1,0 +1,133 @@
+---
+title: Calling an entity
+description: Call an Effect Cluster entity from any runtime by id — RPCs, streams, typed errors, fire-and-forget messages and headers.
+---
+
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
+Any runtime calls an entity the same way, a Cloudflare Worker, a Lambda function, a container or another entity: yield the class, then name an instance. The callers below run outside the pool, so they import the room's declaration on its own, without its code. See [Keep its code out of its callers](/cluster/entities#keep-its-code-out-of-its-callers).
+
+## Get a client
+
+`yield* Room` returns the entity's namespace. `getByName` returns a client for one instance, with one method per RPC:
+
+```typescript title="src/Api.ts"
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        const members = yield* lobby.Join({ name: "sam" });
+        return yield* HttpServerResponse.json({ members });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The client has the same shape as Effect Cluster's own `Entity.client`, and the same shape as a Cloudflare Durable Object's `getByName`.
+
+## How the call travels
+
+While deploying, `yield* Room` binds three values into the caller's environment: the address of the pool's gateway, the token it checks, and the pool's shard group. At runtime, it reads them back and calls the gateway over HTTP. The caller needs no access to the database and no route to the pool.
+
+Inside the cluster, one entity calling another (or a workflow calling an entity) goes straight from runner to runner, through Effect Cluster itself.
+
+<Boundaries
+  nodes={[
+    { id: "api", label: "Api", type: "Lambda Function", col: 1, row: 0 },
+    { id: "gateway", label: "gateway", type: "HTTP · token", col: 1, row: 1, tone: "accent" },
+    { id: "lobby", label: "lobby", type: "Room · Runner 1", col: 1, row: 2 },
+    { id: "invite", label: "Invite", type: "workflow · Runner 2", col: 0, row: 2 },
+  ]}
+  zones={[{ id: "pool", label: "Default", type: "pool", nodes: ["gateway", "lobby", "invite"], labelAt: "left" }]}
+  links={[
+    { from: "api", to: "gateway", label: "Join" },
+    { from: "gateway", to: "lobby" },
+    { from: "invite", to: "lobby", label: "Join" },
+  ]}
+  caption="The Api reaches the pool only through its gateway. An Invite run, inside the pool, calls the lobby straight from its runner."
+/>
+
+## The gateway token
+
+Each pool's gateway checks a token on every request, except `/health`, which load balancers use. The Stack creates one random token per pool and keeps it in its state, and every runtime that yields one of the pool's classes is given it, so a caller never handles it.
+
+The token stays the same across deploys. Anyone holding it can call every class on that pool, so treat it like any other secret. On Docker, and on Kubernetes unless you set `serviceType`, the gateway is only reachable on the cluster's own network.
+
+
+## Typed errors and streams
+
+An RPC's error comes back with its tag:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
+import { Room } from "./Room.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        const joined = yield* lobby.Join({ name: "sam" }).pipe(
+          Effect.catchTag("RoomFull", () => Effect.succeed(-1)),
+        );
+        const history = yield* Stream.runCollect(lobby.History());
+        return yield* HttpServerResponse.json({ joined, history: [...history] });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+A streaming RPC returns a `Stream` that delivers every value the handler emits.
+
+## Send without waiting
+
+Pass `discard: true` to send a message and return as soon as it's on its way:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        yield* lobby.Join({ name: "sam" }, { discard: true });
+        return HttpServerResponse.text("sent");
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The handler still runs; only the reply is skipped. Errors before the message is sent, like a full mailbox, still fail the call.
+
+## Gateway errors
+
+Besides the RPC's own errors, a call can fail with Effect Cluster's: `MailboxFull` when an instance has too many messages waiting and the message isn't persisted, `AlreadyProcessingMessage` when a persisted message with the same key is still running, `PersistenceError` when the message can't be stored, and `EntityNotAssignedToRunner` while a shard moves. Each is a tagged error you can retry.
+
+## Headers
+
+Pass `headers` to send request headers along with a message. RPC middleware on the entity reads them; see [RPC middleware](/cluster/middleware).

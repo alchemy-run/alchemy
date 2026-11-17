@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -101,8 +102,34 @@ export type SecurityProfileGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityProfileGroupLookup
 >;
+
+/**
+ * Props for {@link SecurityProfileGroup.lookup}: find a security profile
+ * group this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface SecurityProfileGroupLookup {
+  /**
+   * SecurityProfileGroup id (the `{securityProfileGroup}` segment of
+   * `projec
+   * ts/{project}/locations/{location}/securityProfileGroups/{securityProfile
+   * Group}`). Must be 1-63 characters, letters, numbers, hyphens, and
+   * underscores, and must not start with a number.
+   */
+  securityProfileGroupId: string;
+  /**
+   * Location. Security profile groups live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security SecurityProfileGroup — a named bundle of
@@ -141,6 +168,19 @@ export type SecurityProfileGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing security profile group
+ * `SecurityProfileGroup.lookup` references a security profile group Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared security profile group.
+ *
+ * **Example:** Reference an existing security profile group
+ * ```typescript
+ * const securityProfileGroup = GCP.NetworkSecurity.SecurityProfileGroup.lookup({
+ *   securityProfileGroupId: "my-security-profile-group",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -151,13 +191,13 @@ export const SecurityProfileGroup = Resource<SecurityProfileGroup>(
 export class SecurityProfileGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SecurityProfileGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const refOf = (value: string | undefined) => {
@@ -189,12 +229,14 @@ const toAttrs = (group: networksecurity.SecurityProfileGroup, project: string) =
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsSecurityProfileGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group ? Effect.succeed(group) : Effect.fail(new SecurityProfileGroupNotResolved({ name })),
+      group
+        ? Effect.succeed(group)
+        : Effect.fail(new SecurityProfileGroupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileGroupNotResolved",
@@ -208,7 +250,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new SecurityProfileGroupStillExists({ name })),
+        : Effect.fail(new SecurityProfileGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileGroupStillExists",
@@ -252,6 +294,15 @@ export const SecurityProfileGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityProfileGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, securityProfileGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -317,7 +368,7 @@ export const SecurityProfileGroupProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -326,7 +377,7 @@ export const SecurityProfileGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfileGroupNotResolved({ name });
+        return yield* new SecurityProfileGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -390,7 +441,7 @@ export const SecurityProfileGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

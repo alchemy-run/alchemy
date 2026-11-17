@@ -1,3 +1,4 @@
+import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
@@ -486,6 +487,20 @@ layer(services, { excludeTestServices: true })((it) => {
     }),
   );
 
+  // A supervisor restarting a stage in the same process (#3188).
+  it.effect("serves on the same strict port again right after the previous proxy closes", () =>
+    Effect.gen(function* () {
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const port = yield* PortHelpers.find(0);
+      const serveOnce = Effect.scoped(
+        proxy.serve({ port, strictPort: true }).pipe(Effect.map((instance) => instance.url.port)),
+      );
+
+      expect(yield* serveOnce).toBe(String(port));
+      expect(yield* serveOnce).toBe(String(port));
+    }),
+  );
+
   it.effect("owns its port on the IPv6 loopback so localhost cannot be shadowed", () =>
     Effect.gen(function* () {
       const proxy = yield* WorkerProxy.WorkerProxy;
@@ -543,7 +558,9 @@ layer(services, { excludeTestServices: true })((it) => {
       // base + 2 probes free.
       const tryBind = (port: number) =>
         Effect.callback<NodeNet.Server | undefined>((resume) => {
-          const server = NodeNet.createServer();
+          // Drop accepted connections: a local tool's keep-alive probe would
+          // otherwise keep `server.close` from completing (see `occupy`).
+          const server = NodeNet.createServer((socket) => socket.destroy());
           server.once("error", () => resume(Effect.succeed(undefined)));
           server.listen({ port, exclusive: true }, () => resume(Effect.succeed(server)));
           return Effect.sync(() => server.close());
@@ -649,6 +666,41 @@ layer(services, { excludeTestServices: true })((it) => {
   );
 
   it.effect(
+    "a slow reader gets the whole response when the upstream closes after it",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* WorkerProxy.WorkerProxy;
+        // An upstream that closes the connection after every response, as
+        // one does for a client that sends `Connection: close`.
+        const upstream = yield* Effect.acquireRelease(
+          Effect.callback<NodeHttp.Server>((resume) => {
+            const server = NodeHttp.createServer((_req, res) => {
+              res.setHeader("Content-Length", SLOW_BODY.length);
+              res.end(SLOW_BODY);
+            });
+            server.listen(0, "127.0.0.1", () => resume(Effect.succeed(server)));
+          }),
+          (server) =>
+            Effect.callback<void>((resume) => {
+              server.closeAllConnections();
+              server.close(() => resume(Effect.void));
+            }),
+        );
+        const { port } = upstream.address() as NodeNet.AddressInfo;
+        const instance = yield* proxy.serve();
+        yield* instance.set(new URL(`http://127.0.0.1:${port}`));
+
+        // Whether the tail is still in the client socket's write buffer when
+        // the upstream closes is a timing question, so ask it many times.
+        const missing = yield* Effect.forEach(Array.from({ length: 40 }), () =>
+          bytesMissingSlowly(instance.url),
+        );
+        expect(missing.filter((bytes) => bytes !== 0)).toEqual([]);
+      }),
+    60_000,
+  );
+
+  it.effect(
     "answers Expect: 100-continue before the client sends the body",
     () =>
       Effect.gen(function* () {
@@ -699,6 +751,45 @@ layer(services, { excludeTestServices: true })((it) => {
     10_000,
   );
 });
+
+const SLOW_BODY = "x".repeat(4 * 1024 * 1024);
+
+/**
+ * Sends one `Connection: close` request and reads the response with a pause
+ * after every chunk, so the proxy is still writing when the upstream closes.
+ * Resolves with how many bytes fewer arrived than the response announced.
+ */
+const bytesMissingSlowly = (url: URL) =>
+  Effect.callback<number>((resume) => {
+    const socket = NodeNet.connect(Number(url.port), url.hostname);
+    let head = "";
+    let received = 0;
+    socket.on("connect", () => {
+      socket.write(`GET / HTTP/1.1\r\nHost: ${url.host}\r\nConnection: close\r\n\r\n`);
+    });
+    socket.on("data", (chunk) => {
+      if (head.length < 1024) head += chunk.toString("latin1");
+      received += chunk.length;
+      socket.pause();
+      setTimeout(() => socket.resume(), 5);
+    });
+    // A reset connection shows up as missing bytes.
+    socket.on("error", () => {});
+    socket.on("close", () => {
+      const end = head.indexOf("\r\n\r\n");
+      const length = Number(/content-length: (\d+)/i.exec(head)?.[1] ?? Number.NaN);
+      resume(
+        Effect.succeed(
+          end === -1 || Number.isNaN(length)
+            ? Number.POSITIVE_INFINITY
+            : end + 4 + length - received,
+        ),
+      );
+    });
+    return Effect.sync(() => {
+      socket.destroy();
+    });
+  });
 
 const roundTrip = (url: URL, payload: string) =>
   Effect.callback<{

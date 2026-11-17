@@ -124,9 +124,7 @@ export const TieredCachingProvider = () =>
             // the setting is gone with it; skip it. A concurrently-purged
             // zone surfaces as `ZoneNotFound` (404 "Invalid or missing
             // zone") rather than the 7003 object-identifier code.
-            Effect.catchTag(["InvalidObjectIdentifier", "ZoneNotFound"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["InvalidObjectIdentifier", "ZoneNotFound"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -149,7 +147,7 @@ export const TieredCachingProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* argo.getTieredCaching({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -190,7 +188,7 @@ export const TieredCachingProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* argo
         .getTieredCaching({ zoneId })
-        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

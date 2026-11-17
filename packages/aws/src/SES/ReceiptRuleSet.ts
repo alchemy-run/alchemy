@@ -25,8 +25,18 @@ export interface ReceiptRuleSet extends Resource<
     ruleSetName: string;
   },
   never,
-  Providers
+  Providers,
+  ReceiptRuleSetLookup
 > {}
+
+/**
+ * Props for {@link ReceiptRuleSet.lookup}: find a receipt rule set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReceiptRuleSetLookup {
+  /** The rule set name of the existing receipt rule set. */
+  ruleSetName: string;
+}
 
 /**
  * An Amazon SES receipt rule set — the ordered container for the receipt rules
@@ -61,6 +71,16 @@ export interface ReceiptRuleSet extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing receipt rule set
+ * `ReceiptRuleSet.lookup` references a receipt rule set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleSetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing receipt rule set
+ * ```typescript
+ * const existing = AWS.SES.ReceiptRuleSet.lookup({ ruleSetName: "my-receipt-rule-set" });
+ * ```
+ *
  * @resource
  */
 export const ReceiptRuleSet = Resource<ReceiptRuleSet>("AWS.SES.ReceiptRuleSet");
@@ -79,7 +99,7 @@ export const ReceiptRuleSetProvider = () =>
       const describe = Effect.fn(function* (name: string) {
         return yield* ses
           .describeReceiptRuleSet({ RuleSetName: name })
-          .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.undefined));
       });
 
       return ReceiptRuleSet.Provider.of({
@@ -103,6 +123,11 @@ export const ReceiptRuleSetProvider = () =>
             } while (nextToken);
             return rows;
           }),
+
+        lookup: Effect.fn(function* ({ ruleSetName: name }) {
+          const found = yield* describe(name);
+          return found ? { ruleSetName: name } : undefined;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.ruleSetName ?? (yield* createName(id, olds));

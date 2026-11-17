@@ -1,6 +1,7 @@
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
-import type { Crypto } from "effect/Crypto";
+import type { Digest } from "effect/crypto/Digest";
+import type { SecureRandom } from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -12,9 +13,9 @@ import type * as Scope from "effect/Scope";
 import type { ActionLike } from "./Action.ts";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import type { ArtifactStore } from "./Artifacts.ts";
-import type { AuthProviders } from "./Auth/AuthProvider.ts";
 import type { CredentialsStore } from "./Auth/Credentials.ts";
 import type { ProfileStore } from "./Auth/Profile.ts";
+import { AuthProvidersLive, type AuthProviders } from "./Auth/Registry.ts";
 import type { Input, InputProps } from "./Input.ts";
 // Type-only: with verbatimModuleSyntax a value import would survive emit and
 // drag the terminal helpers (node:tty, Sigil's ansi helpers) into every unbundled
@@ -36,7 +37,8 @@ export type StackServices =
   | Stage
   | Scope.Scope
   | FileSystem
-  | Crypto
+  | Digest
+  | SecureRandom
   | Path
   | AlchemyContext
   | HttpClient
@@ -134,6 +136,14 @@ export type ConfiguredStackMeta<Req = never> = {
   readonly stackName: string;
 } & StackProps<Req>;
 
+/**
+ * What `Alchemy.Stack(...)` returns, and what an `alchemy.run.ts`
+ * default-exports: the stack program, not yet run, with its providers,
+ * state store, and secrets attached.
+ */
+export type ConfiguredStack<Output, Req> = Effect.Effect<CompiledStack<Output>, ConfigError> &
+  ConfiguredStackMeta<Req>;
+
 export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output">> & {
   make<A, Req>(
     stack: {
@@ -161,7 +171,7 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
       make: <A, Req>(
         options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, ConfigError, Req>,
-      ) => Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
+      ) => ConfiguredStack<A, NoInfer<Req>>;
       stage: {
         readonly [S in Stages]: Effect.Effect<Self>;
       };
@@ -171,7 +181,7 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
     stackName: string,
     options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
+  ): ConfiguredStack<A, NoInfer<Req>>;
 } = Object.assign(
   taggedFunction(
     StackContext,
@@ -331,6 +341,7 @@ export const build = <ROut = never>(options: MakeStackProps<ROut>) =>
             ),
           ),
         ),
+        Layer.provideMerge(AuthProvidersLive),
         Layer.buildWithScope(scope),
       );
     }),

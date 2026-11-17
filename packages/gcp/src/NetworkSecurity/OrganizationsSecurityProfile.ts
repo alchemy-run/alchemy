@@ -174,8 +174,29 @@ export type OrganizationsSecurityProfile = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsSecurityProfileLookup
 >;
+
+/**
+ * Props for {@link OrganizationsSecurityProfile.lookup}: find an
+ * organizations security profile this stack doesn't manage by its
+ * identifiers.
+ */
+export interface OrganizationsSecurityProfileLookup {
+  /**
+   * Security profile id.
+   */
+  securityProfileId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Location. Security profiles live in `global`.
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped Network Security profile (threat prevention,
@@ -198,6 +219,19 @@ export type OrganizationsSecurityProfile = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations security profile
+ * `OrganizationsSecurityProfile.lookup` references an organizations
+ * security profile Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared organizations security profile.
+ *
+ * **Example:** Reference an existing organizations security profile
+ * ```typescript
+ * const organizationsSecurityProfile = GCP.NetworkSecurity.OrganizationsSecurityProfile.lookup({
+ *   securityProfileId: "my-security-profile",
+ * });
  * ```
  *
  * @resource
@@ -247,7 +281,7 @@ const toAttrs = (profile: networksecurity.SecurityProfile) => {
 const getByName = (name: string) =>
   networksecurity
     .getOrganizationsLocationsSecurityProfiles({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (organization: string) =>
   networksecurity.listOrganizationsLocationsSecurityProfiles
@@ -313,6 +347,23 @@ export const OrganizationsSecurityProfileProvider = () =>
           previousId !== undefined &&
           nextId === previousId,
       };
+    }),
+
+    lookup: Effect.fn(function* ({
+      securityProfileId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeLocation(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, securityProfileId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -395,7 +446,7 @@ export const OrganizationsSecurityProfileProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -404,7 +455,7 @@ export const OrganizationsSecurityProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -459,7 +510,7 @@ export const OrganizationsSecurityProfileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

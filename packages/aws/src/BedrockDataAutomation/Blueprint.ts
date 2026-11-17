@@ -68,8 +68,23 @@ export interface Blueprint extends Resource<
     type: string;
   },
   never,
-  Providers
+  Providers,
+  BlueprintLookup
 > {}
+
+/**
+ * Props for {@link Blueprint.lookup}: find a blueprint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type BlueprintLookup =
+  | {
+      /** The ARN of the existing blueprint. */
+      blueprintArn: string;
+    }
+  | {
+      /** The name of the existing blueprint. */
+      blueprintName: string;
+    };
 
 /**
  * An Amazon Bedrock Data Automation Blueprint — a JSON schema describing the
@@ -110,6 +125,16 @@ export interface Blueprint extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing blueprint
+ * `Blueprint.lookup` references a blueprint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `blueprintArn` or `blueprintName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing blueprint
+ * ```typescript
+ * const invoice = AWS.BedrockDataAutomation.Blueprint.lookup({ blueprintName: "invoice" });
+ * ```
+ *
  * @resource
  */
 export const Blueprint = Resource<Blueprint>("AWS.BedrockDataAutomation.Blueprint");
@@ -138,7 +163,7 @@ export const BlueprintProvider = () =>
       ) {
         return yield* bda.getBlueprint({ blueprintArn, blueprintStage }).pipe(
           Effect.map((r) => r.blueprint),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -172,6 +197,15 @@ export const BlueprintProvider = () =>
             return attrs.flat();
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn =
+            "blueprintArn" in props
+              ? props.blueprintArn
+              : yield* findBlueprintArn(props.blueprintName);
+          if (arn === undefined) return undefined;
+          const found = yield* observeBlueprint(arn, undefined);
+          return found === undefined ? undefined : toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const blueprintArn =
             output?.blueprintArn ?? (yield* findBlueprintArn(yield* createName(id, olds ?? {})));

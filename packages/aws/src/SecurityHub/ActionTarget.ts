@@ -97,9 +97,9 @@ export const ActionTargetProvider = () =>
         securityhub.describeActionTargets({ ActionTargetArns: [arn] }).pipe(
           Effect.map((r) => r.ActionTargets?.[0]),
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
             // The whole hub may be disabled — the action target is gone too.
-            InvalidAccessException: () => Effect.succeed(undefined),
+            InvalidAccessException: () => Effect.undefined,
           }),
         );
 

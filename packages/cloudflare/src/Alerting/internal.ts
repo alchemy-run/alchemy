@@ -52,7 +52,7 @@ export const narrowPolicy = (raw: {
 export const observePolicy = (accountId: string, policyId: string) =>
   alerting.getPolicy({ accountId, policyId }).pipe(
     Effect.map((p) => narrowPolicy({ ...p, id: p.id ?? policyId })),
-    Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("PolicyNotFound", () => Effect.undefined),
   );
 
 export const findPolicyByName = (accountId: string, name: string) =>

@@ -93,10 +93,13 @@ export const startViteChild = (
     const alchemyContext = yield* Effect.serviceOption(AlchemyContext);
     const stack = yield* Effect.serviceOption(Stack);
     const base = yield* fromProcessEnv.pipe(
-      Effect.orElseSucceed((): RpcServerEnvironment => ({
-        profile: process.env.ALCHEMY_PROFILE,
-        envFile: undefined,
-      })),
+      Effect.catchTag("ConfigError", (): Effect.Effect<RpcServerEnvironment> =>
+        Effect.succeed({
+          profile: process.env.ALCHEMY_PROFILE,
+          envFile: undefined,
+        }),
+      ),
+      Effect.orDie,
     );
     const childEnvironment: RpcServerEnvironment = {
       profile: base.profile,
@@ -130,7 +133,11 @@ export const startViteChild = (
           stderr: "pipe",
           env: childEnv,
           extendEnv: false,
-          killSignal: "SIGKILL",
+          // SIGTERM lets the child close its runtime, whose finalizer removes
+          // the Docker containers its Workers started (`ctx.container`);
+          // SIGKILL would leave them running.
+          killSignal: "SIGTERM",
+          forceKillAfter: "10 seconds",
         },
       ),
     );

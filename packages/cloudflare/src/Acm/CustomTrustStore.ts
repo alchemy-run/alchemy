@@ -63,8 +63,8 @@ export interface CustomTrustStoreAttributes {
   status: CustomTrustStoreStatus;
   /** When the certificate was uploaded to Cloudflare. */
   uploadedOn: string;
-  /** When the certificate was last modified. */
-  updatedAt: string;
+  /** When the certificate was last modified, if Cloudflare reports it. */
+  updatedAt: string | undefined;
 }
 
 export type CustomTrustStore = Resource<
@@ -270,8 +270,9 @@ const isGoneStatus = (status: CustomTrustStoreStatus): boolean =>
 const getTrustStore = (zoneId: string, id: string) =>
   acm.getCustomTrustStore({ zoneId, customOriginTrustStoreId: id }).pipe(
     Effect.map((cert): ObservedTrustStore | undefined => cert),
-    Effect.catchTag(["CustomTrustStoreNotFound", "InvalidObjectIdentifier"], () =>
-      Effect.succeed(undefined),
+    Effect.catchTag(
+      ["CustomTrustStoreNotFound", "InvalidObjectIdentifier"],
+      () => Effect.undefined,
     ),
   );
 
@@ -303,5 +304,5 @@ const toAttributes = (zoneId: string, cert: ObservedTrustStore): CustomTrustStor
   signature: cert.signature,
   status: cert.status,
   uploadedOn: cert.uploadedOn,
-  updatedAt: cert.updatedAt,
+  updatedAt: cert.updatedAt ?? undefined,
 });

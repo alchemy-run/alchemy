@@ -277,9 +277,7 @@ type ObservedBgpPrefix = addressing.GetPrefixBgpPrefixResponse;
 const getBgpPrefix = (accountId: string, prefixId: string, bgpPrefixId: string) =>
   addressing
     .getPrefixBgpPrefix({ accountId, prefixId, bgpPrefixId })
-    .pipe(
-      Effect.catchTag(["BgpPrefixNotFound", "PrefixNotFound"], () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag(["BgpPrefixNotFound", "PrefixNotFound"], () => Effect.undefined));
 
 /**
  * Find a BGP prefix by exact CIDR — unique within a parent prefix. The
@@ -289,7 +287,7 @@ const findByCidr = (accountId: string, prefixId: string, cidr: string) =>
   addressing.listPrefixBgpPrefixes.items({ accountId, prefixId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk).find((p) => p.cidr === cidr)),
-    Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("PrefixNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

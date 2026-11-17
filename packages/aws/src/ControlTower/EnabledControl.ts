@@ -171,7 +171,7 @@ const waitForControlOperation = (operationIdentifier: string) =>
 const readEnabledControl = (enabledControlArn: string) =>
   controltower.getEnabledControl({ enabledControlIdentifier: enabledControlArn }).pipe(
     Effect.map((r) => r.enabledControlDetails),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 // Find an enabled control by (controlIdentifier, targetIdentifier) —
@@ -186,7 +186,7 @@ const findEnabledControlArn = (controlIdentifier: string, targetIdentifier: stri
           .flatMap((page) => page.enabledControls)
           .find((summary) => summary.controlIdentifier === controlIdentifier)?.arn,
     ),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 export const EnabledControlProvider = () =>
@@ -294,7 +294,7 @@ export const EnabledControlProvider = () =>
             controltower.disableControl({
               enabledControlIdentifier: output.enabledControlArn,
             }),
-          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (result !== undefined) {
             yield* session.note(`control operation ${result.operationIdentifier}`);
             yield* waitForControlOperation(result.operationIdentifier);

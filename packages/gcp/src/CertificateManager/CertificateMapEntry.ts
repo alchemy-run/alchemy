@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -114,8 +115,43 @@ export type CertificateMapEntry = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateMapEntryLookup
 >;
+
+/**
+ * Props for {@link CertificateMapEntry.lookup}: find a certificate map
+ * entry this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface CertificateMapEntryLookup {
+  /**
+   * Certificate map entry id (the `{certificateMapEntry}` segment of
+   * `.../ce
+   * rtificateMaps/{certificateMap}/certificateMapEntries/{certificateMapEntr
+   * y}`). Must be 1-63 characters, start with a letter, and match
+   * `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  certificateMapEntryId: string;
+  /**
+   * Parent certificate map. Full name
+   * `projects/{project}/locations/{locatio
+   * n}/certificateMaps/{certificateMap}` or the map id (combined with
+   * `location`).
+   */
+  certificateMap: string;
+  /**
+   * Certificate Manager location. Used when `certificateMap` is a bare id.
+   * Certificate maps are global resources; omit or set `"global"`. `GLOBAL`
+   * is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager certificate map entry — binds one or more
@@ -174,6 +210,20 @@ export type CertificateMapEntry = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing certificate map entry
+ * `CertificateMapEntry.lookup` references a certificate map entry Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared certificate map entry.
+ *
+ * **Example:** Reference an existing certificate map entry
+ * ```typescript
+ * const certificateMapEntry = GCP.CertificateManager.CertificateMapEntry.lookup({
+ *   certificateMapEntryId: "my-certificate-map-entry",
+ *   certificateMap: "my-certificate-map",
+ * });
+ * ```
+ *
  * @resource
  * @category CertificateManager
  */
@@ -184,13 +234,13 @@ export const CertificateMapEntry = Resource<CertificateMapEntry>(
 export class CertificateMapEntryNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateMapEntryStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapEntryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type Match = { kind: "hostname"; hostname: string } | { kind: "matcher"; matcher: string };
@@ -362,17 +412,19 @@ const isUsableEntryName = (name: string) =>
 
 const getByName = (name: string) => {
   if (!isUsableEntryName(name)) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   return certificatemanager
     .getProjectsLocationsCertificateMapsCertificateMapEntries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry ? Effect.succeed(entry) : Effect.fail(new CertificateMapEntryNotResolved({ name })),
+      entry
+        ? Effect.succeed(entry)
+        : Effect.fail(new CertificateMapEntryNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryNotResolved",
@@ -384,7 +436,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry === undefined ? Effect.void : Effect.fail(new CertificateMapEntryStillExists({ name })),
+      entry === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateMapEntryStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryStillExists",
@@ -530,6 +584,20 @@ export const CertificateMapEntryProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ certificateMapEntryId, certificateMap, location }) {
+      const env = yield* GcpEnvironment.current;
+      // Interrupted creates persist parent Outputs as holes (`{}` / "").
+      // Don't call GET with `.../certificateMaps//certificateMapEntries/...`.
+      if (typeof certificateMap !== "string" || certificateMap.length === 0) {
+        return undefined;
+      }
+      const parent = resolveParent(env.project, certificateMap, location);
+      const name = resourceName(parent.parent, certificateMapEntryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const mapRef = olds?.certificateMap ?? output?.certificateMap;
@@ -599,7 +667,7 @@ export const CertificateMapEntryProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -608,7 +676,7 @@ export const CertificateMapEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateMapEntryNotResolved({ name });
+        return yield* new CertificateMapEntryNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -659,7 +727,7 @@ export const CertificateMapEntryProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

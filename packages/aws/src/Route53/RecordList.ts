@@ -127,7 +127,7 @@ const findRecordSet = (hostedZoneId: string, name: string, type: DnsRecordType) 
             recordSet.AliasTarget === undefined,
         ),
       ),
-      Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)),
+      Effect.catchTag("NoSuchHostedZone", () => Effect.undefined),
     );
 
 const liveValuesOf = (type: DnsRecordType, recordSet: route53.ResourceRecordSet | undefined) =>

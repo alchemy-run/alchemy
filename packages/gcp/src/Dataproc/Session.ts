@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -102,8 +103,32 @@ export type Session = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SessionLookup
 >;
+
+/**
+ * Props for {@link Session.lookup}: find a session this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SessionLookup {
+  /**
+   * Session id (the `{session}` segment of
+   * `projects/{project}/locations/{location}/sessions/{session}`).
+   */
+  sessionId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc serverless interactive session.
@@ -127,23 +152,33 @@ export type Session = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing session
+ * `Session.lookup` references a session Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared session.
+ *
+ * **Example:** Reference an existing session
+ * ```typescript
+ * const session = GCP.Dataproc.Session.lookup({ sessionId: "my-session" });
+ * ```
+ *
  * @resource
  * @category Dataproc
  */
 export const Session = Resource<Session>("GCP.Dataproc.Session");
 
 export class SessionNotResolved extends Data.TaggedError("GCP.Dataproc.SessionNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SessionFailed extends Data.TaggedError("GCP.Dataproc.SessionFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
   detail: string | undefined;
 }> {}
 
 export class SessionNotReady extends Data.TaggedError("GCP.Dataproc.SessionNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -196,18 +231,20 @@ const desiredBody = (
 const getByName = (name: string) =>
   dataproc
     .getProjectsLocationsSessions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((session) =>
-      session ? Effect.succeed(session) : Effect.fail(new SessionNotResolved({ name })),
+      session
+        ? Effect.succeed(session)
+        : Effect.fail(new SessionNotResolved({ resourceName: name })),
     ),
     Effect.filterOrFail(
       (session) => session.state !== "FAILED",
       (session) =>
         new SessionFailed({
-          name,
+          resourceName: name,
           state: session.state,
           detail: session.stateMessage,
         }),
@@ -216,7 +253,7 @@ const waitUntilReady = (name: string) =>
       (session) => READY.has(session.state ?? ""),
       (session) =>
         new SessionNotReady({
-          name,
+          resourceName: name,
           state: session.state,
         }),
     ),
@@ -273,6 +310,15 @@ export const SessionProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ sessionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, sessionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -327,7 +373,7 @@ export const SessionProvider = () =>
             sessionId,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {
           yield* waitForOperation(created);
         }
@@ -336,7 +382,7 @@ export const SessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SessionNotResolved({ name });
+        return yield* new SessionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, location);
@@ -346,7 +392,7 @@ export const SessionProvider = () =>
       if (!output.name) return;
       const operation = yield* dataproc
         .deleteProjectsLocationsSessions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

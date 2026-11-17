@@ -26,7 +26,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -121,10 +121,10 @@ export const defaultScoreFormat = (): gamesConfiguration.GamesNumberFormatConfig
 
 export const getAchievement = (achievementId: string) =>
   achievementId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(gamesConfiguration.getAchievementConfigurations({ achievementId }));
 
 export const getLeaderboard = (leaderboardId: string) =>
   leaderboardId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(gamesConfiguration.getLeaderboardConfigurations({ leaderboardId }));

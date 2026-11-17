@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,36 @@ export type DatasetsDicomStore = Resource<
     notificationConfig: DicomLegacyNotificationConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatasetsDicomStoreLookup
 >;
+
+/**
+ * Props for {@link DatasetsDicomStore.lookup}: find a datasets dicom store
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DatasetsDicomStoreLookup {
+  /**
+   * DICOM store id. Any string up to 256 characters.
+   */
+  dicomStoreId: string;
+  /**
+   * Region used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent dataset. Full name
+   * `projects/{project}/locations/{location}/datasets/{dataset}` or the
+   * dataset id (combined with `location`).
+   */
+  dataset: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Healthcare DICOM store inside a dataset.
@@ -117,6 +146,20 @@ export type DatasetsDicomStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing datasets dicom store
+ * `DatasetsDicomStore.lookup` references a datasets dicom store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared datasets dicom store.
+ *
+ * **Example:** Reference an existing datasets dicom store
+ * ```typescript
+ * const datasetsDicomStore = GCP.Healthcare.DatasetsDicomStore.lookup({
+ *   dicomStoreId: "my-dicom-store",
+ *   dataset: "my-dataset",
+ * });
+ * ```
+ *
  * @resource
  * @category Healthcare
  */
@@ -125,7 +168,7 @@ export const DatasetsDicomStore = Resource<DatasetsDicomStore>("GCP.Healthcare.D
 export class DatasetsDicomStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsDicomStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -151,10 +194,10 @@ const toAttrs = (store: healthcare.DicomStore, project: string, region: string) 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsDicomStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsDicomStoreProvider = () =>
   Provider.succeed(DatasetsDicomStore, {
@@ -174,6 +217,21 @@ export const DatasetsDicomStoreProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      dicomStoreId,
+      location: lookupLocation,
+      dataset: lookupDataset,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataset =
+        lookupDataset !== undefined ? datasetOf(lookupDataset, env.project, location) : "";
+      const name = dataset.length > 0 ? resourceName(dataset, dicomStoreId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -236,7 +294,7 @@ export const DatasetsDicomStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsDicomStoreNotResolved({ name });
+        return yield* new DatasetsDicomStoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

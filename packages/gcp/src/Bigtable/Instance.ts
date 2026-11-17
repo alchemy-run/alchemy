@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -143,8 +144,29 @@ export type Instance = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `projects/{project}/instances/{instance}`). Must be 6-33 characters,
+   * start with a letter, and contain only lowercase letters, numbers, and
+   * hyphens.
+   */
+  instanceId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable instance — a container for clusters, tables, and app
@@ -188,22 +210,32 @@ export type Instance = Resource<
  * const live = yield* getInstance();
  * ```
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Bigtable.Instance.lookup({ instanceId: "my-instance" });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
 export const Instance = Resource<Instance>("GCP.Bigtable.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Bigtable.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Bigtable.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Bigtable.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const normalizeType = (type: string | undefined) => {
@@ -272,7 +304,9 @@ const toAttrs = (instance: bigtable.Instance, project: string) => {
 const waitUntilExists = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.InstanceNotResolved",
@@ -285,13 +319,13 @@ const waitUntilReady = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is bigtable.Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "STATE_NOT_KNOWN") === "READY",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_NOT_KNOWN",
         }),
     ),
@@ -307,7 +341,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.InstanceStillExists",
@@ -329,6 +365,14 @@ export const InstanceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ instanceId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instanceName(env.project, instanceId);
+      const existing = yield* getInstanceByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -382,7 +426,7 @@ export const InstanceProvider = () =>
               clusters: clusterMap,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -390,7 +434,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "STATE_NOT_KNOWN") !== "READY") {

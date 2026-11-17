@@ -2,6 +2,7 @@
 title: Migrations
 description: Apply SQL migrations and seed data to PlanetScale databases and branches as part of every deploy — ordered, hashed, tracked, and run over short-lived credentials.
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Every PlanetScale database and branch resource — `PostgresDatabase`,
 `PostgresBranch`, `MySQLDatabase`, `MySQLBranch` — accepts a
@@ -9,6 +10,21 @@ a `migrations` prop: a folder of `.sql` files applied in order as part of
 every deploy. No separate migration step, no long-lived migration
 user — alchemy mints a short-lived credential for the run and deletes
 it afterwards.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "cred", label: "credential", type: "minted for this deploy" },
+    { id: "mig", label: "pr-42", type: "branch" },
+  ]}
+  bars={[
+    { lane: "cred", start: 1, end: 8, label: "exists only now", tone: "warn" },
+    { lane: "mig", start: 1.6, end: 3.6, label: "history", tone: "default" },
+    { lane: "mig", start: 3.8, end: 7.6, label: "apply 0003_refunds" },
+  ]}
+  marks={[{ at: 1, label: "deploy starts" }, { at: 8, label: "deleted" }]}
+  caption="Each deploy mints a credential, applies only the files the branch hasn't run, and deletes the credential. No migration user outlives the deploy."
+/>
 
 ## Database vs branch
 
@@ -68,6 +84,12 @@ in place:
   new forward migration instead of rewriting files that have already
   run.
 
+Renaming an applied file without changing its contents is neither: its
+row moves to the new name and nothing is replaced. A new file must sort
+after every applied one, or the deploy fails with
+`NonLinearMigrationHistoryError`; rename it so it sorts last. See
+[Change migration history safely](/sql/effect-sql/migrations#change-migration-history-safely).
+
 ## The tracking table
 
 Applied migrations are recorded in Alchemy's `__alchemy_migrations`
@@ -86,7 +108,8 @@ CREATE TABLE IF NOT EXISTS "__alchemy_migrations" (
 (The MySQL flavor is the same shape with MySQL types.) On each
 deploy, files whose names already appear in the table are skipped
 **and** their content hashes must still match. A hash mismatch or a
-recorded name with no local file is a hard error.
+recorded name with no local file is a hard error, unless another file
+has the same contents, which is treated as a rename.
 
 A database previously migrated with drizzle-kit or Prisma is
 [adopted automatically](/sql/effect-sql/migrations#adopting-an-existing-database):

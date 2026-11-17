@@ -83,8 +83,18 @@ export interface App extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AppLookup
 > {}
+
+/**
+ * Props for {@link App.lookup}: find an app this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AppLookup {
+  /** The id of the existing app. */
+  appId: string;
+}
 
 /**
  * An AWS Amplify Hosting app. This resource provisions the app container; it
@@ -146,6 +156,16 @@ export interface App extends Resource<
  * );
  * ```
  *
+ * ### Looking up an existing app
+ * `App.lookup` references an app Alchemy doesn't manage (created in the
+ * console or by another stack), found by `appId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing app
+ * ```typescript
+ * const existing = AWS.Amplify.App.lookup({ appId: "..." });
+ * ```
+ *
  * @resource
  */
 export const App = Resource<App>("AWS.Amplify.App");
@@ -176,7 +196,7 @@ export const AppProvider = () =>
             schedule: Schedule.exponential("2 seconds"),
             times: 3,
           }),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       // Find an app we own (matching physical name + internal Alchemy tags).
@@ -217,6 +237,19 @@ export const AppProvider = () =>
 
       return {
         stables: ["appId", "appArn"],
+        lookup: Effect.fn(function* ({ appId }) {
+          const app = yield* observe(appId);
+          if (!app) return undefined;
+          const attrs = {
+            appId: app.appId,
+            appArn: app.appArn,
+            name: app.name,
+            platform: (app.platform as Platform) ?? "WEB",
+            defaultDomain: app.defaultDomain ?? "",
+            tags: tagRecord(app.tags),
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.appId) return undefined;
           const app = yield* observe(output.appId);

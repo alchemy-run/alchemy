@@ -223,7 +223,7 @@ const observeEntry = (accountId: string, entryId: string) =>
         ? (entry as zeroTrust.DlpEntriesGetResultCase0)
         : undefined,
     ),
-    Effect.catchTag("DlpEntryNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("DlpEntryNotFound", () => Effect.undefined),
   );
 
 const createEntryName = (id: string, name: string | undefined) =>

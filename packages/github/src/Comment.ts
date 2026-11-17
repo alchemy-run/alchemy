@@ -196,7 +196,7 @@ export const CommentProvider = () =>
         // posting a fresh one.
         const observed = output?.commentId
           ? yield* Issues.getComment({ ...scope, comment_id: output.commentId }).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             )
           : undefined;
 

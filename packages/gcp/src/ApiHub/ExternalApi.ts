@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -101,8 +102,31 @@ export type ExternalApi = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ExternalApiLookup
 >;
+
+/**
+ * Props for {@link ExternalApi.lookup}: find an external api this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ExternalApiLookup {
+  /**
+   * External API id (the `{externalApi}` segment of
+   * `projects/{project}/locations/{location}/externalApis/{externalApi}`).
+   */
+  externalApiId: string;
+  /**
+   * Location of the API Hub instance (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API Hub External API — a third-party API modeled so it can be
@@ -143,6 +167,19 @@ export type ExternalApi = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing external api
+ * `ExternalApi.lookup` references an external api Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * external api.
+ *
+ * **Example:** Reference an existing external api
+ * ```typescript
+ * const externalApi = GCP.ApiHub.ExternalApi.lookup({
+ *   externalApiId: "my-external-api",
+ * });
+ * ```
+ *
  * @resource
  * @category ApiHub
  */
@@ -173,10 +210,10 @@ const toAttrs = (api: apihub.GoogleCloudApihubV1ExternalApi, project: string, re
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsExternalApis({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsExternalApis.pages({ parent, pageSize: 1000 }).pipe(
@@ -205,6 +242,15 @@ export const ExternalApiProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ externalApiId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, externalApiId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -264,7 +310,7 @@ export const ExternalApiProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

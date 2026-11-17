@@ -137,7 +137,7 @@ export const TurnKeyProvider = () =>
         ),
       );
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createTurnKeyName(id, news.name);
 
@@ -181,7 +181,7 @@ export const TurnKeyProvider = () =>
 const getTurnKey = (accountId: string, keyId: string) =>
   calls
     .getTurn({ accountId, keyId })
-    .pipe(Effect.catchTag("TurnKeyNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("TurnKeyNotFound", () => Effect.undefined));
 
 const createTurnKeyName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

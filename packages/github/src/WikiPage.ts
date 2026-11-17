@@ -264,6 +264,7 @@ const pageNameFor = (title: string) =>
     if (
       title.trim() !== title ||
       title.length === 0 ||
+      // oxlint-disable-next-line no-control-regex -- rejects control characters on purpose
       /[\x00-\x1f\x7f/\\]/.test(title) ||
       title === "." ||
       title === ".."
@@ -321,7 +322,11 @@ const gitEnvironment = Effect.fn(function* (repository: WikiRepository, director
   const config = path.join(directory, "gitconfig");
   yield* fs.writeFileString(config, "");
   return yield* Effect.sync(() => ({
+    // Git runs with `extendEnv: false`, so it needs the real process PATH,
+    // not a configured value.
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- forwards the real env to the git child
     PATH: process.env.PATH,
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- forwards the real env to the git child
     SystemRoot: process.env.SystemRoot,
     HOME: directory,
     LC_ALL: "C",
@@ -444,8 +449,7 @@ export const readWikiPage = Effect.fn(
     return file === undefined ? undefined : yield* attributes(repository, props, wiki, file);
   },
   Effect.scoped,
-  (effect) =>
-    effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.succeed(undefined))),
+  (effect) => effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.undefined)),
 );
 
 const retryConcurrentPush = <A, E, R>(effect: Effect.Effect<A, E | WikiGitError, R>) =>

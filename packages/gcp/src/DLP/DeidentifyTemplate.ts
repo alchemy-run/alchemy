@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -72,8 +73,28 @@ export type DeidentifyTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeidentifyTemplateLookup
 >;
+
+/**
+ * Props for {@link DeidentifyTemplate.lookup}: find a deidentify template
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DeidentifyTemplateLookup {
+  /**
+   * Template id (the `{deidentifyTemplate}` segment of
+   * `projects/{project}/deidentifyTemplates/{deidentifyTemplate}`). Must
+   * match `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  templateId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Cloud DLP de-identify template.
@@ -123,6 +144,19 @@ export type DeidentifyTemplate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing deidentify template
+ * `DeidentifyTemplate.lookup` references a deidentify template Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared deidentify template.
+ *
+ * **Example:** Reference an existing deidentify template
+ * ```typescript
+ * const deidentifyTemplate = GCP.DLP.DeidentifyTemplate.lookup({
+ *   templateId: "my-template",
+ * });
+ * ```
+ *
  * @resource
  * @category DLP
  */
@@ -131,7 +165,7 @@ export const DeidentifyTemplate = Resource<DeidentifyTemplate>("GCP.DLP.Deidenti
 export class DeidentifyTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.DeidentifyTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, templateId: string) =>
@@ -154,10 +188,10 @@ const toAttrs = (template: dlp.GooglePrivacyDlpV2DeidentifyTemplate, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsDeidentifyTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DeidentifyTemplateProvider = () =>
   Provider.succeed(DeidentifyTemplate, {
@@ -170,6 +204,14 @@ export const DeidentifyTemplateProvider = () =>
         previous !== undefined && news.templateId !== undefined && news.templateId !== previous,
       );
     }),
+
+    lookup: Effect.fn(function* ({ templateId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -228,7 +270,7 @@ export const DeidentifyTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DeidentifyTemplateNotResolved({ name });
+        return yield* new DeidentifyTemplateNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -148,8 +149,32 @@ export type Preview = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PreviewLookup
 >;
+
+/**
+ * Props for {@link Preview.lookup}: find a preview this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PreviewLookup {
+  /**
+   * Preview id (the `{preview}` segment of
+   * `projects/{project}/locations/{location}/previews/{preview}`).
+   */
+  previewId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Infrastructure Manager preview — the Terraform plan Infra Manager
@@ -185,6 +210,16 @@ export type Preview = Resource<
  *   deployment: existingDeployment,
  *   previewMode: "DEFAULT",
  * });
+ * ```
+ *
+ * ### Looking up an existing preview
+ * `Preview.lookup` references a preview Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared preview.
+ *
+ * **Example:** Reference an existing preview
+ * ```typescript
+ * const preview = GCP.Config.Preview.lookup({ previewId: "my-preview" });
  * ```
  *
  * @resource
@@ -250,7 +285,7 @@ const snapshotOf = (input: {
 const getByName = (name: string) =>
   config
     .getProjectsLocationsPreviews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -321,6 +356,15 @@ export const PreviewProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ previewId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, previewId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const previewId = yield* toPhysicalId(id, olds?.previewId, output?.previewId, "preview");
@@ -375,7 +419,7 @@ export const PreviewProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -383,7 +427,7 @@ export const PreviewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -400,7 +444,7 @@ export const PreviewProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -12,7 +12,7 @@ export const MAX_ID_LENGTH = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.ContainerAnalysis.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -175,11 +175,11 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : effect({ name }).pipe(
           Effect.catchIf(
             (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 
@@ -459,231 +459,240 @@ export const occurrenceAttrs = (
   };
 };
 
-export type NoteOps<E = unknown, R = unknown> = {
-  get: (name: string) => Effect.Effect<containeranalysis.Note | undefined, E, R>;
+export type NoteOps<EG = never, RG = never, EC = never, RC = never, EP = never, RP = never> = {
+  get: (name: string) => Effect.Effect<containeranalysis.Note | undefined, EG, RG>;
   create: (input: {
     parent: string;
     noteId: string;
     body: containeranalysis.Note;
-  }) => Effect.Effect<containeranalysis.Note | undefined, E, R>;
+  }) => Effect.Effect<containeranalysis.Note | undefined, EC, RC>;
   patch: (input: {
     name: string;
     updateMask: string;
     body: containeranalysis.Note;
-  }) => Effect.Effect<containeranalysis.Note, E, R>;
+  }) => Effect.Effect<containeranalysis.Note, EP, RP>;
 };
 
-export const reconcileNote = Effect.fn(function* (input: {
+export const reconcileNote = <EG, RG, EC, RC, EP, RP>(input: {
   id: string;
   name: string;
   parent: string;
   noteId: string;
   news: NoteNews;
-  ops: NoteOps;
-}) {
-  const ownership = yield* createInternalLabels(input.id);
-  const desiredLong = encodeDescription(ownership, input.news.longDescription);
-  const kinds = noteKindFields({
-    ...input.news,
-    attestation:
-      input.news.attestation ??
-      (noteKind(input.news) === undefined
-        ? { hint: { humanReadableName: input.noteId } }
-        : undefined),
+  ops: NoteOps<EG, RG, EC, RC, EP, RP>;
+}) =>
+  Effect.gen(function* () {
+    const ownership = yield* createInternalLabels(input.id);
+    const desiredLong = encodeDescription(ownership, input.news.longDescription);
+    const kinds = noteKindFields({
+      ...input.news,
+      attestation:
+        input.news.attestation ??
+        (noteKind(input.news) === undefined
+          ? { hint: { humanReadableName: input.noteId } }
+          : undefined),
+    });
+
+    let current = yield* input.ops.get(input.name);
+
+    if (current === undefined) {
+      const created = yield* input.ops.create({
+        parent: input.parent,
+        noteId: input.noteId,
+        body: {
+          shortDescription: input.news.shortDescription,
+          longDescription: desiredLong,
+          expirationTime: input.news.expirationTime,
+          relatedUrl: input.news.relatedUrl,
+          relatedNoteNames: input.news.relatedNoteNames,
+          ...kinds,
+        },
+      });
+      current = created ?? undefined;
+    }
+
+    if (current === undefined) {
+      return yield* new ResourceNotResolved({ resourceName: input.name });
+    }
+
+    const currentName = current.name ?? input.name;
+    const shortChanged = !sameText(current.shortDescription, input.news.shortDescription);
+    const longChanged = !sameText(current.longDescription, desiredLong);
+    const expirationChanged = !sameText(current.expirationTime, input.news.expirationTime);
+    const relatedUrlChanged = !sameJson(current.relatedUrl ?? [], input.news.relatedUrl ?? []);
+    const relatedNotesChanged = !sameJson(
+      [...(current.relatedNoteNames ?? [])].slice().sort(),
+      [...(input.news.relatedNoteNames ?? [])].slice().sort(),
+    );
+    const attestationChanged = !sameJson(current.attestation, kinds.attestation);
+    const buildChanged = !sameJson(current.build, kinds.build);
+    const discoveryChanged = !sameJson(current.discovery, kinds.discovery);
+    const imageChanged = !sameJson(current.image, kinds.image);
+    const packageChanged = !sameJson(current.package, kinds.package);
+    const vulnerabilityChanged = !sameJson(current.vulnerability, kinds.vulnerability);
+    const complianceChanged = !sameJson(current.compliance, kinds.compliance);
+    const deploymentChanged = !sameJson(current.deployment, kinds.deployment);
+    const upgradeChanged = !sameJson(current.upgrade, kinds.upgrade);
+    const assessmentChanged = !sameJson(
+      current.vulnerabilityAssessment,
+      kinds.vulnerabilityAssessment,
+    );
+    const secretChanged = !sameJson(current.secret, kinds.secret);
+    const dsseChanged = !sameJson(current.dsseAttestation, kinds.dsseAttestation);
+    const sbomChanged = !sameJson(current.sbomReference, kinds.sbomReference);
+    const skillChanged = !sameJson(current.aiSkillAnalysis, kinds.aiSkillAnalysis);
+
+    const updateMask = updateMaskOf(
+      shortChanged ? "shortDescription" : undefined,
+      longChanged ? "longDescription" : undefined,
+      expirationChanged ? "expirationTime" : undefined,
+      relatedUrlChanged ? "relatedUrl" : undefined,
+      relatedNotesChanged ? "relatedNoteNames" : undefined,
+      attestationChanged && kinds.attestation !== undefined ? "attestation" : undefined,
+      buildChanged && kinds.build !== undefined ? "build" : undefined,
+      discoveryChanged && kinds.discovery !== undefined ? "discovery" : undefined,
+      imageChanged && kinds.image !== undefined ? "image" : undefined,
+      packageChanged && kinds.package !== undefined ? "package" : undefined,
+      vulnerabilityChanged && kinds.vulnerability !== undefined ? "vulnerability" : undefined,
+      complianceChanged && kinds.compliance !== undefined ? "compliance" : undefined,
+      deploymentChanged && kinds.deployment !== undefined ? "deployment" : undefined,
+      upgradeChanged && kinds.upgrade !== undefined ? "upgrade" : undefined,
+      assessmentChanged && kinds.vulnerabilityAssessment !== undefined
+        ? "vulnerabilityAssessment"
+        : undefined,
+      secretChanged && kinds.secret !== undefined ? "secret" : undefined,
+      dsseChanged && kinds.dsseAttestation !== undefined ? "dsseAttestation" : undefined,
+      sbomChanged && kinds.sbomReference !== undefined ? "sbomReference" : undefined,
+      skillChanged && kinds.aiSkillAnalysis !== undefined ? "aiSkillAnalysis" : undefined,
+    );
+
+    if (updateMask.length > 0) {
+      current = yield* input.ops.patch({
+        name: currentName,
+        updateMask,
+        body: {
+          shortDescription: input.news.shortDescription,
+          longDescription: desiredLong,
+          expirationTime: input.news.expirationTime,
+          relatedUrl: input.news.relatedUrl,
+          relatedNoteNames: input.news.relatedNoteNames,
+          ...kinds,
+        },
+      });
+    }
+
+    return current;
   });
 
-  let current = yield* input.ops.get(input.name);
-
-  if (current === undefined) {
-    const created = yield* input.ops.create({
-      parent: input.parent,
-      noteId: input.noteId,
-      body: {
-        shortDescription: input.news.shortDescription,
-        longDescription: desiredLong,
-        expirationTime: input.news.expirationTime,
-        relatedUrl: input.news.relatedUrl,
-        relatedNoteNames: input.news.relatedNoteNames,
-        ...kinds,
-      },
-    });
-    current = created ?? undefined;
-  }
-
-  if (current === undefined) {
-    return yield* new ResourceNotResolved({ name: input.name });
-  }
-
-  const currentName = current.name ?? input.name;
-  const shortChanged = !sameText(current.shortDescription, input.news.shortDescription);
-  const longChanged = !sameText(current.longDescription, desiredLong);
-  const expirationChanged = !sameText(current.expirationTime, input.news.expirationTime);
-  const relatedUrlChanged = !sameJson(current.relatedUrl ?? [], input.news.relatedUrl ?? []);
-  const relatedNotesChanged = !sameJson(
-    [...(current.relatedNoteNames ?? [])].slice().sort(),
-    [...(input.news.relatedNoteNames ?? [])].slice().sort(),
-  );
-  const attestationChanged = !sameJson(current.attestation, kinds.attestation);
-  const buildChanged = !sameJson(current.build, kinds.build);
-  const discoveryChanged = !sameJson(current.discovery, kinds.discovery);
-  const imageChanged = !sameJson(current.image, kinds.image);
-  const packageChanged = !sameJson(current.package, kinds.package);
-  const vulnerabilityChanged = !sameJson(current.vulnerability, kinds.vulnerability);
-  const complianceChanged = !sameJson(current.compliance, kinds.compliance);
-  const deploymentChanged = !sameJson(current.deployment, kinds.deployment);
-  const upgradeChanged = !sameJson(current.upgrade, kinds.upgrade);
-  const assessmentChanged = !sameJson(
-    current.vulnerabilityAssessment,
-    kinds.vulnerabilityAssessment,
-  );
-  const secretChanged = !sameJson(current.secret, kinds.secret);
-  const dsseChanged = !sameJson(current.dsseAttestation, kinds.dsseAttestation);
-  const sbomChanged = !sameJson(current.sbomReference, kinds.sbomReference);
-  const skillChanged = !sameJson(current.aiSkillAnalysis, kinds.aiSkillAnalysis);
-
-  const updateMask = updateMaskOf(
-    shortChanged ? "shortDescription" : undefined,
-    longChanged ? "longDescription" : undefined,
-    expirationChanged ? "expirationTime" : undefined,
-    relatedUrlChanged ? "relatedUrl" : undefined,
-    relatedNotesChanged ? "relatedNoteNames" : undefined,
-    attestationChanged && kinds.attestation !== undefined ? "attestation" : undefined,
-    buildChanged && kinds.build !== undefined ? "build" : undefined,
-    discoveryChanged && kinds.discovery !== undefined ? "discovery" : undefined,
-    imageChanged && kinds.image !== undefined ? "image" : undefined,
-    packageChanged && kinds.package !== undefined ? "package" : undefined,
-    vulnerabilityChanged && kinds.vulnerability !== undefined ? "vulnerability" : undefined,
-    complianceChanged && kinds.compliance !== undefined ? "compliance" : undefined,
-    deploymentChanged && kinds.deployment !== undefined ? "deployment" : undefined,
-    upgradeChanged && kinds.upgrade !== undefined ? "upgrade" : undefined,
-    assessmentChanged && kinds.vulnerabilityAssessment !== undefined
-      ? "vulnerabilityAssessment"
-      : undefined,
-    secretChanged && kinds.secret !== undefined ? "secret" : undefined,
-    dsseChanged && kinds.dsseAttestation !== undefined ? "dsseAttestation" : undefined,
-    sbomChanged && kinds.sbomReference !== undefined ? "sbomReference" : undefined,
-    skillChanged && kinds.aiSkillAnalysis !== undefined ? "aiSkillAnalysis" : undefined,
-  );
-
-  if (updateMask.length > 0) {
-    current = yield* input.ops.patch({
-      name: currentName,
-      updateMask,
-      body: {
-        shortDescription: input.news.shortDescription,
-        longDescription: desiredLong,
-        expirationTime: input.news.expirationTime,
-        relatedUrl: input.news.relatedUrl,
-        relatedNoteNames: input.news.relatedNoteNames,
-        ...kinds,
-      },
-    });
-  }
-
-  return current;
-});
-
-export type OccurrenceOps<E = unknown, R = unknown> = {
-  get: (name: string) => Effect.Effect<containeranalysis.Occurrence | undefined, E, R>;
+export type OccurrenceOps<
+  EG = never,
+  RG = never,
+  EC = never,
+  RC = never,
+  EP = never,
+  RP = never,
+> = {
+  get: (name: string) => Effect.Effect<containeranalysis.Occurrence | undefined, EG, RG>;
   create: (input: {
     parent: string;
     body: containeranalysis.Occurrence;
-  }) => Effect.Effect<containeranalysis.Occurrence | undefined, E, R>;
+  }) => Effect.Effect<containeranalysis.Occurrence | undefined, EC, RC>;
   patch: (input: {
     name: string;
     updateMask: string;
     body: containeranalysis.Occurrence;
-  }) => Effect.Effect<containeranalysis.Occurrence, E, R>;
+  }) => Effect.Effect<containeranalysis.Occurrence, EP, RP>;
 };
 
-export const reconcileOccurrence = Effect.fn(function* (input: {
+export const reconcileOccurrence = <EG, RG, EC, RC, EP, RP>(input: {
   id: string;
   name: string | undefined;
   parent: string;
   project: string;
   location: string | undefined;
   news: OccurrenceNews;
-  ops: OccurrenceOps;
-}) {
-  const ownership = yield* createInternalLabels(input.id);
-  const desiredRemediation = encodeDescription(ownership, input.news.remediation);
-  const noteName = expandNoteName(input.news.noteName, input.project, input.location);
-  const kinds = occurrenceKindFields(input.news);
+  ops: OccurrenceOps<EG, RG, EC, RC, EP, RP>;
+}) =>
+  Effect.gen(function* () {
+    const ownership = yield* createInternalLabels(input.id);
+    const desiredRemediation = encodeDescription(ownership, input.news.remediation);
+    const noteName = expandNoteName(input.news.noteName, input.project, input.location);
+    const kinds = occurrenceKindFields(input.news);
 
-  let current =
-    input.name !== undefined && input.name.length > 0
-      ? yield* input.ops.get(input.name)
-      : undefined;
+    let current =
+      input.name !== undefined && input.name.length > 0
+        ? yield* input.ops.get(input.name)
+        : undefined;
 
-  if (current === undefined) {
-    const created = yield* input.ops.create({
-      parent: input.parent,
-      body: {
-        noteName,
-        resourceUri: input.news.resourceUri,
-        remediation: desiredRemediation,
-        ...kinds,
-      },
-    });
-    current = created ?? undefined;
-  }
+    if (current === undefined) {
+      const created = yield* input.ops.create({
+        parent: input.parent,
+        body: {
+          noteName,
+          resourceUri: input.news.resourceUri,
+          remediation: desiredRemediation,
+          ...kinds,
+        },
+      });
+      current = created ?? undefined;
+    }
 
-  if (current === undefined) {
-    return yield* new ResourceNotResolved({
-      name: input.name ?? `${input.parent}/occurrences`,
-    });
-  }
+    if (current === undefined) {
+      return yield* new ResourceNotResolved({
+        resourceName: input.name ?? `${input.parent}/occurrences`,
+      });
+    }
 
-  const currentName = current.name ?? input.name ?? "";
-  const remediationChanged = !sameText(current.remediation, desiredRemediation);
-  const envelopeChanged = !sameJson(current.envelope, kinds.envelope);
-  const attestationChanged = !sameJson(current.attestation, kinds.attestation);
-  const buildChanged = !sameJson(current.build, kinds.build);
-  const discoveryChanged = !sameJson(current.discovery, kinds.discovery);
-  const imageChanged = !sameJson(current.image, kinds.image);
-  const packageChanged = !sameJson(current.package, kinds.package);
-  const vulnerabilityChanged = !sameJson(current.vulnerability, kinds.vulnerability);
-  const complianceChanged = !sameJson(current.compliance, kinds.compliance);
-  const deploymentChanged = !sameJson(current.deployment, kinds.deployment);
-  const upgradeChanged = !sameJson(current.upgrade, kinds.upgrade);
-  const dsseChanged = !sameJson(current.dsseAttestation, kinds.dsseAttestation);
-  const sbomChanged = !sameJson(current.sbomReference, kinds.sbomReference);
-  const secretChanged = !sameJson(current.secret, kinds.secret);
-  const skillChanged = !sameJson(current.aiSkillAnalysis, kinds.aiSkillAnalysis);
+    const currentName = current.name ?? input.name ?? "";
+    const remediationChanged = !sameText(current.remediation, desiredRemediation);
+    const envelopeChanged = !sameJson(current.envelope, kinds.envelope);
+    const attestationChanged = !sameJson(current.attestation, kinds.attestation);
+    const buildChanged = !sameJson(current.build, kinds.build);
+    const discoveryChanged = !sameJson(current.discovery, kinds.discovery);
+    const imageChanged = !sameJson(current.image, kinds.image);
+    const packageChanged = !sameJson(current.package, kinds.package);
+    const vulnerabilityChanged = !sameJson(current.vulnerability, kinds.vulnerability);
+    const complianceChanged = !sameJson(current.compliance, kinds.compliance);
+    const deploymentChanged = !sameJson(current.deployment, kinds.deployment);
+    const upgradeChanged = !sameJson(current.upgrade, kinds.upgrade);
+    const dsseChanged = !sameJson(current.dsseAttestation, kinds.dsseAttestation);
+    const sbomChanged = !sameJson(current.sbomReference, kinds.sbomReference);
+    const secretChanged = !sameJson(current.secret, kinds.secret);
+    const skillChanged = !sameJson(current.aiSkillAnalysis, kinds.aiSkillAnalysis);
 
-  const updateMask = updateMaskOf(
-    remediationChanged ? "remediation" : undefined,
-    envelopeChanged && kinds.envelope !== undefined ? "envelope" : undefined,
-    attestationChanged && kinds.attestation !== undefined ? "attestation" : undefined,
-    buildChanged && kinds.build !== undefined ? "build" : undefined,
-    discoveryChanged && kinds.discovery !== undefined ? "discovery" : undefined,
-    imageChanged && kinds.image !== undefined ? "image" : undefined,
-    packageChanged && kinds.package !== undefined ? "package" : undefined,
-    vulnerabilityChanged && kinds.vulnerability !== undefined ? "vulnerability" : undefined,
-    complianceChanged && kinds.compliance !== undefined ? "compliance" : undefined,
-    deploymentChanged && kinds.deployment !== undefined ? "deployment" : undefined,
-    upgradeChanged && kinds.upgrade !== undefined ? "upgrade" : undefined,
-    dsseChanged && kinds.dsseAttestation !== undefined ? "dsseAttestation" : undefined,
-    sbomChanged && kinds.sbomReference !== undefined ? "sbomReference" : undefined,
-    secretChanged && kinds.secret !== undefined ? "secret" : undefined,
-    skillChanged && kinds.aiSkillAnalysis !== undefined ? "aiSkillAnalysis" : undefined,
-  );
+    const updateMask = updateMaskOf(
+      remediationChanged ? "remediation" : undefined,
+      envelopeChanged && kinds.envelope !== undefined ? "envelope" : undefined,
+      attestationChanged && kinds.attestation !== undefined ? "attestation" : undefined,
+      buildChanged && kinds.build !== undefined ? "build" : undefined,
+      discoveryChanged && kinds.discovery !== undefined ? "discovery" : undefined,
+      imageChanged && kinds.image !== undefined ? "image" : undefined,
+      packageChanged && kinds.package !== undefined ? "package" : undefined,
+      vulnerabilityChanged && kinds.vulnerability !== undefined ? "vulnerability" : undefined,
+      complianceChanged && kinds.compliance !== undefined ? "compliance" : undefined,
+      deploymentChanged && kinds.deployment !== undefined ? "deployment" : undefined,
+      upgradeChanged && kinds.upgrade !== undefined ? "upgrade" : undefined,
+      dsseChanged && kinds.dsseAttestation !== undefined ? "dsseAttestation" : undefined,
+      sbomChanged && kinds.sbomReference !== undefined ? "sbomReference" : undefined,
+      secretChanged && kinds.secret !== undefined ? "secret" : undefined,
+      skillChanged && kinds.aiSkillAnalysis !== undefined ? "aiSkillAnalysis" : undefined,
+    );
 
-  if (updateMask.length > 0) {
-    current = yield* input.ops.patch({
-      name: currentName,
-      updateMask,
-      body: {
-        noteName,
-        resourceUri: input.news.resourceUri,
-        remediation: desiredRemediation,
-        ...kinds,
-      },
-    });
-  }
+    if (updateMask.length > 0) {
+      current = yield* input.ops.patch({
+        name: currentName,
+        updateMask,
+        body: {
+          noteName,
+          resourceUri: input.news.resourceUri,
+          remediation: desiredRemediation,
+          ...kinds,
+        },
+      });
+    }
 
-  return current;
-});
+    return current;
+  });
 
 export const ownedNote = (id: string, note: containeranalysis.Note, project: string) =>
   Effect.gen(function* () {

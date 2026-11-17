@@ -9,6 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -137,13 +138,13 @@ test.provider(
             );
             const target = yield* Cloudflare.SecretsStore.Secret("PagedTarget", {
               store,
-              name: "paged-secret-target",
+              name: testName("paged-secret-target"),
               value: Redacted.make("sk-paged"),
             });
             const adopted = adoptTarget
               ? yield* Cloudflare.SecretsStore.Secret("PagedTargetAdopted", {
                   store,
-                  name: "paged-secret-target",
+                  name: testName("paged-secret-target"),
                   value: Redacted.make("sk-paged"),
                 }).pipe(adopt(true))
               : undefined;

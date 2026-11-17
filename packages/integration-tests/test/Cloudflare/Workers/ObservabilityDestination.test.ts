@@ -14,6 +14,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -26,10 +27,10 @@ const main = pathe.resolve(import.meta.dirname, "fixtures", "observability-sink-
 // reuses them on every run (never derive physical names from
 // Date.now()/random).
 const NAME_DEFAULT_URL = "https://example.com";
-const NAME_UPDATE = "alchemy-obsdest-update";
-const NAME_REPLACE_V1 = "alchemy-obsdest-replace-v1";
-const NAME_REPLACE_V2 = "alchemy-obsdest-replace-v2";
-const NAME_LIST = "alchemy-obsdest-list";
+const NAME_UPDATE = testName("alchemy-obsdest-update");
+const NAME_REPLACE_V1 = testName("alchemy-obsdest-replace-v1");
+const NAME_REPLACE_V2 = testName("alchemy-obsdest-replace-v2");
+const NAME_LIST = testName("alchemy-obsdest-list");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,

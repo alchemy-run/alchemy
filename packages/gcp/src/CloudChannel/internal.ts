@@ -1,5 +1,6 @@
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
@@ -145,8 +146,7 @@ export const toDomain = (id: string, requested: string | undefined, existing: st
   });
 
 export const defaultInvoiceMonth = () =>
-  Effect.sync(() => {
-    const now = new Date();
+  Effect.map(DateTime.nowAsDate, (now) => {
     const utcMonthIndex = now.getUTCMonth() + 2;
     const year = now.getUTCFullYear() + Math.floor(utcMonthIndex / 12);
     const month = (utcMonthIndex % 12) + 1;
@@ -178,17 +178,17 @@ export const collectPages = <A, Page, E, R>(
 
 export const getCustomer = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudchannel
         .getAccountsCustomers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getPartnerCustomer = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudchannel
         .getAccountsChannelPartnerLinksCustomers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listCustomers = (parent: string) =>
   parent.length === 0
@@ -311,19 +311,19 @@ export const desiredCustomer = (input: {
 
 export const getCustomerRepricingConfig = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudchannel
         .getAccountsCustomersCustomerRepricingConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getChannelPartnerRepricingConfig = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudchannel
         .getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
           name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listCustomerRepricingConfigs = (parent: string) =>
   parent.length === 0

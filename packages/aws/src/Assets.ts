@@ -308,10 +308,10 @@ export const ensureLambdaWebCodeAccess = Effect.fn(function* (bucketName: string
   };
   const observed = yield* s3.getBucketPolicy({ Bucket: bucketName }).pipe(
     Effect.map((response) => response.Policy),
-    Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed(undefined)),
+    Effect.catchTag("NoSuchBucketPolicy", () => Effect.undefined),
     Effect.flatMap((policy) =>
       policy === undefined
-        ? Effect.succeed(undefined)
+        ? Effect.undefined
         : Effect.try({
             try: () => JSON.parse(policy) as { Version?: string; Statement?: unknown[] },
             catch: (cause) => new AssetsBucketPolicyInvalid({ bucketName, message: String(cause) }),

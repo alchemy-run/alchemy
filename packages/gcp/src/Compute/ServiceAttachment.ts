@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -190,8 +191,31 @@ export type ServiceAttachment = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceAttachmentLookup
 >;
+
+/**
+ * Props for {@link ServiceAttachment.lookup}: find a service attachment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ServiceAttachmentLookup {
+  /**
+   * Service attachment name (RFC1035, 1-63 characters).
+   */
+  serviceAttachmentName: string;
+  /**
+   * Region the attachment lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine Private Service Connect service attachment.
@@ -240,6 +264,19 @@ export type ServiceAttachment = Resource<
  *     { projectIdOrNum: "my-consumer-project", connectionLimit: 10 },
  *   ],
  *   reconcileConnections: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing service attachment
+ * `ServiceAttachment.lookup` references a service attachment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared service attachment.
+ *
+ * **Example:** Reference an existing service attachment
+ * ```typescript
+ * const serviceAttachment = GCP.Compute.ServiceAttachment.lookup({
+ *   serviceAttachmentName: "my-service-attachment",
  * });
  * ```
  *
@@ -416,7 +453,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, serviceAttachment: string) =>
   compute
     .getServiceAttachments({ project, region, serviceAttachment })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireAttachment = (project: string, region: string, serviceAttachmentName: string) =>
   getByName(project, region, serviceAttachmentName).pipe(
@@ -506,6 +543,17 @@ export const ServiceAttachmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceAttachmentName, region }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(
+        env.project,
+        normalizeRegion(region, env.region),
+        serviceAttachmentName,
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

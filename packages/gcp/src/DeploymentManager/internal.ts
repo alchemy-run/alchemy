@@ -14,13 +14,13 @@ export const MAX_NAME_LENGTH = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.DeploymentManager.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.DeploymentManager.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -175,7 +175,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DeploymentManager.ResourceNotResolved",
@@ -191,7 +191,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DeploymentManager.ResourceStillExists",
@@ -214,7 +214,7 @@ export const collectPages = <Page, A, E, R>(
 export const getDeployment = (project: string, deployment: string) =>
   deploymentmanager
     .getDeployments({ project, deployment })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listOwnedDeployments = (project: string) =>
   collectPages(
@@ -234,7 +234,7 @@ export const listOwnedDeployments = (project: string) =>
 
 export const getManifest = (project: string, deployment: string, manifest: string | undefined) => {
   if (manifest === undefined || manifest.length === 0) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   return deploymentmanager
     .getManifests({
@@ -242,7 +242,7 @@ export const getManifest = (project: string, deployment: string, manifest: strin
       deployment,
       manifest: lastSegment(manifest),
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 export const settleDeployment = (project: string, item: deploymentmanager.Deployment) =>

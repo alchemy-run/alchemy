@@ -6,6 +6,8 @@ import * as baremetalsolution from "@distilled.cloud/gcp/baremetalsolution_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -59,6 +61,9 @@ test.provider.skipIf(runLifecycle)(
   "create is rejected with ServiceDisabled when the Bare Metal Solution API is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // Only meaningful while the API is disabled: enabled, the create would
+      // provision a real resource.
+      if (yield* isServiceEnabled("baremetalsolution.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
@@ -95,6 +100,14 @@ test.provider.skipIf(!runLifecycle)(
             description: "alchemy-test-snap",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BareMetalSolution.VolumesSnapshot.lookup({
+          location: created.location,
+          volume: created.volume,
+          snapshotId: created.snapshotId,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/snapshots/");

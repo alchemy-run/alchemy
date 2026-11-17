@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -17,6 +18,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class ImageRecipeUnexpectedResponse extends Data.TaggedError(
+  "ImageRecipeUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Image Builder image recipe versions are immutable — the deployed recipe
@@ -120,8 +128,18 @@ export interface ImageRecipe extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImageRecipeLookup
 > {}
+
+/**
+ * Props for {@link ImageRecipe.lookup}: find an image recipe this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImageRecipeLookup {
+  /** The image recipe arn of the existing image recipe. */
+  imageRecipeArn: string;
+}
 
 /**
  * An EC2 Image Builder image recipe — the blueprint that combines a parent
@@ -148,6 +166,16 @@ export interface ImageRecipe extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing image recipe
+ * `ImageRecipe.lookup` references an image recipe Alchemy doesn't manage (created in the
+ * console or by another stack), found by `imageRecipeArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing image recipe
+ * ```typescript
+ * const existing = AWS.ImageBuilder.ImageRecipe.lookup({ imageRecipeArn: "my-image-recipe" });
+ * ```
+ *
  * @resource
  */
 export const ImageRecipe = Resource<ImageRecipe>("AWS.ImageBuilder.ImageRecipe");
@@ -169,15 +197,15 @@ export const ImageRecipeProvider = () =>
       const getRecipe = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImageRecipe({ imageRecipeArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.imageRecipe;
       });
 
       const toAttrs = Effect.fn(function* (recipe: imagebuilder.ImageRecipe) {
         if (!recipe.arn || !recipe.name || !recipe.version) {
-          return yield* Effect.fail(
-            new Error("Image Builder image recipe is missing its ARN, name, or version"),
-          );
+          return yield* new ImageRecipeUnexpectedResponse({
+            message: "Image Builder image recipe is missing its ARN, name, or version",
+          });
         }
         return {
           imageRecipeName: recipe.name,
@@ -216,6 +244,13 @@ export const ImageRecipeProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ imageRecipeArn: arn }) {
+          const recipe = yield* getRecipe(arn);
+          if (recipe === undefined) return undefined;
+          const attrs = yield* toAttrs(recipe);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.imageRecipeArn ?? (yield* toArn(yield* toName(id, olds), toVersion(olds)));
@@ -229,7 +264,8 @@ export const ImageRecipeProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.imageRecipeName ?? (yield* toName(id, news));
           const version = output?.semanticVersion ?? toVersion(news);
           const internalTags = yield* createInternalTags(id);
@@ -275,13 +311,15 @@ export const ImageRecipeProvider = () =>
               clientToken,
             });
             if (!created.imageRecipeArn) {
-              return yield* Effect.fail(new Error("CreateImageRecipe returned no imageRecipeArn"));
+              return yield* new ImageRecipeUnexpectedResponse({
+                message: "CreateImageRecipe returned no imageRecipeArn",
+              });
             }
             observed = yield* getRecipe(created.imageRecipeArn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`created Image Builder recipe '${name}' is not readable`),
-              );
+              return yield* new ImageRecipeUnexpectedResponse({
+                message: `created Image Builder recipe '${name}' is not readable`,
+              });
             }
           }
 
@@ -356,7 +394,7 @@ export const ImageRecipeProvider = () =>
                 (summary) =>
                   getRecipe(summary.arn).pipe(
                     Effect.flatMap((recipe) =>
-                      recipe === undefined ? Effect.succeed(undefined) : toAttrs(recipe),
+                      recipe === undefined ? Effect.undefined : toAttrs(recipe),
                     ),
                   ),
                 { concurrency: 4 },

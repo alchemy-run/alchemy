@@ -25,8 +25,6 @@ const context = {
   newBindings: [],
   bindings: [],
   session: {
-    emit: () => Effect.void,
-    done: () => Effect.void,
     note: () => Effect.void,
   },
 };

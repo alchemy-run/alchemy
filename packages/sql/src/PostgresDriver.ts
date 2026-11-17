@@ -4,6 +4,21 @@ import type * as Scope from "effect/Scope";
 import type { Pool, PoolConfig } from "pg";
 
 /**
+ * Drop `sslmode` and `channel_binding` from a Postgres connection URI. Hosted
+ * Postgres URIs (Neon, Fly, PlanetScale) carry `sslmode=require`, which
+ * `pg-connection-string` warns about and treats as `verify-full`; set TLS on
+ * the client (`ssl: { rejectUnauthorized }`) instead. A string that isn't a
+ * URL is returned unchanged.
+ */
+export const stripSslQueryParams = (uri: string): string => {
+  if (!URL.canParse(uri)) return uri;
+  const url = new URL(uri);
+  url.searchParams.delete("sslmode");
+  url.searchParams.delete("channel_binding");
+  return url.toString();
+};
+
+/**
  * Lazily load the raw `pg` driver (an optional peer dependency of
  * alchemy) with a descriptive failure when it isn't installed. CJS/ESM
  * interop is normalized — callers always get the module's named surface.

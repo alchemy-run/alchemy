@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -242,8 +243,33 @@ export type Table = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 >;
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface TableLookup {
+  /**
+   * Table id (the `{table}` segment of
+   * `projects/{project}/datasets/{dataset}/tables/{table}`). Must contain
+   * only letters, numbers, and underscores; max 1,024 characters.
+   */
+  tableId: string;
+  /**
+   * Dataset id (the `{dataset}` segment of
+   * `projects/{project}/datasets/{dataset}`) or a full dataset resource
+   * name.
+   */
+  datasetId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google BigQuery table: a native table, a view, or an external table.
@@ -317,13 +343,26 @@ export type Table = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared table.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const table = GCP.BigQuery.Table.lookup({
+ *   tableId: "my-table",
+ *   datasetId: "my-dataset",
+ * });
+ * ```
+ *
  * @resource
  * @category BigQuery
  */
 export const Table = Resource<Table>("GCP.BigQuery.Table");
 
 export class TableNotResolved extends Data.TaggedError("GCP.BigQuery.TableNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** `view` and `externalDataConfiguration` were both set; a table is one kind. */
@@ -565,7 +604,7 @@ const getByRef = (projectId: string, datasetId: string, tableId: string) =>
       tableId,
       view: "FULL",
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toTableBody = (
   projectId: string,
@@ -666,6 +705,15 @@ export const TableProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ tableId, datasetId: lookupDatasetId }) {
+      const env = yield* GcpEnvironment.current;
+      const datasetId = datasetIdOf(lookupDatasetId ?? "");
+      if (datasetId.length === 0) return undefined;
+      const existing = yield* getByRef(env.project, datasetId, tableId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const tableId = yield* toId(id, olds?.tableId, output?.tableId);
@@ -754,7 +802,7 @@ export const TableProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TableNotResolved({ name });
+        return yield* new TableNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

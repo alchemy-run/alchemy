@@ -160,7 +160,7 @@ export const AgentsGenerator = Resource<AgentsGenerator>("GCP.Dialogflow.AgentsG
 export class AgentsGeneratorNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsGeneratorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_PROMPT = "Say hello.";
@@ -221,10 +221,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsGenerators({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsGenerators.pages({ parent, pageSize: 100 }).pipe(
@@ -242,7 +242,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((generator) => generator.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const AgentsGeneratorProvider = () =>
@@ -337,7 +337,7 @@ export const AgentsGeneratorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsGeneratorNotResolved({ name });
+        return yield* new AgentsGeneratorNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   agentPoolIdOf,
@@ -76,8 +77,29 @@ export type AgentPool = Resource<
     bandwidthLimit: BandwidthLimit | undefined;
   },
   never,
-  Providers
+  Providers,
+  AgentPoolLookup
 >;
+
+/**
+ * Props for {@link AgentPool.lookup}: find an agent pool this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AgentPoolLookup {
+  /**
+   * Agent pool id (the `{agent_pool}` segment of
+   * `projects/{project}/agentPools/{agent_pool}`). Must match
+   * `^(?!goog)[a-z]([a-z0-9-._~]*[a-z0-9])?$` and is at most 128
+   * characters.
+   */
+  agentPoolId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Storage Transfer Service agent pool for on-premises (POSIX) agents.
@@ -115,6 +137,19 @@ export type AgentPool = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing agent pool
+ * `AgentPool.lookup` references an agent pool Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * agent pool.
+ *
+ * **Example:** Reference an existing agent pool
+ * ```typescript
+ * const agentPool = GCP.StorageTransfer.AgentPool.lookup({
+ *   agentPoolId: "my-agent-pool",
+ * });
+ * ```
+ *
  * @resource
  * @category StorageTransfer
  */
@@ -123,7 +158,7 @@ export const AgentPool = Resource<AgentPool>("GCP.StorageTransfer.AgentPool");
 export class AgentPoolNotResolved extends Data.TaggedError(
   "GCP.StorageTransfer.AgentPoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toBandwidth = (
@@ -162,6 +197,14 @@ export const AgentPoolProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ agentPoolId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = agentPoolName(env.project, agentPoolId);
+      const existing = yield* getAgentPool(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -223,7 +266,7 @@ export const AgentPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentPoolNotResolved({ name });
+        return yield* new AgentPoolNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== desiredDisplayName;

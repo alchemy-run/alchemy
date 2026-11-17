@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -121,8 +122,37 @@ export type ApisVersion = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApisVersionLookup
 >;
+
+/**
+ * Props for {@link ApisVersion.lookup}: find an apis version this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ApisVersionLookup {
+  /**
+   * Version id (the `{version}` segment of
+   * `.../apis/{api}/versions/{version}`).
+   */
+  versionId: string;
+  /**
+   * Location used when `api` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent API. Full name
+   * `projects/{project}/locations/{location}/apis/{api}` or the API id
+   * (combined with `location`).
+   */
+  api: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API version in API Hub. Specs and operations hang off a version.
@@ -138,6 +168,20 @@ export type ApisVersion = Resource<
  * const version = yield* GCP.ApiHub.ApisVersion("V1", {
  *   api: api.name,
  *   displayName: "v1",
+ * });
+ * ```
+ *
+ * ### Looking up an existing apis version
+ * `ApisVersion.lookup` references an apis version Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apis version.
+ *
+ * **Example:** Reference an existing apis version
+ * ```typescript
+ * const apisVersion = GCP.ApiHub.ApisVersion.lookup({
+ *   versionId: "my-version",
+ *   api: "my-api",
  * });
  * ```
  *
@@ -181,10 +225,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsApisVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const bodyOf = (
   news: ApisVersionProps,
@@ -222,6 +266,16 @@ export const ApisVersionProvider = () =>
         nextParent: news.api ?? olds?.api ?? output?.api,
       });
     }),
+
+    lookup: Effect.fn(function* ({ versionId, location: lookupLocation, api: lookupApi }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const api = parentApi(lookupApi ?? "", env.project, location);
+      const name = resourceName(api, versionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -270,7 +324,7 @@ export const ApisVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -6,12 +6,40 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class EMRClusterOperationFailed extends Data.TaggedError("EMRClusterOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * Termination was refused because the cluster has termination protection on,
+ * set through `terminationProtected` or outside the stack. Turn it off and
+ * deploy (or turn it off in the console) before deleting it.
+ */
+export class EMRClusterTerminationProtected extends Data.TaggedError(
+  "EMRClusterTerminationProtected",
+)<{
+  readonly clusterId: string;
+  readonly message: string;
+}> {}
+
+export class EMRClusterNotReady extends Data.TaggedError("EMRClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EMRClusterUnexpectedResponse extends Data.TaggedError("EMRClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * EC2 instance topology for an EMR {@link Cluster} — a master (primary)
@@ -56,8 +84,8 @@ export interface ClusterInstancesConfig {
   keepJobFlowAliveWhenNoSteps?: boolean;
   /**
    * Whether the cluster's EC2 instances are locked against termination by
-   * API calls or user intervention. Updateable in place (and always lifted
-   * before the provider terminates the cluster on destroy).
+   * API calls or user intervention. Updateable in place. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   terminationProtected?: boolean;
@@ -197,8 +225,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The id of the existing cluster. */
+  clusterId: string;
+}
 
 /**
  * A provisioned Amazon EMR cluster (job flow) running open-source big-data
@@ -255,6 +293,16 @@ export interface Cluster extends Resource<
  *   jobFlowRole: instanceProfile.instanceProfileName,
  *   securityConfiguration: config.securityConfigurationName,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.EMR.Cluster.lookup({ clusterId: "..." });
  * ```
  *
  * @resource
@@ -327,7 +375,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (clusterId: string) {
         const response = yield* emr
           .describeCluster({ ClusterId: clusterId })
-          .pipe(Effect.catchTag("ClusterNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFound", () => Effect.undefined));
         const cluster = response?.Cluster;
         if (!cluster?.Id) return undefined;
         if (TERMINAL_STATES.has(cluster.Status?.State ?? "")) return undefined;
@@ -352,25 +400,26 @@ export const ClusterProvider = () =>
       const waitForReady = Effect.fn(function* (clusterId: string) {
         const policy = Schedule.max([Schedule.fixed("20 seconds"), Schedule.recurs(90)]);
         return yield* emr.describeCluster({ ClusterId: clusterId }).pipe(
-          Effect.flatMap((response) => {
-            const cluster = response.Cluster;
-            const state = cluster?.Status?.State ?? "STARTING";
-            if (TERMINAL_STATES.has(state)) {
-              const reason = cluster?.Status?.StateChangeReason;
-              return Effect.fail(
-                new Error(
-                  `EMR cluster '${clusterId}' reached terminal state '${state}'` +
+          Effect.flatMap(
+            Effect.fnUntraced(function* (response) {
+              const cluster = response.Cluster;
+              const state = cluster?.Status?.State ?? "STARTING";
+              if (TERMINAL_STATES.has(state)) {
+                const reason = cluster?.Status?.StateChangeReason;
+                return yield* new EMRClusterOperationFailed({
+                  message:
+                    `EMR cluster '${clusterId}' reached terminal state '${state}'` +
                     ` (${reason?.Code ?? "unknown"}: ${reason?.Message ?? "no message"})`,
-                ),
-              );
-            }
-            if (state !== "WAITING" && state !== "RUNNING") {
-              return Effect.fail(
-                new Error(`EMR cluster '${clusterId}' not ready (state: ${state})`),
-              );
-            }
-            return Effect.succeed(cluster!);
-          }),
+                });
+              }
+              if (state !== "WAITING" && state !== "RUNNING") {
+                return yield* new EMRClusterNotReady({
+                  message: `EMR cluster '${clusterId}' not ready (state: ${state})`,
+                });
+              }
+              return cluster!;
+            }),
+          ),
           Effect.retry({
             while: (e) => e instanceof Error && !e.message.includes("terminal state"),
             schedule: policy,
@@ -380,9 +429,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: emr.Cluster) {
         if (!cluster.Id || !cluster.ClusterArn || !cluster.Name) {
-          return yield* Effect.fail(
-            new Error(`EMR cluster '${cluster.Id}' is missing its ARN or name`),
-          );
+          return yield* new EMRClusterUnexpectedResponse({
+            message: `EMR cluster '${cluster.Id}' is missing its ARN or name`,
+          });
         }
         return {
           clusterId: cluster.Id,
@@ -457,6 +506,13 @@ export const ClusterProvider = () =>
           if ((newCore === 0) !== (oldCore === 0)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterId }) {
+          const cluster = yield* readCluster(clusterId);
+          if (!cluster) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -534,9 +590,9 @@ export const ClusterProvider = () =>
                 }),
               );
             if (!created.JobFlowId) {
-              return yield* Effect.fail(
-                new Error(`RunJobFlow for '${name}' returned no JobFlowId`),
-              );
+              return yield* new EMRClusterUnexpectedResponse({
+                message: `RunJobFlow for '${name}' returned no JobFlowId`,
+              });
             }
             clusterId = created.JobFlowId;
           }
@@ -647,13 +703,20 @@ export const ClusterProvider = () =>
           return yield* toAttrs(final ?? observed);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
           const clusterId = output.clusterId;
           // A cluster that is already terminal (or gone) is success.
           const observed = yield* readCluster(clusterId);
           if (observed === undefined) return;
-          // Lift termination protection so TerminateJobFlows succeeds.
+          // Termination protection, set by this stack or outside it, refuses
+          // the delete. Only an account-wide nuke (`force`) lifts it.
           if (observed.TerminationProtected === true) {
+            if (force !== true) {
+              return yield* new EMRClusterTerminationProtected({
+                clusterId,
+                message: `EMR cluster '${clusterId}' has termination protection on. Set \`terminationProtected: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* emr
               .setTerminationProtection({
                 JobFlowIds: [clusterId],
@@ -673,7 +736,9 @@ export const ClusterProvider = () =>
               return TERMINAL_STATES.has(state)
                 ? Effect.void
                 : Effect.fail(
-                    new Error(`EMR cluster '${clusterId}' still active (state: ${state})`),
+                    new EMRClusterNotReady({
+                      message: `EMR cluster '${clusterId}' still active (state: ${state})`,
+                    }),
                   );
             }),
             Effect.catchTag("ClusterNotFound", () => Effect.void),

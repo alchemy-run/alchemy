@@ -7,11 +7,11 @@ import DAG from "../../../components/DAG.astro";
 
 An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
 
-Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This chapter covers how to find a business's events, how to declare one, what to put in it, and what happens to it after it's recorded.
+Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them.
 
 ## Events are the business's memory
 
-Businesses ran on events long before software. A bank's ledger is a list of things that happened, written in order and never erased: opened, deposited 100, withdrew 30. The balance at the bottom of the page is a sum of the lines above it. When the bank finds a mistake, it doesn't rub out a line; it writes a new one that corrects it.
+Businesses ran on events long before software. Take a bank's ledger. It's a list of things that happened, written in order and never erased: opened, deposited 100, withdrew 30. The balance at the bottom of the page is a sum of the lines above it. When the bank finds a mistake, it doesn't rub out a line; it writes a new one that corrects it.
 
 An event-sourced model keeps its history the same way. Each event is one line in the ledger of one aggregate instance. Everything else, the account's state, its statement, the customer's dashboard, is worked out from those lines. Because nothing is overwritten, you can always answer "how did it get like this?", and a question nobody thought to ask last year can be answered from history you already have.
 
@@ -32,7 +32,7 @@ An event-sourced model keeps its history the same way. Each event is one line in
 
 ## Find the events
 
-To find a business's events, ask its people to tell the story of their work as a series of things that happened, in order. "The customer registers. Their main account is opened. They deposit their pay. They withdraw cash. Late at night they withdraw again, and the account is frozen for review." Each sentence in the past tense is an event: `CustomerRegistered`, `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`, `AccountFrozen`.
+To find a business's events, ask its people to tell the story of their work as a series of things that happened, in order. At a bank, it might go: "The customer registers. Their main account is opened. They deposit their pay. They withdraw cash. Late at night they withdraw again, and the account is frozen for review." Each sentence in the past tense is an event: `CustomerRegistered`, `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`, `AccountFrozen`.
 
 Telling it as a story surfaces the things people care about, in their own words, and in the order they happen. The commands fall out next: for each event, ask what someone asked for to make it happen. The aggregates come after that: for each command, ask what has to be checked before it's allowed, and what state that check needs.
 
@@ -57,6 +57,18 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data has no fields: `Domain.Event("AccountClosed")`.
 
+## Describe it
+
+An event's last argument is its [annotations](/domain/annotations). Give it a `description` that says what happened, in the business's words. It is the event Schema's description too.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class MoneyWithdrawn extends Domain.Event(
+  "MoneyWithdrawn",
+  { amount: Schema.Int, balanceAfter: Schema.Int },
+  { description: "Money left an account. Amounts are in cents." },
+) {}
+```
+
 ## Only decide creates events
 
 Events are created in exactly one place: an aggregate's `decide` handler, as its answer to a command.
@@ -65,7 +77,7 @@ Events are created in exactly one place: an aggregate's `decide` handler, as its
 : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
 ```
 
-The command declares which events it may record, so `decide` can't return anything else. Once they're committed, they're never changed or removed. A mistake is corrected the way a bank corrects one, with a new event that reverses it, so the history still shows both.
+The command declares which events it may record, so `decide` can't return anything else. Once they're committed, they're never changed or removed. A mistake is corrected the way an accountant corrects one, with a new event that reverses it, so the history still shows both.
 
 ## Record what readers will need
 
@@ -148,11 +160,11 @@ A view can record events of its own as it folds, such as one `StatementLine` per
 
 ## Follow an instance's events
 
-A client can read an instance's history directly, then keep receiving new events as they're recorded.
+A client reads an account's history through a view that follows it, then keeps receiving new events as they're recorded. `AccountSummary` declares no events of its own, so it emits every event it applies.
 
 ```typescript title="packages/server/test/followAccount.ts"
 export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  yield* bank.Account.events(accountId).pipe(
+  yield* bank.AccountSummary.events(accountId).pipe(
     Stream.filter(Domain.Read.isEvent),
     Stream.runForEach(({ event, envelope }) =>
       Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),

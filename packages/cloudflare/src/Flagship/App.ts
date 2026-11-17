@@ -1,11 +1,17 @@
+import * as LocalFlagship from "@alchemy.run/cloudflare-runtime/core/bindings/flagship";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
+import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
+import { localFlagshipStore } from "./Flag.ts";
 
 const TypeId = "Cloudflare.Flagship.App" as const;
 type TypeId = typeof TypeId;
@@ -48,7 +54,26 @@ export type AppAttributes = {
   updatedBy: string;
 };
 
-export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers, AppLookup>;
+
+/**
+ * Props for {@link App.lookup}: find a Flagship app this stack doesn't
+ * manage, by its id or its name.
+ */
+export type AppLookup =
+  | {
+      /**
+       * The id of the existing app.
+       */
+      appId: string;
+    }
+  | {
+      /**
+       * The name of the existing app. Names are not unique; the oldest app
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Flagship app — a container for feature flags.
@@ -137,6 +162,67 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * };
  * ```
  *
+ * ### Local Development
+ * **Example:** Flags evaluate locally under `alchemy dev`
+ * In `alchemy dev` the app and its flags are emulated on your machine: no
+ * Cloudflare API calls, and the Worker's binding evaluates flags locally with
+ * the same targeting rules, rollouts, and evaluation reasons. Changing a flag
+ * and saving applies to the running Worker without a restart.
+ * ```typescript
+ * const app = yield* Cloudflare.Flagship.App("Flags", {});
+ *
+ * yield* Cloudflare.Flagship.Flag("NewCheckout", {
+ *   appId: app.appId,
+ *   key: "new-checkout",
+ *   defaultVariation: "off",
+ *   variations: { off: false, on: true },
+ *   rules: [
+ *     {
+ *       priority: 1,
+ *       conditions: [{ attribute: "country", operator: "equals", value: "US" }],
+ *       serveVariation: "on",
+ *     },
+ *   ],
+ * });
+ *
+ * yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { FLAGS: app },
+ * });
+ * ```
+ *
+ * **Example:** Use the real app during `alchemy dev`
+ * Pipe the app and its flags through `Alchemy.remote()` to create them on
+ * Cloudflare; the local Worker's binding then evaluates the live flags.
+ * ```typescript
+ * const app = yield* Cloudflare.Flagship.App("Flags", {}).pipe(Alchemy.remote());
+ *
+ * yield* Cloudflare.Flagship.Flag("NewCheckout", {
+ *   appId: app.appId,
+ *   key: "new-checkout",
+ *   defaultVariation: "off",
+ *   variations: { off: false, on: true },
+ * }).pipe(Alchemy.remote());
+ * ```
+ *
+ * ### Looking up an existing app
+ * `App.lookup` references an app Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `appId` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ * Cloudflare lists a new app about ten seconds after creating it, so a
+ * lookup by `name` right after creation can miss it; `appId` never does.
+ *
+ * **Example:** Add a flag to an existing app
+ * ```typescript
+ * const app = Cloudflare.Flagship.App.lookup({ name: "storefront" });
+ * yield* Cloudflare.Flagship.Flag("NewCheckout", {
+ *   appId: app.appId,
+ *   key: "new-checkout",
+ *   defaultVariation: "off",
+ *   variations: { off: false, on: true },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
  *
@@ -151,7 +237,7 @@ export const App = Resource<App>(TypeId);
  */
 export const isApp = (value: unknown): value is App => isResourceOfType(value, TypeId);
 
-export const AppProvider = () =>
+export const AppProviderLive = () =>
   Provider.succeed(App, {
     stables: ["appId", "accountId", "createdAt"],
     diff: Effect.fn(function* ({ output }) {
@@ -160,6 +246,14 @@ export const AppProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "appId" in props
+          ? yield* getApp(accountId, props.appId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -177,7 +271,7 @@ export const AppProvider = () =>
       const match = yield* findByName(acct, name);
       return match ? toAttributes(match, acct) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 
@@ -235,12 +329,57 @@ export const AppProvider = () =>
   });
 
 /**
+ * Local (dev) provider — the app is purely virtual: a `dev:` id keyed into
+ * the local workerd Flagship simulator. The local `Flag` provider seeds
+ * definitions under that id, and `toRuntimeBinding` lowers a `flagship`
+ * binding whose app id is `dev:`-prefixed onto the local evaluator; data
+ * persists under `.alchemy/local/flagship`.
+ */
+export const AppProviderLocal = () =>
+  Provider.succeed(App, {
+    stables: ["appId", "accountId", "createdAt"],
+    diff: Effect.fn(function* ({ output }) {
+      if (!output?.appId) return { action: "update" } as const;
+      if (output.accountId !== (yield* localAccountId)) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const now = DateTime.formatIso(yield* DateTime.now);
+      return {
+        appId: output?.appId ?? generateLocalId(),
+        accountId: output?.accountId ?? (yield* localAccountId),
+        name: yield* createAppName(id, news.name),
+        createdAt: output?.createdAt ?? now,
+        updatedAt: now,
+        updatedBy: "local",
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      // Flags delete their own definitions first; this sweeps anything left
+      // in the app's store (idempotent).
+      yield* LocalFlagship.deleteApp(yield* localFlagshipStore(output.appId));
+    }),
+  });
+
+export const AppProvider = () =>
+  ProviderLayer.dual(App, {
+    local: () => AppProviderLocal(),
+    live: () => AppProviderLive(),
+  });
+
+/**
  * Read an app by id, mapping "gone" (`FlagshipAppNotFound`) to `undefined`.
  */
 const getApp = (accountId: string, appId: string) =>
   flagship
     .getApp({ accountId, appId })
-    .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.undefined));
 
 /**
  * Find an app by exact name. If several apps carry the same name, pick the

@@ -411,7 +411,7 @@ const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
 const getApp = (zoneId: string, appId: string) =>
   spectrum.getApp({ zoneId, appId }).pipe(
     Effect.map((app): ObservedApp | undefined => app),
-    Effect.catchTag("SpectrumAppNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SpectrumAppNotFound", () => Effect.undefined),
   );
 
 /**

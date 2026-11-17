@@ -6,9 +6,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { otelDatasetHeader } from "./OtelHeaders.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DatasetUnexpectedResponse extends Data.TaggedError("DatasetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DatasetKind =
   | "otel:metrics:v1"
@@ -82,8 +88,18 @@ export type Dataset = Resource<
     otelHeaders: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatasetLookup
 >;
+
+/**
+ * Props for {@link Dataset.lookup}: find a dataset this stack
+ * doesn't manage by its name.
+ */
+export interface DatasetLookup {
+  /** Dataset name. */
+  name: string;
+}
 
 /**
  * An Axiom dataset — the top-level container that stores events, logs,
@@ -132,6 +148,16 @@ export type Dataset = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Ingest into an existing dataset
+ * ```typescript
+ * const logs = Axiom.Dataset.lookup({ name: "logs" });
+ * ```
+ *
  * @resource
  * @product Dataset
  */
@@ -178,9 +204,9 @@ export const DatasetProvider = () =>
 
       const toAttrs = Effect.fn(function* (dataset: Axiom.Dataset) {
         if (!dataset.edgeDeployment || !dataset.edgeDeploymentUrl) {
-          return yield* Effect.fail(
-            new Error(`Axiom dataset "${dataset.name}" is missing its edge deployment metadata`),
-          );
+          return yield* new DatasetUnexpectedResponse({
+            message: `Axiom dataset "${dataset.name}" is missing its edge deployment metadata`,
+          });
         }
         const { apiBaseUrl } = yield* credentials;
         const apiRoot = apiBaseUrl.replace(/\/$/, "");
@@ -247,7 +273,7 @@ export const DatasetProvider = () =>
           // here mutation is safe.
           const datasetId = output?.id ?? news.name;
           const observed = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
           // Ensure — POST creates the dataset. Tolerate Conflict/
@@ -304,13 +330,20 @@ export const DatasetProvider = () =>
             Effect.catchTag("NotFound", () => Effect.void),
           );
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const existing = yield* get({ dataset_id: name }).pipe(
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return existing === undefined ? undefined : yield* toAttrs(existing);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const stack = yield* Stack;
           const stage = yield* Stage;
           const datasetId = output?.id ?? olds?.name;
           if (!datasetId) return undefined;
           const existing = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!existing) return undefined;
           const ownership = parseMarker(existing.description);

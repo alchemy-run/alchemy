@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
@@ -68,8 +69,28 @@ export type WorkloadIdentityPool = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkloadIdentityPoolLookup
 >;
+
+/**
+ * Props for {@link WorkloadIdentityPool.lookup}: find a workload identity
+ * pool this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface WorkloadIdentityPoolLookup {
+  /**
+   * Pool id: 4-32 lowercase letters, digits, or hyphens (the `gcp-` prefix
+   * is reserved). Deleted pools keep their id for 30 days; redeploying the
+   * same id in that window restores the pool instead of creating a new one.
+   */
+  workloadIdentityPoolId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud IAM workload identity pool: a trust boundary that lets
@@ -101,6 +122,19 @@ export type WorkloadIdentityPool = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing workload identity pool
+ * `WorkloadIdentityPool.lookup` references a workload identity pool Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared workload identity pool.
+ *
+ * **Example:** Reference an existing workload identity pool
+ * ```typescript
+ * const workloadIdentityPool = GCP.IAM.WorkloadIdentityPool.lookup({
+ *   workloadIdentityPoolId: "my-workload-identity-pool",
+ * });
+ * ```
+ *
  * @resource
  * @category IAM
  */
@@ -108,7 +142,7 @@ export const WorkloadIdentityPool = Resource<WorkloadIdentityPool>("GCP.IAM.Work
 
 export class WorkloadIdentityPoolNotResolved extends Data.TaggedError(
   "GCP.IAM.WorkloadIdentityPoolNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const poolName = (project: string, poolId: string) =>
   `projects/${project}/locations/global/workloadIdentityPools/${poolId}`;
@@ -134,7 +168,7 @@ const toAttrs = (
 const getPool = (name: string) =>
   iam
     .getProjectsLocationsWorkloadIdentityPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitForPoolOperation = (operation: iam.Operation) =>
   waitForOperation(operation, (name) =>
@@ -172,6 +206,15 @@ export const WorkloadIdentityPoolProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workloadIdentityPoolId }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      const existing = yield* getPool(poolName(project, workloadIdentityPoolId));
+      // A deleted pool is recoverable for 30 days but is not a live resource.
+      if (existing === undefined || existing.state === "DELETED") return undefined;
+      return toAttrs(existing, project, workloadIdentityPoolId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -250,7 +293,7 @@ export const WorkloadIdentityPoolProvider = () =>
       current = yield* getPool(name).pipe(
         Effect.flatMap((pool) =>
           pool === undefined || pool.state !== "ACTIVE"
-            ? Effect.fail(new WorkloadIdentityPoolNotResolved({ name }))
+            ? Effect.fail(new WorkloadIdentityPoolNotResolved({ resourceName: name }))
             : Effect.succeed(pool),
         ),
         Effect.retry({
@@ -295,7 +338,7 @@ export const WorkloadIdentityPoolProvider = () =>
       if (current?.state === "DELETED") return;
       const operation = yield* iam
         .deleteProjectsLocationsWorkloadIdentityPools({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) yield* waitForPoolOperation(operation);
     }),
   });

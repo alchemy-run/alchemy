@@ -5,11 +5,22 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags } from "./internal.ts";
+
+export class ACLNotReady extends Data.TaggedError("ACLNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ACLUnexpectedResponse extends Data.TaggedError("ACLUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ACLProps {
   /**
@@ -49,8 +60,18 @@ export interface ACL extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ACLLookup
 > {}
+
+/**
+ * Props for {@link ACL.lookup}: find an ACL this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ACLLookup {
+  /** The acl name of the existing ACL. */
+  aclName: string;
+}
 
 /**
  * A MemoryDB Access Control List (ACL) — a named collection of {@link User}s
@@ -68,6 +89,16 @@ export interface ACL extends Resource<
  * const acl = yield* ACL("AppAcl", {
  *   userNames: [appUser.userName],
  * });
+ * ```
+ *
+ * ### Looking up an existing ACL
+ * `ACL.lookup` references an ACL Alchemy doesn't manage (created in the
+ * console or by another stack), found by `aclName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing ACL
+ * ```typescript
+ * const existing = AWS.MemoryDB.ACL.lookup({ aclName: "my-acl" });
  * ```
  *
  * @resource
@@ -88,7 +119,7 @@ export const ACLProvider = () =>
       const readAcl = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeACLs({ ACLName: name })
-          .pipe(Effect.catchTag("ACLNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ACLNotFoundFault", () => Effect.undefined));
         return response?.ACLs?.[0];
       });
 
@@ -98,7 +129,9 @@ export const ACLProvider = () =>
         return yield* readAcl(name).pipe(
           Effect.flatMap((acl) => {
             if (acl !== undefined && acl.Status !== "active" && acl.Status !== undefined) {
-              return Effect.fail(new Error(`ACL '${name}' not active (${acl.Status})`));
+              return Effect.fail(
+                new ACLNotReady({ message: `ACL '${name}' not active (${acl.Status})` }),
+              );
             }
             return Effect.succeed(acl);
           }),
@@ -110,7 +143,9 @@ export const ACLProvider = () =>
 
       const toAttrs = Effect.fn(function* (acl: memorydb.ACL) {
         if (!acl.Name || !acl.ARN) {
-          return yield* Effect.fail(new Error(`ACL '${acl.Name}' is missing its ARN`));
+          return yield* new ACLUnexpectedResponse({
+            message: `ACL '${acl.Name}' is missing its ARN`,
+          });
         }
         return {
           aclName: acl.Name,
@@ -130,6 +165,13 @@ export const ACLProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ aclName: name }) {
+          const acl = yield* readAcl(name);
+          if (!acl?.ARN) return undefined;
+          const attrs = yield* toAttrs(acl);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -165,7 +207,9 @@ export const ACLProvider = () =>
             observed = yield* waitUntilActive(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(new Error(`ACL '${name}' not found after create`));
+            return yield* new ACLUnexpectedResponse({
+              message: `ACL '${name}' not found after create`,
+            });
           }
 
           // 3. Sync — compute the user membership delta from OBSERVED state.

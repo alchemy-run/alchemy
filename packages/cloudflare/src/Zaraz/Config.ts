@@ -214,8 +214,9 @@ export const ConfigProvider = () =>
             // (missing permission / code-10000 auth blip surfaced as
             // Unauthorized, or a 403/404) must be skipped, not fail the whole
             // enumeration.
-            Effect.catchTag(["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"],
+              () => Effect.undefined,
             ),
           ),
         { concurrency: 10 },

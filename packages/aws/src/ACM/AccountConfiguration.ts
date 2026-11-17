@@ -3,10 +3,16 @@ import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class AccountConfigurationNotReady extends Data.TaggedError("AccountConfigurationNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AccountConfigurationProps {
   /**
@@ -131,11 +137,9 @@ export const AccountConfigurationProvider = () =>
             return observed;
           }
         }
-        return yield* Effect.fail(
-          new Error(
-            `ACM account configuration did not converge to ${desiredDays} days before expiry`,
-          ),
-        );
+        return yield* new AccountConfigurationNotReady({
+          message: `ACM account configuration did not converge to ${desiredDays} days before expiry`,
+        });
       });
 
       return {

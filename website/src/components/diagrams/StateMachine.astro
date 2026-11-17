@@ -1,0 +1,226 @@
+---
+/**
+ * `<StateMachine />` — the states something moves through and what moves it.
+ * States are pills on a grid, transitions are labelled curved arrows, a dot
+ * marks where it starts and a ring where it ends. Use it for a lifecycle: a
+ * message (visible, in flight, deleted, dead-lettered), an alarm (OK, ALARM),
+ * a resource in a deploy (created, updated, replaced, deleted).
+ *
+ *   <StateMachine
+ *     states={[
+ *       { id: "visible", label: "visible", col: 0, row: 0, start: true },
+ *       { id: "flight", label: "in flight", col: 1, row: 0 },
+ *       { id: "deleted", label: "deleted", col: 2, row: 0, end: true },
+ *     ]}
+ *     transitions={[
+ *       { from: "visible", to: "flight", label: "receive" },
+ *       { from: "flight", to: "visible", label: "timeout", bend: 0.4 },
+ *       { from: "flight", to: "deleted", label: "delete" },
+ *     ]}
+ *   />
+ *
+ * `bend` curves a transition (positive bends left of its direction), so a pair
+ * of opposite transitions between two states don't overlap. A transition from a
+ * state to itself loops above it.
+ */
+import "./diagram.css";
+
+interface State {
+  id: string;
+  label: string;
+  type?: string;
+  col: number;
+  row: number;
+  start?: boolean;
+  end?: boolean;
+  tone?: "default" | "accent" | "warn" | "danger";
+}
+interface Transition {
+  from: string;
+  to: string;
+  label?: string;
+  bend?: number;
+  dashed?: boolean;
+}
+interface Props {
+  states: State[];
+  transitions: Transition[];
+  caption?: string;
+}
+
+const { states, transitions, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+const SW = Math.max(120, ...states.map((s) => Math.max(s.label.length * 8, (s.type ?? "").length * 6.6) + 28));
+const SH = 46;
+
+// Two layouts: the grid as written (desktop), and on phones the grid turned on
+// its side (columns become rows) with tighter gaps, when that is narrower.
+// A machine wider than it is tall turns on its side on a phone; one already
+// tall keeps its grid and only tightens its gaps.
+const tallGrid = Math.max(...states.map((s) => s.row)) >= Math.max(...states.map((s) => s.col));
+const layout = (narrow: boolean) => {
+const turn = narrow && !tallGrid;
+// On a phone, a transition between neighbours in a row needs room for its label.
+const rowLabels = transitions
+  .filter((t) => {
+    const a = states.find((s) => s.id === t.from);
+    const b = states.find((s) => s.id === t.to);
+    return narrow && a && b && (turn ? a.col === b.col : a.row === b.row) && t.label;
+  })
+  .map((t) => t.label!.length * 6.6 + 20);
+const COLW = SW + (narrow ? Math.max(40, ...rowLabels) : 120);
+const ROWH = SH + (narrow ? 92 : 84);
+const PAD = 40;
+const pos = new Map(
+  states.map((s) => {
+    const c = turn ? s.row : s.col;
+    const r = turn ? s.col : s.row;
+    return [s.id, { x: PAD + c * COLW + SW / 2, y: PAD + r * ROWH + SH / 2 }];
+  }),
+);
+
+// Where the line from a state's centre towards (dx, dy) leaves its pill.
+const exit = (c: { x: number; y: number }, dx: number, dy: number) => {
+  const tx = dx === 0 ? Infinity : SW / 2 / Math.abs(dx);
+  const ty = dy === 0 ? Infinity : SH / 2 / Math.abs(dy);
+  const t = Math.min(tx, ty);
+  return { x: c.x + dx * t, y: c.y + dy * t };
+};
+
+const paths = transitions.map((t) => {
+  const a = pos.get(t.from)!;
+  const b = pos.get(t.to)!;
+  if (t.from === t.to) {
+    const y = a.y - SH / 2;
+    return {
+      d: `M ${a.x - 18} ${y} C ${a.x - 30} ${y - 46}, ${a.x + 30} ${y - 46}, ${a.x + 18} ${y - 6}`,
+      lx: a.x,
+      ly: y - 40,
+      side: 0,
+      ...t,
+    };
+  }
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const k = (turn ? -1.6 : 1) * (t.bend ?? 0);
+  // Control point off the chord's midpoint, perpendicular to it.
+  const cx = (a.x + b.x) / 2 - (dy / len) * len * k;
+  const cy = (a.y + b.y) / 2 + (dx / len) * len * k;
+  const p1 = exit(a, cx - a.x, cy - a.y);
+  const p2raw = exit(b, cx - b.x, cy - b.y);
+  // Pull the end back a little so the arrowhead clears the pill.
+  const el = Math.hypot(p2raw.x - cx, p2raw.y - cy) || 1;
+  const p2 = { x: p2raw.x + ((cx - p2raw.x) / el) * 4, y: p2raw.y + ((cy - p2raw.y) / el) * 4 };
+  const mx = 0.25 * p1.x + 0.5 * cx + 0.25 * p2.x;
+  const my = 0.25 * p1.y + 0.5 * cy + 0.25 * p2.y;
+  // On phones, a bent transition's label sits outside its curve, so the
+  // labels of a pair of opposite transitions never meet in the middle.
+  const side = narrow && k !== 0 ? Math.sign(mx - (a.x + b.x) / 2) : 0;
+  return { d: `M ${p1.x} ${p1.y} Q ${cx} ${cy} ${p2.x} ${p2.y}`, lx: mx, ly: my, side, ...t };
+});
+
+// The viewBox wraps what's drawn (pills, start dots, curves and their labels) with an even margin.
+const M = 12;
+const xs: number[] = [];
+const ys: number[] = [];
+for (const st of states) {
+  const c = pos.get(st.id)!;
+  xs.push(c.x - SW / 2 - (st.start && !narrow ? 32 : 0), c.x + SW / 2);
+  ys.push(c.y - SH / 2 - (st.start && narrow ? 32 : 0), c.y + SH / 2);
+}
+for (const p of paths) {
+  // A quadratic curve stays inside its end points and its midpoint's bulge.
+  const pts = [...p.d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  const ends = [pts[0]!, pts[pts.length - 1]!];
+  xs.push(...ends.map((e) => e[0]!), p.lx);
+  ys.push(...ends.map((e) => e[1]!), p.ly);
+  if (p.label) {
+    const lw = p.label.length * 6.6;
+    const l0 = p.side < 0 ? p.lx - lw - 10 : p.side > 0 ? p.lx : p.lx - lw / 2 - 5;
+    xs.push(l0, l0 + lw + 10);
+    ys.push(p.ly - 10, p.ly + 7);
+  }
+}
+const VX = Math.min(...xs) - M;
+const VY = Math.min(...ys) - M;
+const VW = Math.max(...xs) + M - VX;
+const VH = Math.max(...ys) + M - VY;
+return { narrow, pos, paths, VX, VY, VW, VH };
+};
+const wide = layout(false);
+const tall = layout(true);
+const layouts = tall.VW < wide.VW && wide.VW > 360 ? [wide, tall] : [wide];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  {layouts.map(({ narrow, pos, paths, VX, VY, VW, VH }) => (
+  <svg class:list={["alc-fig__svg", layouts.length > 1 && (narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide")]} viewBox={`${VX} ${VY} ${VW} ${VH}`} style={`max-width: ${Math.round(VW * 1.15)}px`} role="img" aria-label={caption ?? "State machine"}>
+    <defs>
+      <marker id={`alc-sm-arrow${narrow ? "-n" : ""}-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    {
+      paths.map((p) => (
+        <path d={p.d} class:list={["alc-fig__line", p.dashed && "alc-fig__line--dashed"]} marker-end={`url(#alc-sm-arrow${narrow ? "-n" : ""}-${uid})`} />
+      ))
+    }
+    {
+      states.map((s) => {
+        const { x, y } = pos.get(s.id)!;
+        return (
+          <g>
+            {s.start && (
+              <g>
+                {narrow ? (
+                  <>
+                    <circle cx={x} cy={y - SH / 2 - 26} r="6" class="alc-fig__dot" />
+                    <line x1={x} y1={y - SH / 2 - 20} x2={x} y2={y - SH / 2 - 4} class="alc-fig__line" marker-end={`url(#alc-sm-arrow${narrow ? "-n" : ""}-${uid})`} />
+                  </>
+                ) : (
+                  <>
+                    <circle cx={x - SW / 2 - 26} cy={y} r="6" class="alc-fig__dot" />
+                    <line x1={x - SW / 2 - 20} y1={y} x2={x - SW / 2 - 4} y2={y} class="alc-fig__line" marker-end={`url(#alc-sm-arrow${narrow ? "-n" : ""}-${uid})`} />
+                  </>
+                )}
+              </g>
+            )}
+            <rect
+              x={x - SW / 2}
+              y={y - SH / 2}
+              width={SW}
+              height={SH}
+              rx={SH / 2}
+              class:list={[
+                "alc-fig__box",
+                s.tone === "accent" && "alc-fig__box--accent",
+                s.tone === "warn" && "alc-fig__box--warn",
+                s.tone === "danger" && "alc-fig__box--danger",
+              ]}
+            />
+            {s.end && <rect x={x - SW / 2 + 4} y={y - SH / 2 + 4} width={SW - 8} height={SH - 8} rx={(SH - 8) / 2} class="alc-fig__line alc-fig__line--muted" />}
+            <text x={x} y={y + (s.type ? -2 : 4)} text-anchor="middle" class="alc-fig__label">{s.label}</text>
+            {s.type && <text x={x} y={y + 13} text-anchor="middle" class="alc-fig__type">{s.type}</text>}
+          </g>
+        );
+      })
+    }
+    {
+      paths
+        .filter((p) => p.label)
+        .map((p) => (
+          <g>
+            <rect x={p.side < 0 ? p.lx - p.label!.length * 6.6 - 10 : p.side > 0 ? p.lx : p.lx - p.label!.length * 3.3 - 5} y={p.ly - 10} width={p.label!.length * 6.6 + 10} height="17" rx="4" class="alc-fig__label-bg" />
+            <text x={p.side < 0 ? p.lx - 5 : p.side > 0 ? p.lx + 5 : p.lx} y={p.ly + 3} text-anchor={p.side < 0 ? "end" : p.side > 0 ? "start" : "middle"} class="alc-fig__small">{p.label}</text>
+          </g>
+        ))
+    }
+  </svg>
+  ))}
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

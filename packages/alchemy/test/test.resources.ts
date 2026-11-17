@@ -171,6 +171,9 @@ export const bindingTargetProvider = () =>
           if (n.name !== o.name || n.string !== o.string) {
             return {
               action: "update",
+              // Like a Worker's `workerName`: unchanged by an update that
+              // keeps the name.
+              stables: n.name === o.name ? ["name"] : undefined,
             };
           }
           return undefined;
@@ -1390,6 +1393,115 @@ export const capturedConfigHost = (mode: string) =>
     );
   });
 
+// LookupTarget — a resource found by `name` through `LookupTarget.lookup`.
+// `lookupTargets` stands in for the cloud: tests put the resources no stack
+// manages into it, keyed by a name unique to the test (files run their tests
+// concurrently), and a declared LookupTarget lives there under its id. It is registered via `ProviderLayer.dual` so a dev run can
+// assert lookups always go through the live variant; `lookupCalls` records
+// which variant each lookup reached.
+
+export interface LookupTarget extends Resource<
+  "Test.LookupTarget",
+  { value?: string },
+  // `kind` shares its name with an Output expression's own tag.
+  { name: string; value: string; kind?: string },
+  never,
+  undefined,
+  { name: string }
+> {}
+
+export const LookupTarget = Resource<LookupTarget>("Test.LookupTarget");
+
+/** Existing resources `lookup` can find, keyed by name. */
+export const lookupTargets = new Map<string, LookupTarget["Attributes"]>();
+/** Lookups dispatched to each variant, in order. */
+export const lookupCalls: { mode: ProviderMode; name: string }[] = [];
+/** Ids `delete` was called with — a lookup must never reach it. */
+export const lookupTargetDeletes: string[] = [];
+
+const lookupTargetVariant = (mode: ProviderMode) =>
+  Provider.succeed(LookupTarget, {
+    // `kind` is an optional stable: undefined on a declared LookupTarget,
+    // as `zoneId` is on an account-level Access identity provider.
+    stables: ["name", "kind"],
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
+      const attrs = { name: id, value: news.value ?? id };
+      lookupTargets.set(id, attrs);
+      return attrs;
+    }),
+    delete: Effect.fn(function* ({ id }) {
+      lookupTargetDeletes.push(id);
+      lookupTargets.delete(id);
+    }),
+    lookup: Effect.fn(function* ({ name }) {
+      lookupCalls.push({ mode, name });
+      const found = lookupTargets.get(name);
+      return found === undefined ? undefined : { ...found };
+    }),
+  });
+
+export const lookupTargetProvider = () =>
+  ProviderLayer.dual(LookupTarget, {
+    live: () => lookupTargetVariant("live"),
+    local: () => lookupTargetVariant("local"),
+  });
+
+// UnsupportedLookup — declares lookup props, but its provider has no `lookup`.
+export interface UnsupportedLookup extends Resource<
+  "Test.UnsupportedLookup",
+  {},
+  { name: string },
+  never,
+  undefined,
+  { name: string }
+> {}
+
+export const UnsupportedLookup = Resource<UnsupportedLookup>("Test.UnsupportedLookup");
+
+export const unsupportedLookupProvider = () =>
+  Provider.succeed(UnsupportedLookup, {
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id }) {
+      return { name: id };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
+// OptionalProps — every prop optional, and a provider that reads `news`
+// without a default, as most real providers do. It records the props each
+// lifecycle operation received, keyed by logical id.
+export interface OptionalProps extends Resource<
+  "Test.OptionalProps",
+  { label?: string },
+  { label: string }
+> {}
+
+export const OptionalProps = Resource<OptionalProps>("Test.OptionalProps");
+
+/** Props each `diff` / `reconcile` received, keyed by logical id. */
+export const optionalPropsReceived = new Map<string, { op: string; news: unknown }[]>();
+
+export const optionalPropsProvider = () =>
+  Provider.succeed(OptionalProps, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ id, news }) {
+      optionalPropsReceived.set(id, [
+        ...(optionalPropsReceived.get(id) ?? []),
+        { op: "diff", news },
+      ]);
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      optionalPropsReceived.set(id, [
+        ...(optionalPropsReceived.get(id) ?? []),
+        { op: "reconcile", news },
+      ]);
+      return { label: news.label ?? id };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -1411,6 +1523,9 @@ export const TestLayers = () =>
     driftResourceProvider(),
     modalResourceProvider(),
     capturedConfigHostProvider(),
+    lookupTargetProvider(),
+    unsupportedLookupProvider(),
+    optionalPropsProvider(),
     ProbeBindingLive,
   );
 

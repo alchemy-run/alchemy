@@ -1,8 +1,5 @@
 import type { RegistryCredentials } from "@alchemy.run/docker/Docker";
-import {
-  makeContainerImageSource,
-  type ImageRegistryTarget,
-} from "@alchemy.run/docker/ImageSource";
+import { makeContainerImageSource } from "@alchemy.run/docker/ImageSource";
 import { createPhysicalName } from "alchemy/PhysicalName";
 /**
  * Image publishing for connections that declare a
@@ -55,7 +52,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
             maxLength: 96,
             lowercase: true,
           })}`;
-    const target: ImageRegistryTarget = {
+    const target = {
       repositoryUri: Effect.succeed(repository),
       // Generic registries have no cheap existence probe; resolve only runs
       // when the workload changes, and the local build cache makes a

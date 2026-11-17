@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -56,22 +57,22 @@ test.provider(
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("App", {
-            name: "alchemy-test-flagship-app-v2",
+            name: testName("alchemy-test-flagship-app-v2"),
           });
           return { app };
         }),
       );
       expect(renamed.app.appId).toEqual(initial.app.appId);
-      expect(renamed.app.name).toEqual("alchemy-test-flagship-app-v2");
+      expect(renamed.app.name).toEqual(testName("alchemy-test-flagship-app-v2"));
 
       const liveRenamed = yield* flagship.getApp({ accountId, appId: initial.app.appId });
-      expect(liveRenamed.name).toEqual("alchemy-test-flagship-app-v2");
+      expect(liveRenamed.name).toEqual(testName("alchemy-test-flagship-app-v2"));
 
       // Redeploying identical props is a no-op (still the same app).
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("App", {
-            name: "alchemy-test-flagship-app-v2",
+            name: testName("alchemy-test-flagship-app-v2"),
           });
           return { app };
         }),
@@ -96,7 +97,7 @@ test.provider(
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("HealApp", {
-            name: "alchemy-test-flagship-heal",
+            name: testName("alchemy-test-flagship-heal"),
           });
           return { app };
         }),
@@ -110,17 +111,17 @@ test.provider(
       const healed = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("HealApp", {
-            name: "alchemy-test-flagship-heal-v2",
+            name: testName("alchemy-test-flagship-heal-v2"),
           });
           return { app };
         }),
       );
 
       expect(healed.app.appId).not.toEqual(initial.app.appId);
-      expect(healed.app.name).toEqual("alchemy-test-flagship-heal-v2");
+      expect(healed.app.name).toEqual(testName("alchemy-test-flagship-heal-v2"));
 
       const live = yield* flagship.getApp({ accountId, appId: healed.app.appId });
-      expect(live.name).toEqual("alchemy-test-flagship-heal-v2");
+      expect(live.name).toEqual(testName("alchemy-test-flagship-heal-v2"));
 
       yield* stack.destroy();
 
@@ -138,7 +139,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("ListApp", {
-            name: "alchemy-test-flagship-list",
+            name: testName("alchemy-test-flagship-list"),
           });
           return { app };
         }),
@@ -163,7 +164,7 @@ test.provider(
 
       expect(all.some((a) => a.appId === deployed.app.appId)).toBe(true);
       const found = all.find((a) => a.appId === deployed.app.appId);
-      expect(found?.name).toEqual("alchemy-test-flagship-list");
+      expect(found?.name).toEqual(testName("alchemy-test-flagship-list"));
       expect(found?.accountId).toEqual(deployed.app.accountId);
 
       yield* stack.destroy();

@@ -6,6 +6,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
@@ -81,29 +82,29 @@ test.provider(
       const group = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.Group("RenameGroup", {
-            name: "alchemy-test-access-group-rename-a",
+            name: testName("alchemy-test-access-group-rename-a"),
             include: [{ everyone: {} }],
           });
         }),
       );
-      expect(group.name).toEqual("alchemy-test-access-group-rename-a");
+      expect(group.name).toEqual(testName("alchemy-test-access-group-rename-a"));
 
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.Group("RenameGroup", {
-            name: "alchemy-test-access-group-rename-b",
+            name: testName("alchemy-test-access-group-rename-b"),
             include: [{ everyone: {} }],
           });
         }),
       );
       expect(renamed.groupId).toEqual(group.groupId);
-      expect(renamed.name).toEqual("alchemy-test-access-group-rename-b");
+      expect(renamed.name).toEqual(testName("alchemy-test-access-group-rename-b"));
 
       const actual = yield* zeroTrust.getAccessGroupForAccount({
         accountId,
         groupId: group.groupId,
       });
-      expect(actual.name).toEqual("alchemy-test-access-group-rename-b");
+      expect(actual.name).toEqual(testName("alchemy-test-access-group-rename-b"));
 
       yield* stack.destroy();
     }).pipe(logLevel),

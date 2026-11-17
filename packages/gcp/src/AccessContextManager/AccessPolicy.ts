@@ -69,8 +69,20 @@ export type AccessPolicy = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AccessPolicyLookup
 >;
+
+/**
+ * Props for {@link AccessPolicy.lookup}: find an access policy this stack
+ * doesn't manage by its identifiers.
+ */
+export interface AccessPolicyLookup {
+  /**
+   * Full resource name of the access policy (`accessPolicies/{policy}`).
+   */
+  name: string;
+}
 
 /**
  * An Access Context Manager access policy.
@@ -111,6 +123,19 @@ export type AccessPolicy = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing access policy
+ * `AccessPolicy.lookup` references an access policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * access policy.
+ *
+ * **Example:** Reference an existing access policy
+ * ```typescript
+ * const accessPolicy = GCP.AccessContextManager.AccessPolicy.lookup({
+ *   name: "accessPolicies/1234567890",
+ * });
+ * ```
+ *
  * @resource
  * @category AccessContextManager
  */
@@ -119,7 +144,7 @@ export const AccessPolicy = Resource<AccessPolicy>("GCP.AccessContextManager.Acc
 export class AccessPolicyNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (policy: acm.AccessPolicy): AccessPolicy["Attributes"] => {
@@ -136,9 +161,7 @@ const toAttrs = (policy: acm.AccessPolicy): AccessPolicy["Attributes"] => {
 };
 
 const getByName = (name: string) =>
-  acm
-    .getAccessPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  acm.getAccessPolicies({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, organization: string) =>
   Effect.gen(function* () {
@@ -182,6 +205,12 @@ export const AccessPolicyProvider = () =>
       return replaceOnIdentity(parentChanged || scopesChanged);
     }),
 
+    lookup: Effect.fn(function* ({ name }) {
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const organization = yield* resolveOrganization(olds?.parent, output?.parent);
       const existing = yield* observe(id, output?.name, organization);
@@ -222,7 +251,7 @@ export const AccessPolicyProvider = () =>
               scopes: desiredScopes.length > 0 ? desiredScopes : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           const settled = yield* waitForOperation(created).pipe(
@@ -244,7 +273,7 @@ export const AccessPolicyProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new AccessPolicyNotResolved({
-          name: output?.name ?? organization,
+          resourceName: output?.name ?? organization,
         });
       }
 
@@ -264,7 +293,7 @@ export const AccessPolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPolicyNotResolved({
-          name: output?.name ?? organization,
+          resourceName: output?.name ?? organization,
         });
       }
 
@@ -274,7 +303,7 @@ export const AccessPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteAccessPolicies({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

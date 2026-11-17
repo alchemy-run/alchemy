@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "WORKDIR",
+          "line": 2,
+          "flags": [],
+          "value": "/app"
+        },
+        {
+          "tag": "USER",
+          "line": 3,
+          "flags": [],
+          "value": "node:node"
+        },
+        {
+          "tag": "STOPSIGNAL",
+          "line": 4,
+          "flags": [],
+          "value": "SIGTERM"
+        }
+      ]
+    }
+  ]
+}

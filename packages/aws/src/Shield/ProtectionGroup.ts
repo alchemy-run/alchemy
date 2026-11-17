@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ProtectionGroupUnexpectedResponse extends Data.TaggedError(
+  "ProtectionGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** How Shield Advanced aggregates traffic across a protection group. */
 export type ProtectionGroupAggregation = "SUM" | "MEAN" | "MAX";
@@ -79,8 +87,18 @@ export interface ProtectionGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ProtectionGroupLookup
 > {}
+
+/**
+ * Props for {@link ProtectionGroup.lookup}: find a protection group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProtectionGroupLookup {
+  /** The protection group id of the existing protection group. */
+  protectionGroupId: string;
+}
 
 /**
  * An AWS Shield Advanced Protection Group — a collective of protected
@@ -118,15 +136,23 @@ export interface ProtectionGroup extends Resource<
  *   tags: { team: "platform" },
  * });
  * ```
+ *
+ * ### Looking up an existing protection group
+ * `ProtectionGroup.lookup` references a protection group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `protectionGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing protection group
+ * ```typescript
+ * const existing = AWS.Shield.ProtectionGroup.lookup({ protectionGroupId: "my-protection-group" });
+ * ```
  */
 export const ProtectionGroup = Resource<ProtectionGroup>("AWS.Shield.ProtectionGroup");
 
 const observeGroup = (protectionGroupId: string) =>
   shield.describeProtectionGroup({ ProtectionGroupId: protectionGroupId }).pipe(
     Effect.map((r) => r.ProtectionGroup),
-    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () => Effect.undefined),
   );
 
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>
@@ -195,6 +221,14 @@ export const ProtectionGroupProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ protectionGroupId: groupId }) {
+          const group = yield* observeGroup(groupId);
+          if (!group?.ProtectionGroupArn) return undefined;
+          const tags = yield* readGroupTags(group.ProtectionGroupArn);
+          const attrs = buildAttrs(group, tags);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const groupId = output?.protectionGroupId ?? (yield* toGroupId(id, olds ?? {}));
           const group = yield* observeGroup(groupId);
@@ -229,9 +263,9 @@ export const ProtectionGroupProvider = () =>
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
             group = yield* observeGroup(groupId);
             if (!group?.ProtectionGroupArn) {
-              return yield* Effect.fail(
-                new Error(`Failed to create or read Shield protection group ${groupId}`),
-              );
+              return yield* new ProtectionGroupUnexpectedResponse({
+                message: `Failed to create or read Shield protection group ${groupId}`,
+              });
             }
           } else {
             // 3. SYNC settings — diff observed against desired; update only

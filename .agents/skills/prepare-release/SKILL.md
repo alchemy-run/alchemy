@@ -1,6 +1,6 @@
 ---
 name: prepare-release
-description: Prepare an alchemy release by converging the live test suite — nuke + clear:state the testing account, run every test through a tag-driven `--plan` (unit → per-provider live in parallel → local), triage failures as they stream in, fan out one fix agent per failing/leaking service, census leaks, and loop until two consecutive rounds are green and clean. Fixes land as one alchemy PR plus at most one distilled PR and one floci PR. Use for "prepare a release", "/prepare-release", "release hardening run", "run the full suite before release", optionally scoped ("/prepare-release aws cloudflare").
+description: Prepare an alchemy release by converging the live test suite — nuke + clear:state the testing account, run every test through a tag-driven `--plan` (unit → per-provider live in parallel → local), triage failures as they stream in, fan out one fix agent per failing/leaking service, census leaks, and loop until two consecutive rounds are green and clean. Fixes land as one alchemy PR plus at most one distilled PR and one floci PR. Use for "prepare a release", "/prepare-release", "release hardening run", "run the full suite before release", optionally scoped ("/prepare-release aws cloudflare"). To harden one provider's suite on its own, use the harden skill.
 metadata:
   internal: true
 ---
@@ -11,6 +11,13 @@ This session is the **coordinator** of the convergence loop in AGENTS.md
 ("The convergence loop: nuke → test → census → fix-fleet"). You own the clean
 slate, the test runs, triage, type-checking, the census, and the PRs. Fix
 agents own one service each. The user merges; you never do.
+
+Each provider in scope converges with the **harden** skill
+(`.agents/skills/harden/SKILL.md`): its loop, root-cause order, isolation
+rules and the provider-bug patterns it lists all apply here. This skill adds
+the release-wide pieces around it: the clean slate, the plan across
+providers, the fix fleet, and the PRs. When the user only asks to harden a
+provider, use the harden skill instead of this one.
 
 The arguments name the scope: providers (`aws cloudflare gcp …`) or `all`. With
 no arguments, propose a scope (default: unit + local + every `provider:*` live
@@ -126,9 +133,15 @@ residue) so the loop survives context compaction.
 
 Note the `Full log: .alchemy/log/test/…` path at the end. Failures print
 inline with their error as soon as they happen, so start triage at the first
-failure rather than waiting for the run to finish. If nothing finishes for 10s
-the runner lists running tests — a test stuck far past its timeout is a hang
-to fix, not something to wait out.
+failure rather than waiting for the run to finish.
+
+Test time is the release's biggest cost, so one slow or exclusive test must
+never hold up the rest of a run. If it does, fix the runner or narrow the
+lock; don't lower concurrency and don't wait it out. Tests that only contend
+for a shared cloud resource take a label (`{ exclusive: "aws:ses-account" }`)
+instead of `exclusive: true`, which only process-global state needs. On
+2026-10-31 a writer-preferring `exclusive: true` gate froze the AWS suite
+twice behind a 25-minute ElastiCache test.
 
 ## 4. Triage
 
@@ -140,12 +153,18 @@ service is the unit of ownership). Classify each:
 | Provider bug | wrong reconcile/diff/delete, leak, crash | `packages/alchemy/src/…` (alchemy PR) |
 | Untyped error | `Unknown*Error`, out-of-union status error, wrong schema | distilled patch (distilled PR) |
 | Emulator bug | only fails under floci | `submodules/floci` (floci PR) |
-| Test bug | non-deterministic name, unbounded wait, missing propagation retry | the test (alchemy PR) |
+| Test bug | non-deterministic or hard-coded name, unbounded wait, missing propagation retry | the test (alchemy PR) |
 | Platform/entitlement | plan-gated, slow async provisioning, beta API | skipIf-gate on the typed tag + exact error, keep an ungated probe |
 | Flake | passes alone, fails under load | re-run alone and on main first |
 
-Root-cause priority is **provider bug > distilled patch > test fix**. Never
-paper over a provider leak or untyped error in a test. For suspected flakes,
+Root-cause priority is **provider bug > distilled patch > test fix**, and a
+longer timeout comes last, only for work that is slow by nature (image
+builds, cold starts). Never paper over a provider leak or untyped error in a
+test. A failure that only shows up in some runs is usually two runs touching
+the same cloud object — a shared name or stage, a missing lock label, or a
+retry that leaks — not a flake; see the isolation rules in the harden skill.
+Skip a test only for a permanent account blocker (quota, entitlement), with
+`test.provider.skip` and a comment quoting the exact error. For suspected flakes,
 build a verdict table: `Failure | Re-run alone | On main | Verdict`. A failure
 that also fails on main is still in scope for the release — it just isn't a
 regression.
@@ -165,7 +184,11 @@ failing services ∪ leaking services.
 
 ## 6. Fix fleet
 
-Spawn one agent per service on the worklist, in parallel (~12 at once;
+Launch one agent per service on the worklist, in parallel. In T3 Code each
+fixer is a detached top-level thread from `t3_thread_launch` with
+`workspaceStrategy: { type: "existing_worktree", worktreePath: <this worktree> }`,
+never a `delegate_task` subagent thread. Collect each result with
+`t3_thread_wait` + `t3_thread_read`. Run ~12 at once (
 account-singleton services like CloudTrail, Config, SecurityHub, GuardDuty,
 ControlTower and IdentityCenter run as one sequential chain). Agents work in
 this worktree and **commit but don't push**; they touch only their service's
@@ -191,9 +214,14 @@ contract — include every item:
    - Cloudflare: `cd submodules/distilled/packages/cloudflare && bun scripts/generate.ts --resource <svc> && pnpm exec oxfmt src/services/<svc>.ts`
    - AWS: `cd submodules/distilled/packages/aws && bun scripts/generate.ts --sdk <svc>`
    Tests resolve distilled from `src/`, so there's nothing to rebuild or wait for.
-9. Test rules: start and end with `stack.destroy()`, deterministic names
-   (engine-generated or derived from `stack.stage`), out-of-band verification
-   through distilled, no mocks.
+9. Test rules: start and end with `stack.destroy()`, out-of-band verification
+   through distilled, no mocks. Names: let the resource generate the physical
+   name. Only a test about explicitly provided names passes one, and it is
+   derived from `stack.stage` so it is isolated to the user running the test.
+   Never `Date.now()`, UUIDs or random values in a name: every run is
+   deterministic and leaves no orphans. A resource the API can never delete
+   keeps one shared constant name that every run adopts. Fix any hard-coded
+   name you find in the suites you touch.
 10. Done means: its **full** tag passes, and distilled list/describe calls show
     zero orphans from its service.
 11. Structured result: `{ service, tag, testsPassed, testCommand, rootCause,
@@ -201,7 +229,8 @@ contract — include every item:
     notes }`.
 
 While agents run, watch for stalls: a transcript that hasn't been written for
-~5 minutes with no child test process is stalled — kill and re-dispatch it.
+~5 minutes with no child test process is stalled — `t3_thread_interrupt` it
+and re-dispatch with a new `t3_thread_launch`.
 
 When results come in, review each diff yourself before accepting it. Reject
 any that catch a catch-all error, widen a cast, add `Effect.orDie` to a
@@ -220,8 +249,8 @@ conventional-commit scoped (`fix(aws/ec2): …`) — and **push immediately**.
 
 ## 8. Loop
 
-**Never re-run the full suite.** Live tests are slow (a full pass takes
-hours), so the full plan runs exactly once. After that, every run is targeted:
+**Converge with targeted runs, then confirm with full ones.** Live tests are
+slow, so after the first full plan every fixing run is targeted:
 
 1. **Track passes cumulatively.** Every run (yours and the agents') writes
    `PASS <file> > <title>` lines to `packages/alchemy/.alchemy/log/test/*.log`.
@@ -232,14 +261,18 @@ hours), so the full plan runs exactly once. After that, every run is targeted:
    ```
 2. **Compute the residual:** tests with a `FAIL` line and no `PASS` line, plus
    tests that never finished (a killed or stalled round) — find those by
-   diffing the runner's "still running" lists against the result lines.
+   diffing the run's test list against the result lines.
 3. **Fix agents get each failing area passing individually** (their own
    suites, `-t` for single tests in long sequential files).
 4. **One residual run** of only what's still unpassed — file paths, narrowed
    with `-t` where a file is long and sequential (e.g. `Fly/BlueGreen.test.ts`
    has ~180 tests at ~100s each; never run it unfiltered).
-5. **Finish with nuke + clear:state + census.** The goal is every test has
-   passed at least once and the census shows `Nothing to delete`.
+5. **Confirm stability per provider** with the harden skill's loop: full
+   runs of each provider's suite, a census after each, until two consecutive
+   runs are green and clean. One green run proves little — retry leaks, lagging
+   listings and shared names only show up across runs.
+6. **Finish with nuke + clear:state + census.** The goal is consecutive green
+   runs and a census that shows `Nothing to delete`.
 
 If a census leftover reappears after nuke, its `list` or `delete` is the bug
 (e.g. `list` returning archived or Cloudflare-managed objects), not the test.
@@ -330,6 +363,15 @@ report CI status in place of the test results.
   creating a nested `node_modules` with a second `effect` copy ("Unable to get
   redacted value" everywhere). Move `submodules/distilled/node_modules` aside
   and check `packages/*/node_modules/effect` links point at the root store.
+- **Other sessions share the account.** Another worktree's live resources
+  show up in your census; check `ps -eo etime,command | grep alchemy-test`
+  before deleting a leftover you can't trace to your own run. A linked
+  worktree defaults to its own test stage (`test_$USER_<worktree>`), so two
+  worktrees don't collide; suites that set their own stage must prefix it
+  with `Test.defaultStage()`.
+- **Provider `console.log` doesn't reach the run log.** Debug with
+  `Effect.logInfo`, and probe API behavior with a throwaway test file rather
+  than guessing.
 - **Account blockers are not code.** Billing (GCP), token permission groups
   (e.g. Cloudflare K2) and retired services (AWS FinSpace) get reported to the
   user with the exact error; never enable billing or edit shared tokens.

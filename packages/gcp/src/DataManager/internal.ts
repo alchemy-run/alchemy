@@ -212,10 +212,10 @@ export const ignoreMissing = <A, R>(
 
 export const getUserList = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datamanager
         .getAccountTypesAccountsUserLists({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listUserLists = (parent: string) =>
   parent.length === 0

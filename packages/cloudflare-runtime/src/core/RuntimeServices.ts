@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
@@ -7,6 +8,7 @@ import {
   Cache,
   D1,
   DispatchNamespace,
+  Flagship,
   Hyperdrive,
   Images,
   KvNamespace,
@@ -62,6 +64,7 @@ export const layerLocalBindings = () =>
     Cache.CacheLive,
     D1.D1Live,
     DispatchNamespace.DispatchNamespaceLive,
+    Flagship.FlagshipLive,
     Hyperdrive.HyperdriveLive,
     Images.ImagesLive,
     KvNamespace.KvNamespaceLive,
@@ -81,6 +84,7 @@ export type BindingServices =
   | Cache.Cache
   | D1.D1
   | DispatchNamespace.DispatchNamespace
+  | Flagship.Flagship
   | Hyperdrive.Hyperdrive
   | Images.Images
   | KvNamespace.KvNamespace
@@ -115,4 +119,6 @@ export const layerRuntime = (config: RuntimeConfig) =>
     Layer.provide(Paths.PathsLive),
     Layer.provide(Docker.DockerLive),
     Layer.provide(Workerd.WorkerdLive),
+    // Docker, the loopback server and the registry proxy draw UUIDs from it.
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
   );

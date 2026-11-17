@@ -129,7 +129,7 @@ const bindSidecar = <Shape, Req>(
     }
     return {
       id,
-      port: (ctx === undefined ? Effect.succeed(undefined) : ctx.get<unknown>(key)).pipe(
+      port: (ctx === undefined ? Effect.undefined : ctx.get<unknown>(key)).pipe(
         Effect.flatMap((port) =>
           port === undefined || port === null || port === ""
             ? Effect.fail(new BoundContainerUnavailable({ container: id }))
@@ -239,10 +239,10 @@ export function bindContainer<Groups extends HttpApiGroup.Constraint, Req = neve
   never,
   Req | HttpClient.HttpClient
 >;
-export function bindContainer(
-  target: Bindable<unknown, unknown>,
+export function bindContainer<Req>(
+  target: Bindable<unknown, Req>,
   options?: BindContainerOptions<any, any>,
-): Effect.Effect<unknown, never, any> {
+): Effect.Effect<unknown, never, Req | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const bound = yield* bindSidecar(target);

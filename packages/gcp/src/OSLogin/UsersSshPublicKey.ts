@@ -114,7 +114,7 @@ export const UsersSshPublicKey = Resource<UsersSshPublicKey>("GCP.OSLogin.UsersS
 export class UsersSshPublicKeyNotResolved extends Data.TaggedError(
   "GCP.OSLogin.UsersSshPublicKeyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (key: oslogin.SshPublicKey, user: string, project: string) => {
@@ -195,7 +195,7 @@ export const UsersSshPublicKeyProvider = () =>
 
       if (current === undefined) {
         return yield* new UsersSshPublicKeyNotResolved({
-          name: output?.name ?? resourceName(user, output?.fingerprint ?? ""),
+          resourceName: output?.name ?? resourceName(user, output?.fingerprint ?? ""),
         });
       }
 

@@ -6,12 +6,25 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags, sameStringSet } from "./internal.ts";
+
+export class MemoryDBClusterNotReady extends Data.TaggedError("MemoryDBClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MemoryDBClusterUnexpectedResponse extends Data.TaggedError(
+  "MemoryDBClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -166,8 +179,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon MemoryDB cluster — a durable, Redis/Valkey-compatible in-memory
@@ -197,6 +220,16 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.MemoryDB.Cluster.lookup({ clusterName: "my-cluster" });
+ * ```
+ *
  * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.MemoryDB.Cluster");
@@ -215,7 +248,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeClusters({ ClusterName: name })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -226,11 +259,15 @@ export const ClusterProvider = () =>
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ARN) {
-              return Effect.fail(new Error(`Cluster '${name}' not found`));
+              return Effect.fail(
+                new MemoryDBClusterNotReady({ message: `Cluster '${name}' not found` }),
+              );
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(`Cluster '${name}' not available (status: ${cluster.Status})`),
+                new MemoryDBClusterNotReady({
+                  message: `Cluster '${name}' not available (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -251,7 +288,9 @@ export const ClusterProvider = () =>
               cluster.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(`Cluster '${name}' still settling (status: ${cluster.Status})`),
+                new MemoryDBClusterNotReady({
+                  message: `Cluster '${name}' still settling (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -262,7 +301,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: memorydb.Cluster) {
         if (!cluster.Name || !cluster.ARN) {
-          return yield* Effect.fail(new Error(`Cluster '${cluster.Name}' is missing its ARN`));
+          return yield* new MemoryDBClusterUnexpectedResponse({
+            message: `Cluster '${cluster.Name}' is missing its ARN`,
+          });
         }
         return {
           clusterName: cluster.Name,
@@ -318,6 +359,13 @@ export const ClusterProvider = () =>
           if ((n.engine ?? undefined) !== (o.engine ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterName: name }) {
+          const cluster = yield* readCluster(name);
+          if (!cluster?.ARN) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -498,9 +546,9 @@ export const ClusterProvider = () =>
               cluster === undefined
                 ? Effect.void
                 : Effect.fail(
-                    new Error(
-                      `MemoryDB cluster '${name}' still deleting (status: ${cluster.Status})`,
-                    ),
+                    new MemoryDBClusterNotReady({
+                      message: `MemoryDB cluster '${name}' still deleting (status: ${cluster.Status})`,
+                    }),
                   ),
             ),
             Effect.retry({

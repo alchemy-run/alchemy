@@ -3,10 +3,16 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class FunctionUnexpectedResponse extends Data.TaggedError("FunctionUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FunctionProps {
   /**
@@ -70,8 +76,18 @@ export interface Function extends Resource<
     keyValueStoreArns: string[];
   },
   never,
-  Providers
+  Providers,
+  FunctionLookup
 > {}
+
+/**
+ * Props for {@link Function.lookup}: find a CloudFront function this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FunctionLookup {
+  /** The name of the existing function. */
+  functionName: string;
+}
 
 /**
  * A CloudFront Function for viewer request and response customization.
@@ -93,6 +109,17 @@ export interface Function extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing CloudFront function
+ * `Function.lookup` references a CloudFront function Alchemy doesn't manage (created in the
+ * console or by another stack), found by `functionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach an existing CloudFront function to a distribution
+ * ```typescript
+ * const rewrite = AWS.CloudFront.Function.lookup({ functionName: "rewrite-index" });
+ * const functionArn = rewrite.functionArn;
+ * ```
+ *
  * @resource
  */
 export const Function = Resource<Function>("AWS.CloudFront.Function");
@@ -107,7 +134,7 @@ export const FunctionProvider = () =>
             Name: name,
             Stage: stage,
           })
-          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.undefined));
       });
 
       const getCurrent = Effect.fn(function* (name: string) {
@@ -125,9 +152,9 @@ export const FunctionProvider = () =>
 
       const publish = Effect.fn(function* (name: string, etag: string | undefined) {
         if (!etag) {
-          return yield* Effect.fail(
-            new Error(`CloudFront Function '${name}' is missing an ETag for publish`),
-          );
+          return yield* new FunctionUnexpectedResponse({
+            message: `CloudFront Function '${name}' is missing an ETag for publish`,
+          });
         }
         yield* cloudfront.publishFunction({
           Name: name,
@@ -163,6 +190,13 @@ export const FunctionProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ functionName: name }) {
+          const current = yield* getCurrent(name);
+          if (!current?.FunctionSummary) {
+            return undefined;
+          }
+          return toAttrs(current.FunctionSummary, current.ETag, name);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.functionName ?? (yield* createName(id, olds ?? {}));

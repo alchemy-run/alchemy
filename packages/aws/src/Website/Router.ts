@@ -6,7 +6,6 @@ import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
-import { Certificate } from "../ACM/Certificate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution, type DistributionBehavior } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -341,6 +340,7 @@ export const Router = Effect.fn("AWS.Website.Router")(
               // is pinned.
               dns.alias(`AliasRecord${index + 1}`, {
                 name,
+                ipv6: true,
                 target: aliasTarget,
               }),
             { concurrency: "unbounded" },
@@ -353,7 +353,9 @@ export const Router = Effect.fn("AWS.Website.Router")(
     // `WebsiteRouterBindTargets`). The set infers its zone from the first
     // bound hostname when none is pinned.
     const siteRecords =
-      domain && dns ? yield* dns.aliasSet("SiteAliasRecords", { target: aliasTarget }) : undefined;
+      domain && dns
+        ? yield* dns.aliasSet("SiteAliasRecords", { target: aliasTarget, ipv6: true })
+        : undefined;
 
     const invalidation =
       props.invalidation === false || !props.invalidation
@@ -537,5 +539,6 @@ const stringifyResolvedString = (
   typeof value === "string"
     ? build(value)
     : Effect.isEffect(value)
-      ? value.pipe(Effect.map((resolved) => build(resolved)))
+      ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- TODO: Input<string> carries Effect<string, any, any> until Resource carries its requirements (see Input.ts)
+        value.pipe(Effect.map((resolved) => build(resolved)))
       : value.pipe(Output.map((resolved) => build(resolved)));

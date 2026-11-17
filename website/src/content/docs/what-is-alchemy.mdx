@@ -243,7 +243,7 @@ Effect.gen(function* () {
   const greet = yield* Workflows.RunWorkflow(Greet);
   // ...
 }).pipe(
--  Effect.provide(GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine))),
+-  Effect.provide(GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine()))),
 +  Effect.provide(GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.NativeEngine))),
 );
 ```

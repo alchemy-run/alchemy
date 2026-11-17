@@ -1,0 +1,191 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "ubuntu",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENV",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 3,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 4,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value"
+            ],
+            [
+              "name2",
+              "value2"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 5,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value value1"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 6,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value value2"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 7,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value'quote space'value2"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 8,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value\"double quote\"value2"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 9,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value value2"
+            ],
+            [
+              "name2",
+              "value2 value3"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 10,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "a\"b"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 11,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "a\\'b"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 12,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "a\\b"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 13,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "a\\\"b"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 14,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "''"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 17,
+          "flags": [],
+          "vars": [
+            [
+              "name",
+              "value"
+            ],
+            [
+              "name1",
+              "value1"
+            ],
+            [
+              "name2",
+              "value2a            value2b"
+            ],
+            [
+              "name3",
+              "value3a\\n\"value3b\""
+            ],
+            [
+              "name4",
+              "value4a\\nvalue4b"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

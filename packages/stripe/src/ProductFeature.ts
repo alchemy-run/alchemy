@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteProductFeature,
   GetProducts,
@@ -108,9 +107,7 @@ const toAttrs = (product: string, feature: StripeProductFeature): ProductFeature
 const isMissing = isMissingStripeResource;
 
 const getById = (product: string, id: string) =>
-  GetProductFeature({ product, id }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
-  );
+  GetProductFeature({ product, id }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listFeatures = Effect.fn(function* (product: string) {
   const features: StripeProductFeature[] = [];
@@ -120,7 +117,7 @@ const listFeatures = Effect.fn(function* (product: string) {
       product,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }
@@ -257,10 +254,8 @@ export const ProductFeatureProvider = () =>
         current = yield* CreateProductFeature({
           product: news.product,
           entitlement_feature: news.entitlementFeature,
+          idempotencyKey: `alchemy-product-feature-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-product-feature-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

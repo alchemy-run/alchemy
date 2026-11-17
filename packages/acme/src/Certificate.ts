@@ -2,6 +2,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { arrayEqualsUnordered } from "alchemy/Util/equal";
+import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -188,7 +189,7 @@ export const CertificateProvider = () =>
       if (account.accountUrl !== output.accountUrl) {
         return { action: "replace" as const };
       }
-      const now = yield* Effect.sync(() => Date.now());
+      const now = yield* Clock.currentTimeMillis;
       const reissue =
         !arrayEqualsUnordered(news.identifiers, output.identifiers) ||
         (news.keyAlgorithm ?? "ES256") !== output.keyAlgorithm ||
@@ -204,7 +205,7 @@ export const CertificateProvider = () =>
     reconcile: Effect.fn(function* ({ news, olds, output }) {
       const account = accountOf(news.account);
       const keyAlgorithm = news.keyAlgorithm ?? "ES256";
-      const now = yield* Effect.sync(() => Date.now());
+      const now = yield* Clock.currentTimeMillis;
       // Observe: the stored certificate is authoritative — nothing to do
       // while it covers the names and isn't due.
       if (

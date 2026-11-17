@@ -61,8 +61,18 @@ export interface EventType extends Resource<
     arn: string;
   },
   never,
-  Providers
+  Providers,
+  EventTypeLookup
 > {}
+
+/**
+ * Props for {@link EventType.lookup}: find an event type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EventTypeLookup {
+  /** The name of the existing event type. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector event type — the schema of an event (its variables,
@@ -77,6 +87,16 @@ export interface EventType extends Resource<
  *   entityTypes: ["customer"],
  *   labels: ["fraud", "legit"],
  * });
+ * ```
+ *
+ * ### Looking up an existing event type
+ * `EventType.lookup` references an event type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing event type
+ * ```typescript
+ * const existing = AWS.FraudDetector.EventType.lookup({ name: "my-event-type" });
  * ```
  *
  * @resource
@@ -94,7 +114,7 @@ export const EventTypeProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getEventTypes({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.eventTypes?.[0];
       });
 
@@ -113,6 +133,13 @@ export const EventTypeProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const eventType = yield* get(name);
+          if (eventType === undefined) return undefined;
+          const attrs = toAttrs(eventType);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

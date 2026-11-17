@@ -14,7 +14,6 @@ import {
   listProjectEnvironments,
   missingToUndefined,
   organizationIdOf,
-  parseOrgEnv,
   segmentAfter,
   stripRevision,
   toResourceId,
@@ -137,8 +136,33 @@ export type EnvironmentsKeystoresAlias = Resource<
     expiryDate: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsKeystoresAliasLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsKeystoresAlias.lookup}: find an environments
+ * keystores alias this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsKeystoresAliasLookup {
+  /**
+   * Alias id. Must match `[\w\s-.]{1,255}`.
+   */
+  aliasId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+  /**
+   * Parent keystore id or
+   * `organizations/{org}/environments/{env}/keystores/{keystore}`.
+   */
+  keystore: string;
+}
 
 /**
  * An alias in an Apigee environment keystore — a certificate or
@@ -162,6 +186,21 @@ export type EnvironmentsKeystoresAlias = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environments keystores alias
+ * `EnvironmentsKeystoresAlias.lookup` references an environments keystores
+ * alias Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared environments keystores alias.
+ *
+ * **Example:** Reference an existing environments keystores alias
+ * ```typescript
+ * const environmentsKeystoresAlias = GCP.Apigee.EnvironmentsKeystoresAlias.lookup({
+ *   aliasId: "my-alias",
+ *   environment: "my-environment",
+ *   keystore: "my-keystore",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -172,7 +211,7 @@ export const EnvironmentsKeystoresAlias = Resource<EnvironmentsKeystoresAlias>(
 export class EnvironmentsKeystoresAliasNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeystoresAliasNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const keystoreIdOf = (value: string) => segmentAfter(value, "keystores") ?? lastSegment(value);
@@ -276,6 +315,17 @@ export const EnvironmentsKeystoresAliasProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ aliasId, organization, environment, keystore }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const keystoreId = keystoreIdOf(keystore ?? "");
+      const name = resourceName(organizationId, environmentId, keystoreId, aliasId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId, keystoreId);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(
@@ -361,7 +411,7 @@ export const EnvironmentsKeystoresAliasProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeystoresAliasNotResolved({ name });
+        return yield* new EnvironmentsKeystoresAliasNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organizationId, environmentId, keystoreId);

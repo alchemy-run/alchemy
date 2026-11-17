@@ -1,5 +1,4 @@
 import { pathToFileURL } from "node:url";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -107,9 +106,9 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
     return { ran: false } satisfies VinextPrerenderResult;
   }
 
-  yield* Console.log(`  ${formatVinextPrerenderLabel(decision)}`);
+  yield* Effect.logInfo(`  ${formatVinextPrerenderLabel(decision)}`);
   if (cache === "kv") {
-    yield* Console.log(
+    yield* Effect.logInfo(
       "  Local prerender has no Worker bindings. VINEXT_KV_CACHE is provisioned and seeded on deploy; do not add wrangler.jsonc.",
     );
   }

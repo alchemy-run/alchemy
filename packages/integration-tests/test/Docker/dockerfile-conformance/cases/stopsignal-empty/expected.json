@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: STOPSIGNAL requires exactly one argument"
+}

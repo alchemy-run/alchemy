@@ -72,12 +72,12 @@ export const AttributeGroupAssociationProvider = () =>
       const observeApplication = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
       const observeAttributeGroup = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getAttributeGroup({ attributeGroup: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const isAssociated = Effect.fn(function* (applicationId: string, attributeGroupId: string) {

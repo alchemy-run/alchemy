@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -127,8 +128,32 @@ export type ApisVersionsSpec = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApisVersionsSpecLookup
 >;
+
+/**
+ * Props for {@link ApisVersionsSpec.lookup}: find an apis versions spec
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ApisVersionsSpecLookup {
+  /**
+   * Spec id (the `{spec}` segment of
+   * `.../versions/{version}/specs/{spec}`).
+   */
+  specId: string;
+  /**
+   * Parent version. Full name
+   * `projects/{project}/locations/{location}/apis/{api}/versions/{version}`.
+   */
+  version: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A spec attached to an API Hub version. Adding an OpenAPI spec parses
@@ -148,6 +173,20 @@ export type ApisVersionsSpec = Resource<
  *     contents: "openapi: 3.0.0\ninfo:\n  title: pets\n  version: 1.0.0\npaths: {}\n",
  *     mimeType: "application/yaml",
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing apis versions spec
+ * `ApisVersionsSpec.lookup` references an apis versions spec Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared apis versions spec.
+ *
+ * **Example:** Reference an existing apis versions spec
+ * ```typescript
+ * const apisVersionsSpec = GCP.ApiHub.ApisVersionsSpec.lookup({
+ *   specId: "my-spec",
+ *   version: "my-version",
  * });
  * ```
  *
@@ -184,10 +223,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsApisVersionsSpecs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ApisVersionsSpecProvider = () =>
   Provider.succeed(ApisVersionsSpec, {
@@ -208,6 +247,15 @@ export const ApisVersionsSpecProvider = () =>
         nextParent: news.version ?? olds?.version ?? output?.version,
       });
     }),
+
+    lookup: Effect.fn(function* ({ specId, version: lookupVersion }) {
+      const env = yield* GcpEnvironment.current;
+      const version = lookupVersion ?? "";
+      const name = resourceName(version, specId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -275,7 +323,7 @@ export const ApisVersionsSpecProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

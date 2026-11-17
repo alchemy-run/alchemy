@@ -200,7 +200,7 @@ export const LoggingConfigurationProvider = () =>
       const getByIdentifier = Effect.fn(function* (identifier: string) {
         return yield* ivschat.getLoggingConfiguration({ identifier }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -319,9 +319,7 @@ export const LoggingConfigurationProvider = () =>
                 (summary) =>
                   toAttrs(summary).pipe(
                     // Tolerate a malformed/deleted summary — drop it.
-                    Effect.catchTag("IvsChatLoggingConfigurationInvalid", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("IvsChatLoggingConfigurationInvalid", () => Effect.undefined),
                   ),
                 { concurrency: 5 },
               ),

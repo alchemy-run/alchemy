@@ -135,7 +135,7 @@ export const DatasetsConsentStoresAttributeDefinition =
 export class DatasetsConsentStoresAttributeDefinitionNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresAttributeDefinitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const storeOf = (
@@ -175,12 +175,12 @@ const toAttrs = (definition: healthcare.AttributeDefinition, project: string, re
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
           name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
   Provider.succeed(DatasetsConsentStoresAttributeDefinition, {
@@ -282,7 +282,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresAttributeDefinitionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

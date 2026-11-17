@@ -5,6 +5,7 @@ import * as Namespace from "alchemy/Namespace";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -18,6 +19,7 @@ import {
   durableObjectSettingsPatch,
   mergeApplicationSettings,
 } from "./ContainerConfiguration.ts";
+import { deleteSnapshotImages } from "./ContainerSnapshots.ts";
 
 export const DurableObjectApplicationTypeId = "Cloudflare.Containers.DurableObjectApplication";
 
@@ -103,7 +105,11 @@ export const retryNamespacePropagation = <A, E extends { readonly _tag: string }
         : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error._tag === "DurableObjectNamespaceNotFound",
+      // Cloudflare also refuses creates for a moment ("can't create
+      // application at this time"); the same request succeeds when retried.
+      while: (error) =>
+        error._tag === "DurableObjectNamespaceNotFound" ||
+        error._tag === "ContainerApplicationCreateUnavailable",
       schedule: Schedule.spaced("2 seconds"),
       times: 15,
     }),
@@ -282,7 +288,7 @@ export const LiveDurableObjectApplicationProvider = () =>
       // 1. Observe. The namespace belongs to this stack's Worker, so an
       //    application already attached to it is this class's application.
       let application = yield* getApplication.pipe(
-        Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
       );
 
       // 2. Ensure
@@ -319,6 +325,9 @@ export const LiveDurableObjectApplicationProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!isLiveApplication(output.applicationId)) return;
+      yield* deleteSnapshotImages(output.accountId, output.applicationId).pipe(
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
+      );
       yield* Containers.deleteContainerApplication({
         accountId: output.accountId,
         applicationId: output.applicationId,
@@ -333,7 +342,7 @@ export const LiveDurableObjectApplicationProvider = () =>
           applicationId: output.applicationId,
         }).pipe(
           Effect.map((application) => toAttributes(application, className, output.settings)),
-          Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
         );
       }
       // Generated names identify this instance, so a match is ours.
@@ -369,7 +378,7 @@ export const LocalDurableObjectApplicationProvider = () =>
         applicationName: yield* createContainerApplicationName(id, undefined),
         accountId: yield* localAccountId,
         className: news.className,
-        createdAt: new Date().toISOString(),
+        createdAt: DateTime.formatIso(yield* DateTime.now),
       });
     }),
     reconcile: Effect.fn(function* ({ id, news, bindings, output }) {
@@ -378,7 +387,7 @@ export const LocalDurableObjectApplicationProvider = () =>
         applicationName: yield* createContainerApplicationName(id, undefined),
         accountId: yield* localAccountId,
         className: news.className,
-        createdAt: output?.createdAt || new Date().toISOString(),
+        createdAt: output?.createdAt || DateTime.formatIso(yield* DateTime.now),
         durableObjects: yield* boundNamespace(news.className, bindings),
         settings: yield* boundSettings(news.className, bindings),
       });

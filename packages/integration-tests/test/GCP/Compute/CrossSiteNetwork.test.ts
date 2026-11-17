@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -34,6 +35,10 @@ test.provider(
             description: "cross-cloud fabric",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.CrossSiteNetwork.lookup({ crossSiteNetworkName: created.crossSiteNetworkName }),
+        created,
       );
 
       expect(created.crossSiteNetworkName).toEqual(expect.any(String));

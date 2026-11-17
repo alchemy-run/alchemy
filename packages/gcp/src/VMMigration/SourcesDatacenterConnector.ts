@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -93,8 +94,36 @@ export type SourcesDatacenterConnector = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SourcesDatacenterConnectorLookup
 >;
+
+/**
+ * Props for {@link SourcesDatacenterConnector.lookup}: find a sources
+ * datacenter connector this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SourcesDatacenterConnectorLookup {
+  /**
+   * Datacenter connector id.
+   */
+  datacenterConnectorId: string;
+  /**
+   * Region used when `source` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent source. Full name
+   * `projects/{project}/locations/{location}/sources/{source}` or the
+   * source id (combined with `location`).
+   */
+  source: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration datacenter connector registered against a VMware
@@ -118,6 +147,20 @@ export type SourcesDatacenterConnector = Resource<
  *     version: "1.0.0",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing sources datacenter connector
+ * `SourcesDatacenterConnector.lookup` references a sources datacenter
+ * connector Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared sources datacenter connector.
+ *
+ * **Example:** Reference an existing sources datacenter connector
+ * ```typescript
+ * const sourcesDatacenterConnector = GCP.VMMigration.SourcesDatacenterConnector.lookup({
+ *   datacenterConnectorId: "my-datacenter-connector",
+ *   source: "my-source",
+ * });
  * ```
  *
  * @resource
@@ -152,10 +195,10 @@ const toAttrs = (connector: vm.DatacenterConnector, project: string, region: str
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : vm
         .getProjectsLocationsSourcesDatacenterConnectors({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listChildren = (parent: string) =>
   collectPages(
@@ -197,6 +240,21 @@ export const SourcesDatacenterConnectorProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      datacenterConnectorId,
+      location: lookupLocation,
+      source: lookupSource,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const source =
+        lookupSource !== undefined ? sourceOf(lookupSource, env.project, location) : "";
+      const name = source.length > 0 ? resourceName(source, datacenterConnectorId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -256,7 +314,7 @@ export const SourcesDatacenterConnectorProvider = () =>
               serviceAccount: news.serviceAccount,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -269,7 +327,7 @@ export const SourcesDatacenterConnectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -286,7 +344,7 @@ export const SourcesDatacenterConnectorProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -101,7 +101,7 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig 
 export class CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, configId: string) =>
@@ -113,7 +113,7 @@ const getByName = (tenant: string, name: string) =>
       tenant,
       name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   config: discoveryengine.A2aV1TaskPushNotificationConfig,
@@ -155,7 +155,7 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigP
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const tenant = olds?.tenant ?? output?.tenant;
       const parent = olds?.parent ?? output?.parent;
@@ -167,7 +167,7 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigP
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, tenant);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -208,7 +208,7 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigP
 
       if (current === undefined) {
         return yield* new CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigNotResolved(
-          { name: fallbackName },
+          { resourceName: fallbackName },
         );
       }
 

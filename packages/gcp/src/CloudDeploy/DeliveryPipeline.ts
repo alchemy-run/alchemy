@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -137,8 +138,33 @@ export type DeliveryPipeline = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeliveryPipelineLookup
 >;
+
+/**
+ * Props for {@link DeliveryPipeline.lookup}: find a delivery pipeline this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DeliveryPipelineLookup {
+  /**
+   * Delivery pipeline id (the `{deliveryPipeline}` segment of
+   * `projects/{pro
+   * ject}/locations/{location}/deliveryPipelines/{deliveryPipeline}`).
+   */
+  deliveryPipelineId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Deploy delivery pipeline — the ordered stages a Skaffold
@@ -181,6 +207,19 @@ export type DeliveryPipeline = Resource<
  *   description: "app pipeline v2",
  *   suspended: true,
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing delivery pipeline
+ * `DeliveryPipeline.lookup` references a delivery pipeline Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * delivery pipeline.
+ *
+ * **Example:** Reference an existing delivery pipeline
+ * ```typescript
+ * const deliveryPipeline = GCP.CloudDeploy.DeliveryPipeline.lookup({
+ *   deliveryPipelineId: "my-delivery-pipeline",
  * });
  * ```
  *
@@ -241,7 +280,7 @@ const toAttrs = (item: clouddeploy.DeliveryPipeline, project: string) => {
 const getByName = (name: string) =>
   clouddeploy
     .getProjectsLocationsDeliveryPipelines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -271,6 +310,15 @@ export const DeliveryPipelineProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ deliveryPipelineId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, deliveryPipelineId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -327,7 +375,7 @@ export const DeliveryPipelineProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -335,7 +383,7 @@ export const DeliveryPipelineProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -383,7 +431,7 @@ export const DeliveryPipelineProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

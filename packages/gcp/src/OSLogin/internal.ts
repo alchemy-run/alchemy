@@ -80,7 +80,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -108,7 +108,7 @@ export const retryConflict = <A, E extends { _tag: string }, R>(effect: Effect.E
   );
 
 export const getSshPublicKey = (name: string) => {
-  if (name.length === 0) return Effect.succeed(undefined);
+  if (name.length === 0) return Effect.undefined;
   return catchMissing(oslogin.getUsersSshPublicKeys({ name }));
 };
 

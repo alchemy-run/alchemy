@@ -132,7 +132,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfig =
 export class ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved extends Data.TaggedError(
   "GCP.CloudChannel.ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resolveParent = (newsParent: string, account?: string) =>
@@ -232,7 +232,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved({
-          name: name || `${parent}/channelPartnerRepricingConfigs`,
+          resourceName: name || `${parent}/channelPartnerRepricingConfigs`,
         });
       }
 

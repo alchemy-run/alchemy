@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./common.ts";
+
+export class InstanceProfileConflict extends Data.TaggedError("InstanceProfileConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class InstanceProfileUnexpectedResponse extends Data.TaggedError(
+  "InstanceProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface InstanceProfileProps {
   /**
@@ -48,8 +61,18 @@ export interface InstanceProfile extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  InstanceProfileLookup
 > {}
+
+/**
+ * Props for {@link InstanceProfile.lookup}: find an instance profile this
+ * stack doesn't manage, in the ambient account, by its name.
+ */
+export interface InstanceProfileLookup {
+  /** The name of the existing instance profile. */
+  instanceProfileName: string;
+}
 
 /**
  * An IAM instance profile that can present a role to EC2 instances.
@@ -75,6 +98,20 @@ export interface InstanceProfile extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instance profile
+ * `InstanceProfile.lookup` references an instance profile Alchemy doesn't manage (created in the console or by another stack), found by `instanceProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Launch an instance with an existing profile
+ * ```typescript
+ * const profile = AWS.IAM.InstanceProfile.lookup({ instanceProfileName: "web" });
+ *
+ * const instance = yield* AWS.EC2.Instance("Web", {
+ *   imageId,
+ *   instanceProfileName: profile.instanceProfileName,
+ * });
+ * ```
+ *
  * @resource
  */
 export const InstanceProfile = Resource<InstanceProfile>("AWS.IAM.InstanceProfile");
@@ -93,7 +130,7 @@ export const InstanceProfileProvider = () =>
           .getInstanceProfile({
             InstanceProfileName: name,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.InstanceProfile;
       });
 
@@ -154,6 +191,20 @@ export const InstanceProfileProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ instanceProfileName: name }) {
+          const profile = yield* readInstanceProfile(name);
+          if (!profile?.Arn || !profile.InstanceProfileName) {
+            return undefined;
+          }
+          return {
+            instanceProfileArn: profile.Arn,
+            instanceProfileName: profile.InstanceProfileName,
+            instanceProfileId: profile.InstanceProfileId,
+            path: profile.Path,
+            roleName: profile.Roles?.[0]?.RoleName,
+            tags: toTagRecord(profile.Tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.instanceProfileName ??
@@ -196,27 +247,23 @@ export const InstanceProfileProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* readInstanceProfile(name);
                     if (!existing?.Arn) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Instance profile '${name}' already exists but could not be described`,
-                        ),
-                      );
+                      return yield* new InstanceProfileConflict({
+                        message: `Instance profile '${name}' already exists but could not be described`,
+                      });
                     }
                     if (!hasTags(desiredTags, existing.Tags)) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Instance profile '${name}' already exists and is not managed by alchemy`,
-                        ),
-                      );
+                      return yield* new InstanceProfileConflict({
+                        message: `Instance profile '${name}' already exists and is not managed by alchemy`,
+                      });
                     }
                   }),
                 ),
               );
             profile = yield* readInstanceProfile(name);
             if (!profile?.Arn || !profile.InstanceProfileName) {
-              return yield* Effect.fail(
-                new Error(`Instance profile '${name}' was not readable after create`),
-              );
+              return yield* new InstanceProfileUnexpectedResponse({
+                message: `Instance profile '${name}' was not readable after create`,
+              });
             }
           }
 
@@ -251,9 +298,9 @@ export const InstanceProfileProvider = () =>
           // changes after `syncRole`).
           const fresh = yield* readInstanceProfile(name);
           if (!fresh?.Arn || !fresh.InstanceProfileName) {
-            return yield* Effect.fail(
-              new Error(`Instance profile '${name}' was not readable after sync`),
-            );
+            return yield* new InstanceProfileUnexpectedResponse({
+              message: `Instance profile '${name}' was not readable after sync`,
+            });
           }
 
           yield* session.note(fresh.Arn);

@@ -306,7 +306,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -326,12 +326,12 @@ const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
 
 export const getDestGroup = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(iap.getProjectsIap_tunnelLocationsDestGroups({ name }));
 
 export const getClient = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(iap.getProjectsBrandsIdentityAwareProxyClients({ name }));
 
 export const listDestGroups = (project: string) =>

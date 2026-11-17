@@ -361,7 +361,7 @@ const toAttrs = (
 const getById = (customDomainId: string, projectId: string) =>
   readCustomDomain(customDomainId, projectId).pipe(
     Effect.map((domain) => (isGone(domain) ? undefined : domain)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listServiceDomains = (projectId: string, environmentId: string, serviceId: string) =>
@@ -431,7 +431,7 @@ export const CustomDomainProvider = () =>
             id: service.id,
             name: service.name,
             deletedAt: service.deletedAt,
-          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
+          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.undefined));
           const services = (live ?? []).filter(
             (service) => service.deletedAt == null && matchesAlchemyPhysicalName(service.name),
           );

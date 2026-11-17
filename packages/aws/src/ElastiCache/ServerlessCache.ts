@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ServerlessCacheNotReady extends Data.TaggedError("ServerlessCacheNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServerlessCacheUnexpectedResponse extends Data.TaggedError(
+  "ServerlessCacheUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Cache engine for a serverless cache.
@@ -147,8 +160,18 @@ export interface ServerlessCache extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServerlessCacheLookup
 > {}
+
+/**
+ * Props for {@link ServerlessCache.lookup}: find a serverless cache this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServerlessCacheLookup {
+  /** The serverless cache name of the existing serverless cache. */
+  serverlessCacheName: string;
+}
 
 /**
  * An Amazon ElastiCache serverless cache (valkey, redis, or memcached).
@@ -185,6 +208,16 @@ export interface ServerlessCache extends Resource<
  * const connect = yield* ElastiCache.Connect(cache);
  * // inside a handler:
  * const { host, port, tls } = yield* connect;
+ * ```
+ *
+ * ### Looking up an existing serverless cache
+ * `ServerlessCache.lookup` references a serverless cache Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serverlessCacheName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing serverless cache
+ * ```typescript
+ * const existing = AWS.ElastiCache.ServerlessCache.lookup({ serverlessCacheName: "my-serverless-cache" });
  * ```
  *
  * @resource
@@ -287,7 +320,7 @@ export const ServerlessCacheProvider = () =>
       const readCache = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeServerlessCaches({ ServerlessCacheName: name })
-          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.undefined));
         return response?.ServerlessCaches?.[0];
       });
 
@@ -306,11 +339,15 @@ export const ServerlessCacheProvider = () =>
         return yield* readCache(name).pipe(
           Effect.flatMap((cache) => {
             if (!cache?.ARN) {
-              return Effect.fail(new Error(`Serverless cache '${name}' not found`));
+              return Effect.fail(
+                new ServerlessCacheNotReady({ message: `Serverless cache '${name}' not found` }),
+              );
             }
             if (cache.Status !== "available") {
               return Effect.fail(
-                new Error(`Serverless cache '${name}' not available (status: ${cache.Status})`),
+                new ServerlessCacheNotReady({
+                  message: `Serverless cache '${name}' not available (status: ${cache.Status})`,
+                }),
               );
             }
             return Effect.succeed(cache);
@@ -331,7 +368,9 @@ export const ServerlessCacheProvider = () =>
               cache.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(`Serverless cache '${name}' still settling (status: ${cache.Status})`),
+                new ServerlessCacheNotReady({
+                  message: `Serverless cache '${name}' still settling (status: ${cache.Status})`,
+                }),
               );
             }
             return Effect.succeed(cache);
@@ -347,11 +386,9 @@ export const ServerlessCacheProvider = () =>
           !cache.Endpoint?.Address ||
           cache.Endpoint.Port === undefined
         ) {
-          return yield* Effect.fail(
-            new Error(
-              `Serverless cache '${cache.ServerlessCacheName}' is missing its ARN or endpoint (status: ${cache.Status})`,
-            ),
-          );
+          return yield* new ServerlessCacheUnexpectedResponse({
+            message: `Serverless cache '${cache.ServerlessCacheName}' is missing its ARN or endpoint (status: ${cache.Status})`,
+          });
         }
         return {
           serverlessCacheName: cache.ServerlessCacheName,
@@ -392,6 +429,15 @@ export const ServerlessCacheProvider = () =>
           if ((news?.networkType ?? undefined) !== (olds?.networkType ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ serverlessCacheName: name }) {
+          const cache = yield* readCache(name);
+          // A cache that is still provisioning has no endpoint to bind yet.
+          if (!cache?.ARN || !cache.Endpoint?.Address || cache.Endpoint.Port === undefined) {
+            return undefined;
+          }
+          return yield* toAttrs(cache);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -73,8 +74,45 @@ export type InstancesMaterializedView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesMaterializedViewLookup
 >;
+
+/**
+ * Props for {@link InstancesMaterializedView.lookup}: find an instances
+ * materialized view this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+/**
+ * Deletion was refused because the Bigtable materialized view has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class MaterializedViewDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.MaterializedViewDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface InstancesMaterializedViewLookup {
+  /**
+   * Materialized view id (the `{materialized_view}` segment of
+   * `.../instances/{instance}/materializedViews/{materialized_view}`). Must
+   * be unique among table ids and view ids in the instance.
+   */
+  materializedViewId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable continuous materialized view — a SQL SELECT whose
@@ -102,6 +140,20 @@ export type InstancesMaterializedView = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances materialized view
+ * `InstancesMaterializedView.lookup` references an instances materialized
+ * view Alchemy doesn't manage (created in the console or by another stack).
+ * It is read during plan/deploy, never created, updated or deleted, and
+ * binds like a declared instances materialized view.
+ *
+ * **Example:** Reference an existing instances materialized view
+ * ```typescript
+ * const instancesMaterializedView = GCP.Bigtable.InstancesMaterializedView.lookup({
+ *   materializedViewId: "my-materialized-view",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
@@ -112,13 +164,13 @@ export const InstancesMaterializedView = Resource<InstancesMaterializedView>(
 export class MaterializedViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.MaterializedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MaterializedViewStillExists extends Data.TaggedError(
   "GCP.Bigtable.MaterializedViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, materializedViewId: string | undefined, existing?: string) =>
@@ -145,12 +197,14 @@ const toAttrs = (view: bigtable.MaterializedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesMaterializedViews({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view ? Effect.succeed(view) : Effect.fail(new MaterializedViewNotResolved({ name })),
+      view
+        ? Effect.succeed(view)
+        : Effect.fail(new MaterializedViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.MaterializedViewNotResolved",
@@ -162,7 +216,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined ? Effect.void : Effect.fail(new MaterializedViewStillExists({ name })),
+      view === undefined
+        ? Effect.void
+        : Effect.fail(new MaterializedViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.MaterializedViewStillExists",
@@ -204,6 +260,17 @@ export const InstancesMaterializedViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ materializedViewId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? materializedViewName(env.project, instanceIdOf(instance), materializedViewId)
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -279,7 +346,7 @@ export const InstancesMaterializedViewProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
@@ -307,17 +374,25 @@ export const InstancesMaterializedViewProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new MaterializedViewNotResolved({ name });
+          return yield* new MaterializedViewNotResolved({ resourceName: name });
         }
       }
 
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new MaterializedViewDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable materialized view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* unprotect(output.name, current.etag);
       }
       yield* bigtable

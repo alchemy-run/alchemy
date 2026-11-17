@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -11,6 +12,7 @@ import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { encodeFqn } from "../FQN.ts";
 import { ResourceContext } from "../ResourceContext.ts";
 import { StackContext } from "../StackContext.ts";
+import { LogAnnotation } from "../Util/LogAnnotation.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { namespaceImportPlugin } from "./NamespaceImportPlugin.ts";
@@ -120,6 +122,11 @@ export interface BundleFile {
   readonly path: string;
   readonly content: string | Uint8Array<ArrayBufferLike>;
   readonly hash: string;
+  /**
+   * The platform's module type for this file, when its extension doesn't
+   * decide it (e.g. a Cloudflare `Text` rule over `.md` files).
+   */
+  readonly type?: string;
 }
 
 export class BundleError extends Schema.TaggedError<BundleError>()("BundleError", {
@@ -294,6 +301,35 @@ const bundleConcurrency = (() => {
 const buildPermits = Semaphore.makeUnsafe(bundleConcurrency);
 
 /**
+ * Rolldown's own logs (warnings such as `UNRESOLVED_IMPORT`, plugin timings)
+ * as `output` records in the context of the build: the resource's `fqn` and
+ * trace, one record per log instead of raw lines on stderr. Like any tool
+ * output, they stay in the run log and are never exported. A caller's own
+ * `onLog` wins.
+ */
+const withRolldownLogs = (
+  inputOptions: rolldown.InputOptions,
+  context: Context.Context<never>,
+): rolldown.InputOptions =>
+  inputOptions.onLog !== undefined
+    ? inputOptions
+    : {
+        ...inputOptions,
+        onLog: (level, log) =>
+          Effect.runSyncWith(context)(
+            Effect.logWithLevel(level === "warn" ? "Warn" : level === "debug" ? "Debug" : "Info")(
+              log.frame === undefined ? log.message : `${log.message}\n${log.frame}`,
+            ).pipe(
+              Effect.annotateLogs({
+                [LogAnnotation.stream]: "stderr",
+                ...(log.code === undefined ? {} : { code: log.code }),
+                ...(log.plugin === undefined ? {} : { plugin: log.plugin }),
+              }),
+            ),
+          ),
+      };
+
+/**
  * Build a bundle using rolldown from the given input options and output options.
  * @param inputOptions - The input options for the bundle.
  * @param outputOptions - The output options for the bundle.
@@ -304,13 +340,13 @@ export const build = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  resolveOutputOptions(outputOptions).pipe(
-    Effect.flatMap((options) =>
+  Effect.zip(resolveOutputOptions(outputOptions), Effect.context<never>()).pipe(
+    Effect.flatMap(([options, context]) =>
       Effect.tryPromise({
         try: async () => {
           const rolldown = await loadRolldown();
           const bundle = await rolldown.rolldown({
-            ...withAlchemyDefine(inputOptions),
+            ...withAlchemyDefine(withRolldownLogs(inputOptions, context)),
             plugins: [inputOptions.plugins, await builtInPlugins(extra)],
             optimization: inputOptions.optimization ?? {
               inlineConst: {
@@ -344,7 +380,11 @@ export const watch = (
   extra?: BundleExtraOptions,
 ): Stream.Stream<BundleWatchEvent> =>
   Stream.unwrap(
-    Effect.map(resolveOutputOptions(outputOptions), watchResolved(inputOptions, extra)),
+    Effect.zipWith(
+      resolveOutputOptions(outputOptions),
+      Effect.context<never>(),
+      (options, context) => watchResolved(withRolldownLogs(inputOptions, context), extra)(options),
+    ),
   );
 
 const watchResolved =
@@ -415,11 +455,12 @@ const watchResolved =
         Effect.gen(function* () {
           // Hold a build permit until the watcher's initial build settles.
           yield* buildPermits.take(1);
+          const context = yield* Effect.context();
           let initialBuildSettled = false;
           const settleInitialBuild = () => {
             if (initialBuildSettled) return;
             initialBuildSettled = true;
-            Effect.runFork(buildPermits.release(1));
+            Effect.runForkWith(context)(buildPermits.release(1));
           };
           const watcher = yield* Effect.promise(() => createWatcher(settleInitialBuild)).pipe(
             Effect.onError(() => Effect.sync(settleInitialBuild)),
@@ -454,14 +495,12 @@ const watchResolved =
     );
 
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
-// oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
 /**
  * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
  * bare package specifiers (not starting with `.`, `/` or `\0`) so an
  * unresolvable import in a generated entry fails the build (below).
  */
-// oxlint-disable-next-line no-control-regex
 const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
@@ -596,6 +635,7 @@ export function bundleOutputFromFiles(
       files.map((file) => ({
         path: file.path,
         hash: file.hash,
+        ...(file.type ? { type: file.type } : {}),
       })),
     ),
     (hash) => ({ files, hash }),

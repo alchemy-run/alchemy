@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -57,8 +58,27 @@ export type Snapshot = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SnapshotLookup
 >;
+
+/**
+ * Props for {@link Snapshot.lookup}: find a snapshot this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SnapshotLookup {
+  /**
+   * Snapshot id (the `{snapshot}` segment of
+   * `projects/{project}/snapshots/{snapshot}`).
+   */
+  snapshotId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Pub/Sub snapshot of a subscription's message backlog.
@@ -93,17 +113,27 @@ export type Snapshot = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing snapshot
+ * `Snapshot.lookup` references a snapshot Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared snapshot.
+ *
+ * **Example:** Reference an existing snapshot
+ * ```typescript
+ * const snapshot = GCP.PubSub.Snapshot.lookup({ snapshotId: "my-snapshot" });
+ * ```
+ *
  * @resource
  * @category PubSub
  */
 export const Snapshot = Resource<Snapshot>("GCP.PubSub.Snapshot");
 
 export class SnapshotNotResolved extends Data.TaggedError("GCP.PubSub.SnapshotNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SnapshotStillExists extends Data.TaggedError("GCP.PubSub.SnapshotStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const snapshotIdOf = (name: string) => name.split("/").pop() ?? name;
@@ -151,13 +181,13 @@ const toAttrs = (snapshot: pubsub.Snapshot, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSnapshots({ snapshot: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (existing): existing is undefined => existing === undefined,
-      () => new SnapshotStillExists({ name }),
+      () => new SnapshotStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -176,7 +206,7 @@ const waitUntilPresent = (name: string) =>
     for (let read = 0; read < CONSISTENT_READS; read++) {
       if (read > 0) yield* Effect.sleep("1 second");
       found = yield* getByName(name);
-      if (found === undefined) return yield* new SnapshotNotResolved({ name });
+      if (found === undefined) return yield* new SnapshotNotResolved({ resourceName: name });
     }
     return found!;
   }).pipe(
@@ -211,6 +241,14 @@ export const SnapshotProvider = () =>
           (news.snapshotId ?? previousId) === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ snapshotId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, snapshotId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -274,14 +312,14 @@ export const SnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub consistently serves the snapshot; the next
         // call (label patch) can otherwise hit a lagging replica.
         current = yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {
-        return yield* new SnapshotNotResolved({ name });
+        return yield* new SnapshotNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

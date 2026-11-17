@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -95,8 +96,36 @@ export type FeatureGroupsFeature = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeatureGroupsFeatureLookup
 >;
+
+/**
+ * Props for {@link FeatureGroupsFeature.lookup}: find a feature groups
+ * feature this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface FeatureGroupsFeatureLookup {
+  /**
+   * Feature id. Valid characters `[a-z0-9_]`, must start with a letter.
+   */
+  featureId: string;
+  /**
+   * Region used when `featureGroup` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Feature Group resource name
+   * `projects/{project}/locations/{location}/featureGroups/{featureGroup}`
+   * or the feature-group id (uses `location`).
+   */
+  featureGroup: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Feature Registry Feature belonging to a Feature Group.
@@ -114,6 +143,20 @@ export type FeatureGroupsFeature = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing feature groups feature
+ * `FeatureGroupsFeature.lookup` references a feature groups feature Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared feature groups feature.
+ *
+ * **Example:** Reference an existing feature groups feature
+ * ```typescript
+ * const featureGroupsFeature = GCP.AIPlatform.FeatureGroupsFeature.lookup({
+ *   featureId: "my-feature",
+ *   featureGroup: "my-feature-group",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -124,13 +167,13 @@ export const FeatureGroupsFeature = Resource<FeatureGroupsFeature>(
 export class FeatureGroupsFeatureNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupsFeatureNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureGroupsFeatureStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupsFeatureStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (project: string, location: string, featureGroup: string) =>
@@ -163,14 +206,14 @@ const toAttrs = (feature: aiplatform.GoogleCloudAiplatformV1Feature, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureGroupsFeatures({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((feature) =>
       feature
         ? Effect.succeed(feature)
-        : Effect.fail(new FeatureGroupsFeatureNotResolved({ name })),
+        : Effect.fail(new FeatureGroupsFeatureNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupsFeatureNotResolved",
@@ -184,7 +227,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((feature) =>
       feature === undefined
         ? Effect.void
-        : Effect.fail(new FeatureGroupsFeatureStillExists({ name })),
+        : Effect.fail(new FeatureGroupsFeatureStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupsFeatureStillExists",
@@ -238,6 +281,20 @@ export const FeatureGroupsFeatureProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ featureId, location: lookupLocation, featureGroup }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A create interrupted before its parent resolved has nothing to find.
+      if (typeof featureGroup !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, featureGroup ?? "");
+      const name = resourceName(parent, featureId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -315,7 +372,7 @@ export const FeatureGroupsFeatureProvider = () =>
               pointOfContact: news.pointOfContact,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -323,7 +380,7 @@ export const FeatureGroupsFeatureProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureGroupsFeatureNotResolved({ name });
+        return yield* new FeatureGroupsFeatureNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -374,7 +431,7 @@ export const FeatureGroupsFeatureProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsFeatureGroupsFeatures({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

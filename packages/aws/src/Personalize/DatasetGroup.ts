@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readPersonalizeTags, syncPersonalizeTags } from "./internal.ts";
+
+export class PersonalizeDatasetGroupNotReady extends Data.TaggedError(
+  "PersonalizeDatasetGroupNotReady",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DatasetGroupProps {
   /**
@@ -62,8 +70,18 @@ export interface DatasetGroup extends Resource<
     domain: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatasetGroupLookup
 > {}
+
+/**
+ * Props for {@link DatasetGroup.lookup}: find a dataset group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatasetGroupLookup {
+  /** The ARN of the existing dataset group. */
+  datasetGroupArn: string;
+}
 
 /**
  * An Amazon Personalize dataset group — the top-level container that holds the
@@ -87,6 +105,16 @@ export interface DatasetGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dataset group
+ * `DatasetGroup.lookup` references a dataset group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datasetGroupArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dataset group
+ * ```typescript
+ * const existing = AWS.Personalize.DatasetGroup.lookup({ datasetGroupArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const DatasetGroup = Resource<DatasetGroup>("AWS.Personalize.DatasetGroup");
@@ -102,7 +130,7 @@ export const DatasetGroupProvider = () =>
       const describe = Effect.fn(function* (datasetGroupArn: string) {
         const response = yield* personalize
           .describeDatasetGroup({ datasetGroupArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.datasetGroup;
       });
 
@@ -115,11 +143,9 @@ export const DatasetGroupProvider = () =>
           }),
         );
         if (group?.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `Personalize dataset group ${datasetGroupArn} did not become ACTIVE (status: ${group?.status}, reason: ${group?.failureReason})`,
-            ),
-          );
+          return yield* new PersonalizeDatasetGroupNotReady({
+            message: `Personalize dataset group ${datasetGroupArn} did not become ACTIVE (status: ${group?.status}, reason: ${group?.failureReason})`,
+          });
         }
         return group;
       });
@@ -259,11 +285,9 @@ export const DatasetGroupProvider = () =>
             remaining.datasets.length >
           0
         ) {
-          return yield* Effect.fail(
-            new Error(
-              `Personalize dataset group ${datasetGroupArn} still has children after drain (trackers: ${remaining.trackers.length}, filters: ${remaining.filters.length}, solutions: ${remaining.solutions.length}, datasets: ${remaining.datasets.length})`,
-            ),
-          );
+          return yield* new PersonalizeDatasetGroupNotReady({
+            message: `Personalize dataset group ${datasetGroupArn} still has children after drain (trackers: ${remaining.trackers.length}, filters: ${remaining.filters.length}, solutions: ${remaining.solutions.length}, datasets: ${remaining.datasets.length})`,
+          });
         }
       });
 
@@ -282,6 +306,13 @@ export const DatasetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ datasetGroupArn }) {
+          const group = yield* describe(datasetGroupArn);
+          if (group === undefined) return undefined;
+          const attrs = toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {
@@ -371,11 +402,9 @@ export const DatasetGroupProvider = () =>
             }),
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `Personalize dataset group ${output.datasetGroupArn} was not deleted (status: ${remaining.status})`,
-              ),
-            );
+            return yield* new PersonalizeDatasetGroupNotReady({
+              message: `Personalize dataset group ${output.datasetGroupArn} was not deleted (status: ${remaining.status})`,
+            });
           }
         }),
 

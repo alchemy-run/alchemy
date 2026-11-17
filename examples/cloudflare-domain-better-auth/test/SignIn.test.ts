@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import { OAuth2Server } from "oauth2-mock-server";
 import { Auth } from "../src/Auth.ts";
 import { NotesModel } from "../src/Notes.model.ts";
+import { NotesLive } from "../src/Notes.view.ts";
 import { NotesApi } from "../src/NotesApi.api.ts";
 import { SessionLive } from "../src/Session.ts";
 import { UserId } from "../src/User.id.ts";
@@ -84,7 +85,7 @@ const Served = Layer.unwrap(
   Layer.provideMerge(
     SessionLive.pipe(
       Layer.provideMerge(AuthTest),
-      Layer.provideMerge(NotesModel.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory))),
+      Layer.provideMerge(NotesModel.layer(NotesLive).pipe(Layer.provide(Domain.InMemory))),
     ),
   ),
   Layer.provideMerge(NodeHttpServer.layerTest),
@@ -176,7 +177,7 @@ describe("sign-in with better-auth", () => {
       const sam = UserId.make(session!.user.id);
 
       const notes = yield* notesAs(cookie);
-      yield* notes.WriteNote(sam, { text: "buy milk" });
+      yield* notes.WriteNote({ userId: sam, text: "buy milk" });
       const read = yield* notes.Notes.get(sam);
       expect(read?.notes).toEqual(["buy milk"]);
     }).pipe(Effect.provide(RuntimeContext.phantom), Effect.provide(Served), Effect.scoped),
@@ -185,7 +186,9 @@ describe("sign-in with better-auth", () => {
   it.live("without a session, the Api refuses", () =>
     Effect.gen(function* () {
       const notes = yield* notesAs("");
-      const refused = yield* notes.WriteNote(UserId.make("u-1"), { text: "hi" }).pipe(Effect.flip);
+      const refused = yield* notes
+        .WriteNote({ userId: UserId.make("u-1"), text: "hi" })
+        .pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthorized");
     }).pipe(Effect.provide(Served), Effect.scoped),
   );
@@ -199,7 +202,7 @@ describe("sign-in with better-auth", () => {
       const alexCookie = yield* signIn({ sub: "u-alex", name: "Alex", email: "alex@example.com" });
       const alex = yield* notesAs(alexCookie);
 
-      const write = yield* alex.WriteNote(sam, { text: "hi" }).pipe(Effect.flip);
+      const write = yield* alex.WriteNote({ userId: sam, text: "hi" }).pipe(Effect.flip);
       expect(write._tag).toBe("NotYours");
       const read = yield* alex.Notes.get(sam).pipe(Effect.flip);
       expect(read._tag).toBe("NotYours");

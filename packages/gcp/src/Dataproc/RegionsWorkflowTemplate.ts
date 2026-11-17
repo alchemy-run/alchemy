@@ -96,7 +96,7 @@ export const RegionsWorkflowTemplate = Resource<RegionsWorkflowTemplate>(
 export class RegionsWorkflowTemplateNotResolved extends Data.TaggedError(
   "GCP.Dataproc.RegionsWorkflowTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, region: string, templateId: string) =>
@@ -143,7 +143,7 @@ const desiredBody = (
 const getByName = (name: string) =>
   dataproc
     .getProjectsRegionsWorkflowTemplates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRegion = (project: string, region: string) =>
   emptyOnMissing(
@@ -253,7 +253,7 @@ export const RegionsWorkflowTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RegionsWorkflowTemplateNotResolved({ name });
+        return yield* new RegionsWorkflowTemplateNotResolved({ resourceName: name });
       }
 
       const desired = desiredBody(

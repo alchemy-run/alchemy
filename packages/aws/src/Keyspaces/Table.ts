@@ -7,11 +7,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class KeyspacesTableNotReady extends Data.TaggedError("KeyspacesTableNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A Cassandra column definition. `type` is a CQL data type such as `text`,
@@ -157,8 +163,20 @@ export interface Table extends Resource<
     latestStreamArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TableLookup {
+  /** The keyspace the table belongs to. */
+  keyspaceName: string;
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon Keyspaces (for Apache Cassandra) table.
@@ -214,6 +232,16 @@ export interface Table extends Resource<
  * // table.latestStreamArn → consume via the TableStreams binding
  * ```
  *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyspaceName` and `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const events = AWS.Keyspaces.Table.lookup({ keyspaceName: "app", tableName: "events" });
+ * ```
+ *
  * @resource
  */
 export const Table = Resource<Table>("AWS.Keyspaces.Table");
@@ -247,7 +275,7 @@ export const TableProvider = () =>
       const readTable = Effect.fn(function* (keyspaceName: string, tableName: string) {
         return yield* keyspaces
           .getTable({ keyspaceName, tableName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
@@ -265,7 +293,7 @@ export const TableProvider = () =>
       const readLatestStreamArn = Effect.fn(function* (keyspaceName: string, tableName: string) {
         const response = yield* keyspacesstreams
           .listStreams({ keyspaceName, tableName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const sorted = [...(response?.streams ?? [])].sort((a, b) =>
           b.streamLabel.localeCompare(a.streamLabel),
         );
@@ -286,7 +314,9 @@ export const TableProvider = () =>
             arn !== undefined
               ? Effect.succeed<string | undefined>(arn)
               : Effect.fail(
-                  new Error(`CDC stream for '${keyspaceName}.${tableName}' not yet visible`),
+                  new KeyspacesTableNotReady({
+                    message: `CDC stream for '${keyspaceName}.${tableName}' not yet visible`,
+                  }),
                 ),
           ),
           Effect.retry({
@@ -310,11 +340,15 @@ export const TableProvider = () =>
         return yield* readTable(keyspaceName, tableName).pipe(
           Effect.flatMap((table) => {
             if (table === undefined) {
-              return Effect.fail(new Error(`Keyspaces table '${tableName}' not found`));
+              return Effect.fail(
+                new KeyspacesTableNotReady({ message: `Keyspaces table '${tableName}' not found` }),
+              );
             }
             if (!activeStatuses.has(table.status ?? "")) {
               return Effect.fail(
-                new Error(`Keyspaces table '${tableName}' not active (status: ${table.status})`),
+                new KeyspacesTableNotReady({
+                  message: `Keyspaces table '${tableName}' not active (status: ${table.status})`,
+                }),
               );
             }
             if (requiredColumns !== undefined) {
@@ -324,9 +358,9 @@ export const TableProvider = () =>
               const missing = requiredColumns.filter((c) => !present.has(c));
               if (missing.length > 0) {
                 return Effect.fail(
-                  new Error(
-                    `Keyspaces table '${tableName}' missing columns: ${missing.join(", ")}`,
-                  ),
+                  new KeyspacesTableNotReady({
+                    message: `Keyspaces table '${tableName}' missing columns: ${missing.join(", ")}`,
+                  }),
                 );
               }
             }
@@ -382,6 +416,19 @@ export const TableProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ keyspaceName, tableName }) {
+          const found = yield* readTable(keyspaceName, tableName);
+          if (found === undefined || found.status === "DELETING") return undefined;
+          return {
+            keyspaceName: found.keyspaceName,
+            tableName: found.tableName,
+            tableArn: found.resourceArn,
+            status: found.status ?? "ACTIVE",
+            latestStreamArn: isCdcEnabled(found)
+              ? yield* readLatestStreamArn(found.keyspaceName, found.tableName)
+              : undefined,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const props = (olds ?? {}) as Partial<TableProps>;
           const keyspaceName = output?.keyspaceName ?? props.keyspaceName;
@@ -557,7 +604,9 @@ export const TableProvider = () =>
             Effect.flatMap((t) =>
               t === undefined
                 ? Effect.void
-                : Effect.fail(new Error(`Table '${tableName}' still deleting`)),
+                : Effect.fail(
+                    new KeyspacesTableNotReady({ message: `Table '${tableName}' still deleting` }),
+                  ),
             ),
             // Point-in-time-recovery tables take minutes to finish deleting.
             Effect.retry({

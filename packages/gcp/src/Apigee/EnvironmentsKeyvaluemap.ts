@@ -65,8 +65,28 @@ export type EnvironmentsKeyvaluemap = Resource<
     maskedValues: boolean;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsKeyvaluemapLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsKeyvaluemap.lookup}: find an environments
+ * keyvaluemap this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsKeyvaluemapLookup {
+  /**
+   * Key value map id.
+   */
+  keyvaluemapId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
 
 /**
  * An environment-scoped Apigee key value map.
@@ -93,6 +113,20 @@ export type EnvironmentsKeyvaluemap = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environments keyvaluemap
+ * `EnvironmentsKeyvaluemap.lookup` references an environments keyvaluemap
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared environments keyvaluemap.
+ *
+ * **Example:** Reference an existing environments keyvaluemap
+ * ```typescript
+ * const environmentsKeyvaluemap = GCP.Apigee.EnvironmentsKeyvaluemap.lookup({
+ *   keyvaluemapId: "my-keyvaluemap",
+ *   environment: "my-environment",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -103,7 +137,7 @@ export const EnvironmentsKeyvaluemap = Resource<EnvironmentsKeyvaluemap>(
 export class EnvironmentsKeyvaluemapNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeyvaluemapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, keyvaluemapId: string) =>
@@ -158,6 +192,16 @@ export const EnvironmentsKeyvaluemapProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ keyvaluemapId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, keyvaluemapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(
@@ -204,7 +248,7 @@ export const EnvironmentsKeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeyvaluemapNotResolved({ name });
+        return yield* new EnvironmentsKeyvaluemapNotResolved({ resourceName: name });
       }
 
       if ((current.maskedValues === true) !== desiredMasked) {

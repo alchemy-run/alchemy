@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -7,6 +8,13 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { artifactFileStream, type ArtifactFile } from "./ArtifactFile.ts";
 import { PrismaUploadClient } from "./HttpClient.ts";
+
+export class ArtifactUploadOperationFailed extends Data.TaggedError(
+  "ArtifactUploadOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const ARTIFACT_UPLOAD_TIMEOUT = Duration.minutes(15);
 const UPLOAD_ERROR_BODY_BYTES = 64 * 1024;
@@ -33,12 +41,17 @@ export const executeArtifactUpload = (
     );
     const responseOption = yield* http.execute(request).pipe(
       Effect.mapError(
-        () => new Error("Prisma artifact upload transport failed before a response was received."),
+        () =>
+          new ArtifactUploadOperationFailed({
+            message: "Prisma artifact upload transport failed before a response was received.",
+          }),
       ),
       Effect.timeoutOption(ARTIFACT_UPLOAD_TIMEOUT),
     );
     if (Option.isNone(responseOption)) {
-      return yield* Effect.fail(new Error("Prisma artifact upload timed out after 15 minutes."));
+      return yield* new ArtifactUploadOperationFailed({
+        message: "Prisma artifact upload timed out after 15 minutes.",
+      });
     }
     const response = responseOption.value;
     if (response.status < 200 || response.status >= 300) {
@@ -53,9 +66,9 @@ export const executeArtifactUpload = (
         onNone: () => "diagnostic body unavailable",
         onSome: (bytes) => `diagnostic body prefix: ${bytes} bytes`,
       });
-      return yield* Effect.fail(
-        new Error(`Prisma artifact upload failed (HTTP ${response.status}; ${diagnostic}).`),
-      );
+      return yield* new ArtifactUploadOperationFailed({
+        message: `Prisma artifact upload failed (HTTP ${response.status}; ${diagnostic}).`,
+      });
     }
   });
 

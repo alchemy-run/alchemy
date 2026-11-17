@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -91,6 +92,13 @@ test.provider.skipIf(!runLifecycle)(
             hubs: { "us-central1": { internetGateway: {} } },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BeyondCorp.SecurityGateway.lookup({
+          securityGatewayId: created.securityGatewayId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/securityGateways/");

@@ -9,6 +9,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -30,8 +31,8 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 
 // Deterministic record names for the origin DNS records the fallback origin
 // points at (the API requires the origin to be a DNS record in the zone).
-const ORIGIN_A = `alchemy-fallback-origin-a.${zoneName}`;
-const ORIGIN_B = `alchemy-fallback-origin-b.${zoneName}`;
+const ORIGIN_A = `${testName("alchemy-fallback-origin-a")}.${zoneName}`;
+const ORIGIN_B = `${testName("alchemy-fallback-origin-b")}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -77,8 +78,32 @@ export type AdaptiveMtDataset = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AdaptiveMtDatasetLookup
 >;
+
+/**
+ * Props for {@link AdaptiveMtDataset.lookup}: find an adaptive mt dataset
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AdaptiveMtDatasetLookup {
+  /**
+   * Location of the dataset (`us-central1`, `europe-west1`, …). Adaptive MT
+   * is regional.
+   */
+  location?: string;
+  /**
+   * Dataset id (the `{dataset}` segment of
+   * `projects/{project}/locations/{location}/adaptiveMtDatasets/{dataset}`).
+   */
+  datasetId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Adaptive MT dataset of source/target sentence pairs used to
@@ -109,6 +134,17 @@ export type AdaptiveMtDataset = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing adaptive mt dataset
+ * `AdaptiveMtDataset.lookup` references an adaptive mt dataset Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared adaptive mt dataset.
+ *
+ * **Example:** Reference an existing adaptive mt dataset
+ * ```typescript
+ * const adaptiveMtDataset = GCP.Translate.AdaptiveMtDataset.lookup({ datasetId: "my-dataset" });
+ * ```
+ *
  * @resource
  * @category Translate
  */
@@ -136,10 +172,10 @@ const toAttrs = (dataset: translate.AdaptiveMtDataset, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : translate
         .getProjectsLocationsAdaptiveMtDatasets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const AdaptiveMtDatasetProvider = () =>
   Provider.succeed(AdaptiveMtDataset, {
@@ -167,6 +203,15 @@ export const AdaptiveMtDatasetProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({ location: lookupLocation, datasetId }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = datasetId ? resourceName(env.project, location, datasetId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -208,7 +253,7 @@ export const AdaptiveMtDatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || name });
+        return yield* new ResourceNotResolved({ resourceName: hinted || name });
       }
 
       return toAttrs(current, env.project);

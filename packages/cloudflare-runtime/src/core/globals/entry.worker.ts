@@ -337,7 +337,7 @@ async function handleEmail(
   );
 
   // Propagate `.setReject()` reasons to the caller
-  let maybeClientError: string | undefined = undefined;
+  let maybeClientError = undefined as string | undefined;
 
   // Construct a ForwardableEmailMessage-like object. We need
   // - it to be able to be passed across JSRPC (to support e.g.

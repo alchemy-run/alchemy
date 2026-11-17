@@ -49,8 +49,18 @@ export interface DedicatedIpPool extends Resource<
     scalingMode: DedicatedIpPoolScalingMode;
   },
   never,
-  Providers
+  Providers,
+  DedicatedIpPoolLookup
 > {}
+
+/**
+ * Props for {@link DedicatedIpPool.lookup}: find a dedicated IP pool this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DedicatedIpPoolLookup {
+  /** The pool name of the existing dedicated IP pool. */
+  poolName: string;
+}
 
 /**
  * An Amazon SES v2 dedicated IP pool — a named group of dedicated IP addresses
@@ -118,6 +128,16 @@ export interface DedicatedIpPool extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dedicated IP pool
+ * `DedicatedIpPool.lookup` references a dedicated IP pool Alchemy doesn't manage (created in the
+ * console or by another stack), found by `poolName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dedicated IP pool
+ * ```typescript
+ * const existing = AWS.SES.DedicatedIpPool.lookup({ poolName: "my-dedicated-ip-pool" });
+ * ```
+ *
  * @resource
  */
 export const DedicatedIpPool = Resource<DedicatedIpPool>("AWS.SES.DedicatedIpPool");
@@ -150,7 +170,7 @@ export const DedicatedIpPoolProvider = () =>
       const getPool = Effect.fn(function* (name: string) {
         return yield* sesv2.getDedicatedIpPool({ PoolName: name }).pipe(
           Effect.map((response) => response.DedicatedIpPool),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 
@@ -194,6 +214,12 @@ export const DedicatedIpPoolProvider = () =>
             { concurrency: 2 },
           );
           return pools.flat();
+        }),
+
+        lookup: Effect.fn(function* ({ poolName: name }) {
+          const found = yield* getPool(name);
+          if (!found) return undefined;
+          return { poolName: name, scalingMode: found.ScalingMode };
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

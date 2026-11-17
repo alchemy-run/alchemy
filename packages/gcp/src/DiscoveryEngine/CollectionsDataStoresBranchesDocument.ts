@@ -132,7 +132,7 @@ export const CollectionsDataStoresBranchesDocument =
 export class CollectionsDataStoresBranchesDocumentNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresBranchesDocumentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const contentOf = (
@@ -174,10 +174,10 @@ const resourceName = (dataStore: string, branchId: string, documentId: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresBranchesDocuments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CollectionsDataStoresBranchesDocumentProvider = () =>
   Provider.succeed(CollectionsDataStoresBranchesDocument, {
@@ -265,7 +265,7 @@ export const CollectionsDataStoresBranchesDocumentProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresBranchesDocumentNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

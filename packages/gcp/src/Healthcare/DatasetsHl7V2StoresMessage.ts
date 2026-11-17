@@ -185,13 +185,13 @@ const toAttrs = (message: healthcare.Message, project: string, data: string, reg
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsHl7V2StoresMessages({
           name,
           view: "FULL",
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (parent: string, id: string) =>
   Effect.gen(function* () {

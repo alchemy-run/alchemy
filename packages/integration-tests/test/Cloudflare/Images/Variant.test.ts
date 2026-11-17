@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -173,33 +174,33 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Cloudflare.Images.Variant("ReplaceVariant", {
-          name: "alchemyreplacea",
+          name: testName("alchemyreplacea", ""),
           fit: "cover",
           width: 64,
           height: 64,
         }).pipe(adopt(true)),
       );
-      expect(initial.variantName).toEqual("alchemyreplacea");
+      expect(initial.variantName).toEqual(testName("alchemyreplacea", ""));
 
       // Renaming the variant replaces it — the name is the API path id.
       const replaced = yield* stack.deploy(
         Cloudflare.Images.Variant("ReplaceVariant", {
-          name: "alchemyreplaceb",
+          name: testName("alchemyreplaceb", ""),
           fit: "cover",
           width: 64,
           height: 64,
         }).pipe(adopt(true)),
       );
-      expect(replaced.variantName).toEqual("alchemyreplaceb");
+      expect(replaced.variantName).toEqual(testName("alchemyreplaceb", ""));
 
-      const live = yield* getVariant(accountId, "alchemyreplaceb");
-      expect(live.variant?.id).toEqual("alchemyreplaceb");
+      const live = yield* getVariant(accountId, testName("alchemyreplaceb", ""));
+      expect(live.variant?.id).toEqual(testName("alchemyreplaceb", ""));
 
       // The old variant is gone after the replacement completes.
-      yield* expectGone(accountId, "alchemyreplacea");
+      yield* expectGone(accountId, testName("alchemyreplacea", ""));
 
       yield* stack.destroy();
-      yield* expectGone(accountId, "alchemyreplaceb");
+      yield* expectGone(accountId, testName("alchemyreplaceb", ""));
     }).pipe(logLevel),
   // Same eventual-consistency budget as above: the post-replace verify plus
   // two gone-assertions can exceed the 120s default under parallel load.

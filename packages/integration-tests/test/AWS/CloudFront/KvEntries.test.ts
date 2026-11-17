@@ -8,6 +8,7 @@ import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -185,6 +186,66 @@ const entriesMatch = (got: Record<string, string>, expected: Record<string, stri
     expectedKeys.every((key) => got[key] === expected[key])
   );
 };
+
+// #2688: KvEntries and KvRoutesUpdate returned their persisted output from
+// `read`, so edited, deleted or extra keys read as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band key value store changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { store } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const store = yield* KeyValueStore("DriftStore", { comment: "kv drift" });
+          yield* KvEntries("DriftEntries", {
+            store: store.keyValueStoreArn,
+            namespace: "routes",
+            entries: { "/": "/index.html", "/about": "/about.html" },
+            purge: true,
+          });
+          yield* KvRoutesUpdate("DriftRoute", {
+            store: store.keyValueStoreArn,
+            namespace: "app",
+            key: "routes",
+            entry: "site,app,*,/",
+          });
+          return { store };
+        }),
+      );
+      const arn = store.keyValueStoreArn;
+      const allUnchanged = (actions: Record<string, string | undefined>) =>
+        Object.values(actions).every((action) => action === "unchanged");
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+
+      const write = (puts: kvs.PutKeyRequestListItem[], deletes: kvs.DeleteKeyRequestListItem[]) =>
+        withKvsRegion(
+          Effect.gen(function* () {
+            const { ETag } = yield* kvs.describeKeyValueStore({ KvsARN: arn });
+            yield* kvs.updateKeys({ KvsARN: arn, IfMatch: ETag, Puts: puts, Deletes: deletes });
+          }),
+        );
+      yield* write(
+        [
+          { Key: "routes:/", Value: "/out-of-band.html" },
+          { Key: "routes:/stray", Value: "/stray.html" },
+          { Key: "app:routes", Value: "[]" },
+        ],
+        [{ Key: "routes:/about" }],
+      );
+
+      const drifted = yield* waitForDrift(stack, "DriftEntries", "drifted");
+      expect(drifted?.attr?.entries).toEqual({ "/": "/out-of-band.html", "/stray": "/stray.html" });
+      expect((yield* waitForDrift(stack, "DriftRoute", "missing"))?.action).toBe("missing");
+
+      yield* repairDrift(stack);
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      yield* assertEntries(arn, "routes", { "/": "/index.html", "/about": "/about.html" });
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:cloudfront", "live"], timeout: 240_000 },
+);
 
 const assertEntries = (store: string, namespace: string, expected: Record<string, string>) =>
   Effect.gen(function* () {

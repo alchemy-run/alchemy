@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -88,6 +89,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
           return { card, cardholder };
         }),
       );
+      yield* expectFound(Stripe.IssuingCard.lookup({ id: created.card.id }), created.card);
 
       expect(created.card.id).toMatch(/^ic_/);
       expect(created.card.cardholder).toEqual(created.cardholder.id);
@@ -224,6 +226,70 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       "provider:stripe:issuingcardholder",
       "live",
     ],
+    timeout: 120_000,
+  },
+);
+
+test.provider.skipIf(!ISSUING_ENABLED)(
+  "ship a physical card, cap a single-use card, and record why a card was canceled",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const cardholder = yield* Stripe.IssuingCardholder("ShippedHolder", {
+            name: "Alchemy Shipped Holder",
+            type: "individual",
+            email: "alchemy.issuing.shipped@example.com",
+            phoneNumber: "+15555550101",
+            billing,
+            individual: { firstName: "Alchemy", lastName: "Shipper" },
+          });
+          const physical = yield* Stripe.IssuingCard("PhysicalCard", {
+            cardholder: cardholder.id,
+            currency: "usd",
+            type: "physical",
+            shipping: {
+              name: "Alchemy Shipper",
+              address: billing.address,
+              service: "standard",
+            },
+          });
+          const singleUse = yield* Stripe.IssuingCard("SingleUseCard", {
+            cardholder: cardholder.id,
+            currency: "usd",
+            type: "virtual",
+            lifecycleControls: { cancelAfterPaymentCount: 1 },
+            cancellationReason: "lost",
+          });
+          return { physical, singleUse };
+        }),
+      );
+
+      expect(deployed.physical.type).toEqual("physical");
+      expect(deployed.physical.shipping).toMatchObject({
+        name: "Alchemy Shipper",
+        service: "standard",
+        address: { line1: "123 Main Street", postalCode: "94111", country: "US" },
+      });
+      expect(deployed.singleUse.lifecycleControls).toEqual({ cancelAfterPaymentCount: 1 });
+
+      const fetched = yield* GetIssuingCard({ card: deployed.physical.id });
+      expect(fetched.shipping?.address.postal_code).toEqual("94111");
+      const fetchedSingleUse = yield* GetIssuingCard({ card: deployed.singleUse.id });
+      expect(fetchedSingleUse.lifecycle_controls?.cancel_after.payment_count).toEqual(1);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilCanceled(deployed.singleUse.id)).toEqual("canceled");
+      expect((yield* GetIssuingCard({ card: deployed.singleUse.id })).cancellation_reason).toEqual(
+        "lost",
+      );
+      expect(yield* waitUntilCanceled(deployed.physical.id)).toEqual("canceled");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:issuingcard", "live"],
     timeout: 120_000,
   },
 );

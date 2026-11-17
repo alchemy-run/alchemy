@@ -2,10 +2,27 @@
 title: Pub/Sub
 description: Publish to Pub/Sub topics from Cloud Run, consume them with push delivery or a pull loop, filter by attribute, and dead-letter failures.
 ---
+import Fanout from "../../../../components/diagrams/Fanout.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 Pub/Sub moves messages between services. A producer publishes to a
 topic. Each consumer gets its own subscription and sees every message
 it subscribes to, independent of the others.
+
+## Topics and subscriptions
+
+A **topic** is where messages are published. A **subscription** is one consumer's own stream of them: every subscription gets every message published after it was created, unless its filter says otherwise, and acknowledges them separately. A subscription either **pushes** each message to a URL or waits for a consumer to **pull**.
+
+<Fanout
+  item={{ title: "message", lines: ['"data": { "orderId": "o_104" }', '"attributes":', '  { "type": "order.created" }'] }}
+  group="Orders · topic"
+  routes={[
+    { label: "push subscription", condition: ["no filter"], target: { label: "Api", type: "Cloud Run service" } },
+    { label: "pull subscription", condition: ["no filter"], target: { label: "Worker", type: "worker pool" } },
+    { label: "push subscription", condition: ['attributes.type = "order.refunded"'], target: { label: "Refunds", type: "Cloud Run service" }, match: false },
+  ]}
+  caption="One publish reaches every subscription whose filter matches. Each acknowledges its own copy, so a slow Worker never holds back the Api."
+/>
 
 ## Create a topic
 
@@ -118,6 +135,24 @@ yield* GCP.PubSub.consumeTopicMessages(
   (messages) => messages.pipe(Stream.runForEach(handle), Effect.orDie),
 );
 ```
+
+<StateMachine
+  states={[
+    { id: "pending", label: "outstanding", col: 0, row: 0, start: true },
+    { id: "delivered", label: "delivered", type: "to the handler", col: 1, row: 0, tone: "accent" },
+    { id: "acked", label: "acknowledged", type: "removed", col: 2, row: 0, end: true },
+    { id: "failed", label: "failed", type: "500 or deadline", col: 1, row: 1, tone: "warn" },
+    { id: "dead", label: "FailedOrders", type: "dead-letter topic", col: 2, row: 1, end: true, tone: "danger" },
+  ]}
+  transitions={[
+    { from: "pending", to: "delivered", label: "push or pull" },
+    { from: "delivered", to: "acked", label: "handler succeeds" },
+    { from: "delivered", to: "failed", label: "handler fails", bend: 0.7 },
+    { from: "failed", to: "delivered", label: "redelivered", bend: 0.7 },
+    { from: "failed", to: "dead", label: "after 5 attempts" },
+  ]}
+  caption="A message leaves its subscription only when it's acknowledged. One that fails maxDeliveryAttempts times moves to the dead-letter topic."
+/>
 
 A topic with no subscription drops what is published to it. Give the
 dead-letter topic a subscription so failed messages are kept:

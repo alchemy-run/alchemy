@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -116,8 +117,34 @@ export type ApiHubInstance = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApiHubInstanceLookup
 >;
+
+/**
+ * Props for {@link ApiHubInstance.lookup}: find an api hub instance this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ApiHubInstanceLookup {
+  /**
+   * ApiHub instance id (the `{apiHubInstance}` segment of
+   * `projects/{project
+   * }/locations/{location}/apiHubInstances/{apiHubInstance}`). Must be 4-40
+   * characters matching `[a-z0-9-_]+`.
+   */
+  apiHubInstanceId: string;
+  /**
+   * Location (`us-central1`, …). Only one ApiHub instance is allowed per
+   * project.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud API Hub instance. One instance is allowed per project.
@@ -140,6 +167,19 @@ export type ApiHubInstance = Resource<
  *   apiHubInstanceId: "alchemy-hub",
  *   location: "us-central1",
  *   config: { vertexLocation: "us-central1" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing api hub instance
+ * `ApiHubInstance.lookup` references an api hub instance Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * api hub instance.
+ *
+ * **Example:** Reference an existing api hub instance
+ * ```typescript
+ * const apiHubInstance = GCP.ApiHub.ApiHubInstance.lookup({
+ *   apiHubInstanceId: "my-api-hub-instance",
  * });
  * ```
  *
@@ -180,15 +220,15 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsApiHubInstances({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const lookupAt = (parent: string) =>
   apihub.lookupProjectsLocationsApiHubInstances({ parent }).pipe(
     Effect.map((response) => response.apiHubInstance),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const configOf = (news: ApiHubInstanceProps): apihub.GoogleCloudApihubV1Config => ({
@@ -224,6 +264,18 @@ export const ApiHubInstanceProvider = () =>
             (olds?.config?.encryptionType ?? output?.encryptionType),
       });
     }),
+
+    lookup: Effect.fn(function* ({ apiHubInstanceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, apiHubInstanceId);
+      let existing = yield* getByName(name);
+      if (existing === undefined) {
+        existing = yield* lookupAt(locationParent(env.project, location));
+      }
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -296,7 +348,7 @@ export const ApiHubInstanceProvider = () =>
               config,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -304,7 +356,7 @@ export const ApiHubInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -333,7 +385,7 @@ export const ApiHubInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name: currentName });
+        return yield* new ApihubNotResolved({ resourceName: currentName });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -342,7 +394,7 @@ export const ApiHubInstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apihub
         .deleteProjectsLocationsApiHubInstances({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

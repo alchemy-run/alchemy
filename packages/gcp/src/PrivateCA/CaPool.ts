@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -131,8 +132,33 @@ export type CaPool = Resource<
     encryptionSpec: EncryptionSpec | undefined;
   },
   never,
-  Providers
+  Providers,
+  CaPoolLookup
 >;
+
+/**
+ * Props for {@link CaPool.lookup}: find a ca pool this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface CaPoolLookup {
+  /**
+   * CaPool id (the `{caPool}` segment of
+   * `projects/{project}/locations/{location}/caPools/{caPool}`). Must match
+   * `[a-zA-Z0-9_-]{1,63}`.
+   */
+  caPoolId: string;
+  /**
+   * Certificate Authority Service location (`us-central1`, `us-east1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Authority Service CaPool — a group of Certificate
@@ -181,17 +207,27 @@ export type CaPool = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing ca pool
+ * `CaPool.lookup` references a ca pool Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared ca pool.
+ *
+ * **Example:** Reference an existing ca pool
+ * ```typescript
+ * const caPool = GCP.PrivateCA.CaPool.lookup({ caPoolId: "my-ca-pool" });
+ * ```
+ *
  * @resource
  * @category PrivateCA
  */
 export const CaPool = Resource<CaPool>("GCP.PrivateCA.CaPool");
 
 export class CaPoolNotResolved extends Data.TaggedError("GCP.PrivateCA.CaPoolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CaPoolStillExists extends Data.TaggedError("GCP.PrivateCA.CaPoolStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -330,7 +366,7 @@ const toAttrs = (pool: privateca.CaPool, project: string) => {
 const getByName = (name: string) =>
   privateca
     .getProjectsLocationsCaPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Certificate Authority Service operation; CA creation and
@@ -354,7 +390,7 @@ const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool ? Effect.succeed(pool) : Effect.fail(new CaPoolNotResolved({ name })),
+      pool ? Effect.succeed(pool) : Effect.fail(new CaPoolNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CaPoolNotResolved",
@@ -366,7 +402,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new CaPoolStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new CaPoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CaPoolStillExists",
@@ -451,6 +487,15 @@ export const CaPoolProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ caPoolId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, caPoolId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const caPoolId = yield* toId(id, olds?.caPoolId, output?.caPoolId);
@@ -493,7 +538,7 @@ export const CaPoolProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -502,7 +547,7 @@ export const CaPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CaPoolNotResolved({ name });
+        return yield* new CaPoolNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -542,7 +587,7 @@ export const CaPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CaPoolNotResolved({ name });
+        return yield* new CaPoolNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -555,7 +600,7 @@ export const CaPoolProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -73,13 +73,13 @@ export const toServiceName = (
 export const getByName = (serviceName: string) =>
   servicemanagement
     .getServices({ serviceName })
-    .pipe(Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.undefined));
 
 /** The newest config version (the list is ordered newest first). */
 export const getLatestConfig = (serviceName: string) =>
   servicemanagement.listServicesConfigs({ serviceName, pageSize: 1 }).pipe(
     Effect.map((page) => page.serviceConfigs?.[0]),
-    Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NotFound", "ServiceNotFound"], () => Effect.undefined),
   );
 
 export const waitUntilExists = (serviceName: string) =>
@@ -113,8 +113,9 @@ export const undeleteService = (serviceName: string) =>
     const operation = yield* servicemanagement
       .undeleteServices({ serviceName })
       .pipe(
-        Effect.catchTag(["NotFound", "ServiceNotFound", "ServiceAlreadyActive"], () =>
-          Effect.succeed(undefined),
+        Effect.catchTag(
+          ["NotFound", "ServiceNotFound", "ServiceAlreadyActive"],
+          () => Effect.undefined,
         ),
       );
     if (operation !== undefined) {

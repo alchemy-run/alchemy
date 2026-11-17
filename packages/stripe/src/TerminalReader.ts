@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteTerminalReader,
   GetTerminalReaders,
@@ -92,8 +91,18 @@ export type TerminalReader = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  TerminalReaderLookup
 >;
+
+/**
+ * Props for {@link TerminalReader.lookup}: find a Terminal reader this stack
+ * doesn't manage by its id.
+ */
+export interface TerminalReaderLookup {
+  /** Stripe Terminal reader id, e.g. `"tmr_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Terminal Reader — a physical or simulated card reader that
@@ -149,6 +158,16 @@ export type TerminalReader = Resource<
  * // stack.destroy() deletes the reader
  * ```
  *
+ * ### Looking up an existing Terminal reader
+ * `TerminalReader.lookup` references a Terminal reader Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Terminal reader
+ * ```typescript
+ * const ref = Stripe.TerminalReader.lookup({ id: "tmr_A2b3C4d5E6f7G8" });
+ * ```
+ *
  * @resource
  * @product Terminal
  */
@@ -202,7 +221,7 @@ const isMissingReader = isMissingStripeResource;
 const getById = (reader: string) =>
   GetTerminalReader({ reader }).pipe(
     Effect.map(asReader),
-    Effect.catchIf(isMissingReader, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingReader, () => Effect.undefined),
   );
 
 const listAllReaders = Effect.fn(function* () {
@@ -278,6 +297,11 @@ export const TerminalReaderProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -315,11 +339,8 @@ export const TerminalReaderProvider = () =>
           metadata,
           ...(news.label !== undefined ? { label: news.label } : {}),
           ...(news.location !== undefined ? { location: news.location } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-terminal-reader-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-terminal-reader-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

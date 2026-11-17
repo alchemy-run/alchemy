@@ -18,9 +18,15 @@ import * as Effect from "effect/Effect";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
+/**
+ * Returns the image to run: the configured `ALCHEMY_FLOCI_IMAGE`, `floci:dev`
+ * when it exists, or undefined for the pinned release. Callers that start the
+ * emulator in this process pass it on: `Config` reads the environment before
+ * this writes it, so the write only reaches child processes.
+ */
 export const preferLocalFlociImage = Effect.fn(function* (label: string) {
   const configured = yield* Config.String("ALCHEMY_FLOCI_IMAGE").pipe(Config.withDefault(""));
-  if (configured !== "") return;
+  if (configured !== "") return configured;
   const spawner = yield* ChildProcessSpawner;
   const exitCode = yield* spawner
     .exitCode(
@@ -34,12 +40,15 @@ export const preferLocalFlociImage = Effect.fn(function* (label: string) {
     .pipe(Effect.orElseSucceed(() => 1));
   if (exitCode === 0) {
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes the real env so child test processes inherit it
       process.env.ALCHEMY_FLOCI_IMAGE = "floci:dev";
     });
     yield* Console.log(`${label}: using locally built floci:dev image`);
+    return "floci:dev";
   } else {
     yield* Console.log(
       `${label}: no local floci:dev image (pnpm floci:build) — using the pinned release image`,
     );
+    return undefined;
   }
 });

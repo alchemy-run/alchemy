@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -126,8 +127,37 @@ export type CertificateIssuanceConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateIssuanceConfigLookup
 >;
+
+/**
+ * Props for {@link CertificateIssuanceConfig.lookup}: find a certificate
+ * issuance config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CertificateIssuanceConfigLookup {
+  /**
+   * CertificateIssuanceConfig id (the `{certificateIssuanceConfig}` segment
+   * of
+   * `projects/{project}/locations/{location}/certificateIssuanceConfigs/{
+   * certificateIssuanceConfig}`). Must be 1-63 characters, start with a
+   * letter, and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Ids are unique across
+   * all locations.
+   */
+  certificateIssuanceConfigId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`. A regional
+   * CA pool may be referenced from a `global` issuance config.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager issuance config — how Google-managed certificates
@@ -198,6 +228,19 @@ export type CertificateIssuanceConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing certificate issuance config
+ * `CertificateIssuanceConfig.lookup` references a certificate issuance
+ * config Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared certificate issuance config.
+ *
+ * **Example:** Reference an existing certificate issuance config
+ * ```typescript
+ * const certificateIssuanceConfig = GCP.CertificateManager.CertificateIssuanceConfig.lookup({
+ *   certificateIssuanceConfigId: "my-certificate-issuance-config",
+ * });
+ * ```
+ *
  * @resource
  * @category CertificateManager
  */
@@ -208,13 +251,13 @@ export const CertificateIssuanceConfig = Resource<CertificateIssuanceConfig>(
 export class CertificateIssuanceConfigNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateIssuanceConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateIssuanceConfigStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateIssuanceConfigStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -352,14 +395,14 @@ const toAttrs = (config: certificatemanager.CertificateIssuanceConfig, project: 
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsCertificateIssuanceConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
       config
         ? Effect.succeed(config)
-        : Effect.fail(new CertificateIssuanceConfigNotResolved({ name })),
+        : Effect.fail(new CertificateIssuanceConfigNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -374,7 +417,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((config) =>
       config === undefined
         ? Effect.void
-        : Effect.fail(new CertificateIssuanceConfigStillExists({ name })),
+        : Effect.fail(new CertificateIssuanceConfigStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -477,6 +520,15 @@ export const CertificateIssuanceConfigProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ certificateIssuanceConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, certificateIssuanceConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const certificateIssuanceConfigId = yield* toId(
@@ -529,7 +581,7 @@ export const CertificateIssuanceConfigProvider = () =>
                 times: 5,
                 schedule: Schedule.spaced("2 seconds"),
               }),
-              Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+              Effect.catchTag("Conflict", () => Effect.undefined),
             );
           if (created !== undefined) {
             yield* waitForOperation(created);
@@ -547,7 +599,7 @@ export const CertificateIssuanceConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateIssuanceConfigNotResolved({ name });
+        return yield* new CertificateIssuanceConfigNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -589,7 +641,7 @@ export const CertificateIssuanceConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -126,9 +126,9 @@ const waitForNetworkConfig = (
 
 export class PrivateNetworkNameUnsupported extends Data.TaggedError(
   "Railway.PrivateNetworkNameUnsupported",
-)<{ name: string }> {
+)<{ resourceName: string }> {
   override get message() {
-    return `Railway manages one private network per environment. Custom network '${this.name}' is no longer supported; remove the legacy declaration and use PrivateNetwork without a name.`;
+    return `Railway manages one private network per environment. Custom network '${this.resourceName}' is no longer supported; remove the legacy declaration and use PrivateNetwork without a name.`;
   }
 }
 
@@ -260,7 +260,7 @@ export const PrivateNetwork: typeof PrivateNetworkResource = Object.assign(
 );
 
 export class PrivateNetworkNotCreated extends Data.TaggedError("Railway.PrivateNetworkNotCreated")<{
-  name: string;
+  resourceName: string;
   environmentId: string;
 }> {}
 
@@ -309,7 +309,7 @@ const toNetworkAttrs = (
 
 const resolveNetworkName = Effect.fn(function* (name?: string) {
   if (name !== undefined && name !== PLATFORM_NETWORK_NAME) {
-    return yield* new PrivateNetworkNameUnsupported({ name });
+    return yield* new PrivateNetworkNameUnsupported({ resourceName: name });
   }
   return PLATFORM_NETWORK_NAME;
 });
@@ -364,7 +364,9 @@ const ensureNetwork = Effect.fn(function* (environmentId: string) {
   const network = yield* observeNetwork({ environmentId, name: PLATFORM_NETWORK_NAME }).pipe(
     Effect.flatMap((network) =>
       network === undefined
-        ? Effect.fail(new PrivateNetworkNotCreated({ name: PLATFORM_NETWORK_NAME, environmentId }))
+        ? Effect.fail(
+            new PrivateNetworkNotCreated({ resourceName: PLATFORM_NETWORK_NAME, environmentId }),
+          )
         : Effect.succeed(network),
     ),
     Effect.retry({
@@ -399,7 +401,7 @@ export const PrivateNetworkProvider = () =>
       const name = output?.name ?? olds?.name ?? PLATFORM_NETWORK_NAME;
       if (environmentId === undefined) return undefined;
       const config = yield* readNetworkConfig(environmentId).pipe(
-        Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("RailwayNotFound", () => Effect.undefined),
       );
       if (config === undefined || config.privateNetworkDisabled === true) {
         return undefined;
@@ -721,7 +723,7 @@ const getEndpoint = (input: {
     serviceId: input.serviceId,
   }).pipe(
     Effect.map((endpoint) => (endpoint == null || isGoneEndpoint(endpoint) ? undefined : endpoint)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const resolveServiceName = (serviceId: string, hint?: string) =>
@@ -734,7 +736,7 @@ const resolveServiceName = (serviceId: string, hint?: string) =>
 
 export class PrivateNetworkEndpointNameUnavailable extends Data.TaggedError(
   "Railway.PrivateNetworkEndpointNameUnavailable",
-)<{ name: string; privateNetworkId: string; serviceId: string }> {}
+)<{ endpointName: string; privateNetworkId: string; serviceId: string }> {}
 
 const waitUntilEndpointNamed = (input: {
   environmentId: string;
@@ -823,7 +825,7 @@ export const PrivateNetworkEndpointProvider = () =>
             id: service.id,
             name: service.name,
             deletedAt: service.deletedAt,
-          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
+          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.undefined));
           const services = (live ?? []).filter((service) => service.deletedAt == null);
           const nested = yield* Effect.forEach(owned, (network) =>
             Effect.forEach(services, (service) =>
@@ -911,7 +913,7 @@ export const PrivateNetworkEndpointProvider = () =>
             });
             if (!available) {
               return yield* new PrivateNetworkEndpointNameUnavailable({
-                name: desiredPrefix,
+                endpointName: desiredPrefix,
                 privateNetworkId,
                 serviceId,
               });

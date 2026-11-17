@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,13 @@ import {
   retryWhileMailManagerConflict,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class MailManagerArchiveUnexpectedResponse extends Data.TaggedError(
+  "MailManagerArchiveUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ArchiveProps {
   /**
@@ -55,8 +63,18 @@ export interface Archive extends Resource<
     archiveState: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ArchiveLookup
 > {}
+
+/**
+ * Props for {@link Archive.lookup}: find an archive this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ArchiveLookup {
+  /** The name of the existing archive. */
+  archiveName: string;
+}
 
 /**
  * An SES Mail Manager email archive — durable storage for emails captured
@@ -99,6 +117,16 @@ export interface Archive extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing archive
+ * `Archive.lookup` references an archive Alchemy doesn't manage (created in the
+ * console or by another stack), found by `archiveName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing archive
+ * ```typescript
+ * const existing = AWS.MailManager.Archive.lookup({ archiveName: "compliance" });
+ * ```
+ *
  * @resource
  */
 export const Archive = Resource<Archive>("AWS.MailManager.Archive");
@@ -116,7 +144,7 @@ export const ArchiveProvider = () =>
       const getById = (archiveId: string) =>
         mm.getArchive({ ArchiveId: archiveId }).pipe(
           Effect.map((a) => (a.ArchiveState === "PENDING_DELETION" ? undefined : a)),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Archives have no name-keyed Get — enumerate and match, skipping
@@ -169,6 +197,10 @@ export const ArchiveProvider = () =>
             Effect.map((results) => results.flatMap((a) => (a === undefined ? [] : [toAttrs(a)]))),
           ),
 
+        lookup: Effect.fn(function* ({ archiveName }) {
+          const found = yield* observe(undefined, archiveName);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.archiveName ?? (yield* createName(id, olds ?? {}));
           const archive = yield* observe(output, name);
@@ -208,16 +240,16 @@ export const ArchiveProvider = () =>
                 KmsKeyArn: news.kmsKeyArn,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             archive =
               created !== undefined
                 ? yield* getById(created.ArchiveId)
                 : yield* observe(undefined, name);
           }
           if (archive === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager archive '${name}' not found after create`),
-            );
+            return yield* new MailManagerArchiveUnexpectedResponse({
+              message: `Mail Manager archive '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED name/retention against desired; apply

@@ -60,8 +60,20 @@ export type DispatchNamespace = Resource<
   DispatchNamespaceProps,
   DispatchNamespaceAttributes,
   never,
-  Providers
+  Providers,
+  DispatchNamespaceLookup
 >;
+
+/**
+ * Props for {@link DispatchNamespace.lookup}: find a dispatch namespace this
+ * stack doesn't manage, by its name.
+ */
+export interface DispatchNamespaceLookup {
+  /**
+   * The name of the existing dispatch namespace.
+   */
+  name: string;
+}
 
 /**
  * A Workers for Platforms dispatch namespace — a container for customer
@@ -138,6 +150,28 @@ export type DispatchNamespace = Resource<
  * };
  * ```
  *
+ * ### Looking up an existing namespace
+ * `DispatchNamespace.lookup` references a namespace Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Dispatch to, and upload into, a looked-up namespace
+ * ```typescript
+ * const namespace = Cloudflare.WorkersForPlatforms.DispatchNamespace.lookup({
+ *   name: "customers",
+ * });
+ *
+ * const platform = yield* Cloudflare.Worker("Platform", {
+ *   main: "./handler.ts",
+ *   env: { DISPATCH: namespace },
+ * });
+ *
+ * const customerA = yield* Cloudflare.Worker("CustomerA", {
+ *   namespace,
+ *   main: "./customer.ts",
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
  *
  * @resource
@@ -155,7 +189,7 @@ export const isDispatchNamespace = (value: unknown): value is DispatchNamespace 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {
     stables: ["namespaceId", "name", "accountId", "createdOn"],
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -182,6 +216,11 @@ export const DispatchNamespaceProvider = () =>
         ),
       );
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getNamespace(accountId, name);
+      return observed ? toAttributes(observed, accountId, name) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -192,7 +231,7 @@ export const DispatchNamespaceProvider = () =>
       const observed = yield* getNamespace(acct, name);
       return observed ? toAttributes(observed, acct, name) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
@@ -233,7 +272,7 @@ export const DispatchNamespaceProvider = () =>
 const getNamespace = (accountId: string, name: string) =>
   wfp
     .getDispatchNamespace({ accountId, dispatchNamespace: name })
-    .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.undefined));
 
 const toAttributes = (
   ns: wfp.GetDispatchNamespaceResponse | wfp.CreateDispatchNamespaceResponse,

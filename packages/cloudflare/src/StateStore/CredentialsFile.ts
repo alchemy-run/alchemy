@@ -1,4 +1,3 @@
-import type { AuthError } from "alchemy/Auth/AuthProvider";
 import type { CredentialsStoreService } from "alchemy/Auth/Credentials";
 import { withLock } from "alchemy/Auth/Lock";
 import { profileStateStoresDirPath } from "alchemy/Auth/Paths";

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -89,8 +90,32 @@ export type OrganizationBigQueryExport = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationBigQueryExportLookup
 >;
+
+/**
+ * Props for {@link OrganizationBigQueryExport.lookup}: find an organization
+ * big query export this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface OrganizationBigQueryExportLookup {
+  /**
+   * Export id (the `{export}` segment of
+   * `organizations/{organization}/bigQueryExports/{export}`). Letters,
+   * digits, and hyphens; max 63 characters.
+   */
+  exportId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Security Command Center BigQuery export.
@@ -126,6 +151,19 @@ export type OrganizationBigQueryExport = Resource<
  *     dataset: "projects/my-project/datasets/scc",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organization big query export
+ * `OrganizationBigQueryExport.lookup` references an organization big query
+ * export Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared organization big query export.
+ *
+ * **Example:** Reference an existing organization big query export
+ * ```typescript
+ * const organizationBigQueryExport = GCP.SecurityCenter.OrganizationBigQueryExport.lookup({
+ *   exportId: "my-export",
+ * });
  * ```
  *
  * @resource
@@ -164,10 +202,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getOrganizationsBigQueryExports({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationBigQueryExportProvider = () =>
   Provider.succeed(OrganizationBigQueryExport, {
@@ -183,6 +221,15 @@ export const OrganizationBigQueryExportProvider = () =>
         )
       );
     }),
+
+    lookup: Effect.fn(function* ({ exportId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const name = resourceName(organization, exportId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -239,7 +286,7 @@ export const OrganizationBigQueryExportProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritycenterNotResolved({ name });
+        return yield* new SecuritycenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

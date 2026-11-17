@@ -6,6 +6,8 @@ import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
+import { globalLogs } from "alchemy/Util/LogRecord";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -147,12 +149,14 @@ export const state = (options: GcsStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const context = yield* Effect.context<GcsDeps | GcpEnvironment>();
+      const context = yield* Effect.context<GcsDeps | GcpEnvironment | SecureRandom.SecureRandom>();
 
       // Bind the lease to this layer's scope. The cached effect runs on the
       // first state operation, which may sit in a shorter scope.
       const make = Scope.provide(makeGcsState(options), scope).pipe(
         recordStateStoreInit,
+        // Account-level: filed in the global run log, not the project's.
+        globalLogs,
         Effect.orDie,
         Effect.provideContext(context),
       );
@@ -167,7 +171,7 @@ export const state = (options: GcsStateOptions = {}) =>
  */
 export const makeGcsState = (options: GcsStateOptions = {}) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<GcsDeps | GcpEnvironment>();
+    const context = yield* Effect.context<GcsDeps | GcpEnvironment | SecureRandom.SecureRandom>();
 
     const toError = (cause: unknown) =>
       new StateStoreError({
@@ -193,8 +197,9 @@ export const makeGcsState = (options: GcsStateOptions = {}) =>
         : Provisioning.deployMissing(
             {
               backend: "gcp",
-              name: options.name,
+              flags: { name: options.name },
               label: `Cloud Storage state bucket '${bucketName}'`,
+              configured: options.bucketName !== undefined,
             },
             ensure,
           );
@@ -245,7 +250,7 @@ const gcsObjects = (
           text: new TextDecoder().decode(object.body),
           version: object.generation ?? "",
         })),
-        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.undefined),
       ),
     ),
   write: (key, body, condition) =>
@@ -267,7 +272,7 @@ const gcsObjects = (
           // A lost condition answers 412.
           Effect.catchIf(
             (error) => error._tag === "GCP.Storage.ObjectRequestFailed" && error.status === 412,
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         ),
     ),
@@ -357,7 +362,7 @@ const ensureStateBucket = (bucket: string, project: string, location: string) =>
   Effect.gen(function* () {
     const observed = yield* storage
       .getBuckets({ bucket })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (observed === undefined) {
       yield* Effect.logInfo(`Cloud Storage state store: creating bucket ${bucket} in ${location}`);
       yield* storage

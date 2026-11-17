@@ -153,7 +153,7 @@ export const PostgresDefaultRoleProvider = () =>
             privateHost: role.private_access_host_url,
             privateConnectionServiceName: role.private_connection_service_name,
           })),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -175,7 +175,7 @@ export const PostgresDefaultRoleProvider = () =>
           database: databaseName,
           branch: branchName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // 2. Sync (no-op) — we own the role and it still exists in the
       //    cloud. Default roles have nothing mutable in place: their

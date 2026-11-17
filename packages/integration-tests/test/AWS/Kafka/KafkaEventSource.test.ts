@@ -1,6 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -54,6 +55,37 @@ describe.sequential(
           const mapping = yield* waitForMapping(fn.functionName, cluster.clusterArn);
           expect(mapping.Topics).toEqual(["orders"]);
           expect(mapping.State).not.toBe("Failed");
+
+          // The execution role may delete ENIs only in the cluster's subnets.
+          // Lambda's create-time check (no subnet in its request) passed, or
+          // the mapping wouldn't exist; a delete in another subnet is denied.
+          const [account, region] = [
+            cluster.clusterArn.split(":")[4],
+            cluster.clusterArn.split(":")[3],
+          ];
+          const subnetArn = (id: string) => `arn:aws:ec2:${region}:${account}:subnet/${id}`;
+          const deleteDecision = (subnet: string) =>
+            IAM.simulatePrincipalPolicy({
+              PolicySourceArn: fn.roleArn,
+              ActionNames: ["ec2:DeleteNetworkInterface"],
+              ResourceArns: [
+                `arn:aws:ec2:${region}:${account}:network-interface/eni-0123456789abcdef0`,
+              ],
+              ContextEntries: [
+                {
+                  ContextKeyName: "ec2:Subnet",
+                  ContextKeyType: "string",
+                  ContextKeyValues: [subnet],
+                },
+                {
+                  ContextKeyName: "aws:RequestedRegion",
+                  ContextKeyType: "string",
+                  ContextKeyValues: [region!],
+                },
+              ],
+            }).pipe(Effect.map((result) => result.EvaluationResults?.[0]?.EvalDecision));
+          expect(yield* deleteDecision(subnetArn(cluster.subnetIds[0]!))).toBe("allowed");
+          expect(yield* deleteDecision(subnetArn("subnet-0123456789abcdef0"))).not.toBe("allowed");
 
           // Drive the control-plane bindings end-to-end through the deployed
           // function URL: GetBootstrapBrokers, ConnectReadWrite (env-published

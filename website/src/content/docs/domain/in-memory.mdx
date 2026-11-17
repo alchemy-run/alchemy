@@ -3,7 +3,7 @@ title: In memory
 description: Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 ---
 
-`Domain.InMemory` runs your whole model in the current process: aggregates, views and policies, with nothing to deploy. Swap it for `DomainCloudflare.DurableObjects` and nothing else changes.
+`Domain.InMemory` runs your whole model in the current process: aggregates, views and policies, with nothing to deploy. Swap it for `DomainCloudflare.layerDurableObjects()` and nothing else changes.
 
 ## Host the model in memory
 
@@ -27,7 +27,7 @@ export const BankInMemory = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
 );
 ```
 
-Policies and projections run for real, and views catch up just after each command, as they do on Cloudflare.
+Policies and projections run for real, and views catch up just after each command, as they do on Cloudflare. A [decision](/domain/decision) records on every instance it reads in one step.
 
 ## Call it through an Api
 
@@ -47,7 +47,7 @@ it.live("a customer registers and deposits", () =>
   Effect.gen(function* () {
     const sam = yield* CustomerApi.clientInProcess.pipe(Effect.provide(signedInAs(customer("c-1"))));
     const accountId = yield* register(sam, "c-1", "sam");
-    const { reply } = yield* sam.DepositMoney(accountId, { amount: 100 });
+    const { reply } = yield* sam.DepositMoney({ accountId, amount: 100 });
     expect(reply.balance).toBe(100);
   }).pipe(Effect.scoped, Effect.provide(BankInMemory)),
 );

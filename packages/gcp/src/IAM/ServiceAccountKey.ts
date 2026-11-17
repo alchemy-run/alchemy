@@ -60,7 +60,7 @@ export type ServiceAccountKey = Resource<
 export const ServiceAccountKey = Resource<ServiceAccountKey>("GCP.IAM.ServiceAccountKey");
 
 export class ServiceAccountKeyInvalid extends Data.TaggedError("GCP.IAM.ServiceAccountKeyInvalid")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** The fields of a `TYPE_GOOGLE_CREDENTIALS_FILE` key that callers need. */
@@ -74,13 +74,13 @@ const decodeKeyFile = (name: string, privateKeyData: string) =>
       return { privateKeyId: file.private_key_id, privateKey: Redacted.make(file.private_key) };
     },
     // The cause can quote key material, so it is not attached.
-    catch: () => new ServiceAccountKeyInvalid({ name }),
+    catch: () => new ServiceAccountKeyInvalid({ resourceName: name }),
   });
 
 const getKey = (name: string) =>
   iam
     .getProjectsServiceAccountsKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceAccountKeyProvider = () =>
   Provider.succeed(ServiceAccountKey, {

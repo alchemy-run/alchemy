@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 import type { AlchemyContext } from "alchemy/AlchemyContext";
 import type { CompiledStack, StackDefinition } from "alchemy/Stack";
 import type { Stage } from "alchemy/Stage";
@@ -26,6 +24,7 @@ import {
   tagsOf,
   optInTagsOf,
   timeoutOf,
+  type Exclusive,
   type TestOptions,
 } from "./index.ts";
 
@@ -47,6 +46,7 @@ export const ALCHEMY_TEST_DEV = Core.ALCHEMY_TEST_DEV;
 export const resolveDev = Core.resolveDev;
 export const defaultStage = Core.defaultStage;
 export const resolveStage = Core.resolveStage;
+export const captureResourceLog = Core.captureResourceLog;
 
 interface TestFn {
   (name: string, eff: TestEffect<void>, options?: TestOptions): void;
@@ -141,6 +141,9 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // Session ownership outlives a mid-file destroy, but not file cleanup.
   let sidecar = Core.makeSidecarHandle(options);
   const clearResults = new Set<() => void>();
+  // Every test and beforeAll/afterAll hook also holds the file's limit.
+  const exclusive = (opts: TestOptions | undefined): Exclusive =>
+    options.limit === undefined ? exclusiveOf(opts) : [exclusiveOf(opts), options.limit].flat();
   const wrap = <A>(eff: TestEffect<A>) =>
     sharedScope === undefined
       ? Effect.die("Test runtime is closed")
@@ -155,7 +158,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
-      exclusive: exclusiveOf(opts),
+      exclusive: exclusive(opts),
       retry: retryOf(opts),
       timeout: timeoutOf(opts),
       tags: tagsOf(opts),
@@ -233,7 +236,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
-      exclusive: exclusiveOf(opts),
+      exclusive: exclusive(opts),
       retry: retryOf(opts),
       timeout: timeoutOf(opts),
       tags: tagsOf(opts),
@@ -264,7 +267,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
           }),
         ),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
-      exclusive: exclusiveOf(hookOptions),
+      exclusive: exclusive(hookOptions),
     });
     return Effect.sync(() => result as A);
   };
@@ -277,7 +280,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerHook("afterAll", {
       body: () => wrap(eff),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
-      exclusive: exclusiveOf(hookOptions),
+      exclusive: exclusive(hookOptions),
     });
   }) as AfterAllFn;
   afterAll.skipIf = (predicate) => (eff, hookOptions) => {
@@ -285,7 +288,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerHook("afterAll", {
       body: () => wrap(eff),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
-      exclusive: exclusiveOf(hookOptions),
+      exclusive: exclusive(hookOptions),
     });
   };
 

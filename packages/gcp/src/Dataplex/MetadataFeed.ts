@@ -10,6 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -109,8 +110,31 @@ export type MetadataFeed = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MetadataFeedLookup
 >;
+
+/**
+ * Props for {@link MetadataFeed.lookup}: find a metadata feed this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MetadataFeedLookup {
+  /**
+   * Feed id (the `{metadataFeed}` segment of
+   * `projects/{project}/locations/{location}/metadataFeeds/{metadataFeed}`).
+   */
+  metadataFeedId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex metadata feed that publishes catalog changes to Pub/Sub.
@@ -136,6 +160,19 @@ export type MetadataFeed = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing metadata feed
+ * `MetadataFeed.lookup` references a metadata feed Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * metadata feed.
+ *
+ * **Example:** Reference an existing metadata feed
+ * ```typescript
+ * const metadataFeed = GCP.Dataplex.MetadataFeed.lookup({
+ *   metadataFeedId: "my-metadata-feed",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
@@ -144,13 +181,13 @@ export const MetadataFeed = Resource<MetadataFeed>("GCP.Dataplex.MetadataFeed");
 export class MetadataFeedNotResolved extends Data.TaggedError(
   "GCP.Dataplex.MetadataFeedNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataFeedStillExists extends Data.TaggedError(
   "GCP.Dataplex.MetadataFeedStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, feedId: string) =>
@@ -191,7 +228,7 @@ const toAttrs = (feed: dataplex.GoogleCloudDataplexV1MetadataFeed, project: stri
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsMetadataFeeds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const topicResource = (topic: string, project: string) =>
   topic.includes("/") ? topic : `projects/${project}/topics/${topic}`;
@@ -202,7 +239,7 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
     const resource = topicResource(topic, project);
     const projectResource = yield* resourcemanager
       .getProjects({ name: `projects/${project}` })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     const projectNumber = lastSegment(projectResource?.name ?? "");
     if (projectNumber.length === 0) return;
     const member = `serviceAccount:service-${projectNumber}@gcp-sa-dataplex.iam.gserviceaccount.com`;
@@ -236,7 +273,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feed): feed is dataplex.GoogleCloudDataplexV1MetadataFeed => feed !== undefined,
-      () => new MetadataFeedNotResolved({ name }),
+      () => new MetadataFeedNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedNotResolved",
@@ -248,7 +285,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((feed) =>
-      feed === undefined ? Effect.void : Effect.fail(new MetadataFeedStillExists({ name })),
+      feed === undefined
+        ? Effect.void
+        : Effect.fail(new MetadataFeedStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedStillExists",
@@ -283,6 +322,15 @@ export const MetadataFeedProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ metadataFeedId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, metadataFeedId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -331,7 +379,7 @@ export const MetadataFeedProvider = () =>
               pubsubTopic: news.pubsubTopic,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -339,7 +387,7 @@ export const MetadataFeedProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataFeedNotResolved({ name });
+        return yield* new MetadataFeedNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -382,7 +430,7 @@ export const MetadataFeedProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

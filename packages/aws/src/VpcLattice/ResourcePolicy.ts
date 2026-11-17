@@ -82,7 +82,7 @@ export const ResourcePolicyProvider = () =>
       const observe = (resourceArn: string) =>
         vpclattice.getResourcePolicy({ resourceArn }).pipe(
           Effect.map((response) => response.policy),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const toDesired = (policy: PolicyDocument | string) =>

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -177,8 +178,36 @@ export type Certificate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateLookup
 >;
+
+/**
+ * Props for {@link Certificate.lookup}: find a certificate this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CertificateLookup {
+  /**
+   * Certificate id (the `{certificate}` segment of
+   * `projects/{project}/locations/{location}/certificates/{certificate}`).
+   * Must be 1-63 characters, start with a letter, and match
+   * `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  certificateId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`. `DEFAULT` /
+   * `EDGE_CACHE` / `CLIENT_AUTH` / `ALL_REGIONS` certificates live in
+   * `global`; omit or set a region for a regional certificate.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager TLS certificate — self-managed (uploaded PEM),
@@ -233,6 +262,19 @@ export type Certificate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * certificate.
+ *
+ * **Example:** Reference an existing certificate
+ * ```typescript
+ * const certificate = GCP.CertificateManager.Certificate.lookup({
+ *   certificateId: "my-certificate",
+ * });
+ * ```
+ *
  * @resource
  * @category CertificateManager
  */
@@ -241,13 +283,13 @@ export const Certificate = Resource<Certificate>("GCP.CertificateManager.Certifi
 export class CertificateNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -417,12 +459,12 @@ const toAttrs = (cert: certificatemanager.Certificate, project: string) => {
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsCertificates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ name })),
+      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateNotResolved",
@@ -434,7 +476,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert === undefined ? Effect.void : Effect.fail(new CertificateStillExists({ name })),
+      cert === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateStillExists",
@@ -603,6 +647,15 @@ export const CertificateProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ certificateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, certificateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const certificateId = yield* toId(id, olds?.certificateId, output?.certificateId);
@@ -647,7 +700,7 @@ export const CertificateProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -656,7 +709,7 @@ export const CertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateNotResolved({ name });
+        return yield* new CertificateNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -695,7 +748,7 @@ export const CertificateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

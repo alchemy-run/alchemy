@@ -78,8 +78,18 @@ export interface RuleGroup extends Resource<
     capacity: number;
   },
   never,
-  Providers
+  Providers,
+  RuleGroupLookup
 > {}
+
+/**
+ * Props for {@link RuleGroup.lookup}: find a rule group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuleGroupLookup {
+  /** The ARN of the existing rule group. */
+  ruleGroupArn: string;
+}
 
 /**
  * An AWS Network Firewall rule group — a reusable collection of stateless
@@ -140,6 +150,16 @@ export interface RuleGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing rule group
+ * `RuleGroup.lookup` references a rule group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleGroupArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule group
+ * ```typescript
+ * const blocklist = AWS.NetworkFirewall.RuleGroup.lookup({ ruleGroupArn });
+ * ```
+ *
  * @resource
  */
 export const RuleGroup = Resource<RuleGroup>("AWS.NetworkFirewall.RuleGroup");
@@ -174,29 +194,31 @@ export const RuleGroupProvider = () =>
               (meta) =>
                 nfw.describeRuleGroup({ RuleGroupArn: meta.Arn }).pipe(
                   Effect.map((r) => toAttrs(r.RuleGroupResponse)),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
             return items.filter((item): item is RuleGroup["Attributes"] => item !== undefined);
           }),
 
+        lookup: Effect.fn(function* ({ ruleGroupArn }) {
+          const found = yield* nfw
+            .describeRuleGroup({ RuleGroupArn: ruleGroupArn })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          return found === undefined ? undefined : toAttrs(found.RuleGroupResponse);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found =
             output?.ruleGroupArn !== undefined
               ? yield* nfw
                   .describeRuleGroup({ RuleGroupArn: output.ruleGroupArn })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
               : yield* nfw
                   .describeRuleGroup({
                     RuleGroupName: yield* createName(id, olds ?? {}),
                     Type: olds?.type,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found.RuleGroupResponse);
           const tags = nfwTagsToRecord(found.RuleGroupResponse.Tags);
@@ -223,7 +245,7 @@ export const RuleGroupProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* nfw
             .describeRuleGroup({ RuleGroupName: name, Type: news.type })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {

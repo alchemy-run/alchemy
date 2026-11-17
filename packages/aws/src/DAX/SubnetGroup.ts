@@ -3,10 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { sameStringSet } from "./internal.ts";
+
+export class DAXSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "DAXSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SubnetGroupProps {
   /**
@@ -41,8 +49,18 @@ export interface SubnetGroup extends Resource<
     subnetIds: string[];
   },
   never,
-  Providers
+  Providers,
+  SubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link SubnetGroup.lookup}: find a subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SubnetGroupLookup {
+  /** The subnet group name of the existing subnet group. */
+  subnetGroupName: string;
+}
 
 /**
  * A DAX subnet group — the set of VPC subnets a DAX cluster's nodes are
@@ -71,6 +89,16 @@ export interface SubnetGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing subnet group
+ * `SubnetGroup.lookup` references a subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `subnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing subnet group
+ * ```typescript
+ * const existing = AWS.DAX.SubnetGroup.lookup({ subnetGroupName: "my-subnet-group" });
+ * ```
+ *
  * @resource
  */
 export const SubnetGroup = Resource<SubnetGroup>("AWS.DAX.SubnetGroup");
@@ -87,7 +115,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeSubnetGroups({ SubnetGroupNames: [name] })
-          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.SubnetGroups?.[0];
       });
 
@@ -111,6 +139,12 @@ export const SubnetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ subnetGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (group?.SubnetGroupName === undefined) return undefined;
+          return toAttrs(group);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -141,9 +175,9 @@ export const SubnetGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`DAX subnet group '${name}' not found after create`),
-            );
+            return yield* new DAXSubnetGroupUnexpectedResponse({
+              message: `DAX subnet group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync — apply description / subnet delta from OBSERVED state.

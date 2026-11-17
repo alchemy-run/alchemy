@@ -6,6 +6,7 @@ import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { CAPACITY_REGION } from "../zones.ts";
 import { defaultComputeServiceAccount } from "./serviceAccount.ts";
 
@@ -73,6 +74,13 @@ test.provider.skipIf(!runLifecycle)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Composer.Environment.lookup({
+          environmentId: created.environmentId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/environments/");

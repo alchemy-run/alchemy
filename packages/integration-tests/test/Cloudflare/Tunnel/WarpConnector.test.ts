@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -35,36 +36,36 @@ test.provider(
       const connector = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
-            name: "alchemy-test-warp-connector",
+            name: testName("alchemy-test-warp-connector"),
           }).pipe(adopt(true));
         }),
       );
 
       expect(connector.tunnelId).toBeDefined();
       expect(connector.accountId).toEqual(accountId);
-      expect(connector.name).toEqual("alchemy-test-warp-connector");
+      expect(connector.name).toEqual(testName("alchemy-test-warp-connector"));
       // The connector token is returned redacted and non-empty.
       expect(Redacted.value(connector.token).length).toBeGreaterThan(0);
       // A never-joined connector only ever shows API-visible CRUD state —
       // do not wait for connection states; assert the record exists.
       const live = yield* getLiveConnector(accountId, connector.tunnelId);
       expect(live?.id).toEqual(connector.tunnelId);
-      expect(live?.name).toEqual("alchemy-test-warp-connector");
+      expect(live?.name).toEqual(testName("alchemy-test-warp-connector"));
 
       // Cloudflare returns TunnelNotFound from the documented PATCH endpoint
       // for a live connector, so changing the name replaces the tunnel.
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Tunnel.WarpConnector("SiteA", {
-            name: "alchemy-test-warp-connector-v2",
+            name: testName("alchemy-test-warp-connector-v2"),
           }).pipe(adopt(true));
         }),
       );
       expect(renamed.tunnelId).not.toEqual(connector.tunnelId);
-      expect(renamed.name).toEqual("alchemy-test-warp-connector-v2");
+      expect(renamed.name).toEqual(testName("alchemy-test-warp-connector-v2"));
 
       const renamedLive = yield* getLiveConnector(accountId, renamed.tunnelId);
-      expect(renamedLive?.name).toEqual("alchemy-test-warp-connector-v2");
+      expect(renamedLive?.name).toEqual(testName("alchemy-test-warp-connector-v2"));
 
       yield* stack.destroy();
 
@@ -90,7 +91,7 @@ test.provider(
       const connector = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Tunnel.WarpConnector("ListSite", {
-            name: "alchemy-test-warp-connector-list",
+            name: testName("alchemy-test-warp-connector-list"),
           }).pipe(adopt(true));
         }),
       );
@@ -100,7 +101,7 @@ test.provider(
 
       const found = all.find((t) => t.tunnelId === connector.tunnelId);
       expect(found).toBeDefined();
-      expect(found?.name).toEqual("alchemy-test-warp-connector-list");
+      expect(found?.name).toEqual(testName("alchemy-test-warp-connector-list"));
       expect(found?.accountId).toEqual(connector.accountId);
       expect(Redacted.value(found!.token).length).toBeGreaterThan(0);
 

@@ -1,83 +1,25 @@
 import {
   MigrationError,
   readMigrationRecords,
+  scanSqlScript,
   type NormalizedMigrationsInput,
 } from "@alchemy.run/sql/Migrations";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import * as Effect from "effect/Effect";
 
 /**
- * Split PostgreSQL scripts without splitting quoted values, identifiers,
- * dollar-quoted bodies, or nested comments. The parallel mask preserves
- * offsets while hiding literals and comments from capability checks.
+ * Split a PostgreSQL script without splitting quoted values, identifiers,
+ * dollar-quoted bodies, or nested comments. Each statement's `code` masks
+ * literals and comments at the same offsets as its `sql`, hiding them from
+ * capability checks.
  */
-export const parseDsqlStatements = (sql: string) => {
-  const statements: Array<{ sql: string; code: string }> = [];
-  let start = 0;
-  let code = "";
-  const push = (end: number) => {
-    if (code.trim()) statements.push({ sql: sql.slice(start, end), code });
-    start = end + 1;
-    code = "";
-  };
-  for (let i = 0; i < sql.length;) {
-    const begin = i;
-    if (sql.startsWith("--", i)) {
-      const end = sql.indexOf("\n", i);
-      i = end < 0 ? sql.length : end;
-    } else if (sql.startsWith("/*", i)) {
-      let depth = 1;
-      i += 2;
-      while (i < sql.length && depth > 0) {
-        if (sql.startsWith("/*", i)) {
-          depth++;
-          i += 2;
-        } else if (sql.startsWith("*/", i)) {
-          depth--;
-          i += 2;
-        } else i++;
-      }
-      if (depth) throw new Error("Unterminated SQL comment");
-    } else if (sql[i] === "'" || sql[i] === '"') {
-      const quote = sql[i++];
-      const escaped = quote === "'" && /(?:^|\W)[eE]$/.test(sql.slice(0, begin));
-      let closed = false;
-      while (i < sql.length) {
-        if (escaped && sql[i] === "\\") {
-          i += 2;
-          continue;
-        }
-        if (sql[i++] === quote) {
-          if (sql[i] === quote) {
-            i++;
-            continue;
-          }
-          closed = true;
-          break;
-        }
-      }
-      if (!closed) throw new Error("Unterminated SQL quote");
-    } else {
-      const dollar = /^\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$/.exec(sql.slice(i))?.[0];
-      if (dollar) {
-        const end = sql.indexOf(dollar, i + dollar.length);
-        if (end < 0) throw new Error("Unterminated SQL dollar quote");
-        i = end + dollar.length;
-      } else {
-        if (sql[i] === ";") push(i);
-        else code += sql[i];
-        i++;
-        continue;
-      }
+export const parseDsqlStatements = (sql: string) =>
+  scanSqlScript(sql, "postgres").map((statement) => {
+    if (statement.unterminated) {
+      throw new Error(`Unterminated SQL ${statement.unterminated}`);
     }
-    // Keep literals as opaque tokens so invalid literal-only SQL is not skipped.
-    code +=
-      (sql[begin] === '"' || sql[begin] === "'" || sql[begin] === "$" ? "_" : " ") +
-      " ".repeat(i - begin - 1);
-  }
-  push(sql.length);
-  return statements;
-};
+    return { sql: statement.sql, code: statement.code };
+  });
 
 /** Validate known DSQL incompatibilities; this is not a full SQL parser. */
 export const prepareDsqlStatements = (sql: string, migration: string) =>

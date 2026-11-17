@@ -9,6 +9,7 @@ import { destroy } from "alchemy/RemovalPolicy";
 import { State } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { expectFound } from "./lookup.ts";
 import { gh, scopedToOwner } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
@@ -95,6 +96,10 @@ test.provider(
           checkResponseTimeoutMinutes: 30,
         },
       });
+      yield* expectFound(
+        GitHub.Ruleset.lookup({ owner, repository: repo, rulesetId: created.rulesetId }),
+        created,
+      );
       expect(created.rulesetId).toBeGreaterThan(0);
       expect(created.name).toBe("main protection");
       const fetched = yield* getRuleset(repo, created.rulesetId);

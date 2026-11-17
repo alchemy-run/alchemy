@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -181,8 +182,26 @@ export type HealthCheck = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  HealthCheckLookup
 >;
+
+/**
+ * Props for {@link HealthCheck.lookup}: find a health check this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface HealthCheckLookup {
+  /**
+   * Health check name (RFC1035, 1-63 chars).
+   */
+  healthCheckName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine health check.
@@ -214,6 +233,19 @@ export type HealthCheck = Resource<
  * const check = yield* GCP.Compute.HealthCheck("tcp", {
  *   type: "TCP",
  *   tcpHealthCheck: { port: 8080 },
+ * });
+ * ```
+ *
+ * ### Looking up an existing health check
+ * `HealthCheck.lookup` references a health check Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * health check.
+ *
+ * **Example:** Reference an existing health check
+ * ```typescript
+ * const healthCheck = GCP.Compute.HealthCheck.lookup({
+ *   healthCheckName: "my-health-check",
  * });
  * ```
  *
@@ -558,7 +590,7 @@ const needsUpdate = (current: compute.HealthCheck, desired: compute.HealthCheck)
 const getByName = (project: string, healthCheck: string) =>
   compute
     .getHealthChecks({ project, healthCheck })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, healthCheckName: string) =>
   getByName(project, healthCheckName).pipe(
@@ -591,6 +623,13 @@ export const HealthCheckProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ healthCheckName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, healthCheckName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -632,7 +671,7 @@ export const HealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, healthCheckName);
       }
@@ -671,7 +710,7 @@ export const HealthCheckProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

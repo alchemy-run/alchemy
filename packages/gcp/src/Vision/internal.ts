@@ -133,7 +133,7 @@ const catchMissing = <A, E extends { readonly _tag: string }, R>(effect: Effect.
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -178,17 +178,17 @@ const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
 
 export const getProductSet = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(vision.getProjectsLocationsProductSets({ name }));
 
 export const getProduct = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(vision.getProjectsLocationsProducts({ name }));
 
 export const getReferenceImage = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(vision.getProjectsLocationsProductsReferenceImages({ name }));
 
 export const listProductsInSet = (name: string) =>

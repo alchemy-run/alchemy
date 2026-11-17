@@ -1,7 +1,9 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
+import { Retry as CloudflareRetry } from "@distilled.cloud/cloudflare/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
 import { Random, RandomProvider } from "alchemy/Random";
@@ -12,7 +14,6 @@ import * as AccessApp from "./Access/Application.ts";
 import * as Bookmark from "./Access/Bookmark.ts";
 import * as AccessCert from "./Access/Certificate.ts";
 import * as CustomPage from "./Access/CustomPage.ts";
-import { GetIdentityProviderHttp } from "./Access/GetIdentityProviderHttp.ts";
 import * as Group from "./Access/Group.ts";
 import * as AccessIdp from "./Access/IdentityProvider.ts";
 import * as AccessInfraTarget from "./Access/InfrastructureTarget.ts";
@@ -244,6 +245,7 @@ export const providers = () =>
       Email.Domain,
       Email.ImpersonationRegistryEntry,
       Email.Routing,
+      Email.RoutingSubdomain,
       Email.Rule,
       Email.SendingSubdomain,
       Email.TrustedDomain,
@@ -509,6 +511,7 @@ export const providers = () =>
           Email.DomainProvider(),
           Email.ImpersonationRegistryEntryProvider(),
           Email.RoutingProvider(),
+          Email.RoutingSubdomainProvider(),
           Email.RuleProvider(),
           Email.SendingSubdomainProvider(),
           Email.TrustedDomainProvider(),
@@ -678,8 +681,6 @@ export const providers = () =>
         Dns.AdapterLive,
       ),
     ),
-    // Plan-executable data-source capabilities (`Binding.Service.execute`).
-    Layer.provideMerge(GetIdentityProviderHttp),
     Layer.provideMerge(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
@@ -701,13 +702,12 @@ export const providers = () =>
  * lifecycle operations and state-store init/bootstrap probes run under
  * the same services.
  *
- * No retry policy is installed here: every Cloudflare API call already
- * runs under the SDK's `makeDefault` (throttling / 5xx / network, server
- * retry-after hints, bounded backoff) when no policy is in context, and
- * the Cloudflare-specific misleadingly-tagged transient cases (10001
+ * Every Cloudflare API call runs under {@link DeployRetry.policy}
+ * (throttling / 5xx / network, server retry-after hints, bounded backoff).
+ * The Cloudflare-specific misleadingly-tagged transient cases (10001
  * "internal error", 10001 "Unable to authenticate request", 10000
  * "Authentication error" under load) are tagged retryable at the source
- * in the SDK's global error map, so that default covers them.
+ * in the SDK's global error map, so the policy covers them.
  *
  * Every request goes out over HTTP/1.1 ({@link Http1FetchHttpClient}):
  * Node 26's `fetch` negotiates HTTP/2 by default and funnels the engine's
@@ -716,6 +716,7 @@ export const providers = () =>
  */
 export const CloudflareApiLive = () =>
   Credentials.fromAuthProvider().pipe(
+    Layer.provideMerge(Layer.succeed(CloudflareRetry, DeployRetry.policy)),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),

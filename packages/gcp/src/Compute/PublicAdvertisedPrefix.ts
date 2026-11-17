@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,26 @@ export type PublicAdvertisedPrefix = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PublicAdvertisedPrefixLookup
 >;
+
+/**
+ * Props for {@link PublicAdvertisedPrefix.lookup}: find a public advertised
+ * prefix this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface PublicAdvertisedPrefixLookup {
+  /**
+   * Prefix name (RFC1035, 1-63 characters).
+   */
+  prefixName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global public advertised prefix (BYOIP).
@@ -127,6 +146,19 @@ export type PublicAdvertisedPrefix = Resource<
  *   prefixName: "lab-pap",
  *   ipCidrRange: "203.0.113.0/24",
  *   pdpScope: "REGIONAL",
+ * });
+ * ```
+ *
+ * ### Looking up an existing public advertised prefix
+ * `PublicAdvertisedPrefix.lookup` references a public advertised prefix
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared public advertised prefix.
+ *
+ * **Example:** Reference an existing public advertised prefix
+ * ```typescript
+ * const publicAdvertisedPrefix = GCP.Compute.PublicAdvertisedPrefix.lookup({
+ *   prefixName: "my-prefix",
  * });
  * ```
  *
@@ -171,7 +203,7 @@ const toAttrs = (
 const getByName = (project: string, publicAdvertisedPrefix: string) =>
   compute
     .getPublicAdvertisedPrefixes({ project, publicAdvertisedPrefix })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, prefixName: string) =>
   getByName(project, prefixName).pipe(
@@ -216,6 +248,13 @@ export const PublicAdvertisedPrefixProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ prefixName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, prefixName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -270,7 +309,7 @@ export const PublicAdvertisedPrefixProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, prefixName);
       }
 
@@ -305,6 +344,6 @@ export const PublicAdvertisedPrefixProvider = () =>
           publicAdvertisedPrefix: output.prefixName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

@@ -338,7 +338,7 @@ const getRule = (zoneId: string | undefined, accountId: string, ruleId: string) 
     : firewall.getAccessRuleForAccount({ accountId, ruleId })
   ).pipe(
     Effect.map((rule): ObservedRule | undefined => rule),
-    Effect.catchTag("AccessRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("AccessRuleNotFound", () => Effect.undefined),
   );
 
 /**

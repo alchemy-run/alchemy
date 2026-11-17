@@ -402,6 +402,7 @@ export const make = (
               ...new Set(["nodejs_compat", ...(options?.vite?.compatibilityFlags ?? [])]),
             ],
             ...(worker?.name !== undefined ? { proxyName: `${worker.name}-dev-proxy` } : {}),
+            ...(worker?.workerd !== undefined ? { workerd: worker.workerd } : {}),
             logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
           }).pipe(Effect.provideContext(context));
           return { url: server.url.href };
@@ -442,6 +443,7 @@ export const make = (
                     }),
                   ]
                 : []),
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
               ...(worker?.bindings ?? []),
             ],
             assets: {
@@ -458,6 +460,7 @@ export const make = (
               ? { queueConsumers: worker.queueConsumers }
               : {}),
             ...(worker?.unsafe !== undefined ? { unsafe: worker.unsafe } : {}),
+            ...(worker?.workerd !== undefined ? { workerd: worker.workerd } : {}),
             logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
           }),
         ).pipe(
@@ -474,6 +477,7 @@ export const make = (
 
       return FrameworkCore.Framework.of({
         build: (buildOptions) => build(buildOptions),
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
         dev: (devOptions) => dev(devOptions),
       });
     }),

@@ -2,6 +2,7 @@ import * as NodeFs from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -39,6 +40,7 @@ import {
   ENVIRONMENT_NAME_HEADER,
 } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
+import { workerSocketPath } from "./worker-request.ts";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
@@ -48,17 +50,19 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices.RuntimeServices>,
   exportTypes: ExportTypes,
-  /** See `RuntimeWorker.onRestart`. */
+  /** Called when a replacement `workerd` process serves again; see `RuntimeWorker.onEvent`. */
   onRestart?: () => void,
 ) => {
   const scope = Scope.makeUnsafe();
   const proxySharedSecret = crypto.randomUUID();
+  const socketPath = workerSocketPath();
   const address = await serve(
     options,
     entryEnvironment,
     server,
     exportTypes,
     proxySharedSecret,
+    socketPath,
     onRestart,
   ).pipe(
     // `provideMerge`: the assets layer's construction reads `Loopback` (and
@@ -67,12 +71,15 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     Effect.provide(
       ViteAssets.ViteAssetsLive(server, {
         hasUserWorker: entryEnvironment.entryName !== undefined,
-      }).pipe(Layer.provideMerge(Layer.succeedContext(context))),
+      }).pipe(
+        Layer.provideMerge(Layer.succeedContext(context)),
+        Layer.merge(SecureRandom.layerWebCrypto),
+      ),
     ),
     Scope.provide(scope),
     Effect.runPromise,
   );
-  return { address, proxySharedSecret, close: () => closeScope(scope) };
+  return { address, socketPath, proxySharedSecret, close: () => closeScope(scope) };
 };
 
 export const createDefaultContext = async (): Promise<
@@ -187,12 +194,15 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   exportTypes: ExportTypes,
   proxySharedSecret: string,
+  entrySocketPath: string | undefined,
   onRestart?: () => void,
 ) {
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
 
-  const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
+  const name =
+    options.worker?.name ??
+    `vite-dev-${yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))}`;
   return yield* runtime.start({
     // Everything the caller configured on the Worker (crons, tail consumers,
     // Cache API, request.cf, ...) reaches workerd; the fields below are the
@@ -200,13 +210,19 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     ...options.worker,
     name,
     proxySharedSecret,
+    entrySocketPath,
     // The stable proxy in front relays TLS as-is, so a dev server on HTTPS
     // is public on HTTPS.
     publicUrl:
       options.worker?.publicUrl && server.config.server.https
         ? options.worker.publicUrl.replace(/^http:/, "https:")
         : options.worker?.publicUrl,
-    onRestart,
+    onEvent: (event) => {
+      // Reconnect first: a user callback that throws must not leave the
+      // module runner on the dead process.
+      if (event.type === "workerd.process.started" && event.generation > 0) onRestart?.();
+      return options.worker?.onEvent?.(event);
+    },
     modules: yield* Effect.promise(() =>
       makeWorkerModules(exportTypes, {
         ...entryEnvironment,
@@ -237,6 +253,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
           return HttpServerResponse.jsonUnsafe(result);
         }),
       }),
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- `startServer` runs this with `Effect.runPromise` and provides only RuntimeServices, so user hooks' requirements are erased by `BindingHooks` (`BindingHook<any>`)
       ...(options.worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [

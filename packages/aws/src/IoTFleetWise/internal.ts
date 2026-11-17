@@ -36,7 +36,7 @@ export const inFleetWiseRegion = <A, E, R>(
     // binding captures its client, which cannot fail, so a ConfigProvider
     // that cannot read its source stays a defect here.
     const ambient = yield* (yield* Region).pipe(
-      Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.succeed(undefined)),
+      Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.undefined),
       Effect.orDie,
     );
     return ambient !== undefined && FLEETWISE_REGIONS.has(ambient)

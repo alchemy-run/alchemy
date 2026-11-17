@@ -56,8 +56,22 @@ export type VolumeSnapshot = Resource<
     createdAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumeSnapshotLookup
 >;
+
+/**
+ * Props for {@link VolumeSnapshot.lookup}: find a snapshot this stack
+ * doesn't manage by its App, Volume and id.
+ */
+export interface VolumeSnapshotLookup {
+  /** Fly App name the Volume belongs to. */
+  appName: string;
+  /** Fly Volume id (`vol_…`). */
+  volumeId: string;
+  /** Fly snapshot id (`vs_…`). */
+  snapshotId: string;
+}
 
 /**
  * A Fly.VolumeSnapshot is an on-demand snapshot of a mounted disk.
@@ -125,6 +139,25 @@ export type VolumeSnapshot = Resource<
  *     };
  *   }).pipe(Effect.provide(Fly.MountVolumeLive)),
  * ) {}
+ * ```
+ *
+ * ### Looking up an existing snapshot
+ * `VolumeSnapshot.lookup` references a snapshot Alchemy doesn't manage
+ * (taken by Fly's daily schedule or by another stack). It is read during
+ * plan/deploy and never created or deleted.
+ *
+ * **Example:** Restore a disk from an existing snapshot
+ * ```typescript
+ * const snapshot = Fly.VolumeSnapshot.lookup({
+ *   appName: "my-app",
+ *   volumeId: "vol_123",
+ *   snapshotId: "vs_456",
+ * });
+ * const disk = yield* Fly.MountVolume({
+ *   path: "/data",
+ *   sizeGb: 1,
+ *   snapshotId: snapshot.snapshotId,
+ * });
  * ```
  *
  * @resource
@@ -214,7 +247,7 @@ const waitForNewSnapshot = (appName: string, volumeId: string, knownIds: Readonl
       times: 8,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.VolumeSnapshotPending", () => Effect.succeed(undefined)),
+    Effect.catchTag("Fly.VolumeSnapshotPending", () => Effect.undefined),
   );
 
 export const VolumeSnapshotProvider = () =>
@@ -233,6 +266,11 @@ export const VolumeSnapshotProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, volumeId, snapshotId }) {
+      const found = yield* findById(appName, volumeId, snapshotId);
+      return found === undefined ? undefined : toAttrs(appName, volumeId, found);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {

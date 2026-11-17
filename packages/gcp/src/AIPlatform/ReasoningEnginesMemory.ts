@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -116,8 +117,36 @@ export type ReasoningEnginesMemory = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReasoningEnginesMemoryLookup
 >;
+
+/**
+ * Props for {@link ReasoningEnginesMemory.lookup}: find a reasoning engines
+ * memory this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ReasoningEnginesMemoryLookup {
+  /**
+   * Memory id.
+   */
+  memoryId: string;
+  /**
+   * Vertex AI location. Used when `reasoningEngine` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Reasoning Engine. Full name
+   * `projects/{project}/locations/{location}/reasoningEngines/{engine}` or
+   * the engine id (combined with `location`).
+   */
+  reasoningEngine: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Reasoning Engine memory — scoped semantic knowledge used
@@ -138,6 +167,20 @@ export type ReasoningEnginesMemory = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing reasoning engines memory
+ * `ReasoningEnginesMemory.lookup` references a reasoning engines memory
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared reasoning engines memory.
+ *
+ * **Example:** Reference an existing reasoning engines memory
+ * ```typescript
+ * const reasoningEnginesMemory = GCP.AIPlatform.ReasoningEnginesMemory.lookup({
+ *   memoryId: "my-memory",
+ *   reasoningEngine: "my-reasoning-engine",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -148,7 +191,7 @@ export const ReasoningEnginesMemory = Resource<ReasoningEnginesMemory>(
 export class ReasoningEnginesMemoryNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesMemoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
@@ -181,13 +224,13 @@ const toAttrs = (memory: aiplatform.GoogleCloudAiplatformV1Memory, project: stri
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsReasoningEnginesMemories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (memory): memory is aiplatform.GoogleCloudAiplatformV1Memory => memory !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -200,7 +243,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (memory) => memory === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -252,6 +295,21 @@ export const ReasoningEnginesMemoryProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ memoryId, location: lookupLocation, reasoningEngine }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A create interrupted before its reasoningEngine resolved has nothing to find.
+      if (typeof reasoningEngine !== "string") {
+        return undefined;
+      }
+      const parent = engineNameOf(env.project, location, reasoningEngine ?? "");
+      const name = resourceName(parent, memoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -317,7 +375,7 @@ export const ReasoningEnginesMemoryProvider = () =>
               expireTime: news.expireTime,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -326,7 +384,7 @@ export const ReasoningEnginesMemoryProvider = () =>
       }
 
       if (current === undefined || current.name === undefined) {
-        return yield* new ReasoningEnginesMemoryNotResolved({ name });
+        return yield* new ReasoningEnginesMemoryNotResolved({ resourceName: name });
       }
 
       const observedName = current.name;
@@ -360,7 +418,7 @@ export const ReasoningEnginesMemoryProvider = () =>
 
       if (current === undefined) {
         return yield* new ReasoningEnginesMemoryNotResolved({
-          name: observedName,
+          resourceName: observedName,
         });
       }
       return toAttrs(current, env.project);
@@ -371,7 +429,7 @@ export const ReasoningEnginesMemoryProvider = () =>
         .deleteProjectsLocationsReasoningEnginesMemories({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

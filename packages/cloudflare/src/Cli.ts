@@ -100,7 +100,7 @@ const createTokenCommand = Command.make(
     accountId: tokenAccountIdFlag,
     yes,
   },
-  instrumentCommand("cloudflare.create-token", (a: { allPermissions: boolean }) => ({
+  instrumentCommand("provider.cloudflare.create-token", (a: { allPermissions: boolean }) => ({
     "alchemy.all_permissions": a.allPermissions,
   }))(
     Effect.fn(function* ({ envFile, allPermissions, name, accountId, yes: approved }) {

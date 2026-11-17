@@ -2,6 +2,7 @@ import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -10,6 +11,16 @@ import {
   retryIdentityCenter,
   toInstanceAttributes,
 } from "./common.ts";
+
+export class InstanceInvalidProps extends Data.TaggedError("InstanceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class InstanceUnexpectedResponse extends Data.TaggedError("InstanceUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface InstanceProps {
   /**
@@ -164,11 +175,10 @@ export const InstanceProvider = () =>
           // Organization instances must be enabled manually in the
           // management account.
           if (mode !== "account") {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new InstanceInvalidProps({
+              message:
                 "No visible Identity Center instance was found. Organization instances must be enabled manually in the management account before Alchemy can adopt them.",
-              ),
-            );
+            });
           }
 
           // Ensure — `account` mode creates an account instance.
@@ -183,9 +193,9 @@ export const InstanceProvider = () =>
             name: news.name,
           });
           if (!created) {
-            return yield* Effect.fail(
-              new Error("failed to resolve Identity Center instance after create"),
-            );
+            return yield* new InstanceUnexpectedResponse({
+              message: "failed to resolve Identity Center instance after create",
+            });
           }
 
           yield* session.note(created.instanceArn);

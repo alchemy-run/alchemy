@@ -97,13 +97,13 @@ export const CollectionsDataStoresSchema = Resource<CollectionsDataStoresSchema>
 export class CollectionsDataStoresSchemaNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSchemaNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsDataStoresSchemaStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSchemaStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema, project: string) => {
@@ -124,17 +124,17 @@ const resourceName = (dataStore: string, schemaId: string) => `${dataStore}/sche
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((schema) =>
       schema
         ? Effect.succeed(schema)
-        : Effect.fail(new CollectionsDataStoresSchemaNotResolved({ name })),
+        : Effect.fail(new CollectionsDataStoresSchemaNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoresSchemaNotResolved",
@@ -148,7 +148,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((schema) =>
       schema === undefined
         ? Effect.void
-        : Effect.fail(new CollectionsDataStoresSchemaStillExists({ name })),
+        : Effect.fail(new CollectionsDataStoresSchemaStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoresSchemaStillExists",
@@ -230,7 +230,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -239,7 +239,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoresSchemaNotResolved({ name });
+        return yield* new CollectionsDataStoresSchemaNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;
@@ -269,7 +269,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
         .deleteProjectsLocationsCollectionsDataStoresSchemas({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

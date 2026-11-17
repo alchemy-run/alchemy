@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * The `alchemy dev` provider for `AWS.Lambda.Function`: deploys the function
  * into the floci emulator and hot-swaps its code on file change.
@@ -32,6 +30,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as TempRoot from "alchemy/Bundle/TempRoot";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
@@ -105,6 +104,16 @@ export const FlociFunctionProvider = () =>
               deleteFirst: news.functionName !== undefined,
             };
           }
+          if (olds.alias !== news.alias) {
+            // As in the live diff: consumers move to (or off) the alias, whose
+            // ARN is not known until reconcile publishes and creates it. A
+            // bare update would keep the static `qualifiedArn` stable, and
+            // event source mappings would stay on the old target.
+            return {
+              action: "update" as const,
+              stables: ["functionArn", "functionName", "roleName"],
+            };
+          }
           return undefined;
         }),
       normalizeProps: (props) =>
@@ -154,7 +163,7 @@ export const FlociFunctionProvider = () =>
           // back to its original content hashes the same) is the signal
           // that a re-point happened and the function must be re-enrolled.
           let enrolledAttrs: Function["Attributes"] | undefined;
-          let startedAt = Date.now();
+          let startedAt = yield* Clock.currentTimeMillis;
 
           const swap = Effect.fn(function* (result: FunctionBundleResult) {
             if (result.identityHash === lastHash) return;
@@ -188,7 +197,7 @@ export const FlociFunctionProvider = () =>
             }
             lastHash = result.identityHash;
             yield* Effect.logInfo(
-              `[alchemy dev] ${functionName}: code swapped in ${Date.now() - startedAt}ms`,
+              `code swapped in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
             );
           });
 
@@ -202,14 +211,10 @@ export const FlociFunctionProvider = () =>
               Stream.debounce("200 millis"),
               Stream.runForEach(() =>
                 Effect.gen(function* () {
-                  startedAt = Date.now();
+                  startedAt = yield* Clock.currentTimeMillis;
                   const result = yield* bundler.prebuiltCode(realMain);
                   yield* swap(result);
-                }).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
-                  ),
-                ),
+                }).pipe(Effect.catchCause((cause) => Effect.logWarning(`code swap failed`, cause))),
               ),
             );
           } else {
@@ -221,13 +226,11 @@ export const FlociFunctionProvider = () =>
                 Effect.gen(function* () {
                   switch (event._tag) {
                     case "Start": {
-                      startedAt = Date.now();
+                      startedAt = yield* Clock.currentTimeMillis;
                       return;
                     }
                     case "Error": {
-                      yield* Effect.logWarning(
-                        `[alchemy dev] ${functionName}: rebuild failed: ${event.error.message}`,
-                      );
+                      yield* Effect.logWarning(`rebuild failed: ${event.error.message}`);
                       return;
                     }
                     case "Success": {
@@ -235,11 +238,7 @@ export const FlociFunctionProvider = () =>
                       yield* swap(result);
                     }
                   }
-                }).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
-                  ),
-                ),
+                }).pipe(Effect.catchCause((cause) => Effect.logWarning(`code swap failed`, cause))),
               ),
             );
           }

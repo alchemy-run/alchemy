@@ -25,7 +25,7 @@ const ResponseMetadata = Schema.Struct({
     Schema.Struct({
       contentEntryKeys: Schema.Array(Schema.String),
       staticImages: Schema.Array(Schema.Unknown),
-      referencedImages: Schema.optional(Schema.Array(Schema.String)),
+      referencedImages: Schema.String.pipe(Schema.Array, Schema.optional),
     }),
   ),
 }).check(
@@ -34,6 +34,7 @@ const ResponseMetadata = Schema.Struct({
   }),
 );
 
+// oxlint-disable-next-line effecttsgo/schema-sync -- decoded inside an async, non-Effect reader
 const decodeResponseMetadata = Schema.decodeUnknownSync(Schema.fromJsonString(ResponseMetadata));
 
 export async function readFramedPrerenderResponse(

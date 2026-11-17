@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -117,8 +118,30 @@ export type ExascaleDbStorageVault = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ExascaleDbStorageVaultLookup
 >;
+
+/**
+ * Props for {@link ExascaleDbStorageVault.lookup}: find an exascale db
+ * storage vault this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ExascaleDbStorageVaultLookup {
+  /**
+   * Vault id.
+   */
+  exascaleDbStorageVaultId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Exascale DB storage vault on Google Cloud.
@@ -136,6 +159,19 @@ export type ExascaleDbStorageVault = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing exascale db storage vault
+ * `ExascaleDbStorageVault.lookup` references an exascale db storage vault
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared exascale db storage vault.
+ *
+ * **Example:** Reference an existing exascale db storage vault
+ * ```typescript
+ * const exascaleDbStorageVault = GCP.OracleDatabase.ExascaleDbStorageVault.lookup({
+ *   exascaleDbStorageVaultId: "my-exascale-db-storage-vault",
+ * });
+ * ```
+ *
  * @resource
  * @category OracleDatabase
  */
@@ -146,10 +182,10 @@ export const ExascaleDbStorageVault = Resource<ExascaleDbStorageVault>(
 const mergedProperties = (
   news: ExascaleDbStorageVaultProps,
 ): ExascaleDbStorageVaultPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   description: news.description ?? news.properties?.description,
   exascaleDbStorageDetails: {
-    ...(news.properties?.exascaleDbStorageDetails ?? {}),
+    ...news.properties?.exascaleDbStorageDetails,
     totalSizeGbs: news.totalSizeGbs ?? news.properties?.exascaleDbStorageDetails?.totalSizeGbs,
   },
 });
@@ -203,7 +239,7 @@ const toAttrs = (vault: oracle.ExascaleDbStorageVault, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsExascaleDbStorageVaults({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listVaults = (project: string, region: string) => {
@@ -244,6 +280,15 @@ export const ExascaleDbStorageVaultProvider = () =>
         extra: nextInfra !== previousInfra || nextZone !== previousZone,
       });
     }),
+
+    lookup: Effect.fn(function* ({ exascaleDbStorageVaultId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, exascaleDbStorageVaultId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -295,7 +340,7 @@ export const ExascaleDbStorageVaultProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -304,7 +349,7 @@ export const ExascaleDbStorageVaultProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -323,7 +368,7 @@ export const ExascaleDbStorageVaultProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

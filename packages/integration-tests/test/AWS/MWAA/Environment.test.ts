@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -151,6 +152,11 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
       yield* assertEnvironmentDeleted(environment.environmentName);
+      // MWAA leaves its per-module log groups behind; the delete reaps them.
+      const { logGroups } = yield* logs.describeLogGroups({
+        logGroupNamePrefix: `airflow-${environment.environmentName}-`,
+      });
+      expect(logGroups ?? []).toEqual([]);
       // Billable NAT gateway + environment: never leave them behind on failure.
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   // network + create (~20-30 min) + delete-until-gone (~20-30 min) + network teardown.

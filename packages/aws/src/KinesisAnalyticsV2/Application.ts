@@ -300,8 +300,18 @@ export interface Application extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApplicationLookup {
+  /** The name of the existing application. */
+  applicationName: string;
+}
 
 /**
  * A Managed Service for Apache Flink (Kinesis Data Analytics v2)
@@ -387,6 +397,16 @@ export interface Application extends Resource<
  *   code: { bucketArn: bucket.bucketArn, fileKey: "jobs/enrichment-1.0.jar" },
  *   start: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.KinesisAnalyticsV2.Application.lookup({ applicationName: "..." });
  * ```
  *
  * @resource
@@ -515,7 +535,7 @@ const toAttrs = ({
 const describeApplicationDetail = Effect.fn(function* (applicationName: string) {
   const response = yield* analytics
     .describeApplication({ ApplicationName: applicationName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.ApplicationDetail;
 });
 
@@ -535,7 +555,7 @@ const readApplication = Effect.fn(function* ({
   // just means it's gone.
   const tagsResponse = yield* analytics
     .listTagsForResource({ ResourceARN: detail.ApplicationARN })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -895,6 +915,12 @@ export const ApplicationProvider = () =>
             );
           }),
 
+        lookup: Effect.fn(function* ({ applicationName }) {
+          const state = yield* readApplication({ applicationName, roleName: undefined });
+          // The execution role names the role a declared application records,
+          // so a lookup of a managed application matches its state.
+          return state && { ...state, roleName: state.serviceExecutionRole?.split("/").at(-1) };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationName =
             output?.applicationName ?? (yield* createApplicationName(id, olds ?? {}));
@@ -1208,7 +1234,7 @@ export const ApplicationProvider = () =>
           const applicationArn = stable.ApplicationARN;
           const observedTagsResponse = yield* analytics
             .listTagsForResource({ ResourceARN: applicationArn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const observedTags = toTagRecord(observedTagsResponse?.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (removed.length > 0) {

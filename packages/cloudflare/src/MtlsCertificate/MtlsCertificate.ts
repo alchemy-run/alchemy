@@ -100,7 +100,32 @@ export type Attributes = {
   type: Type | undefined;
 };
 
-export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
+/**
+ * Props for {@link MtlsCertificate.lookup}: find a certificate this stack
+ * doesn't manage, by its id or its name.
+ */
+export type MtlsCertificateLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing certificate.
+       */
+      mtlsCertificateId: string;
+    }
+  | {
+      /**
+       * The name of the existing certificate.
+       */
+      name: string;
+    };
+
+export type MtlsCertificate = Resource<
+  TypeId,
+  Props,
+  Attributes,
+  never,
+  Providers,
+  MtlsCertificateLookup
+>;
 
 /**
  * An account-level Cloudflare mTLS certificate.
@@ -184,6 +209,24 @@ export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Provide
  * );
  * ```
  *
+ * ### Looking up an existing Certificate
+ * `MtlsCertificate.lookup` binds a certificate Alchemy doesn't manage
+ * (uploaded with wrangler, in the dashboard or by another stack), found by
+ * `mtlsCertificateId` or `name`. It is read during plan/deploy and never
+ * uploaded or deleted.
+ *
+ * **Example:** Present an existing client certificate from a Worker
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     ORIGIN_CERT: Cloudflare.MtlsCertificate.MtlsCertificate.lookup({
+ *       name: "origin-client-cert",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  *
  * @resource
@@ -231,6 +274,16 @@ export const MtlsCertificateProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const cert =
+        "mtlsCertificateId" in props
+          ? yield* mtls
+              .getMtlsCertificate({ accountId, mtlsCertificateId: props.mtlsCertificateId })
+              .pipe(Effect.catchTag("CertificateNotFound", () => Effect.undefined))
+          : yield* findByName(accountId, props.name);
+      return cert ? toAttributes(cert, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -242,7 +295,7 @@ export const MtlsCertificateProvider = () =>
           })
           .pipe(
             Effect.map((cert) => toAttributes(cert, acct)),
-            Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("CertificateNotFound", () => Effect.undefined),
           );
       }
       // Cold read — recover by listing and matching on the deterministic
@@ -286,7 +339,7 @@ export const MtlsCertificateProvider = () =>
               accountId,
               mtlsCertificateId: output.mtlsCertificateId,
             })
-            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.undefined))
         : yield* findByName(accountId, name, news.certificates);
 
       // Ensure — upload if missing. Cloudflare rejects uploading a

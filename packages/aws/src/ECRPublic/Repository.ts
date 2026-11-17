@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { Region } from "../Region.ts";
+
+export class ECRPublicRepositoryUnexpectedResponse extends Data.TaggedError(
+  "ECRPublicRepositoryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // Amazon ECR Public is a single global registry hosted only in us-east-1. Every
 // control-plane call must target that region regardless of the ambient stack
@@ -77,8 +85,18 @@ export interface PublicRepository extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PublicRepositoryLookup
 > {}
+
+/**
+ * Props for {@link PublicRepository.lookup}: find a public repository this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PublicRepositoryLookup {
+  /** The repository name of the existing public repository. */
+  repositoryName: string;
+}
 
 /**
  * An Amazon ECR Public repository on the public.ecr.aws registry. Images pushed
@@ -121,6 +139,16 @@ export interface PublicRepository extends Resource<
  *     ],
  *   }),
  * });
+ * ```
+ *
+ * ### Looking up an existing public repository
+ * `PublicRepository.lookup` references a public repository Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing public repository
+ * ```typescript
+ * const existing = AWS.ECRPublic.PublicRepository.lookup({ repositoryName: "my-public-repository" });
  * ```
  *
  * @resource
@@ -166,13 +194,13 @@ export const PublicRepositoryProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.repositories?.[0]),
-          Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined),
         );
 
       const readPolicy = (repositoryName: string) =>
         pin(ecrpublic.getRepositoryPolicy({ repositoryName })).pipe(
           Effect.map((r) => r.policyText),
-          Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.undefined),
         );
 
       const syncPolicy = Effect.fn(function* (repositoryName: string, desired: string | undefined) {
@@ -223,6 +251,26 @@ export const PublicRepositoryProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ repositoryName }) {
+          const repository = yield* observe(repositoryName);
+          if (!repository?.repositoryArn || !repository.repositoryUri) {
+            return undefined;
+          }
+          const listed = yield* pin(
+            ecrpublic.listTagsForResource({
+              resourceArn: repository.repositoryArn,
+            }),
+          );
+          const attrs = {
+            repositoryName,
+            repositoryArn: repository.repositoryArn as RepositoryArn,
+            repositoryUri: repository.repositoryUri,
+            registryId: repository.registryId!,
+            policyText: yield* readPolicy(repositoryName),
+            tags: toTagRecord(listed.tags),
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const repositoryName =
             output?.repositoryName ?? (yield* toRepositoryName(id, olds ?? {}));
@@ -270,9 +318,9 @@ export const PublicRepositoryProvider = () =>
             );
             repository = created;
             if (!repository?.repositoryArn || !repository.repositoryUri) {
-              return yield* Effect.fail(
-                new Error(`Failed to create or read public repository ${repositoryName}`),
-              );
+              return yield* new ECRPublicRepositoryUnexpectedResponse({
+                message: `Failed to create or read public repository ${repositoryName}`,
+              });
             }
           } else if (news.catalogData) {
             // Sync catalog data on updates (create already set it).

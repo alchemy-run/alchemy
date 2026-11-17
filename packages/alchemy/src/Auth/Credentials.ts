@@ -66,7 +66,7 @@ export const CredentialsStoreLive = Layer.effect(
         Effect.gen(function* () {
           const filePath = yield* validateCredentialPath(profile, provider);
           const data = yield* fs.readFileString(filePath).pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
             Effect.mapError((cause) =>
               AuthError.make({
                 message: `Could not read credentials at '${filePath}'.`,
@@ -75,9 +75,7 @@ export const CredentialsStoreLive = Layer.effect(
             ),
           );
           if (data === undefined) return undefined;
-          const json = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
-            data,
-          ).pipe(
+          const json = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(data).pipe(
             Effect.mapError((cause) =>
               AuthError.make({
                 message: `Stored credentials at '${filePath}' contain invalid JSON.`,

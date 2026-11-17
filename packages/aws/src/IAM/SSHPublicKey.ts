@@ -2,9 +2,17 @@ import * as iam from "@distilled.cloud/aws/iam";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class SSHPublicKeyUnexpectedResponse extends Data.TaggedError(
+  "SSHPublicKeyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SSHPublicKeyProps {
   /**
@@ -84,7 +92,7 @@ export const SSHPublicKeyProvider = () =>
           SSHPublicKeyId: output.sshPublicKeyId,
           Encoding: "SSH",
         })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       if (!response?.SSHPublicKey?.SSHPublicKeyId) {
         return undefined;
       }
@@ -111,7 +119,7 @@ export const SSHPublicKeyProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.SSHPublicKey),
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
             )
         : undefined;
 
@@ -123,7 +131,9 @@ export const SSHPublicKeyProvider = () =>
           SSHPublicKeyBody: news.sshPublicKeyBody,
         });
         if (!uploaded.SSHPublicKey?.SSHPublicKeyId) {
-          return yield* Effect.fail(new Error(`uploadSSHPublicKey returned no key id`));
+          return yield* new SSHPublicKeyUnexpectedResponse({
+            message: `uploadSSHPublicKey returned no key id`,
+          });
         }
         key = uploaded.SSHPublicKey;
       }
@@ -186,7 +196,7 @@ export const SSHPublicKeyProvider = () =>
                       Effect.map((r) => r.SSHPublicKey),
                       // The key may be deleted between enumeration and
                       // hydration.
-                      Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                     ),
                 { concurrency: 10 },
               ),

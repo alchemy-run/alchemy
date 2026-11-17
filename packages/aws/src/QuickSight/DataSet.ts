@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readQuickSightTags, syncQuickSightTags, toWireTags } from "./internal.ts";
+
+export class QuickSightDataSetUnexpectedResponse extends Data.TaggedError(
+  "QuickSightDataSetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Properties for an Amazon QuickSight dataset — a prepared, queryable model
@@ -92,8 +100,18 @@ export interface DataSet extends Resource<
     name: string;
   },
   never,
-  Providers
+  Providers,
+  DataSetLookup
 > {}
+
+/**
+ * Props for {@link DataSet.lookup}: find a data set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataSetLookup {
+  /** The id of the existing data set. */
+  dataSetId: string;
+}
 
 /**
  * An Amazon QuickSight dataset — a prepared, queryable model built on top of
@@ -121,6 +139,16 @@ export interface DataSet extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing data set
+ * `DataSet.lookup` references a data set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dataSetId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data set
+ * ```typescript
+ * const sales = AWS.QuickSight.DataSet.lookup({ dataSetId: "sales" });
+ * ```
+ *
  * @resource
  */
 export const DataSet = Resource<DataSet>("AWS.QuickSight.DataSet");
@@ -137,7 +165,7 @@ export const DataSetProvider = () =>
       const readSet = Effect.fn(function* (accountId: string, dataSetId: string) {
         const response = yield* quicksight
           .describeDataSet({ AwsAccountId: accountId, DataSetId: dataSetId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.DataSet;
       });
 
@@ -157,6 +185,11 @@ export const DataSetProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ dataSetId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readSet(accountId, dataSetId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const dataSetId = output?.dataSetId ?? (yield* toId(id, olds));
@@ -214,9 +247,9 @@ export const DataSetProvider = () =>
 
           observed = yield* readSet(accountId, dataSetId);
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`QuickSight dataset '${dataSetId}' not found after reconcile`),
-            );
+            return yield* new QuickSightDataSetUnexpectedResponse({
+              message: `QuickSight dataset '${dataSetId}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags.

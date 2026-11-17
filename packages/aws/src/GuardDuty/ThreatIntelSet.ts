@@ -85,8 +85,27 @@ export interface ThreatIntelSet extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  ThreatIntelSetLookup
 > {}
+
+/**
+ * Props for {@link ThreatIntelSet.lookup}: find a threat intel set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ThreatIntelSetLookup =
+  | {
+      /** The detector it belongs to. */
+      detectorId: string;
+      /** The id of the existing threat intel set. */
+      threatIntelSetId: string;
+    }
+  | {
+      /** The detector it belongs to. */
+      detectorId: string;
+      /** The name of the existing threat intel set. */
+      name: string;
+    };
 
 /**
  * A GuardDuty threat intelligence set — an S3-hosted list of known malicious
@@ -103,6 +122,16 @@ export interface ThreatIntelSet extends Resource<
  *   format: "TXT",
  *   location: "https://s3.amazonaws.com/my-security-bucket/threats.txt",
  * });
+ * ```
+ *
+ * ### Looking up an existing threat intel set
+ * `ThreatIntelSet.lookup` references a threat intel set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId` with `threatIntelSetId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing threat intel set
+ * ```typescript
+ * const trusted = AWS.GuardDuty.ThreatIntelSet.lookup({ detectorId, name: "trusted" });
  * ```
  */
 const ThreatIntelSetResource = Resource<ThreatIntelSet>("AWS.GuardDuty.ThreatIntelSet");
@@ -133,7 +162,7 @@ export const ThreatIntelSetProvider = () =>
             DetectorId: detectorId,
             ThreatIntelSetId: threatIntelSetId,
           })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       // Recover the set id after state loss by matching the deterministic
       // name across the detector's threat intel sets.
@@ -177,6 +206,18 @@ export const ThreatIntelSetProvider = () =>
           if (olds.detectorId !== news.detectorId || olds.format !== news.format) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          if ("threatIntelSetId" in props) {
+            const set = yield* getSet(props.detectorId, props.threatIntelSetId);
+            return set
+              ? yield* buildAttrs(props.detectorId, props.threatIntelSetId, set)
+              : undefined;
+          }
+          const found = yield* findByName(props.detectorId, props.name);
+          return found
+            ? yield* buildAttrs(props.detectorId, found.threatIntelSetId, found.set)
+            : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const detectorId = output?.detectorId ?? olds?.detectorId;

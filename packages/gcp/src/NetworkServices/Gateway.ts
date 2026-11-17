@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -189,8 +190,33 @@ export type Gateway = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GatewayLookup
 >;
+
+/**
+ * Props for {@link Gateway.lookup}: find a gateway this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface GatewayLookup {
+  /**
+   * Gateway id (the `{gateway}` segment of
+   * `projects/{project}/locations/{location}/gateways/{gateway}`). Must be
+   * 1-63 characters and not start with a number.
+   */
+  gatewayId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Services Gateway — the ip:port a Mesh or Secure Web Gateway
@@ -218,6 +244,18 @@ export type Gateway = Resource<
  *   type: "OPEN_MESH",
  *   ports: [80, 443],
  *   scope: "prod",
+ * });
+ * ```
+ *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` references a gateway Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared gateway.
+ *
+ * **Example:** Reference an existing gateway
+ * ```typescript
+ * const gateway = GCP.NetworkServices.Gateway.lookup({
+ *   gatewayId: "my-gateway",
  * });
  * ```
  *
@@ -259,7 +297,7 @@ const toAttrs = (gateway: networkservices.Gateway, project: string) => {
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsGateways({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GatewayProvider = () =>
   Provider.succeed(Gateway, {
@@ -297,6 +335,15 @@ export const GatewayProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ gatewayId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, gatewayId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -371,7 +418,7 @@ export const GatewayProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -450,7 +497,7 @@ export const GatewayProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

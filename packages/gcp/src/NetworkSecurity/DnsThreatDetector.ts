@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -90,8 +91,33 @@ export type DnsThreatDetector = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DnsThreatDetectorLookup
 >;
+
+/**
+ * Props for {@link DnsThreatDetector.lookup}: find a dns threat detector
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DnsThreatDetectorLookup {
+  /**
+   * DnsThreatDetector id (the `{dnsThreatDetector}` segment of
+   * `projects/{pr
+   * oject}/locations/global/dnsThreatDetectors/{dnsThreatDetector}`). A
+   * project may have only one DNS threat detector.
+   */
+  dnsThreatDetectorId: string;
+  /**
+   * Location. The only supported value is `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A DNS threat detector that sends VPC DNS query logs to Infoblox for
@@ -118,6 +144,19 @@ export type DnsThreatDetector = Resource<
  *     `projects/${project}/global/networks/${vpc.networkName}`,
  *   ],
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing dns threat detector
+ * `DnsThreatDetector.lookup` references a dns threat detector Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared dns threat detector.
+ *
+ * **Example:** Reference an existing dns threat detector
+ * ```typescript
+ * const dnsThreatDetector = GCP.NetworkSecurity.DnsThreatDetector.lookup({
+ *   dnsThreatDetectorId: "my-dns-threat-detector",
  * });
  * ```
  *
@@ -156,7 +195,7 @@ const toAttrs = (detector: networksecurity.DnsThreatDetector, project: string) =
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsDnsThreatDetectors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DnsThreatDetectorProvider = () =>
   Provider.succeed(DnsThreatDetector, {
@@ -191,6 +230,15 @@ export const DnsThreatDetectorProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ dnsThreatDetectorId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, dnsThreatDetectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -265,7 +313,7 @@ export const DnsThreatDetectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworksecurityNotResolved({ name });
+        return yield* new NetworksecurityNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

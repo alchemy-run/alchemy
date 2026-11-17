@@ -23,6 +23,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -54,6 +55,7 @@ test.provider(
           return yield* Project("DefaultProject");
         }),
       );
+      yield* expectFound(Project.lookup({ projectId: project.projectId }), project);
 
       expect(project.projectId).toBeDefined();
       expect(project.projectName).toBeDefined();
@@ -162,7 +164,7 @@ test.provider(
         fqn: "ObservedProject",
         instanceId: "observed-project",
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       };
       const news = {
         name: initial.projectName,
@@ -247,7 +249,7 @@ test.provider(
           olds: undefined,
           output: undefined,
           bindings: [],
-          session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+          session: { note: () => Effect.void },
         })
         .pipe(Effect.result);
       expect(Result.isFailure(recovery)).toBe(true);
@@ -308,7 +310,7 @@ test.provider(
         fqn: "LateProject",
         instanceId: "late-project",
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       };
       const late = yield* provider
         .reconcile({ ...context, news: { name }, olds: undefined, output: undefined })

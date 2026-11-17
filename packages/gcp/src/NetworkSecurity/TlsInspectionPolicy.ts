@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   normalizeLocation,
@@ -129,8 +130,34 @@ export type TlsInspectionPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TlsInspectionPolicyLookup
 >;
+
+/**
+ * Props for {@link TlsInspectionPolicy.lookup}: find a tls inspection
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface TlsInspectionPolicyLookup {
+  /**
+   * TlsInspectionPolicy id (the `{tlsInspectionPolicy}` segment of
+   * `projects
+   * /{project}/locations/{location}/tlsInspectionPolicies/{tlsInspectionPoli
+   * cy}`). Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  tlsInspectionPolicyId: string;
+  /**
+   * Location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security TlsInspectionPolicy — CA pool and TLS settings used
@@ -180,6 +207,19 @@ export type TlsInspectionPolicy = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tls inspection policy
+ * `TlsInspectionPolicy.lookup` references a tls inspection policy Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared tls inspection policy.
+ *
+ * **Example:** Reference an existing tls inspection policy
+ * ```typescript
+ * const tlsInspectionPolicy = GCP.NetworkSecurity.TlsInspectionPolicy.lookup({
+ *   tlsInspectionPolicyId: "my-tls-inspection-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -190,13 +230,13 @@ export const TlsInspectionPolicy = Resource<TlsInspectionPolicy>(
 export class TlsInspectionPolicyNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TlsInspectionPolicyStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const caPoolName = (project: string, location: string, caPool: string) => {
@@ -236,12 +276,14 @@ const toAttrs = (policy: networksecurity.TlsInspectionPolicy, project: string, r
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsTlsInspectionPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy ? Effect.succeed(policy) : Effect.fail(new TlsInspectionPolicyNotResolved({ name })),
+      policy
+        ? Effect.succeed(policy)
+        : Effect.fail(new TlsInspectionPolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
@@ -255,7 +297,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((policy) =>
       policy === undefined
         ? Effect.void
-        : Effect.fail(new TlsInspectionPolicyStillExists({ name })),
+        : Effect.fail(new TlsInspectionPolicyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
@@ -301,6 +343,15 @@ export const TlsInspectionPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ tlsInspectionPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, tlsInspectionPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -366,7 +417,7 @@ export const TlsInspectionPolicyProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -375,7 +426,7 @@ export const TlsInspectionPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TlsInspectionPolicyNotResolved({ name });
+        return yield* new TlsInspectionPolicyNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
@@ -442,7 +493,7 @@ export const TlsInspectionPolicyProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

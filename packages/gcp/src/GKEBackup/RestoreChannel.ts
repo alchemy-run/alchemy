@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,8 +88,33 @@ export type RestoreChannel = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RestoreChannelLookup
 >;
+
+/**
+ * Props for {@link RestoreChannel.lookup}: find a restore channel this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RestoreChannelLookup {
+  /**
+   * Restore channel id (the `{restoreChannel}` segment of
+   * `projects/{project
+   * }/locations/{location}/restoreChannels/{restoreChannel}`).
+   */
+  restoreChannelId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Backup for GKE restore channel that authorizes restoring backups
@@ -125,6 +151,19 @@ export type RestoreChannel = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing restore channel
+ * `RestoreChannel.lookup` references a restore channel Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * restore channel.
+ *
+ * **Example:** Reference an existing restore channel
+ * ```typescript
+ * const restoreChannel = GCP.GKEBackup.RestoreChannel.lookup({
+ *   restoreChannelId: "my-restore-channel",
+ * });
+ * ```
+ *
  * @resource
  * @category GKEBackup
  */
@@ -154,7 +193,7 @@ const toAttrs = (item: gkebackup.RestoreChannel, project: string, region: string
 const getByName = (name: string) =>
   gkebackup
     .getProjectsLocationsRestoreChannels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -193,6 +232,15 @@ export const RestoreChannelProvider = () =>
           previousDest !== `projects/${nextDest}`,
       });
     }),
+
+    lookup: Effect.fn(function* ({ restoreChannelId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, restoreChannelId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -246,7 +294,7 @@ export const RestoreChannelProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -254,7 +302,7 @@ export const RestoreChannelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -290,7 +338,7 @@ export const RestoreChannelProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

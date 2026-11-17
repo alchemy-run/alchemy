@@ -20,6 +20,16 @@ import {
   syncDeadlineTags,
 } from "./internal.ts";
 
+export class QueueInvalidProps extends Data.TaggedError("QueueInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QueueUnexpectedResponse extends Data.TaggedError("QueueUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type QueueStatus = deadline.QueueStatus;
 export type DefaultQueueBudgetAction = deadline.DefaultQueueBudgetAction;
 
@@ -114,8 +124,27 @@ export interface Queue extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  QueueLookup
 > {}
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type QueueLookup =
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The id of the existing queue. */
+      queueId: string;
+    }
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The display name of the existing queue. */
+      displayName: string;
+    };
 
 /**
  * An AWS Deadline Cloud queue — accepts render jobs within a farm and
@@ -145,6 +174,16 @@ export interface Queue extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` with `queueId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing queue
+ * ```typescript
+ * const existing = AWS.Deadline.Queue.lookup({ farmId, displayName: "main" });
+ * ```
+ *
  * @resource
  */
 export const Queue = Resource<Queue>("AWS.Deadline.Queue");
@@ -166,7 +205,7 @@ const readQueueById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getQueue({ farmId, queueId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const queueArn = arnOf(`farm/${described.farmId}/queue/${described.queueId}`);
   const state: QueueState = {
@@ -234,6 +273,14 @@ export const QueueProvider = () =>
         // iterating every farm — treated as a sub-resource per the factory
         // list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "queueId" in props
+              ? yield* readQueueById(props.farmId, props.queueId, arnOf)
+              : yield* findQueueByDisplayName(props.farmId, props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const farmId = output?.farmId ?? olds?.farmId;
@@ -256,7 +303,7 @@ export const QueueProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Queue requires props"));
+            return yield* new QueueInvalidProps({ message: "AWS.Deadline.Queue requires props" });
           }
           const arnOf = yield* deadlineArnOf;
           const farmId = news.farmId;
@@ -289,7 +336,9 @@ export const QueueProvider = () =>
             yield* session.note(`Created queue ${displayName} (${created.queueId})`);
             state = yield* readQueueById(farmId, created.queueId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created queue ${displayName}`));
+              return yield* new QueueUnexpectedResponse({
+                message: `failed to read created queue ${displayName}`,
+              });
             }
           }
 
@@ -347,7 +396,9 @@ export const QueueProvider = () =>
           yield* session.note(state.attrs.queueArn);
           const final = yield* readQueueById(farmId, state.attrs.queueId, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled queue ${displayName}`));
+            return yield* new QueueUnexpectedResponse({
+              message: `failed to read reconciled queue ${displayName}`,
+            });
           }
           return final.attrs;
         }),
@@ -364,9 +415,7 @@ export const QueueProvider = () =>
             Effect.gen(function* () {
               const described = yield* deadline
                 .getQueue({ farmId: output.farmId, queueId: output.queueId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               if (described !== undefined) {
                 return yield* new QueueStillExists({ queueId: output.queueId });
               }

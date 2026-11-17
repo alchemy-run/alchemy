@@ -130,7 +130,7 @@ export const ProductsCertificate = Resource<ProductsCertificate>(
 export class ProductsCertificateNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsCertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, product: string, certificateId: string) =>
@@ -160,10 +160,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations
         .getProjectsLocationsProductsCertificates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsCertificates.pages({ parent, pageSize: 100 }).pipe(
@@ -181,7 +181,7 @@ const findOwned = (parent: string, id: string) =>
     Stream.filterEffect((certificate) => ownedByAlchemy(id, certificate.description)),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const ProductsCertificateProvider = () =>
@@ -280,7 +280,7 @@ export const ProductsCertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsCertificateNotResolved({ name });
+        return yield* new ProductsCertificateNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

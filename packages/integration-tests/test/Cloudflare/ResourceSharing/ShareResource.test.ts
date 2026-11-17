@@ -98,7 +98,6 @@ test.provider(
 
         const share = yield* stack.deploy(
           Cloudflare.ResourceSharing.Share("ListEntryShare", {
-            name: "alchemy-list-entry-share",
             recipients: [{ accountId: recipientAccountId }],
             resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
           }),

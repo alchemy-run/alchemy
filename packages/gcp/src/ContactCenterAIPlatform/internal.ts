@@ -20,27 +20,27 @@ export const MIN_DOMAIN_PREFIX_LENGTH = 2;
 export class ContactCenterNotResolved extends Data.TaggedError(
   "GCP.ContactCenterAIPlatform.ContactCenterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ContactCenterNotReady extends Data.TaggedError(
   "GCP.ContactCenterAIPlatform.ContactCenterNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ContactCenterFailed extends Data.TaggedError(
   "GCP.ContactCenterAIPlatform.ContactCenterFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ContactCenterStillExists extends Data.TaggedError(
   "GCP.ContactCenterAIPlatform.ContactCenterStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -212,7 +212,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ContactCenterNotResolved({ name }),
+      () => new ContactCenterNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContactCenterAIPlatform.ContactCenterNotResolved",
@@ -228,7 +228,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ContactCenterStillExists({ name }),
+      () => new ContactCenterStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -259,13 +259,13 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ContactCenterNotResolved({ name }),
+      () => new ContactCenterNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has(stateOfUpper(stateOf(value))),
       (value) =>
         new ContactCenterFailed({
-          name,
+          resourceName: name,
           state: stateOfUpper(stateOf(value)),
         }),
     ),
@@ -273,7 +273,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
       (value) => READY_STATES.has(stateOfUpper(stateOf(value))),
       (value) =>
         new ContactCenterNotReady({
-          name,
+          resourceName: name,
           state: stateOfUpper(stateOf(value)),
         }),
     ),

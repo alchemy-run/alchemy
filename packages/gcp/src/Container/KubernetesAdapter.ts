@@ -1,7 +1,6 @@
 import {
   ClusterAdapter,
   ClusterNotFoundError,
-  type AdapterLifecycleServices,
   type ClusterAdapterService,
   type ClusterTransport,
   type ImageRegistryDeleteOptions,
@@ -46,6 +45,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import type { ResourceBinding } from "alchemy/Resource";
 import { Self } from "alchemy/Self";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -63,6 +63,18 @@ import {
   type GcpIamGrant,
 } from "../Host.ts";
 import { revokeIamMembership, updateIamMembership } from "../IamPolicy.ts";
+
+export class KubernetesAdapterNotReady extends Data.TaggedError("KubernetesAdapterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KubernetesAdapterOperationFailed extends Data.TaggedError(
+  "KubernetesAdapterOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 declare module "@alchemy.run/kubernetes/Connection" {
   interface AuthRegistry {
@@ -294,6 +306,7 @@ import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -307,6 +320,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -372,6 +386,7 @@ import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -385,6 +400,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -458,7 +474,7 @@ export const GkeKubernetesAdapter = () =>
           const name = clusterResourceName(project, auth.location, auth.clusterId);
           return yield* container
             .getProjectsLocationsClusters({ name })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         }).pipe(withGcp);
         // STOPPING still serves the API until the endpoint is gone. A missing
         // CA with that endpoint is not "gone": connect fails and destroy retries
@@ -482,25 +498,17 @@ export const GkeKubernetesAdapter = () =>
           const endpoint = apiServerEndpoint(cluster.endpoint);
           const certificateAuthorityData = cluster.masterAuth?.clusterCaCertificate;
           if (!endpoint || !certificateAuthorityData) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new KubernetesAdapterNotReady({
+              message:
                 `GKE cluster '${auth.clusterId}' has no endpoint or ` +
-                  "certificate authority data yet (still creating?)",
-              ),
-            );
+                "certificate authority data yet (still creating?)",
+            });
           }
           return yield* makeGkeTransport({
             endpoint,
             certificateAuthorityData,
           });
-        }).pipe(
-          withGcp,
-          Effect.mapError((error): ClusterNotFoundError | Error =>
-            error instanceof ClusterNotFoundError || error instanceof Error
-              ? error
-              : new Error(String(error)),
-          ),
-        );
+        }).pipe(withGcp);
 
       const identityReconcile = Effect.fn(function* (options: WorkloadIdentityReconcileOptions) {
         const auth = yield* narrowGkeAuth(options.connection);
@@ -632,9 +640,7 @@ export const GkeKubernetesAdapter = () =>
         }).pipe(withGcp);
       });
 
-      const registryResolve = (
-        options: ImageRegistryResolveOptions,
-      ): Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices> =>
+      const registryResolve = (options: ImageRegistryResolveOptions) =>
         Effect.gen(function* () {
           const state = options.state;
           const env = yield* GcpEnvironment.current;
@@ -674,7 +680,7 @@ export const GkeKubernetesAdapter = () =>
                   : imageSource.resourceName(env.project, location, resolved.repositoryName),
             },
           } satisfies ImageRegistryResult;
-        }).pipe(withGcp) as Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
+        }).pipe(withGcp);
 
       const registryHash = Effect.fn(function* (options: {
         source: ImageSourceLike;
@@ -694,13 +700,11 @@ export const GkeKubernetesAdapter = () =>
           .pipe(withGcp);
       });
 
-      const registryDelete = (
-        options: ImageRegistryDeleteOptions,
-      ): Effect.Effect<void, any, AdapterLifecycleServices> =>
+      const registryDelete = (options: ImageRegistryDeleteOptions) =>
         Effect.gen(function* () {
           if (typeof options.state?.name !== "string") return;
           yield* imageSource.destroyRepository(options.state.name);
-        }).pipe(withGcp) as Effect.Effect<void, any, AdapterLifecycleServices>;
+        }).pipe(withGcp);
 
       const loadBalancerDefaults = Effect.fn(function* (_options: { connection: Connection }) {
         return {

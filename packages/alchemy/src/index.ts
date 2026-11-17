@@ -40,6 +40,7 @@ export * as Telemetry from "./Telemetry.ts";
 // downstream `.d.ts` emissions (fixes TS2883 in user files).
 export { AuthProviders } from "./Auth/AuthProvider.ts";
 export { Cli } from "./Report.ts";
+export * as Events from "./Events.ts";
 export * as Report from "./Report.ts";
 export type { Dependencies } from "./Dependencies.ts";
 export type { Named } from "./Named.ts";

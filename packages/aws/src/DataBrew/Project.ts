@@ -68,8 +68,18 @@ export interface Project extends Resource<
     projectArn: string;
   },
   {},
-  Providers
+  Providers,
+  ProjectLookup
 > {}
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProjectLookup {
+  /** The name of the existing project. */
+  projectName: string;
+}
 
 /**
  * An AWS Glue DataBrew project — the interactive workspace binding a dataset
@@ -97,6 +107,16 @@ export interface Project extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in the
+ * console or by another stack), found by `projectName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing project
+ * ```typescript
+ * const existing = AWS.DataBrew.Project.lookup({ projectName: "..." });
+ * ```
+ *
  * @resource
  */
 export const Project = Resource<Project>("AWS.DataBrew.Project");
@@ -118,7 +138,7 @@ export const ProjectProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeProject({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Project.Provider.of({
@@ -135,6 +155,15 @@ export const ProjectProvider = () =>
                 projectArn: p.ResourceArn ?? databrewArn(region, accountId, "project", p.Name),
               }));
           }),
+
+        lookup: Effect.fn(function* ({ projectName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const project = yield* observe(name);
+          if (project === undefined) return undefined;
+          const arn = project.ResourceArn ?? databrewArn(region, accountId, "project", name);
+          const attrs = { projectName: name, projectArn: arn };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -206,7 +235,7 @@ export const ProjectProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // ConflictException while an interactive session is winding down.
           yield* retryWhileConflict(databrew.deleteProject({ Name: output.projectName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

@@ -87,7 +87,7 @@ export const ResourceProvider = () =>
       const observe = Effect.fn(function* (resourceArn: string) {
         return yield* lf.describeResource({ ResourceArn: resourceArn }).pipe(
           Effect.map((r) => r.ResourceInfo),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -208,11 +208,12 @@ export const ResourceProvider = () =>
               // service-linked role to deregister last S3 location" even
               // though the registration IS removed (verified live). Verify
               // and only re-fail if the registration is still present.
-              LastServiceLinkedRoleRegistration: (error) =>
-                lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
+              LastServiceLinkedRoleRegistration: Effect.fn(function* (error) {
+                return yield* lf.describeResource({ ResourceArn: output.resourceArn }).pipe(
                   Effect.flatMap(() => Effect.fail(error)),
                   Effect.catchTag("EntityNotFoundException", () => Effect.void),
-                ),
+                );
+              }),
             }),
           );
         }),

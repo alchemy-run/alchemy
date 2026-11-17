@@ -106,7 +106,7 @@ export const BrandsIdentityAwareProxyClient = Resource<BrandsIdentityAwareProxyC
 export class BrandsIdentityAwareProxyClientNotResolved extends Data.TaggedError(
   "GCP.IAP.BrandsIdentityAwareProxyClientNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -205,7 +205,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
 
       if (current === undefined) {
         return yield* new BrandsIdentityAwareProxyClientNotResolved({
-          name: name || `${brand}/identityAwareProxyClients`,
+          resourceName: name || `${brand}/identityAwareProxyClients`,
         });
       }
 

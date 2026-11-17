@@ -121,7 +121,7 @@ export const LeakedCredentialCheckProvider = () =>
               } satisfies Attributes;
             }),
             // Zone deleted out-of-band or plan-gated route; skip it.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

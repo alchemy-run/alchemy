@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceNameOf,
@@ -65,7 +66,8 @@ export type TableProps = {
   columnFamilies?: Record<string, ColumnFamily>;
   /**
    * Protect the table (and its instance) from Admin API deletes.
-   * Disabled automatically on destroy.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deletionProtection?: boolean;
@@ -112,8 +114,43 @@ export type Table = Resource<
     restoreInfo: bigtable.RestoreInfo | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 >;
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+/**
+ * Deletion was refused because the Bigtable table has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class TableDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.TableDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface TableLookup {
+  /**
+   * Table id (the `{table}` segment of
+   * `.../instances/{instance}/tables/{table}`). Must be 1-50 characters.
+   */
+  tableId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable table — rows keyed by row key, grouped into column
@@ -148,17 +185,30 @@ export type Table = Resource<
  * const live = yield* getTable({ view: "SCHEMA_VIEW" });
  * ```
  *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared table.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const table = GCP.Bigtable.Table.lookup({
+ *   tableId: "my-table",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
 export const Table = Resource<Table>("GCP.Bigtable.Table");
 
 export class TableNotResolved extends Data.TaggedError("GCP.Bigtable.TableNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TableStillExists extends Data.TaggedError("GCP.Bigtable.TableStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_GRANULARITY = "MILLIS";
@@ -210,12 +260,12 @@ const toAttrs = (table: bigtable.Table, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTables({ name, view: SCHEMA_VIEW })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((table) =>
-      table === undefined ? Effect.void : Effect.fail(new TableStillExists({ name })),
+      table === undefined ? Effect.void : Effect.fail(new TableStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.TableStillExists",
@@ -293,6 +343,17 @@ export const TableProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ tableId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? `${instanceNameOf(env.project, instance)}/tables/${tableId}`
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -380,7 +441,7 @@ export const TableProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TableNotResolved({ name });
+        return yield* new TableNotResolved({ resourceName: name });
       }
 
       if (families !== undefined) {
@@ -432,17 +493,25 @@ export const TableProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new TableNotResolved({ name });
+          return yield* new TableNotResolved({ resourceName: name });
         }
       }
 
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new TableDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable table '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* bigtable.patchProjectsInstancesTables({
           name: output.name,
           updateMask: "deletion_protection",

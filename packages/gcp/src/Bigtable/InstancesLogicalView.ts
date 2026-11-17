@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -70,8 +71,45 @@ export type InstancesLogicalView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesLogicalViewLookup
 >;
+
+/**
+ * Props for {@link InstancesLogicalView.lookup}: find an instances logical
+ * view this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+/**
+ * Deletion was refused because the Bigtable logical view has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class LogicalViewDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.LogicalViewDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface InstancesLogicalViewLookup {
+  /**
+   * Logical view id (the `{logical_view}` segment of
+   * `.../instances/{instance}/logicalViews/{logical_view}`). Must be unique
+   * among table ids and view ids in the instance.
+   */
+  logicalViewId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable logical view — a SQL SELECT over a table that can
@@ -98,6 +136,20 @@ export type InstancesLogicalView = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances logical view
+ * `InstancesLogicalView.lookup` references an instances logical view
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared instances logical view.
+ *
+ * **Example:** Reference an existing instances logical view
+ * ```typescript
+ * const instancesLogicalView = GCP.Bigtable.InstancesLogicalView.lookup({
+ *   logicalViewId: "my-logical-view",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
@@ -108,13 +160,13 @@ export const InstancesLogicalView = Resource<InstancesLogicalView>(
 export class LogicalViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.LogicalViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LogicalViewStillExists extends Data.TaggedError(
   "GCP.Bigtable.LogicalViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, logicalViewId: string | undefined, existing?: string) =>
@@ -140,12 +192,12 @@ const toAttrs = (view: bigtable.LogicalView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesLogicalViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view ? Effect.succeed(view) : Effect.fail(new LogicalViewNotResolved({ name })),
+      view ? Effect.succeed(view) : Effect.fail(new LogicalViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.LogicalViewNotResolved",
@@ -157,7 +209,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined ? Effect.void : Effect.fail(new LogicalViewStillExists({ name })),
+      view === undefined
+        ? Effect.void
+        : Effect.fail(new LogicalViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.LogicalViewStillExists",
@@ -196,6 +250,17 @@ export const InstancesLogicalViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ logicalViewId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? logicalViewName(env.project, instanceIdOf(instance), logicalViewId)
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -255,7 +320,7 @@ export const InstancesLogicalViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -289,17 +354,25 @@ export const InstancesLogicalViewProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new LogicalViewNotResolved({ name });
+          return yield* new LogicalViewNotResolved({ resourceName: name });
         }
       }
 
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new LogicalViewDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable logical view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* unprotect(output.name, current.etag);
       }
       yield* bigtable

@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -178,8 +179,28 @@ export type Metric = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MetricLookup
 >;
+
+/**
+ * Props for {@link Metric.lookup}: find a metric this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface MetricLookup {
+  /**
+   * Client-assigned metric id (`METRIC_ID` in
+   * `projects/{project}/metrics/{METRIC_ID}`). Max 100 characters; letters,
+   * digits, and `_-. ,+!*'()%/`. Cannot start with `/`.
+   */
+  metricId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging logs-based metric.
@@ -231,13 +252,23 @@ export type Metric = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing metric
+ * `Metric.lookup` references a metric Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared metric.
+ *
+ * **Example:** Reference an existing metric
+ * ```typescript
+ * const metric = GCP.Logging.Metric.lookup({ metricId: "my-metric" });
+ * ```
+ *
  * @resource
  * @category Logging
  */
 export const Metric = Resource<Metric>("GCP.Logging.Metric");
 
 export class MetricNotResolved extends Data.TaggedError("GCP.Logging.MetricNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -459,7 +490,7 @@ const toBody = (
 const getByName = (metricName: string) =>
   logging
     .getProjectsMetrics({ metricName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MetricProvider = () =>
   Provider.succeed(Metric, {
@@ -492,6 +523,14 @@ export const MetricProvider = () =>
         deleteFirst: !idChanged && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ metricId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, metricId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -544,7 +583,7 @@ export const MetricProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetricNotResolved({ name: metricName });
+        return yield* new MetricNotResolved({ resourceName: metricName });
       }
 
       const needsUpdate =

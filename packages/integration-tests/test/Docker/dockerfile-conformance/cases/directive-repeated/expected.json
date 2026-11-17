@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "only one escape parser directive can be used"
+}

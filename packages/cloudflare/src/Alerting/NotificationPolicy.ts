@@ -1,6 +1,7 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
@@ -17,6 +18,13 @@ import {
   type PolicyBody,
   policyEqualsObserved,
 } from "./internal.ts";
+
+export class NotificationPolicyUnexpectedResponse extends Data.TaggedError(
+  "NotificationPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type { NotificationPolicyBinding } from "./internal.ts";
 
@@ -294,9 +302,9 @@ export const NotificationPolicyProvider = () =>
           ...desired,
         });
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the created notification policy"),
-          );
+          return yield* new NotificationPolicyUnexpectedResponse({
+            message: "Cloudflare did not return an id for the created notification policy",
+          });
         }
         const fresh = yield* observePolicy(accountId, created.id);
         return toPolicyAttributes(fresh ?? { id: created.id }, accountId);

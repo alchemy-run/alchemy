@@ -1,0 +1,80 @@
+---
+title: What is a git host?
+description: The concepts behind hosting git — objects, refs, packs, the smart HTTP protocol, pushes and their verification, repositories, names and pull requests — and how @alchemy.run/git builds a host from them.
+---
+
+import Shell from "../../../components/diagrams/Shell.astro";
+
+A git host is the server your `git clone` and `git push` talk to. It stores repositories, sends a client the objects it's missing, accepts new ones, and moves branches only when the push is valid. Around that, most hosts add names like `acme/api`, an API, and pull requests.
+
+Take one host: a Worker serving git over HTTP, with each repository in a Durable Object and its bulk bytes in R2. A client speaks git's HTTP protocol to the Worker. The Worker checks who's calling, resolves the name to a repository, and the repository stores objects and moves refs, keeping large packs in a blob store.
+
+<Shell
+  shell={{
+    label: "Worker",
+    icon: "brand:cloudflare",
+    children: [{
+      label: "Git.Api",
+      icon: "brand:git",
+      children: [
+        { label: "Repository", type: "Durable Object", icon: "book-marked" },
+        { label: "Registry", type: "Durable Object · D1", icon: "list" },
+        { label: "Blob Store", type: "R2 · S3", icon: "archive" },
+        { label: "Hasher", type: "inline · Lambda", icon: "hash" },
+      ],
+    }],
+  }}
+  caption="Git's API runs inside your Worker, over a Repository, Registry, Blob Store and Hasher."
+/>
+
+## Objects
+
+A git repository is a set of **objects**, each named by the hash of its content. A **blob** is a file's content. A **tree** is a directory: names pointing at blobs and other trees. A **commit** points at a tree, at its parent commits, and carries an author and a message.
+
+Because an object's name is its hash, the same content always has the same name, and nothing can change it without changing its name. A host never edits an object. It only adds new ones.
+
+## Refs
+
+A **ref** is a name that points at a commit: `refs/heads/main` is the branch `main`, `refs/tags/v1.0` a tag. Refs are the only part of a repository that changes. A push that adds commits to `main` stores the new objects and then moves the ref.
+
+Moving a ref must be atomic: two pushes to `main` at once must not both succeed, or one's commits are lost. So every repository needs one place where its refs move, one at a time.
+
+## Packs
+
+Objects travel and rest in **packs**: one file holding many objects, compressed against each other, often small enough that a whole history fits in a few megabytes. A clone receives a pack. A push sends one.
+
+## Smart HTTP
+
+Clients talk to a host with git's **smart HTTP** protocol. A clone or fetch asks which refs exist, says which commits it already has, and receives a pack of everything it's missing. A push sends the ref changes it wants and a pack of the new objects.
+
+Any standard client works against any host that speaks it: `git`, IDEs, CI runners. See [Cloning & pushing](/git/clone-and-push).
+
+## Verifying a push
+
+A host must not trust a pack. Before moving a ref, it checks that every object hashes to its name, that every object the new commits refer to exists, and that the change is allowed: perhaps `main` can't be deleted, or only some users may push to it.
+
+Hashing a large pack is real CPU work, so where it runs is a choice: inline, in a separate isolate, or on a Lambda Function.
+
+## Repositories and names
+
+Clients name a repository like `acme/api`. A **registry** resolves that name to the repository that holds it, and lists what exists. Creating, forking and importing repositories are operations on it.
+
+See [Repositories](/git/repositories).
+
+## Pull requests
+
+A **pull request** asks to merge one branch into another. A host works out the **merge base**, the commit both branches share, shows the diff, and, when asked, creates the merge commit and moves the target ref.
+
+See [Pull requests](/git/pull-requests).
+
+## Authentication and policy
+
+A host decides who may read and who may write, and what each write may do. Git itself has no opinion: credentials arrive as HTTP authentication, and the host applies whatever rules it likes.
+
+## How @alchemy.run/git builds a host from these concepts
+
+Each of these decisions is a Layer you choose, all composed in one graph and provided once.
+
+`ApiLive` serves smart HTTP, a typed REST plane and a GitHub-compatible API, behind your own middleware, so who may call what is your application's code. `ReposDurableObject` gives each repository its own Durable Object, the one place its refs move. A registry resolves names, in a Durable Object or D1. A blob store keeps packs and bundles, in R2 or S3. A hasher verifies pushes, inline, in a Worker Loader isolate or on Lambda. Swap any line, and only that decision changes.
+
+Next, build one: [Getting Started](/git/getting-started) deploys a host in one file, and the [tutorial](/git/tutorial/part-1) builds it up one behavior at a time. Or read [Building blocks](/git/blocks) for each decision in depth.

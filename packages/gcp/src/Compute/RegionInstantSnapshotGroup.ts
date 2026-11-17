@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -71,8 +72,31 @@ export type RegionInstantSnapshotGroup = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionInstantSnapshotGroupLookup
 >;
+
+/**
+ * Props for {@link RegionInstantSnapshotGroup.lookup}: find a region
+ * instant snapshot group this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface RegionInstantSnapshotGroupLookup {
+  /**
+   * Instant snapshot group name (RFC1035, 1-63 characters).
+   */
+  instantSnapshotGroupName: string;
+  /**
+   * Region the group lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine instant snapshot group.
@@ -94,6 +118,19 @@ export type RegionInstantSnapshotGroup = Resource<
  * const group = yield* GCP.Compute.RegionInstantSnapshotGroup("ckpt", {
  *   region: "us-central1",
  *   sourceConsistencyGroup: policy.resourcePolicyName,
+ * });
+ * ```
+ *
+ * ### Looking up an existing region instant snapshot group
+ * `RegionInstantSnapshotGroup.lookup` references a region instant snapshot
+ * group Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared region instant snapshot group.
+ *
+ * **Example:** Reference an existing region instant snapshot group
+ * ```typescript
+ * const regionInstantSnapshotGroup = GCP.Compute.RegionInstantSnapshotGroup.lookup({
+ *   instantSnapshotGroupName: "my-instant-snapshot-group",
  * });
  * ```
  *
@@ -224,7 +261,7 @@ const getByName = (project: string, region: string, instantSnapshotGroup: string
       region,
       instantSnapshotGroup,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReady = (project: string, region: string, instantSnapshotGroupName: string) =>
   getByName(project, region, instantSnapshotGroupName).pipe(
@@ -317,6 +354,14 @@ export const RegionInstantSnapshotGroupProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instantSnapshotGroupName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, instantSnapshotGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instantSnapshotGroupName = yield* toName(
@@ -380,7 +425,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
               sourceConsistencyGroup: desiredSource,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -420,7 +465,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
           instantSnapshotGroup: output.instantSnapshotGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

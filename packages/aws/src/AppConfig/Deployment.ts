@@ -97,7 +97,7 @@ export const DeploymentProvider = () =>
             EnvironmentId: environmentId,
             DeploymentNumber: deploymentNumber,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Deployments roll out asynchronously; wait (bounded) for a terminal

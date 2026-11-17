@@ -185,10 +185,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1Document, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsDocuments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DocumentProvider = () =>
   Provider.succeed(Document, {
@@ -286,7 +286,7 @@ export const DocumentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: lookup });
+        return yield* new ResourceNotResolved({ resourceName: lookup });
       }
 
       const currentName = current.name ?? lookup;

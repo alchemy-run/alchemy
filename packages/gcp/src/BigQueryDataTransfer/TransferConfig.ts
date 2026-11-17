@@ -325,7 +325,7 @@ export const TransferConfig = Resource<TransferConfig>("GCP.BigQueryDataTransfer
 export class TransferConfigNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataTransfer.TransferConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -509,7 +509,7 @@ const toAttrs = (config: bqdt.TransferConfig, project: string, location: string)
 const getByName = (name: string) =>
   bqdt
     .getProjectsLocationsTransferConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   bqdt.listProjectsLocationsTransferConfigs
@@ -670,7 +670,7 @@ export const TransferConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new TransferConfigNotResolved({
-          name: `${parent}/transferConfigs`,
+          resourceName: `${parent}/transferConfigs`,
         });
       }
 

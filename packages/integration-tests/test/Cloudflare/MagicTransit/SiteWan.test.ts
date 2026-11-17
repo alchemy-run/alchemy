@@ -56,7 +56,6 @@ test.provider.skipIf(!entitled)(
 
       const site = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSite("Site", {
-          name: "alchemy-wan-list-site",
           description: "alchemy magic site wan list test",
         }),
       );
@@ -65,7 +64,6 @@ test.provider.skipIf(!entitled)(
         Cloudflare.MagicTransit.MagicSiteWan("Wan", {
           siteId: site.siteId,
           physport: 1,
-          name: "alchemy-wan-list",
           priority: 10,
         }),
       );

@@ -4,8 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class TransferUserUnexpectedResponse extends Data.TaggedError(
+  "TransferUserUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface UserProps {
   /**
@@ -85,8 +93,20 @@ export interface User extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  UserLookup
 > {}
+
+/**
+ * Props for {@link User.lookup}: find a user this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface UserLookup {
+  /** The server the user belongs to. */
+  serverId: string;
+  /** The name of the existing user. */
+  userName: string;
+}
 
 /**
  * A user of an AWS Transfer Family server (service-managed identity
@@ -102,6 +122,16 @@ export interface User extends Resource<
  *   homeDirectory: "/my-bucket/alice",
  *   sshPublicKeyBody: "ssh-ed25519 AAAA...",
  * });
+ * ```
+ *
+ * ### Looking up an existing user
+ * `User.lookup` references a user Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serverId` and `userName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user
+ * ```typescript
+ * const partner = AWS.Transfer.User.lookup({ serverId, userName: "partner" });
  * ```
  *
  * @resource
@@ -127,7 +157,7 @@ export const UserProvider = () =>
       const describe = Effect.fn(function* (serverId: string, userName: string) {
         const response = yield* transfer
           .describeUser({ ServerId: serverId, UserName: userName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.User;
       });
 
@@ -140,7 +170,9 @@ export const UserProvider = () =>
 
       const toAttrs = Effect.fn(function* (serverId: string, user: transfer.DescribedUser) {
         if (!user.UserName) {
-          return yield* Effect.fail(new Error("Transfer user is missing its UserName"));
+          return yield* new TransferUserUnexpectedResponse({
+            message: "Transfer user is missing its UserName",
+          });
         }
         return {
           userName: user.UserName,
@@ -163,6 +195,10 @@ export const UserProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ serverId, userName }) {
+          const user = yield* describe(serverId, userName);
+          return user?.UserName ? yield* toAttrs(serverId, user) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const serverId = output?.serverId ?? olds?.serverId;
           const userName = output?.userName ?? olds?.userName;
@@ -215,9 +251,9 @@ export const UserProvider = () =>
 
           observed = yield* describe(news.serverId, news.userName);
           if (!observed?.UserName) {
-            return yield* Effect.fail(
-              new Error(`Transfer user '${news.userName}' not found after reconcile`),
-            );
+            return yield* new TransferUserUnexpectedResponse({
+              message: `Transfer user '${news.userName}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

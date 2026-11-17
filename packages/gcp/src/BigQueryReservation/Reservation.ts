@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -178,8 +179,35 @@ export type Reservation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReservationLookup
 >;
+
+/**
+ * Props for {@link Reservation.lookup}: find a reservation this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ReservationLookup {
+  /**
+   * Reservation id (the `{reservation}` segment of
+   * `projects/{project}/locations/{location}/reservations/{reservation}`).
+   * Must contain only lowercase letters, digits, or dashes; start with a
+   * letter; not end with a dash; max 64 characters.
+   */
+  reservationId: string;
+  /**
+   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * and `EU` stay uppercase; regional ids are lowercased (`US-CENTRAL1`
+   * becomes `us-central1`).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BigQuery slot reservation — a named pool of slots that assignments
@@ -218,6 +246,19 @@ export type Reservation = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing reservation
+ * `Reservation.lookup` references a reservation Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * reservation.
+ *
+ * **Example:** Reference an existing reservation
+ * ```typescript
+ * const reservation = GCP.BigQueryReservation.Reservation.lookup({
+ *   reservationId: "my-reservation",
+ * });
+ * ```
+ *
  * @resource
  * @category BigQueryReservation
  */
@@ -226,7 +267,7 @@ export const Reservation = Resource<Reservation>("GCP.BigQueryReservation.Reserv
 export class ReservationNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.ReservationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -326,7 +367,7 @@ const toAttrs = (current: bigqueryreservation.Reservation, project: string) => {
 const getByName = (name: string) =>
   bigqueryreservation
     .getProjectsLocationsReservations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedAt = (project: string, location: string) =>
   bigqueryreservation.listProjectsLocationsReservations
@@ -413,6 +454,15 @@ export const ReservationProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ reservationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, reservationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const reservationId = yield* toId(id, olds?.reservationId, output?.reservationId);
@@ -472,7 +522,7 @@ export const ReservationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReservationNotResolved({ name });
+        return yield* new ReservationNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

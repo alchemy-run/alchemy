@@ -14,8 +14,11 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // New projects must switch RAG Engine to Serverless mode first; otherwise
 // create fails with BadRequest "For new projects, using Spanner mode with
 // RAG Engine in us-central1, us-east1, and us-east4 is restricted to only
-// allowlisted projects." Set GCP_TEST_AIPLATFORM_RAG=1 once the project's
-// RagEngineConfig is Serverless.
+// allowlisted projects." The testing project is Serverless now, but updating a
+// Serverless corpus fails: v1 GET omits its RAG_MANAGED_VERTEX_VECTOR_SEARCH
+// backend and v1 PATCH (no update mask) reads the omission as RAG_MANAGED_DB
+// ("The vector db type is immutable"). Set GCP_TEST_AIPLATFORM_RAG=1 to run
+// the lifecycle.
 const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_RAG;
 
 const waitUntilGone = (name: string) =>
@@ -52,27 +55,6 @@ test.provider(
       );
 
       yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(runLifecycle)(
-  "createProjectsLocationsRagCorpora is rejected until RAG Engine is Serverless",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      yield* stack.destroy();
-      const error = yield* Effect.flip(
-        aiplatform.createProjectsLocationsRagCorpora({
-          parent: `projects/${project}/locations/us-central1`,
-          body: { displayName: "alchemy-rag-probe" },
-        }),
-      );
-      expect(error._tag).toEqual("BadRequest");
-      expect(String(error.message)).toContain("Spanner mode");
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],

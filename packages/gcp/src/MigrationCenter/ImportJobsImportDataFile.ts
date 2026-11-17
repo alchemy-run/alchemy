@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,36 @@ export type ImportJobsImportDataFile = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImportJobsImportDataFileLookup
 >;
+
+/**
+ * Props for {@link ImportJobsImportDataFile.lookup}: find an import jobs
+ * import data file this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ImportJobsImportDataFileLookup {
+  /**
+   * Import data file id (the `{importDataFile}` segment).
+   */
+  importDataFileId: string;
+  /**
+   * Region used when `importJob` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent import job. Full name
+   * `projects/{project}/locations/{location}/importJobs/{importJob}` or the
+   * import job id (combined with `location`).
+   */
+  importJob: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A payload file attached to a Migration Center import job. Creating the
@@ -113,6 +142,20 @@ export type ImportJobsImportDataFile = Resource<
  *   importJob: job.name,
  *   format: "IMPORT_JOB_FORMAT_RVTOOLS_CSV",
  *   displayName: "inventory",
+ * });
+ * ```
+ *
+ * ### Looking up an existing import jobs import data file
+ * `ImportJobsImportDataFile.lookup` references an import jobs import data
+ * file Alchemy doesn't manage (created in the console or by another stack).
+ * It is read during plan/deploy, never created, updated or deleted, and
+ * binds like a declared import jobs import data file.
+ *
+ * **Example:** Reference an existing import jobs import data file
+ * ```typescript
+ * const importJobsImportDataFile = GCP.MigrationCenter.ImportJobsImportDataFile.lookup({
+ *   importDataFileId: "my-import-data-file",
+ *   importJob: "my-import-job",
  * });
  * ```
  *
@@ -152,10 +195,10 @@ const toAttrs = (item: mc.ImportDataFile, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : mc
         .getProjectsLocationsImportJobsImportDataFiles({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listFiles = (parent: string) =>
   mc.listProjectsLocationsImportJobsImportDataFiles.pages({ parent, pageSize: 1000 }).pipe(
@@ -231,6 +274,20 @@ export const ImportJobsImportDataFileProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({
+      importDataFileId,
+      location: lookupLocation,
+      importJob: lookupImportJob,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const importJob = jobNameOf(lookupImportJob ?? "", env.project, location);
+      const name = importJob.length > 0 ? resourceName(importJob, importDataFileId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -287,7 +344,7 @@ export const ImportJobsImportDataFileProvider = () =>
               format,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -295,7 +352,7 @@ export const ImportJobsImportDataFileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -312,7 +369,7 @@ export const ImportJobsImportDataFileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

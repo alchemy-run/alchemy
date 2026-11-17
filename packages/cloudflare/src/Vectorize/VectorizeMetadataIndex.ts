@@ -237,5 +237,5 @@ const findExisting = (acct: string, indexName: string, propertyName: string) =>
             }
           : undefined;
       }),
-      Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)),
+      Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined),
     );

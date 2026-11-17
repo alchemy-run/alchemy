@@ -114,8 +114,21 @@ export type Bucket = Resource<
     website: BucketWebsite | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 >;
+
+/**
+ * Props for {@link Bucket.lookup}: find a bucket this stack doesn't manage
+ * by its identifiers.
+ */
+export interface BucketLookup {
+  /**
+   * Globally-unique bucket name. Must be 3-63 characters, lowercase, and
+   * DNS compatible.
+   */
+  bucketName: string;
+}
 
 /**
  * A Google Cloud Storage bucket.
@@ -203,6 +216,16 @@ export type Bucket = Resource<
  * ```
  * `forceDestroy: true` deletes objects before the bucket. `alchemy destroy` waits until the bucket is gone.
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared bucket.
+ *
+ * **Example:** Reference an existing bucket
+ * ```typescript
+ * const bucket = GCP.Storage.Bucket.lookup({ bucketName: "my-bucket" });
+ * ```
+ *
  * @resource
  * @category Storage
  */
@@ -256,7 +279,7 @@ const toWebsite = (website: storage.BucketWebsite | undefined): BucketWebsite | 
 const getByName = (bucketName: string) =>
   storage
     .getBuckets({ bucket: bucketName, projection: "full" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyBucket = (bucketName: string) =>
   storage.listObjects.items({ bucket: bucketName, versions: true, maxResults: 1000 }).pipe(
@@ -365,6 +388,12 @@ export const BucketProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ bucketName }) {
+      const existing = yield* getByName(bucketName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

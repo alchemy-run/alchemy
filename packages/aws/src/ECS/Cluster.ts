@@ -70,8 +70,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The name or ARN of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon ECS cluster for running tasks and services.
@@ -79,6 +89,21 @@ export interface Cluster extends Resource<
  * **Example:** Default Cluster
  * ```typescript
  * const cluster = yield* Cluster("AppCluster", {});
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run a service on an existing cluster
+ * ```typescript
+ * const cluster = AWS.ECS.Cluster.lookup({ clusterName: "shared" });
+ *
+ * const service = yield* AWS.ECS.Service("Web", {
+ *   cluster: cluster.clusterArn,
+ *   taskDefinition: task.taskDefinitionArn,
+ * });
  * ```
  *
  * @resource
@@ -166,6 +191,22 @@ export const ClusterProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ clusterName }) {
+          const described = yield* ecs.describeClusters({
+            clusters: [clusterName],
+            include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+          });
+          const cluster = described.clusters?.[0];
+          if (!cluster?.clusterArn || cluster.status === "INACTIVE") return undefined;
+          return toAttrs(
+            cluster,
+            Object.fromEntries(
+              (cluster.tags ?? []).flatMap((t) =>
+                typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+              ),
+            ),
+          );
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
           const described = yield* ecs.describeClusters({
@@ -180,7 +221,14 @@ export const ClusterProvider = () =>
           if (!cluster?.clusterArn || cluster.status === "INACTIVE") {
             return undefined;
           }
-          return toAttrs(cluster, output?.tags ?? {});
+          return toAttrs(
+            cluster,
+            Object.fromEntries(
+              (cluster.tags ?? []).flatMap((t) =>
+                typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+              ),
+            ),
+          );
         }),
         list: () =>
           Effect.gen(function* () {
@@ -293,12 +341,22 @@ export const ClusterProvider = () =>
 
           // Sync cluster config — call updateCluster to converge settings,
           // configuration, and serviceConnectDefaults to desired state.
-          yield* ecs.updateCluster({
-            cluster: clusterArn,
-            settings: news.settings,
-            configuration: news.configuration,
-            serviceConnectDefaults: news.serviceConnectDefaults,
-          });
+          yield* ecs
+            .updateCluster({
+              cluster: clusterArn,
+              settings: news.settings,
+              configuration: news.configuration,
+              serviceConnectDefaults: news.serviceConnectDefaults,
+            })
+            .pipe(
+              // A cluster just created can read back ACTIVE while UpdateCluster
+              // still reports it missing.
+              Effect.retry({
+                while: (e) => e._tag === "ClusterNotFoundException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
 
           // Sync capacity providers — observed ↔ desired.
           yield* applyCapacityProviders({
@@ -365,8 +423,9 @@ export const ClusterProvider = () =>
             serviceArns,
             (service) =>
               ecs.deleteService({ cluster, service, force: true }).pipe(
-                Effect.catchTag(["ServiceNotFoundException", "ClusterNotFoundException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ServiceNotFoundException", "ClusterNotFoundException"],
+                  () => Effect.undefined,
                 ),
                 Effect.asVoid,
               ),
@@ -383,7 +442,7 @@ export const ClusterProvider = () =>
             taskArns,
             (task) =>
               ecs.stopTask({ cluster, task, reason: "alchemy delete" }).pipe(
-                Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                 Effect.asVoid,
               ),
             { discard: true },
@@ -407,7 +466,7 @@ export const ClusterProvider = () =>
                   force: true,
                 })
                 .pipe(
-                  Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                   Effect.asVoid,
                 ),
             { discard: true },

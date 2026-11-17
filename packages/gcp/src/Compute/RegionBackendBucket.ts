@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,31 @@ export type RegionBackendBucket = Resource<
     id: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionBackendBucketLookup
 >;
+
+/**
+ * Props for {@link RegionBackendBucket.lookup}: find a region backend
+ * bucket this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionBackendBucketLookup {
+  /**
+   * Name of the backend bucket.
+   */
+  name: string;
+  /**
+   * Region the backend bucket lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine backend bucket that fronts a Cloud Storage
@@ -142,6 +166,19 @@ export type RegionBackendBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing region backend bucket
+ * `RegionBackendBucket.lookup` references a region backend bucket Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared region backend bucket.
+ *
+ * **Example:** Reference an existing region backend bucket
+ * ```typescript
+ * const regionBackendBucket = GCP.Compute.RegionBackendBucket.lookup({
+ *   name: "my-name",
+ * });
+ * ```
+ *
  * @resource
  * @category Compute
  */
@@ -150,7 +187,7 @@ export const RegionBackendBucket = Resource<RegionBackendBucket>("GCP.Compute.Re
 export class RegionBackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionBackendBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
   region: string;
 }> {}
 
@@ -194,14 +231,14 @@ const toAttrs = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionBackendBuckets({ project, region, backendBucket: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, name: string) =>
   getByName(project, region, name).pipe(
     Effect.flatMap((bucket) =>
       bucket !== undefined
         ? Effect.succeed(bucket)
-        : Effect.fail(new RegionBackendBucketNotResolved({ name, region })),
+        : Effect.fail(new RegionBackendBucketNotResolved({ resourceName: name, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RegionBackendBucketNotResolved",
@@ -236,6 +273,14 @@ export const RegionBackendBucketProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ name, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -314,12 +359,12 @@ export const RegionBackendBucketProvider = () =>
             body: insertBody,
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, name);
       }
 
       if (current === undefined) {
-        return yield* new RegionBackendBucketNotResolved({ name, region });
+        return yield* new RegionBackendBucketNotResolved({ resourceName: name, region });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
@@ -389,6 +434,6 @@ export const RegionBackendBucketProvider = () =>
           backendBucket: output.name,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

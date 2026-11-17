@@ -9,6 +9,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { CA_CERT_1, CA_CERT_2 } from "./fixtures/certs.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -119,27 +120,33 @@ describe.sequential(
           const created = yield* stack.deploy(
             Cloudflare.CertificateAuthorities.HostnameAssociation("ManagedCaHosts", {
               zoneId,
-              hostnames: [`mtls.${zoneName}`],
+              hostnames: [`${testName("mtls")}.${zoneName}`],
             }),
           );
 
           expect(created.zoneId).toEqual(zoneId);
           expect(created.mtlsCertificateId).toBeUndefined();
-          expect(created.hostnames).toEqual([`mtls.${zoneName}`]);
+          expect(created.hostnames).toEqual([`${testName("mtls")}.${zoneName}`]);
 
-          yield* waitForHostnames(zoneId, [`mtls.${zoneName}`]);
+          yield* waitForHostnames(zoneId, [`${testName("mtls")}.${zoneName}`]);
 
           // In-place update — hostnames are the mutable aspect of the singleton.
           const updated = yield* stack.deploy(
             Cloudflare.CertificateAuthorities.HostnameAssociation("ManagedCaHosts", {
               zoneId,
-              hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
+              hostnames: [`${testName("mtls2")}.${zoneName}`, `${testName("mtls")}.${zoneName}`],
             }),
           );
 
-          expect([...updated.hostnames].sort()).toEqual([`mtls.${zoneName}`, `mtls2.${zoneName}`]);
+          expect([...updated.hostnames].sort()).toEqual([
+            `${testName("mtls")}.${zoneName}`,
+            `${testName("mtls2")}.${zoneName}`,
+          ]);
 
-          yield* waitForHostnames(zoneId, [`mtls.${zoneName}`, `mtls2.${zoneName}`]);
+          yield* waitForHostnames(zoneId, [
+            `${testName("mtls")}.${zoneName}`,
+            `${testName("mtls2")}.${zoneName}`,
+          ]);
 
           yield* stack.destroy();
 
@@ -171,7 +178,7 @@ describe.sequential(
                 {
                   zoneId,
                   mtlsCertificateId: cert.mtlsCertificateId,
-                  hostnames: [`mtls-ca.${zoneName}`],
+                  hostnames: [`${testName("mtls-ca")}.${zoneName}`],
                 },
               );
               return { cert, assoc };
@@ -180,9 +187,13 @@ describe.sequential(
 
           expect(cert.mtlsCertificateId).toBeDefined();
           expect(assoc.mtlsCertificateId).toEqual(cert.mtlsCertificateId);
-          expect(assoc.hostnames).toEqual([`mtls-ca.${zoneName}`]);
+          expect(assoc.hostnames).toEqual([`${testName("mtls-ca")}.${zoneName}`]);
 
-          yield* waitForHostnames(zoneId, [`mtls-ca.${zoneName}`], cert.mtlsCertificateId);
+          yield* waitForHostnames(
+            zoneId,
+            [`${testName("mtls-ca")}.${zoneName}`],
+            cert.mtlsCertificateId,
+          );
 
           // Destroy must clear the association before deleting the certificate —
           // Cloudflare refuses to delete a CA that hostnames still reference.
@@ -207,14 +218,14 @@ describe.sequential(
             Effect.gen(function* () {
               const assoc = yield* Cloudflare.CertificateAuthorities.HostnameAssociation(
                 "ReplaceHosts",
-                { zoneId, hostnames: [`mtls-replace.${zoneName}`] },
+                { zoneId, hostnames: [`${testName("mtls-replace")}.${zoneName}`] },
               );
               return { assoc };
             }),
           );
 
           expect(first.assoc.mtlsCertificateId).toBeUndefined();
-          yield* waitForHostnames(zoneId, [`mtls-replace.${zoneName}`]);
+          yield* waitForHostnames(zoneId, [`${testName("mtls-replace")}.${zoneName}`]);
 
           // mtlsCertificateId keys the association — switching from the Managed
           // CA to an uploaded CA is a replacement: the new keyed association is
@@ -231,7 +242,7 @@ describe.sequential(
                 {
                   zoneId,
                   mtlsCertificateId: cert.mtlsCertificateId,
-                  hostnames: [`mtls-replace.${zoneName}`],
+                  hostnames: [`${testName("mtls-replace")}.${zoneName}`],
                 },
               );
               return { cert, assoc };
@@ -242,7 +253,7 @@ describe.sequential(
 
           yield* waitForHostnames(
             zoneId,
-            [`mtls-replace.${zoneName}`],
+            [`${testName("mtls-replace")}.${zoneName}`],
             second.cert.mtlsCertificateId,
           );
           // The old Managed CA association was cleared by the replacement.

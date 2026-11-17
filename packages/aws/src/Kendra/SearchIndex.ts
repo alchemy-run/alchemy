@@ -12,6 +12,20 @@ import * as EffectStream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
+export class KendraSearchIndexInvalidProps extends Data.TaggedError(
+  "KendraSearchIndexInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KendraSearchIndexUnexpectedResponse extends Data.TaggedError(
+  "KendraSearchIndexUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type IndexStatus = kendra.IndexStatus;
 export type IndexEdition = kendra.IndexEdition;
 
@@ -125,8 +139,23 @@ export interface Index extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  IndexLookup
 > {}
+
+/**
+ * Props for {@link Index.lookup}: find an index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type IndexLookup =
+  | {
+      /** The id of the existing index. */
+      id: string;
+    }
+  | {
+      /** The name of the existing index. */
+      name: string;
+    };
 
 /**
  * An Amazon Kendra index — a machine-learning powered enterprise search
@@ -171,6 +200,16 @@ export interface Index extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing index
+ * `Index.lookup` references an index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `id` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing index
+ * ```typescript
+ * const docs = AWS.Kendra.Index.lookup({ name: "docs" });
+ * ```
+ *
  * @resource
  */
 export const Index = Resource<Index>("AWS.Kendra.Index");
@@ -182,8 +221,9 @@ const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* kendra
     .listTagsForResource({ ResourceARN: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "ResourceUnavailableException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "ResourceUnavailableException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries((response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
@@ -197,7 +237,7 @@ interface IndexState {
 const readIndexById = Effect.fn(function* (id: string, arnOf: (indexId: string) => string) {
   const described = yield* kendra
     .describeIndex({ Id: id })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.Status === "DELETING") return undefined;
   const arn = arnOf(described.Id ?? id);
   const state: IndexState = {
@@ -275,7 +315,7 @@ const waitForIndexStatus = (id: string, target: "ACTIVE" | "DELETED") =>
     Effect.gen(function* () {
       const described = yield* kendra
         .describeIndex({ Id: id })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new IndexNotReady({ id, status: described.Status });
@@ -315,6 +355,14 @@ export const IndexProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* currentArnOf;
+          const state =
+            "id" in props
+              ? yield* readIndexById(props.id, arnOf)
+              : yield* findIndexByName(props.name, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* currentArnOf;
           const state = output?.id
@@ -338,7 +386,9 @@ export const IndexProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Kendra Index requires props"));
+            return yield* new KendraSearchIndexInvalidProps({
+              message: "Kendra Index requires props",
+            });
           }
           const arnOf = yield* currentArnOf;
           const name = yield* createIndexName(id, news);
@@ -372,13 +422,17 @@ export const IndexProvider = () =>
               }),
             );
             if (!created.Id) {
-              return yield* Effect.fail(new Error(`CreateIndex for '${name}' returned no Id`));
+              return yield* new KendraSearchIndexUnexpectedResponse({
+                message: `CreateIndex for '${name}' returned no Id`,
+              });
             }
             yield* session.note(`Creating index ${name} (${created.Id})...`);
             yield* waitForIndexStatus(created.Id, "ACTIVE");
             state = yield* readIndexById(created.Id, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created index ${name}`));
+              return yield* new KendraSearchIndexUnexpectedResponse({
+                message: `failed to read created index ${name}`,
+              });
             }
           }
 
@@ -440,7 +494,9 @@ export const IndexProvider = () =>
 
           const final = yield* readIndexById(state.attrs.id, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled index ${name}`));
+            return yield* new KendraSearchIndexUnexpectedResponse({
+              message: `failed to read reconciled index ${name}`,
+            });
           }
           return final.attrs;
         }),

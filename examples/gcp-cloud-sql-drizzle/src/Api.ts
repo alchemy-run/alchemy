@@ -6,7 +6,6 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schema from "effect/Schema";
 import { database } from "./database.ts";
-import { migrate } from "./migrate.ts";
 import { todos } from "./schema.ts";
 
 const Id = Schema.String.check(Schema.isUUID());
@@ -17,18 +16,18 @@ const Id = Schema.String.check(Schema.isUUID());
  * `GCP.SQL.Connect` mounts the instance's Unix socket into the revision
  * and grants the runtime service account `roles/cloudsql.client` on this
  * instance only; Drizzle then talks Postgres over
- * `/cloudsql/{connectionName}`.
+ * `/cloudsql/{connectionName}`. Binding the database makes the service
+ * deploy after its migrations are applied.
  */
 export default class Api extends GCP.Function<Api>()(
   "Api",
   Effect.gen(function* () {
-    // Depending on the migration output makes the service deploy after
-    // the schema exists, and roll a new revision when it changes.
-    const schemaVersion = yield* migrate;
+    const { schema } = yield* database;
     return {
       main: import.meta.url,
       invokerIamDisabled: true,
-      env: { SCHEMA_VERSION: schemaVersion },
+      // Rolls a new revision whenever the schema changes.
+      env: { SCHEMA_VERSION: schema.snapshotHash },
     };
   }),
   Effect.gen(function* () {

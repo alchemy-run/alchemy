@@ -1,9 +1,22 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { STATE_STORE_VERSION } from "@alchemy.run/cloudflare/StateStore/Api";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import {
+  STATE_STORE_SCRIPT_NAME,
+  STATE_STORE_VERSION,
+} from "@alchemy.run/cloudflare/StateStore/Api";
+import { readStoreCredentials } from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { CredentialsStore } from "alchemy/Auth/Credentials";
+import { currentProfileName } from "alchemy/Auth/Profile";
+import { StateApi } from "alchemy/State/HttpStateApi";
+import { makeHttpStateStore } from "alchemy/State/HttpStateStore";
 import { State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 /**
  * Live-API tests for the deployed Cloudflare State Store at
  * `alchemy-state-store`. The State service is wired up via
@@ -18,8 +31,12 @@ import * as Effect from "effect/Effect";
 
 const STACK = "alchemy_tests";
 const STAGE = "alchemy_tests";
+const SCRIPT_NAME = STATE_STORE_SCRIPT_NAME;
 
-const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
+const { test } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const sampleState = (fqn: string, instanceId: string) => ({
   kind: "resource" as const,
@@ -79,6 +96,80 @@ describe.sequential(
         const store = yield* yield* State;
         const version = yield* store.getVersion();
         expect(version).toBe(STATE_STORE_VERSION);
+      }),
+      { timeout: 60_000 },
+    );
+
+    test.provider(
+      "a failed Durable Object call answers as a typed StateStoreFailure",
+      () =>
+        Effect.gen(function* () {
+          // `yield* State` deploys the store at STATE_STORE_VERSION first.
+          yield* yield* State;
+          const credentials = yield* readStoreCredentials(
+            yield* CredentialsStore,
+            yield* currentProfileName,
+            SCRIPT_NAME,
+          );
+          expect(credentials).toBeDefined();
+          const client = yield* HttpApiClient.make(StateApi, {
+            baseUrl: credentials!.url,
+            transformClient: HttpClient.mapRequest(
+              HttpClientRequest.bearerToken(credentials!.authToken),
+            ),
+          });
+          // Past the 32 MiB Durable Object RPC cap, so the authorized request
+          // fails inside the Store call (#1833). Called once, without the
+          // state client's retries.
+          const error = yield* client.state
+            .setState({
+              params: { stack: STACK, stage: STAGE, fqn: "stack/scope/too-large" },
+              payload: { blob: "x".repeat(34_000_000) },
+            })
+            .pipe(Effect.flip);
+          expect(error._tag).toBe("StateStoreFailure");
+          expect(error).toMatchObject({ operation: "setState", reason: "RpcCallError" });
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "a request with a wrong bearer token is rejected as unauthorized",
+      () =>
+        Effect.gen(function* () {
+          yield* yield* State;
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const { subdomain } = yield* workers.getSubdomain({ accountId });
+          const store = yield* makeHttpStateStore({
+            id: "cloudflare-http",
+            url: `https://${SCRIPT_NAME}.${subdomain}.workers.dev`,
+            authToken: "not-the-state-store-token",
+          });
+          const error = yield* store
+            .get({ stack: STACK, stage: STAGE, fqn: "stack/scope/resource-a" })
+            .pipe(Effect.flip);
+          expect(error._tag).toBe("StateStoreError");
+          expect(error.message).toContain("State store rejected the request as unauthorized.");
+          expect(error.http).toEqual({ status: 401 });
+        }),
+      { timeout: 60_000 },
+    );
+
+    test(
+      "a resource whose URI-encoded FQN exceeds 100 chars round-trips",
+      Effect.gen(function* () {
+        const store = yield* yield* State;
+        const stage = `${STAGE}-long-fqn`;
+        // Each "/" encodes to "%2F", so this FQN is a ~200-char path segment.
+        const fqn = Array.from({ length: 8 }, (_, i) => `Namespace${i}/Scope${i}`).join("/");
+        expect(encodeURIComponent(fqn).length).toBeGreaterThan(100);
+        yield* store.set({ stack: STACK, stage, fqn, value: sampleState(fqn, "inst-long") });
+        const got = yield* store.get({ stack: STACK, stage, fqn });
+        expect(got?.fqn).toBe(fqn);
+        expect(yield* store.list({ stack: STACK, stage })).toEqual([fqn]);
+        yield* store.delete({ stack: STACK, stage, fqn });
+        expect(yield* store.get({ stack: STACK, stage, fqn })).toBeUndefined();
+        yield* store.deleteStack({ stack: STACK, stage });
       }),
       { timeout: 60_000 },
     );

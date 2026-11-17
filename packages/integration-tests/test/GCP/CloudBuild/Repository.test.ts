@@ -6,6 +6,7 @@ import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -134,6 +135,14 @@ test.provider.skipIf(!runLifecycle)(
             annotations: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudBuild.Repository.lookup({
+          repositoryId: created.repositoryId,
+          connection: created.connection,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/repositories/");

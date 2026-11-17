@@ -1,5 +1,5 @@
 import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -197,7 +197,7 @@ export const MerchantReview = Resource<MerchantReview>("GCP.MerchantApiReviews.M
 export class MerchantReviewNotResolved extends Data.TaggedError(
   "GCP.MerchantApiReviews.MerchantReviewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const attributesOf = (
@@ -303,7 +303,7 @@ export const MerchantReviewProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const account = olds?.account ?? output?.account ?? "";
       const merchantReviewId = yield* toResourceId(
         id,
@@ -322,7 +322,7 @@ export const MerchantReviewProvider = () =>
         content: existing.merchantReviewAttributes?.content,
       }))
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -392,7 +392,7 @@ export const MerchantReviewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MerchantReviewNotResolved({ name });
+        return yield* new MerchantReviewNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, account, dataSource);

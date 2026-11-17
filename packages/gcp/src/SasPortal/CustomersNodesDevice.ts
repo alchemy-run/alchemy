@@ -161,7 +161,7 @@ export class CustomersNodesDeviceNotResolved extends Data.TaggedError(
   "GCP.SasPortal.CustomersNodesDeviceNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (device: sasportal.SasPortalDevice, parent: string, project: string) => {
@@ -287,7 +287,7 @@ export const CustomersNodesDeviceProvider = () =>
       if (current === undefined) {
         return yield* new CustomersNodesDeviceNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 

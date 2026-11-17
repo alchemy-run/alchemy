@@ -12,6 +12,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { stageSuffix } from "../../names.ts";
 import { expectUrlAbsent, expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -29,7 +30,7 @@ const zoneName =
 // Deterministic per-test path prefixes on the zone apex. Each test owns a
 // disjoint prefix so reruns and parallel runs never collide, and the same
 // patterns are reused on every run (never derive names from Date.now()).
-const routeSuffix = `alchemy-worker-route-${process.env.PULL_REQUEST ?? process.env.USER}`;
+const routeSuffix = `alchemy-worker-route-${stageSuffix()}`;
 
 const workerMarker = "Hello from TestWorker";
 

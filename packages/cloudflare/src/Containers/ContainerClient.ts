@@ -411,25 +411,24 @@ export const fromContainer = (
 
   // A single readiness probe: any response (even non-2xx) proves the port
   // accepts connections. A process that has exited is a crash, not "not ready".
-  const probePort = (container: cf.Container, port: number) =>
-    Effect.tryPromise({
+  const probePort = (container: cf.Container, port: number) => {
+    const notReady = (cause: unknown) =>
+      container.running
+        ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
+        : new ContainerCrashedError({
+            message: `Container exited while waiting for port ${port}`,
+            cause,
+          });
+    return Effect.tryPromise({
       try: () =>
         httpSchemePort(container.getTcpPort(port)).fetch("http://containerstarthealthcheck"),
-      catch: (cause) => cause,
+      catch: notReady,
     }).pipe(
       Effect.timeout(READINESS_PROBE_TIMEOUT),
       Effect.asVoid,
-      Effect.catch((cause) =>
-        Effect.fail(
-          container.running
-            ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
-            : new ContainerCrashedError({
-                message: `Container exited while waiting for port ${port}`,
-                cause,
-              }),
-        ),
-      ),
+      Effect.mapError((error) => (error._tag === "TimeoutError" ? notReady(error) : error)),
     );
+  };
 
   const waitForPort = (port: number) =>
     Effect.gen(function* () {
@@ -533,9 +532,9 @@ export const fromContainer = (
  * container's RPC shape are sent to its port-3000 server; the handle's own
  * methods take precedence.
  */
-export const makeContainerHandle = Effect.fnUntraced(function* (
+export const makeContainerHandle = Effect.fnUntraced(function* <R>(
   id: string,
-  binding: Effect.Effect<unknown, never, any>,
+  binding: Effect.Effect<unknown, never, R>,
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
@@ -544,12 +543,14 @@ export const makeContainerHandle = Effect.fnUntraced(function* (
   return makeFetchRpcStub<ContainerClient>({
     // RPC methods only run inside the Durable Object, where RuntimeContext is
     // always present; the stub's fetch type cannot carry it.
-    fetch: (request) =>
+    fetch: (request) => {
+      const response = rpcPort.pipe(Effect.flatMap((port) => port.fetch(request)));
       // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext; RPC calls only run at runtime
-      rpcPort.pipe(Effect.flatMap((port) => port.fetch(request))) as Effect.Effect<
+      return response as Effect.Effect<
         HttpClientResponse.HttpClientResponse,
-        unknown
-      >,
+        Effect.Error<typeof response>
+      >;
+    },
     baseUrl: "http://container",
     base: { ...client, "~alchemy/Id": id },
   });

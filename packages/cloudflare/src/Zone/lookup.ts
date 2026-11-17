@@ -1,8 +1,14 @@
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Stream from "effect/Stream";
+
+export class ZoneLookupInvalidProps extends Data.TaggedError("ZoneLookupInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Reference to an existing Cloudflare Zone. Accepts:
@@ -36,7 +42,9 @@ export const resolveZoneId = ({
       const match = yield* findZoneByName({ accountId, name: candidate });
       if (match) return match.id;
     }
-    return yield* Effect.fail(new Error(`Cloudflare zone not found for ${lookup}`));
+    return yield* new ZoneLookupInvalidProps({
+      message: `Cloudflare zone not found for ${lookup}`,
+    });
   });
 
 type ZoneListItem = {
@@ -57,7 +65,7 @@ export const findZoneByName = ({
   Credentials | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
-    // Distilled `listZones` rides `Retry.makeDefault` (5xx / throttling).
+    // Distilled `listZones` rides the deploy policy (5xx / throttling).
     // The previous raw `fetch` failed the first time Cloudflare answered
     // `{ success: false, errors: [{ message: "unhandled server error" }] }`.
     const page = yield* zones.listZones({

@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 export const fetchSiteWiseTags = Effect.fn(function* (arn: string) {
   const response = yield* sitewise
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;

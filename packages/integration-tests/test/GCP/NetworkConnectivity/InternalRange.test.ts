@@ -6,6 +6,7 @@ import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -72,6 +73,13 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { range };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.InternalRange.lookup({
+          internalRangeId: created.range.internalRangeId,
+          location: created.range.location,
+        }),
+        created.range,
       );
 
       expect(created.range.name).toContain("/internalRanges/");

@@ -39,8 +39,18 @@ export interface Activity extends Resource<
     activityArn: string;
   },
   never,
-  Providers
+  Providers,
+  ActivityLookup
 > {}
+
+/**
+ * Props for {@link Activity.lookup}: find an activity this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface ActivityLookup {
+  /** The name of the existing activity. */
+  activityName: string;
+}
 
 /**
  * An AWS Step Functions activity — a named endpoint that external workers
@@ -87,6 +97,19 @@ export interface Activity extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing activity
+ * `Activity.lookup` references an activity Alchemy doesn't manage (created in the
+ * console or by another stack), found by `activityName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Poll an existing activity for tasks
+ * ```typescript
+ * const approvals = AWS.StepFunctions.Activity.lookup({ activityName: "approvals" });
+ *
+ * // init
+ * const getActivityTask = yield* AWS.StepFunctions.GetActivityTask(approvals);
+ * ```
+ *
  * @resource
  */
 export const Activity = Resource<Activity>("AWS.StepFunctions.Activity");
@@ -121,7 +144,7 @@ export const ActivityProvider = () =>
       const describeOrUndefined = Effect.fn(function* (activityArn: string) {
         return yield* sfn
           .describeActivity({ activityArn })
-          .pipe(Effect.catchTag("ActivityDoesNotExist", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ActivityDoesNotExist", () => Effect.undefined));
       });
 
       const fetchObservedTags = Effect.fn(function* (resourceArn: string) {
@@ -144,6 +167,13 @@ export const ActivityProvider = () =>
                 activityArn: activity.activityArn,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ activityName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* describeOrUndefined(activityArnOf(region, accountId, activityName));
+          if (!found) return undefined;
+          return { activityName: found.name, activityArn: found.activityArn };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

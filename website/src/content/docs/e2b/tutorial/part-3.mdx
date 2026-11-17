@@ -1,0 +1,52 @@
+---
+title: "Part 3: A Copy per User"
+description: Give each user an E2B sandbox started from the Warm snapshot, which pauses with their changes and resumes when they come back.
+sidebar:
+  order: 3
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Start a user's sandbox from Warm
+
+```diff lang="typescript"
+// src/Api.ts
++    const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
++      const [existing] = yield* sandboxes.list({ metadata: { user }, state: ["running", "paused"] });
++      return existing !== undefined
++        ? yield* sandboxes.connect(existing.sandboxID, { timeout: 600 })
++        : yield* sandboxes.create({ metadata: { user }, timeout: 600, autoPause: true });
++    });
+```
+
+A user's first request starts their sandbox from `Warm`, with the repository already cloned. Its metadata finds it again on their next request.
+
+## Their changes stay in their copy
+
+```diff lang="typescript"
+// src/Api.ts
++        const match = /^\/users\/([a-z0-9-]+)\/files\/(.+)$/.exec(url.pathname);
++        if (match !== null) {
++          const sandbox = yield* userSandbox(match[1]!);
++          if (request.method === "PUT") yield* sandbox.files.write(`/home/user/repo/${match[2]}`, yield* request.text);
++          const content = yield* sandbox.files.readText(`/home/user/repo/${match[2]}`);
++          yield* sandbox.pause();
++          return yield* HttpServerResponse.json({ content });
++        }
+```
+
+Each user edits their own copy of the repository. `Warm` never changes, so the next sandbox started from it doesn't see their edits.
+
+## Pause between requests
+
+`pause` keeps the sandbox's memory, files and processes, and stops billing it. `connect` resumes it where it stopped on the user's next request. `autoPause` pauses it too when its timeout runs out, instead of killing it.
+
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X PUT "$URL/users/ana/files/notes.md" -d 'hello'
+curl "$URL/users/ana/files/notes.md"`}
+/>
+
+## Next
+
+[Part 4](/e2b/tutorial/part-4) changes the template.

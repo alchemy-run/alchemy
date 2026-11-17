@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
@@ -6,11 +7,21 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../../Utils/Telemetry.ts";
 import TestService from "./fixtures/service.ts";
+import TracedService from "./fixtures/traced.ts";
 import { awaitLogGroups, logGroupNamesFor, observeLogGroups } from "./logGroups.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+// App Runner closed to new customers on 2026-04-30; accounts that weren't
+// already customers get "Account <id> can't create new App Runner services".
+// Set AWS_TEST_APPRUNNER_SERVICES=1 on an account that can still create them.
+const appRunnerServices = !!process.env.AWS_TEST_APPRUNNER_SERVICES;
+
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
 
 // Full end-to-end for the Effect-native `AppRunner.Service` form: bundle the
 // inline Effect program, build + push the container image to the managed ECR
@@ -22,7 +33,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // It is heavy (Docker build + ECR push + 3-5 min App Runner provisioning,
 // bills while running), so it is skipped under `--fast` and always
 // destroys what it created.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !appRunnerServices)(
   "deploys an Effect-native App Runner service and serves HTTP",
   (stack) =>
     Effect.gen(function* () {
@@ -126,6 +137,46 @@ test.provider.skipIf(!!process.env.FAST)(
       "provider:aws:apprunner",
       "provider:aws:ecr",
       "provider:aws:iam",
+      "live",
+    ],
+    timeout: 1_200_000,
+  },
+);
+
+test.provider.skipIf(!!process.env.FAST || !appRunnerServices)(
+  "an Effect-native App Runner service exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const service = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedService;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(`https://${service.serviceUrl}`, "apprunner")).toBe(
+        "did work apprunner",
+      );
+      const traces = yield* waitForWorkSpan(collector.url!, "apprunner");
+      expect(traces).toContain("work:apprunner");
+      expect(traces).toContain("apprunner-service-e2e");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:apprunner",
+      "provider:aws:ecr",
+      "provider:aws:iam",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
       "live",
     ],
     timeout: 1_200_000,

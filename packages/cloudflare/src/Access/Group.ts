@@ -3,12 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class GroupUnexpectedResponse extends Data.TaggedError("GroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * One arm of a Cloudflare Access group rule discriminated union. A rule is a
@@ -82,8 +88,27 @@ export type Group = Resource<
     isDefault: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 >;
+
+/**
+ * Props for {@link Group.lookup}: find an Access group this stack doesn't
+ * manage, by its id or its name.
+ */
+export type GroupLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID (UUID) of the existing group.
+       */
+      groupId: string;
+    }
+  | {
+      /**
+       * The name of the existing group.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Access group — a reusable, account-scoped set of
@@ -120,6 +145,22 @@ export type Group = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Group
+ * `Group.lookup` reads a group Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `groupId` or `name`, so policies
+ * can reference it. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Allow an existing group
+ * ```typescript
+ * const admins = Cloudflare.Access.Group.lookup({ name: "Admins" });
+ *
+ * const policy = yield* Cloudflare.Access.Policy("AllowAdmins", {
+ *   decision: "allow",
+ *   include: [{ group: { id: admins.groupId } }],
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -140,6 +181,23 @@ export const GroupProvider = () =>
       }
       // Everything else (name, rules, isDefault) converges via PUT.
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const group =
+        "groupId" in props
+          ? yield* zeroTrust.getAccessGroupForAccount({ accountId, groupId: props.groupId }).pipe(
+              Effect.map(toObserved),
+              Effect.catchTag("AccessGroupNotFound", () => Effect.undefined),
+            )
+          : yield* findGroupByName(accountId, props.name);
+      if (!group?.id) return undefined;
+      return {
+        groupId: group.id,
+        accountId,
+        name: group.name ?? "",
+        isDefault: group.isDefault ?? undefined,
+      };
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -151,7 +209,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.undefined),
           );
         if (direct && direct.id) {
           return {
@@ -207,7 +265,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.undefined),
           );
       }
       if (!observed) {
@@ -259,7 +317,7 @@ export const GroupProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(new Error("Group: ensured group missing id"));
+        return yield* new GroupUnexpectedResponse({ message: "Group: ensured group missing id" });
       }
       return {
         groupId: ensured.id,

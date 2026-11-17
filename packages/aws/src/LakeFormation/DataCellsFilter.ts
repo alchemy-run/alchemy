@@ -135,7 +135,7 @@ export const DataCellsFilterProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.DataCellsFilter),
-            Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
           );
       });
 

@@ -65,8 +65,18 @@ export interface Flow extends Resource<
     flowStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FlowLookup
 > {}
+
+/**
+ * Props for {@link Flow.lookup}: find a flow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FlowLookup {
+  /** The flow name of the existing flow. */
+  flowName: string;
+}
 
 /**
  * An Amazon AppFlow flow. A flow transfers data between a source connector
@@ -111,6 +121,16 @@ export interface Flow extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing flow
+ * `Flow.lookup` references a flow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `flowName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing flow
+ * ```typescript
+ * const existing = AWS.AppFlow.Flow.lookup({ flowName: "my-flow" });
+ * ```
+ *
  * @resource
  */
 export const Flow = Resource<Flow>("AWS.AppFlow.Flow");
@@ -136,11 +156,24 @@ export const FlowProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ flowName: name }) {
+          const flow = yield* appflow
+            .describeFlow({ flowName: name })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (flow === undefined || flow.flowArn === undefined) return undefined;
+          const attrs = {
+            flowName: name,
+            flowArn: flow.flowArn,
+            flowStatus: flow.flowStatus,
+          };
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.flowName ?? (yield* toName(id, olds ?? {}));
           const flow = yield* appflow
             .describeFlow({ flowName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (flow === undefined || flow.flowArn === undefined) return undefined;
           const attrs = {
             flowName: name,
@@ -160,7 +193,7 @@ export const FlowProvider = () =>
           // 1. Observe.
           let live = yield* appflow
             .describeFlow({ flowName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // 2. Ensure — create if missing. Tolerate an AlreadyExists race by
           // falling back to describe.

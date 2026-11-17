@@ -4,11 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { stripNullFields } from "alchemy/Util/data";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class PolicyUnexpectedResponse extends Data.TaggedError("PolicyUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * One arm of a Cloudflare Access policy rule discriminated union. A rule is a
@@ -264,8 +270,28 @@ export type Policy = Resource<
     updatedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PolicyLookup
 >;
+
+/**
+ * Props for {@link Policy.lookup}: find a reusable Access policy this stack
+ * doesn't manage, by its id or its name.
+ */
+export type PolicyLookup =
+  | {
+      /**
+       * The UUID of the existing policy.
+       */
+      policyId: string;
+    }
+  | {
+      /**
+       * The name of the existing policy. Names are not unique; the first
+       * policy with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
@@ -315,6 +341,22 @@ export type Policy = Resource<
  *   connectionRules: {
  *     ssh: { usernames: ["root", "ubuntu"], allowEmailAlias: true },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing policy
+ * `Policy.lookup` references a reusable policy Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `policyId` or
+ * `name`. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Gate an application with an existing policy
+ * ```typescript
+ * const admins = Cloudflare.Access.Policy.lookup({ name: "Admins" });
+ * const app = yield* Cloudflare.Access.Application("Admin", {
+ *   type: "self_hosted",
+ *   domain: "admin.example.com",
+ *   policies: [admins.policyId],
  * });
  * ```
  *
@@ -407,7 +449,9 @@ export const PolicyProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(new Error("Policy: ensured policy missing id"));
+        return yield* new PolicyUnexpectedResponse({
+          message: "Policy: ensured policy missing id",
+        });
       }
       return {
         policyId: ensured.id,
@@ -453,6 +497,24 @@ export const PolicyProvider = () =>
           policyId: output.policyId,
         })
         .pipe(Effect.catch((): Effect.Effect<void> => Effect.void));
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const policy =
+        "policyId" in props
+          ? yield* zeroTrust
+              .getAccessPolicy({ accountId, policyId: props.policyId })
+              .pipe(Effect.catchTag("AccessPolicyNotFound", () => Effect.undefined))
+          : yield* findPolicyByName(accountId, props.name);
+      if (!policy?.id) return undefined;
+      return {
+        policyId: policy.id,
+        name: policy.name ?? "",
+        decision: policy.decision ?? "",
+        accountId,
+        createdAt: policy.createdAt ?? undefined,
+        updatedAt: policy.updatedAt ?? undefined,
+      };
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -559,7 +621,7 @@ type ObservedPolicy = {
 type RawPolicy = {
   id?: string | null;
   name?: string | null;
-  decision?: PolicyDecision | null | string;
+  decision?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 } & { [K in (typeof PRESERVED_FIELDS)[number]]?: unknown };

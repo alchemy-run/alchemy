@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -89,8 +90,41 @@ export type Repository = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 >;
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RepositoryLookup {
+  /**
+   * Repository id (the `{repository}` segment of
+   * `projects/{project}/locatio
+   * ns/{location}/connections/{connection}/repositories/{repository}`).
+   * Unique within the connection.
+   */
+  repositoryId: string;
+  /**
+   * Parent Cloud Build connection. Full name
+   * `projects/{project}/locations/{location}/connections/{connection}` or
+   * the connection id (combined with `location`).
+   */
+  connection: string;
+  /**
+   * Cloud Build location (`us-central1`, `us-east1`, …). Used when
+   * `connection` is a bare id. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Build v2 repository — links a remote Git repository to a
@@ -140,6 +174,20 @@ export type Repository = Resource<
  * const { token } = yield* accessReadToken();
  * ```
  *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * repository.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const repository = GCP.CloudBuild.Repository.lookup({
+ *   repositoryId: "my-repository",
+ *   connection: "my-connection",
+ * });
+ * ```
+ *
  * @resource
  * @category CloudBuild
  */
@@ -148,13 +196,13 @@ export const Repository = Resource<Repository>("GCP.CloudBuild.Repository");
 export class RepositoryNotResolved extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -274,7 +322,7 @@ const toAttrs = (repository: cloudbuild.Repository, project: string) => {
 const getByName = (name: string) =>
   cloudbuild
     .getProjectsLocationsConnectionsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Cloud Build repositories long-running operation (seconds to a minute).
@@ -330,7 +378,9 @@ const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundO
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository ? Effect.succeed(repository) : Effect.fail(new RepositoryNotResolved({ name })),
+      repository
+        ? Effect.succeed(repository)
+        : Effect.fail(new RepositoryNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryNotResolved",
@@ -342,7 +392,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository === undefined ? Effect.void : Effect.fail(new RepositoryStillExists({ name })),
+      repository === undefined
+        ? Effect.void
+        : Effect.fail(new RepositoryStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryStillExists",
@@ -459,6 +511,18 @@ export const RepositoryProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ repositoryId, connection, location }) {
+      const env = yield* GcpEnvironment.current;
+      if (typeof connection !== "string" || connection.length === 0) {
+        return undefined;
+      }
+      const parent = resolveParent(env.project, connection, location, env.region);
+      const name = resourceName(parent.parent, repositoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       let name = output?.name;
@@ -517,7 +581,7 @@ export const RepositoryProvider = () =>
               annotations: desiredAnnotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -525,7 +589,7 @@ export const RepositoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoryNotResolved({ name });
+        return yield* new RepositoryNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -538,7 +602,7 @@ export const RepositoryProvider = () =>
       }
       const operation = yield* cloudbuild
         .deleteProjectsLocationsConnectionsRepositories({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -85,8 +86,37 @@ export type ClustersTopic = Resource<
     configs: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClustersTopicLookup
 >;
+
+/**
+ * Props for {@link ClustersTopic.lookup}: find a clusters topic this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ClustersTopicLookup {
+  /**
+   * Topic id (the `{topic}` segment of
+   * `.../clusters/{cluster}/topics/{topic}`).
+   */
+  topicId: string;
+  /**
+   * Region used when `cluster` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent cluster. Full name
+   * `projects/{project}/locations/{location}/clusters/{cluster}` or the
+   * cluster id (combined with `location`).
+   */
+  cluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Kafka topic on a Managed Service for Apache Kafka cluster.
@@ -114,6 +144,20 @@ export type ClustersTopic = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing clusters topic
+ * `ClustersTopic.lookup` references a clusters topic Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * clusters topic.
+ *
+ * **Example:** Reference an existing clusters topic
+ * ```typescript
+ * const clustersTopic = GCP.ManagedKafka.ClustersTopic.lookup({
+ *   topicId: "my-topic",
+ *   cluster: "my-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category ManagedKafka
  */
@@ -122,7 +166,7 @@ export const ClustersTopic = Resource<ClustersTopic>("GCP.ManagedKafka.ClustersT
 export class ClustersTopicNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ClustersTopicNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const clusterOf = (cluster: string, project: string, location: string) =>
@@ -164,6 +208,17 @@ export const ClustersTopicProvider = () =>
           previousFactor !== undefined && nextFactor !== undefined && previousFactor !== nextFactor,
       });
     }),
+
+    lookup: Effect.fn(function* ({ topicId, location: lookupLocation, cluster: lookupCluster }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const cluster =
+        lookupCluster !== undefined ? clusterOf(lookupCluster, env.project, location) : "";
+      const name = cluster.length > 0 ? resourceName(cluster, topicId) : "";
+      const existing = yield* getTopic(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -240,7 +295,7 @@ export const ClustersTopicProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClustersTopicNotResolved({ name });
+        return yield* new ClustersTopicNotResolved({ resourceName: name });
       }
 
       const partitionsChanged =

@@ -38,7 +38,7 @@ export const makePipelineHttpBinding = <I extends { name?: string }, A, E>(optio
       ) {
         const pipelineName = yield* name;
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: pipelineName,
         } as I);
       });

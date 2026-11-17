@@ -427,11 +427,12 @@ const sameHeaders = (
   );
   return (
     keys.length === Object.keys(desired).length &&
-    keys.every((key) =>
-      observed[key] == null
+    keys.every((key) => {
+      const value = observed[key];
+      return value == null
         ? applied !== undefined && applied[key] === desired[key]
-        : String(observed[key]) === desired[key],
-    )
+        : (typeof value === "string" ? value : JSON.stringify(value)) === desired[key];
+    })
   );
 };
 

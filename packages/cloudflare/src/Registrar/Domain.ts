@@ -2,11 +2,17 @@ import * as registrar from "@distilled.cloud/cloudflare/registrar";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class RegistrarDomainInvalidProps extends Data.TaggedError("RegistrarDomainInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Registrar.Domain" as const;
 type TypeId = typeof TypeId;
@@ -204,14 +210,13 @@ export const DomainProvider = () =>
       //    the API cannot create one.
       const observed = yield* findDomain(accountId, domainName);
       if (!observed) {
-        return yield* Effect.fail(
-          new Error(
+        return yield* new RegistrarDomainInvalidProps({
+          message:
             `Domain "${domainName}" is not registered with Cloudflare Registrar ` +
-              `on account ${accountId}. Cloudflare.Registrar.Domain only manages ` +
-              `settings on an existing registration — register or transfer the ` +
-              `domain in the Cloudflare dashboard first.`,
-          ),
-        );
+            `on account ${accountId}. Cloudflare.Registrar.Domain only manages ` +
+            `settings on an existing registration — register or transfer the ` +
+            `domain in the Cloudflare dashboard first.`,
+        });
       }
 
       // 2. Capture — the pre-management settings, restored on destroy.

@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
+
+export class QuickSightDataSourceUnexpectedResponse extends Data.TaggedError(
+  "QuickSightDataSourceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Properties for an Amazon QuickSight data source — a connection to an
@@ -86,8 +94,18 @@ export interface DataSource extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DataSourceLookup
 > {}
+
+/**
+ * Props for {@link DataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataSourceLookup {
+  /** The id of the existing data source. */
+  dataSourceId: string;
+}
 
 /**
  * An Amazon QuickSight data source — a connection to an external data store
@@ -120,6 +138,16 @@ export interface DataSource extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing data source
+ * `DataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dataSourceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const sales = AWS.QuickSight.DataSource.lookup({ dataSourceId: "sales" });
+ * ```
+ *
  * @resource
  */
 export const DataSource = Resource<DataSource>("AWS.QuickSight.DataSource");
@@ -139,7 +167,7 @@ export const DataSourceProvider = () =>
             AwsAccountId: accountId,
             DataSourceId: dataSourceId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const source = response?.DataSource;
         if (source === undefined || source.Status === "DELETED") {
           return undefined;
@@ -168,6 +196,11 @@ export const DataSourceProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ dataSourceId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readSource(accountId, dataSourceId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const dataSourceId = output?.dataSourceId ?? (yield* toId(id, olds));
@@ -210,9 +243,9 @@ export const DataSourceProvider = () =>
               ),
             );
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`QuickSight data source '${dataSourceId}' disappeared while creating`),
-              );
+              return yield* new QuickSightDataSourceUnexpectedResponse({
+                message: `QuickSight data source '${dataSourceId}' disappeared while creating`,
+              });
             }
           } else {
             // 3. Sync — apply mutable settings via an idempotent update.
@@ -232,9 +265,9 @@ export const DataSourceProvider = () =>
               ),
             );
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`QuickSight data source '${dataSourceId}' disappeared while updating`),
-              );
+              return yield* new QuickSightDataSourceUnexpectedResponse({
+                message: `QuickSight data source '${dataSourceId}' disappeared while updating`,
+              });
             }
           }
 

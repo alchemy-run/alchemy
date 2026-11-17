@@ -1,0 +1,84 @@
+---
+title: GCP
+description: Run a Rivet control plane on Compute Engine, and pools of nodes on Cloud Run or Compute Engine.
+---
+
+Host your Durable Objects in your Google Cloud project, and the control plane runs on Compute Engine instances across zones. Your pools run on a Cloud Run worker pool or on Compute Engine, and any Cloud Run service calls the rooms by name.
+
+```typescript title="src/cluster.ts"
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
+
+export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/gcp` and finish [GCP setup](/gcp/setup).
+
+## The control plane
+
+You get three instances across zones. Each has a persistent disk, and they share a Cloud Storage bucket. A Cloud Run service serves them over HTTPS at a `run.app` address, reaching them through a Serverless VPC Access connector, so the instances take no traffic from outside their network and you need no domain.
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet", {
+  instances: 3,
+  machineType: "e2-standard-2",
+  diskSize: 20,
+});
+```
+
+## On Cloud Run
+
+`CloudRunPool` runs nodes on a Cloud Run worker pool:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetGCP.CloudRunPool("Default", {
+  replicas: 2,
+  cpu: "1",
+  memory: "1Gi",
+}).pipe(Layer.provide(Cluster));
+```
+
+## On Compute Engine
+
+`ComputeEnginePool` runs one Compute Engine instance per node:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetGCP.ComputeEnginePool("Default", {
+  replicas: 2,
+  machineType: "e2-small",
+}).pipe(Layer.provide(Cluster));
+```
+
+Each deploy updates running nodes in place.
+
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) on a Cloud Run worker pool:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetGCP.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+Cloud Run pulls its image from Docker Hub through an Artifact Registry remote repository, which the pool creates.
+
+## Call it from Cloud Run
+
+```typescript title="src/api.ts"
+export default class Api extends GCP.Run.Service<Api>()(
+  "Api",
+  { main: import.meta.url, invokerIamDisabled: true },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const visitors = yield* rooms.getByName("lobby").join();
+        return yield* HttpServerResponse.json({ visitors });
+      }),
+    };
+  }),
+) {}
+```
+
+Every option, with its default, is in the reference: [ComputeEngineControlPlane](/providers/rivet/gcp#computeenginecontrolplane), [CloudRunPool](/providers/rivet/gcp#cloudrunpool), [ComputeEnginePool](/providers/rivet/gcp#computeenginepool) and [ServicesPool](/providers/rivet/gcp#servicespool).

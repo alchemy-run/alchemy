@@ -1,6 +1,6 @@
+import type { ApplyEvent, ApplyStatus, ResourceStatusChanged } from "../../../Events.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../../../Plan.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
-import type { ApplyEvent, ApplyStatus, ResourceStatusChanged } from "../../../Report.ts";
 import {
   buildNamespaceTree,
   buildPlanSummary,
@@ -88,6 +88,8 @@ export interface PlanTreeState {
   readonly viewport: PlanViewport;
   readonly busy: boolean;
   readonly outcome: PlanOutcome | undefined;
+  /** Total time the operation took, set once it settles. */
+  readonly elapsedMs: number | undefined;
   readonly output: unknown;
   readonly view: PlanView;
 }
@@ -237,6 +239,7 @@ export class PlanTree {
       viewport: options.viewport ?? "virtual",
       busy: options.busy ?? false,
       outcome: undefined,
+      elapsedMs: undefined,
       output: undefined,
       view: "plan",
     };
@@ -286,8 +289,13 @@ export class PlanTree {
     });
   }
 
-  finish(outcome: PlanOutcome, label: string, view: PlanView = this.state.view) {
-    this.update({ busy: false, outcome, label, view });
+  finish(
+    outcome: PlanOutcome,
+    label: string,
+    view: PlanView = this.state.view,
+    elapsedMs?: number,
+  ) {
+    this.update({ busy: false, outcome, label, view, elapsedMs });
   }
 
   setOutput(output: unknown) {
@@ -313,7 +321,7 @@ export class PlanTree {
       };
     };
 
-    if (event._tag === "apply.resource.status") {
+    if (event.type === "apply.resource.status") {
       const current = tasks.get(key);
       if (current) {
         tasks.set(key, {

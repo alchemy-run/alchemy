@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
@@ -127,8 +128,36 @@ export type CapacityCommitment = Resource<
     failureStatus: bigqueryreservation.Status | undefined;
   },
   never,
-  Providers
+  Providers,
+  CapacityCommitmentLookup
 >;
+
+/**
+ * Props for {@link CapacityCommitment.lookup}: find a capacity commitment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface CapacityCommitmentLookup {
+  /**
+   * Capacity commitment id (the `{capacityCommitment}` segment of
+   * `projects/
+   * {project}/locations/{location}/capacityCommitments/{capacityCommitment}`
+   * ). Must contain only lowercase letters, digits, or dashes; start with a
+   * letter; not end with a dash; max 64 characters. Split/merge drops a
+   * caller-assigned id.
+   */
+  capacityCommitmentId: string;
+  /**
+   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * and `EU` stay uppercase; regional ids are lowercased.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BigQuery capacity commitment — purchased slot capacity with a
@@ -166,6 +195,19 @@ export type CapacityCommitment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing capacity commitment
+ * `CapacityCommitment.lookup` references a capacity commitment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared capacity commitment.
+ *
+ * **Example:** Reference an existing capacity commitment
+ * ```typescript
+ * const capacityCommitment = GCP.BigQueryReservation.CapacityCommitment.lookup({
+ *   capacityCommitmentId: "my-capacity-commitment",
+ * });
+ * ```
+ *
  * @resource
  * @category BigQueryReservation
  */
@@ -176,7 +218,7 @@ export const CapacityCommitment = Resource<CapacityCommitment>(
 export class CapacityCommitmentNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.CapacityCommitmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, capacityCommitmentId: string) =>
@@ -213,7 +255,7 @@ const toAttrs = (current: bigqueryreservation.CapacityCommitment, project: strin
 const getByName = (name: string) =>
   bigqueryreservation
     .getProjectsLocationsCapacityCommitments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilSettled = (name: string) =>
   getByName(name).pipe(
@@ -297,6 +339,15 @@ export const CapacityCommitmentProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ capacityCommitmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, capacityCommitmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const capacityCommitmentId = yield* toResourceId(
@@ -358,7 +409,7 @@ export const CapacityCommitmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CapacityCommitmentNotResolved({ name });
+        return yield* new CapacityCommitmentNotResolved({ resourceName: name });
       }
 
       const desiredPlan = normalizePlan(news.plan);

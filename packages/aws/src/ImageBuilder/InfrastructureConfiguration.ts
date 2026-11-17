@@ -5,6 +5,8 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -16,6 +18,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class InfrastructureConfigurationUnexpectedResponse extends Data.TaggedError(
+  "InfrastructureConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface InfrastructureConfigurationProps {
   /**
@@ -99,8 +108,18 @@ export interface InfrastructureConfiguration extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InfrastructureConfigurationLookup
 > {}
+
+/**
+ * Props for {@link InfrastructureConfiguration.lookup}: find an infrastructure configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface InfrastructureConfigurationLookup {
+  /** The infrastructure configuration arn of the existing infrastructure configuration. */
+  infrastructureConfigurationArn: string;
+}
 
 /**
  * An EC2 Image Builder infrastructure configuration — the environment
@@ -131,6 +150,16 @@ export interface InfrastructureConfiguration extends Resource<
  *   instanceTypes: ["t3.micro"],
  *   terminateInstanceOnFailure: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing infrastructure configuration
+ * `InfrastructureConfiguration.lookup` references an infrastructure configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `infrastructureConfigurationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing infrastructure configuration
+ * ```typescript
+ * const existing = AWS.ImageBuilder.InfrastructureConfiguration.lookup({ infrastructureConfigurationArn: "my-infrastructure-configuration" });
  * ```
  *
  * @resource
@@ -175,15 +204,15 @@ export const InfrastructureConfigurationProvider = () =>
           .getInfrastructureConfiguration({
             infrastructureConfigurationArn: arn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.infrastructureConfiguration;
       });
 
       const toAttrs = Effect.fn(function* (config: imagebuilder.InfrastructureConfiguration) {
         if (!config.arn || !config.name) {
-          return yield* Effect.fail(
-            new Error("Image Builder infrastructure configuration is missing its ARN or name"),
-          );
+          return yield* new InfrastructureConfigurationUnexpectedResponse({
+            message: "Image Builder infrastructure configuration is missing its ARN or name",
+          });
         }
         return {
           infrastructureConfigurationName: config.name,
@@ -222,6 +251,12 @@ export const InfrastructureConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ infrastructureConfigurationArn: arn }) {
+          const config = yield* getConfiguration(arn);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.infrastructureConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));
@@ -235,7 +270,8 @@ export const InfrastructureConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.infrastructureConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -266,16 +302,12 @@ export const InfrastructureConfigurationProvider = () =>
                 tags: desiredTags,
                 clientToken,
               }),
-            ).pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-            );
+            ).pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getConfiguration(created?.infrastructureConfigurationArn ?? arn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(
-                  `created Image Builder infrastructure configuration '${name}' is not readable`,
-                ),
-              );
+              return yield* new InfrastructureConfigurationUnexpectedResponse({
+                message: `created Image Builder infrastructure configuration '${name}' is not readable`,
+              });
             }
           }
 

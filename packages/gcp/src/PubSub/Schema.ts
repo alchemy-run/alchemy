@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 export type SchemaType = "AVRO" | "PROTOCOL_BUFFER";
@@ -51,8 +52,28 @@ export type Schema = Resource<
     revisionCreateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SchemaLookup
 >;
+
+/**
+ * Props for {@link Schema.lookup}: find a schema this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SchemaLookup {
+  /**
+   * Schema id (the `{schema}` segment of
+   * `projects/{project}/schemas/{schema}`). Must start with a letter and be
+   * 3-255 characters.
+   */
+  schemaId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Pub/Sub schema used to validate published messages.
@@ -102,13 +123,23 @@ export type Schema = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing schema
+ * `Schema.lookup` references a schema Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared schema.
+ *
+ * **Example:** Reference an existing schema
+ * ```typescript
+ * const schema = GCP.PubSub.Schema.lookup({ schemaId: "my-schema" });
+ * ```
+ *
  * @resource
  * @category PubSub
  */
 export const Schema = Resource<Schema>("GCP.PubSub.Schema");
 
 export class SchemaNotResolved extends Data.TaggedError("GCP.PubSub.SchemaNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const canonicalName = (name: string) => name.split("@")[0] ?? name;
@@ -149,7 +180,7 @@ const toAttrs = (schema: pubsub.Pubsub_Schema, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSchemas({ name: canonicalName(name), view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const definitionsEqual = (left: string | undefined, right: string | undefined) => {
   const a = (left ?? "").trim();
@@ -185,6 +216,14 @@ export const SchemaProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ schemaId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = canonicalName(resourceName(env.project, schemaId));
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -234,7 +273,7 @@ export const SchemaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SchemaNotResolved({ name });
+        return yield* new SchemaNotResolved({ resourceName: name });
       }
 
       if (!definitionsEqual(current.definition, news.definition)) {

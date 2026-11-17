@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -181,8 +182,32 @@ export type PrivateCloud = Resource<
     expireTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateCloudLookup
 >;
+
+/**
+ * Props for {@link PrivateCloud.lookup}: find a private cloud this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PrivateCloudLookup {
+  /**
+   * Private cloud id (the `{privateCloud}` segment of
+   * `projects/{project}/locations/{location}/privateClouds/{privateCloud}`).
+   */
+  privateCloudId: string;
+  /**
+   * Location. `STANDARD` and `TIME_LIMITED` clouds are zonal
+   * (`us-central1-a`); `STRETCHED` clouds are regional.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud VMware Engine private cloud. `STANDARD` and
@@ -213,6 +238,19 @@ export type PrivateCloud = Resource<
  *     },
  *   },
  *   description: "app sddc",
+ * });
+ * ```
+ *
+ * ### Looking up an existing private cloud
+ * `PrivateCloud.lookup` references a private cloud Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * private cloud.
+ *
+ * **Example:** Reference an existing private cloud
+ * ```typescript
+ * const privateCloud = GCP.VMwareEngine.PrivateCloud.lookup({
+ *   privateCloudId: "my-private-cloud",
  * });
  * ```
  *
@@ -344,7 +382,7 @@ const toAttrs = (item: vmwareengine.PrivateCloud, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateClouds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const PrivateCloudProvider = () =>
   Provider.succeed(PrivateCloud, {
@@ -384,6 +422,15 @@ export const PrivateCloudProvider = () =>
           !sameJson(news.encryptionConfig, olds?.encryptionConfig ?? output?.encryptionConfig),
       });
     }),
+
+    lookup: Effect.fn(function* ({ privateCloudId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, privateCloudId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -456,7 +503,7 @@ export const PrivateCloudProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -465,7 +512,7 @@ export const PrivateCloudProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -510,7 +557,7 @@ export const PrivateCloudProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

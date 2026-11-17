@@ -113,7 +113,7 @@ export type Group = Resource<
 export const Group = Resource<Group>("GCP.Monitoring.Group");
 
 export class GroupNotResolved extends Data.TaggedError("GCP.Monitoring.GroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
@@ -144,9 +144,7 @@ const toAttrs = (group: monitoring.Group, project: string) => {
 };
 
 const getByName = (name: string) =>
-  monitoring
-    .getProjectsGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  monitoring.getProjectsGroups({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPages = (project: string) =>
   monitoring.listProjectsGroups
@@ -254,7 +252,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         return yield* new GroupNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

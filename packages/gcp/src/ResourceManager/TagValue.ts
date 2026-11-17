@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForCreate, waitForOperation } from "./internal.ts";
 
@@ -60,8 +61,32 @@ export type TagValue = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TagValueLookup
 >;
+
+/**
+ * Props for {@link TagValue.lookup}: find a tag value this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TagValueLookup {
+  /**
+   * User-assigned short name, unique among TagValues of the same TagKey.
+   * 1–256 characters, beginning and ending with `[a-zA-Z0-9]`, with dashes,
+   * underscores, dots, and alphanumerics between.
+   */
+  shortName: string;
+  /**
+   * Parent TagKey resource name (`tagKeys/{tagKey}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Resource Manager TagValue — a child of a TagKey used to group
@@ -102,6 +127,19 @@ export type TagValue = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tag value
+ * `TagValue.lookup` references a tag value Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared tag value.
+ *
+ * **Example:** Reference an existing tag value
+ * ```typescript
+ * const tagValue = GCP.ResourceManager.TagValue.lookup({
+ *   shortName: "my-short",
+ *   parent: "my-parent",
+ * });
+ * ```
+ *
  * @resource
  * @category ResourceManager
  */
@@ -110,7 +148,7 @@ export const TagValue = Resource<TagValue>("GCP.ResourceManager.TagValue");
 export class TagValueNotResolved extends Data.TaggedError(
   "GCP.ResourceManager.TagValueNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TagValueParentRequired extends Data.TaggedError(
@@ -122,7 +160,7 @@ export class TagValueParentRequired extends Data.TaggedError(
 export class TagValueStillExists extends Data.TaggedError(
   "GCP.ResourceManager.TagValueStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -166,7 +204,7 @@ const toAttrs = (value: crm.TagValue, project: string): TagValue["Attributes"] =
 const getByName = (name: string) =>
   crm
     .getTagValues({ name })
-    .pipe(Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.undefined));
 
 const listTagValuesUnder = (parent: string) =>
   crm.listTagValues.pages({ parent, pageSize: 300 }).pipe(
@@ -202,7 +240,7 @@ const nameFromOperation = (operation: crm.Operation): string | undefined => {
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new TagValueNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new TagValueNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagValueNotResolved",
@@ -216,7 +254,7 @@ const waitUntilFound = (parent: string, shortName: string) =>
     Effect.flatMap((value) =>
       value !== undefined
         ? Effect.succeed(value)
-        : Effect.fail(new TagValueNotResolved({ name: `${parent}/${shortName}` })),
+        : Effect.fail(new TagValueNotResolved({ resourceName: `${parent}/${shortName}` })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagValueNotResolved",
@@ -228,7 +266,9 @@ const waitUntilFound = (parent: string, shortName: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new TagValueStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new TagValueStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagValueStillExists",
@@ -270,6 +310,14 @@ export const TagValueProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ shortName, parent: lookupParent }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = lookupParent !== undefined ? normalizeParent(lookupParent) : undefined;
+      const existing = yield* observe(undefined, parent, shortName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.parent !== undefined ? normalizeParent(olds.parent) : output?.parent;
@@ -298,15 +346,13 @@ export const TagValueProvider = () =>
               description: desiredDescription,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForCreate(operation);
           const createdName = nameFromOperation(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(createdName).pipe(
-              Effect.catchTag("GCP.ResourceManager.TagValueNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.ResourceManager.TagValueNotResolved", () => Effect.undefined),
             );
           }
         }
@@ -317,7 +363,7 @@ export const TagValueProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new TagValueNotResolved({
-          name: `${parent}/${shortName}`,
+          resourceName: `${parent}/${shortName}`,
         });
       }
 
@@ -345,7 +391,7 @@ export const TagValueProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

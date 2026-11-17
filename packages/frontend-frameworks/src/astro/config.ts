@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { FrameworkError } from "../core/Framework.ts";
 import { loadProjectModule, resolveProjectPackageDirectory } from "../core/Loader.ts";
@@ -100,12 +101,13 @@ export const readConfigSettings = Effect.fn("Astro.readConfigSettings")(function
   );
   // Astro imports a JavaScript config natively (cache-busted, so an edited
   // config is re-read) and falls back to Vite when that fails.
+  const cacheBust = yield* Clock.currentTimeMillis;
   const config = /\.m?js$/.test(configPath)
     ? yield* Effect.tryPromise({
         try: async () =>
           (
             (await import(
-              /* @vite-ignore */ `${pathToFileURL(configPath).href}?t=${Date.now()}`
+              /* @vite-ignore */ `${pathToFileURL(configPath).href}?t=${cacheBust}`
             )) as { default?: unknown }
           ).default,
         catch: fail,

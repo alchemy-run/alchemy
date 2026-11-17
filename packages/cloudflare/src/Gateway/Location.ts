@@ -108,7 +108,33 @@ export interface LocationAttributes {
   updatedAt: string | undefined;
 }
 
-export type Location = Resource<TypeId, LocationProps, LocationAttributes, never, Providers>;
+export type Location = Resource<
+  TypeId,
+  LocationProps,
+  LocationAttributes,
+  never,
+  Providers,
+  LocationLookup
+>;
+
+/**
+ * Props for {@link Location.lookup}: find a Gateway DNS location this stack
+ * doesn't manage, by its id or its name.
+ */
+export type LocationLookup =
+  | {
+      /**
+       * The id of the existing location.
+       */
+      locationId: string;
+    }
+  | {
+      /**
+       * The name of the existing location. Names are not unique; the oldest
+       * location with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Gateway DNS location — a configured source of
@@ -140,6 +166,20 @@ export type Location = Resource<TypeId, LocationProps, LocationAttributes, never
  *     ipv4: { enabled: true },
  *     ipv6: { enabled: false },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing location
+ * `Location.lookup` references a location Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `locationId` or `name`. It is
+ * read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Hand an existing location's DoH endpoint to a Worker
+ * ```typescript
+ * const office = Cloudflare.Gateway.Location.lookup({ name: "office" });
+ * yield* Cloudflare.Worker("Setup", {
+ *   main: "./src/setup.ts",
+ *   env: { DOH_SUBDOMAIN: office.dohSubdomain },
  * });
  * ```
  *
@@ -208,6 +248,14 @@ export const LocationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "locationId" in props
+          ? yield* getLocation(accountId, props.locationId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -226,7 +274,7 @@ export const LocationProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
 
@@ -258,7 +306,11 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              // Capped so the bounded retry stays under ~25s in total.
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("4 seconds"),
+              ]),
               times: 8,
             }),
           );
@@ -302,7 +354,11 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              // Capped so the bounded retry stays under ~25s in total.
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("4 seconds"),
+              ]),
               times: 8,
             }),
           );
@@ -335,7 +391,7 @@ type ObservedLocation = zeroTrust.GetGatewayLocationResponse;
 const getLocation = (accountId: string, locationId: string) =>
   zeroTrust.getGatewayLocation({ accountId, locationId }).pipe(
     Effect.map((l): ObservedLocation | undefined => l),
-    Effect.catchTag("GatewayLocationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayLocationNotFound", () => Effect.undefined),
   );
 
 /**

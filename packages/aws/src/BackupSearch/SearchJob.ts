@@ -243,7 +243,7 @@ export const SearchJobProvider = () =>
       const get = Effect.fn(function* (searchJobIdentifier: string) {
         return yield* backupsearch
           .getSearchJob({ SearchJobIdentifier: searchJobIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (job: backupsearch.GetSearchJobOutput) => ({

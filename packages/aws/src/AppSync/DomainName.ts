@@ -46,8 +46,18 @@ export interface AppSyncDomainName extends Resource<
     hostedZoneId: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppSyncDomainNameLookup
 > {}
+
+/**
+ * Props for {@link AppSyncDomainName.lookup}: find an app sync domain name this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AppSyncDomainNameLookup {
+  /** The domain name of the existing app sync domain name. */
+  domainName: string;
+}
 
 /**
  * A custom domain name for AppSync GraphQL APIs.
@@ -66,6 +76,16 @@ export interface AppSyncDomainName extends Resource<
  * // CNAME api.example.com → domain.appsyncDomainName
  * ```
  *
+ * ### Looking up an existing app sync domain name
+ * `AppSyncDomainName.lookup` references an app sync domain name Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing app sync domain name
+ * ```typescript
+ * const existing = AWS.AppSync.AppSyncDomainName.lookup({ domainName: "my-app-sync-domain-name" });
+ * ```
+ *
  * @resource
  */
 export const DomainName = Resource<AppSyncDomainName>("AWS.AppSync.DomainName");
@@ -77,7 +97,7 @@ export const DomainNameProvider = () =>
       const getDomainSafe = (domainName: string) =>
         appsync.getDomainName({ domainName }).pipe(
           Effect.map((response) => response.domainNameConfig),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const toAttributes = (config: appsync.DomainNameConfig): AppSyncDomainName["Attributes"] => ({
@@ -99,6 +119,14 @@ export const DomainNameProvider = () =>
               .filter((config) => config.domainName != null)
               .map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ domainName }) {
+          if (domainName === undefined) return undefined;
+          const config = yield* getDomainSafe(domainName);
+          if (config?.domainName == null) return undefined;
+          const attrs = toAttributes(config);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const domainName = output?.domainName ?? olds?.domainName;

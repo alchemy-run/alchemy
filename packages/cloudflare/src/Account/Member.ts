@@ -352,7 +352,7 @@ type ObservedMember =
 const getMember = (accountId: string, memberId: string) =>
   accounts.getMember({ accountId, memberId }).pipe(
     Effect.map((member): ObservedMember | undefined => member),
-    Effect.catchTag("MemberNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("MemberNotFound", () => Effect.undefined),
   );
 
 /**
@@ -369,7 +369,7 @@ const findByEmail = (accountId: string, email: string) =>
       );
       // The list payload omits nothing we need, but re-read through
       // `getMember` so every code path observes the same response shape.
-      return match?.id != null ? getMember(accountId, match.id) : Effect.succeed(undefined);
+      return match?.id != null ? getMember(accountId, match.id) : Effect.undefined;
     }),
   );
 

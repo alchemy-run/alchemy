@@ -80,8 +80,18 @@ export interface Terminology extends Resource<
     directionality: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TerminologyLookup
 > {}
+
+/**
+ * Props for {@link Terminology.lookup}: find a terminology this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TerminologyLookup {
+  /** The terminology name of the existing terminology. */
+  terminologyName: string;
+}
 
 /**
  * An Amazon Translate custom terminology — a glossary of term pairs (CSV,
@@ -107,6 +117,16 @@ export interface Terminology extends Resource<
  *   TargetLanguageCode: "es",
  *   TerminologyNames: [glossary.terminologyName],
  * });
+ * ```
+ *
+ * ### Looking up an existing terminology
+ * `Terminology.lookup` references a terminology Alchemy doesn't manage (created in the
+ * console or by another stack), found by `terminologyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing terminology
+ * ```typescript
+ * const existing = AWS.Translate.Terminology.lookup({ terminologyName: "my-terminology" });
  * ```
  *
  * @resource
@@ -137,7 +157,7 @@ export const TerminologyProvider = () =>
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getTerminology({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {
@@ -148,6 +168,13 @@ export const TerminologyProvider = () =>
           if ((yield* createName(id, olds)) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ terminologyName: name }) {
+          const found = yield* getOne(name);
+          if (found?.TerminologyProperties === undefined) return undefined;
+          const attrs = toAttributes(found.TerminologyProperties);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

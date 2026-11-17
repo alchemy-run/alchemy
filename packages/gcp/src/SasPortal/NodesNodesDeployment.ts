@@ -119,7 +119,7 @@ export class NodesNodesDeploymentNotResolved extends Data.TaggedError(
   "GCP.SasPortal.NodesNodesDeploymentNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (deployment: sasportal.SasPortalDeployment, parent: string, project: string) => {
@@ -229,7 +229,7 @@ export const NodesNodesDeploymentProvider = () =>
       if (current === undefined) {
         return yield* new NodesNodesDeploymentNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -203,8 +204,38 @@ export type VolumesReplication = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumesReplicationLookup
 >;
+
+/**
+ * Props for {@link VolumesReplication.lookup}: find a volumes replication
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface VolumesReplicationLookup {
+  /**
+   * Replication id (the `{replication}` segment of
+   * `.../volumes/{volume}/replications/{replication}`).
+   */
+  replicationId: string;
+  /**
+   * Region used when `volume` is a bare id. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Source volume. Full name
+   * `projects/{project}/locations/{location}/volumes/{volume}` or the
+   * volume id (combined with `location`).
+   */
+  volume: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes cross-region replication. Creating it also
@@ -252,6 +283,20 @@ export type VolumesReplication = Resource<
  *     storagePool: destPool.name,
  *   },
  *   replicationEnabled: false,
+ * });
+ * ```
+ *
+ * ### Looking up an existing volumes replication
+ * `VolumesReplication.lookup` references a volumes replication Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared volumes replication.
+ *
+ * **Example:** Reference an existing volumes replication
+ * ```typescript
+ * const volumesReplication = GCP.NetApp.VolumesReplication.lookup({
+ *   replicationId: "my-replication",
+ *   volume: "my-volume",
  * });
  * ```
  *
@@ -315,10 +360,10 @@ const destBody = (
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : netapp
         .getProjectsLocationsVolumesReplications({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "volumes/-", (parent) =>
@@ -336,7 +381,7 @@ const waitUntilMirror = (name: string, enabled: boolean) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (value): value is netapp.Replication => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => {
@@ -345,7 +390,7 @@ const waitUntilMirror = (name: string, enabled: boolean) =>
           ? mirror === "MIRRORED" || mirror === "TRANSFERRING"
           : mirror === STOPPED || mirror === "ABORTED";
       },
-      (value) => new ResourceNotReady({ name, state: value.mirrorState ?? "" }),
+      (value) => new ResourceNotReady({ resourceName: name, state: value.mirrorState ?? "" }),
     ),
     Effect.retry({
       while: (error) =>
@@ -392,6 +437,20 @@ export const VolumesReplicationProvider = () =>
         extra: destChanged,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      replicationId,
+      location: lookupLocation,
+      volume: lookupVolume,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const volume = volumeOf(lookupVolume ?? "", env.project, location);
+      const name = resourceName(volume, replicationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -455,7 +514,7 @@ export const VolumesReplicationProvider = () =>
               clusterLocation: news.clusterLocation,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -463,7 +522,7 @@ export const VolumesReplicationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -516,7 +575,7 @@ export const VolumesReplicationProvider = () =>
             name: current.name ?? name,
             body: {},
           })
-          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.undefined));
         if (resumed !== undefined) {
           yield* waitForOperation(resumed);
         }
@@ -533,7 +592,7 @@ export const VolumesReplicationProvider = () =>
             name: current.name ?? name,
             body: { force: news.forceStopping ?? true },
           })
-          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.undefined));
         if (stopped !== undefined) {
           yield* waitForOperation(stopped);
         }
@@ -562,11 +621,7 @@ export const VolumesReplicationProvider = () =>
             name: output.name,
             body: { force: olds?.forceStopping ?? true },
           })
-          .pipe(
-            Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () => Effect.undefined));
         if (stopped !== undefined) {
           yield* waitForDeleteOperation(stopped);
         }
@@ -580,7 +635,7 @@ export const VolumesReplicationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
@@ -594,11 +649,7 @@ export const VolumesReplicationProvider = () =>
             name: destination,
             force: true,
           })
-          .pipe(
-            Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () => Effect.undefined));
         if (deleted !== undefined) {
           yield* waitForDeleteOperation(deleted);
         }

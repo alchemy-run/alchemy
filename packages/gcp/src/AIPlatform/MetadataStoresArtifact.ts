@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -111,8 +112,32 @@ export type MetadataStoresArtifact = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MetadataStoresArtifactLookup
 >;
+
+/**
+ * Props for {@link MetadataStoresArtifact.lookup}: find a metadata stores
+ * artifact this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface MetadataStoresArtifactLookup {
+  /**
+   * Artifact id. Must be 4-128 characters of `a-z` and `-`.
+   */
+  artifactId: string;
+  /**
+   * Parent MetadataStore resource name
+   * `projects/{project}/locations/{locati
+   * on}/metadataStores/{metadatastore}`.
+   */
+  metadataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex ML Metadata Artifact associated with a MetadataStore.
@@ -132,6 +157,20 @@ export type MetadataStoresArtifact = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing metadata stores artifact
+ * `MetadataStoresArtifact.lookup` references a metadata stores artifact
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared metadata stores artifact.
+ *
+ * **Example:** Reference an existing metadata stores artifact
+ * ```typescript
+ * const metadataStoresArtifact = GCP.AIPlatform.MetadataStoresArtifact.lookup({
+ *   artifactId: "my-artifact",
+ *   metadataStore: "my-metadata-store",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -142,13 +181,13 @@ export const MetadataStoresArtifact = Resource<MetadataStoresArtifact>(
 export class MetadataStoresArtifactNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresArtifactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoresArtifactStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresArtifactStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (name: string) => {
@@ -182,7 +221,7 @@ const toAttrs = (artifact: aiplatform.GoogleCloudAiplatformV1Artifact, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStoresArtifacts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listArtifacts = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStoresArtifacts.pages({ parent, pageSize: 100 }).pipe(
@@ -206,7 +245,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (artifact) => artifact === undefined,
-      () => new MetadataStoresArtifactStillExists({ name }),
+      () => new MetadataStoresArtifactStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -240,6 +279,15 @@ export const MetadataStoresArtifactProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ artifactId, metadataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const name = metadataStore !== undefined ? resourceName(metadataStore, artifactId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -308,7 +356,7 @@ export const MetadataStoresArtifactProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataStoresArtifactNotResolved({ name });
+        return yield* new MetadataStoresArtifactNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
@@ -375,7 +423,7 @@ export const MetadataStoresArtifactProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

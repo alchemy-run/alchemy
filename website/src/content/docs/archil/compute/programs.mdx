@@ -1,0 +1,179 @@
+---
+title: Programs
+description: Run your program in its own Archil sandbox, in the Effect or async form, at a public https URL.
+sidebar:
+  order: 2
+---
+
+import Shell from "../../../../components/diagrams/Shell.astro";
+
+Give an [`Archil.Sandbox`](/providers/archil/reference/sandbox) a `main`
+and it runs your program. Alchemy bundles the program, uploads it into the
+sandbox, and registers it with the sandbox's service manager. The service
+manager restarts the program if it crashes and starts it whenever the
+sandbox boots. The program's port gets a public `https://` URL.
+
+## The service manager keeps it running
+
+<Shell
+  shell={{
+    label: "Api",
+    type: "sandbox · https://3000-….archil.app",
+    icon: "brand:archil",
+    children: [
+      {
+        label: "service manager",
+        icon: "cog",
+        children: [{ label: "program", type: "your bundle · PORT=3000", tone: "accent", icon: "file-code" }],
+      },
+      { label: "/data", type: "Dataset · read-only", icon: "hard-drive" },
+    ],
+  }}
+  caption="The program is a service inside its sandbox. The service manager restarts it if it crashes, and starts it each time the sandbox boots. Disks it binds are mounted before it starts."
+/>
+
+## Write an Effect program
+
+The class form takes `main: import.meta.url` and the port. The Effect
+returns the handlers:
+
+```typescript
+// src/api.ts
+import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Archil.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }),
+) {}
+```
+
+## Deploy it at a public URL
+
+Yield the program from your Stack and return its URL:
+
+```typescript
+// alchemy.run.ts
+import * as Archil from "@alchemy.run/archil";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApi",
+  { providers: Archil.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `url` is `https://3000-<id>.<region>.archil.app`.
+
+## Mount a disk
+
+`Archil.MountDisk` adds the disk to the sandbox's own mounts. The disk is
+already mounted when the program starts, at the `path` you give:
+
+```diff lang="typescript"
+// src/api.ts
+export default class Api extends Archil.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
++    const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
++    const fs = yield* FileSystem.FileSystem;
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
++      fetch: Effect.map(fs.readDirectory(dataset.path), (names) => HttpServerResponse.text(names.join("\n"))).pipe(Effect.orDie),
+    };
+-  }),
++  }).pipe(Effect.provide(Archil.MountDiskLive)),
+) {}
+```
+
+## Read a disk as objects
+
+`Archil.ReadDisk` gives the program a read-only S3 user on one disk, for
+reading files by key without a mount:
+
+```diff lang="typescript"
+// src/api.ts
+  Effect.gen(function* () {
++    const files = yield* Archil.ReadDisk(Dataset);
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
++      fetch: Effect.map(files.getText("README.md"), (text) => HttpServerResponse.text(text)),
+    };
+-  }),
++  }).pipe(Effect.provide(Archil.ReadDiskHttp)),
+```
+
+## Write an async program
+
+Point `main` at a plain module whose default export has
+`fetch(request, env)`. Alchemy bundles it with no Effect runtime:
+
+```typescript
+// src/infra.ts
+import * as Archil from "@alchemy.run/archil";
+
+export const Hello = Archil.Sandbox("Hello", {
+  main: "./src/hello.ts",
+  env: { GREETING: "hello" },
+});
+
+export type HelloEnv = Archil.InferEnv<typeof Hello>;
+```
+
+## Type its environment
+
+`Archil.InferEnv` turns the sandbox's `env` into the handler's `env`
+argument:
+
+```typescript
+// src/hello.ts
+import type { HelloEnv } from "./infra.ts";
+
+export default {
+  async fetch(request: Request, env: HelloEnv) {
+    return new Response(`${env.GREETING} from ${new URL(request.url).pathname}`);
+  },
+};
+```
+
+## Install native packages
+
+Packages in `build.install` are installed next to the program with
+`npm install` instead of bundled:
+
+```typescript
+// src/infra.ts
+export const Thumbs = Archil.Sandbox("Thumbs", {
+  main: "./src/thumbs.ts",
+  build: { install: ["sharp"] },
+});
+```
+
+## A deploy changes it in place
+
+A code change, a new `env`, or a new mount updates the same sandbox. A
+code or `env` change uploads the program and restarts it. A mount change
+stops the sandbox and starts it with the new mounts. The root filesystem
+is kept either way. Changing the image or the size replaces the sandbox.
+
+## An idle sandbox pauses until the next request
+
+A sandbox pauses after its idle timeout, 30 minutes by default, and the next request to the program's URL wakes it, usually in a few seconds. Set `idleTtlSeconds` to change it, or `0` to keep it running.
+
+## Where next
+
+- [Sandboxes](/archil/compute/sandboxes): sizes, disks, and network policy
+- [`Archil.Sandbox` reference](/providers/archil/reference/sandbox)

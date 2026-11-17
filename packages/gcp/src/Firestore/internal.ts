@@ -95,7 +95,7 @@ export const stringFromMap = (
 export const getDatabaseByName = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
     Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R>(

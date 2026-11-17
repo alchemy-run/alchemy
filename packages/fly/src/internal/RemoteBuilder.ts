@@ -37,7 +37,9 @@ const HEALTH_INTERVAL = Duration.seconds(5);
 const MAX_PENDING_POLLS = 240;
 /** How often, and how long, to wait for the builder's push to reach `registry.fly.io`. */
 const UPSTREAM_POLL = Duration.seconds(2);
-const MAX_UPSTREAM_POLLS = 90;
+const MAX_UPSTREAM_POLLS = 30;
+/** Pushes of one image before giving up on it reaching the registry. */
+const MAX_PUSHES = 3;
 
 export class RemoteBuilderError extends Data.TaggedError("Fly.RemoteBuilderError")<{
   operation: string;
@@ -170,7 +172,13 @@ export const buildOnRemoteBuilder = Effect.fn(function* (input: {
       () => input.docker.run(["buildx", "rm", builder]).pipe(Effect.ignore),
     );
 
-    yield* input.docker.image
+    // The builder pushes through its host's registry mirror, which forwards
+    // to registry.fly.io. Machines pull from there, so confirm the tag landed
+    // (usually within seconds) while the builder is still held. The mirror
+    // occasionally drops a push without an error, so a tag that hasn't
+    // landed is pushed again: the builder has every layer cached, so a
+    // repeat build only re-sends the image.
+    const build = input.docker.image
       .build(
         {
           context: input.contextDir,
@@ -193,25 +201,35 @@ export const buildOnRemoteBuilder = Effect.fn(function* (input: {
           }),
         }),
       );
-
-    // The builder pushes through its host's registry mirror, which forwards
-    // to registry.fly.io. Machines pull from there, so confirm the tag landed
-    // (usually within seconds) while the builder is still held.
-    const started = yield* Clock.currentTimeMillis;
-    yield* input.docker.run(["buildx", "imagetools", "inspect", "--raw", input.imageRef]).pipe(
-      Effect.provideService(DockerEnvironment, {
-        DOCKER_AUTH_CONFIG: JSON.stringify({
-          auths: { [input.registry.server]: { auth: basicAuth(input.registry) } },
-        }),
-      }),
-      Effect.retry({ schedule: Schedule.spaced(UPSTREAM_POLL), times: MAX_UPSTREAM_POLLS }),
-      Effect.mapError(
-        () =>
-          new RemoteBuilderError({
-            operation: "upload",
-            message: `${input.imageRef} did not reach ${input.registry.server}`,
+    const landed = input.docker
+      .run(["buildx", "imagetools", "inspect", "--raw", input.imageRef])
+      .pipe(
+        Effect.provideService(DockerEnvironment, {
+          DOCKER_AUTH_CONFIG: JSON.stringify({
+            auths: { [input.registry.server]: { auth: basicAuth(input.registry) } },
           }),
+        }),
+        Effect.retry({ schedule: Schedule.spaced(UPSTREAM_POLL), times: MAX_UPSTREAM_POLLS }),
+        Effect.mapError(
+          () =>
+            new RemoteBuilderError({
+              operation: "upload",
+              message: `${input.imageRef} did not reach ${input.registry.server} after ${MAX_PUSHES} pushes`,
+            }),
+        ),
+      );
+    const started = yield* Clock.currentTimeMillis;
+    yield* build.pipe(
+      Effect.andThen(landed),
+      Effect.tapError((error) =>
+        error._tag === "Fly.RemoteBuilderError" && error.operation === "upload"
+          ? note(`${input.imageRef} hasn't reached ${input.registry.server} yet`)
+          : Effect.void,
       ),
+      Effect.retry({
+        while: (error) => error._tag === "Fly.RemoteBuilderError" && error.operation === "upload",
+        times: MAX_PUSHES - 1,
+      }),
     );
     const waited = (yield* Clock.currentTimeMillis) - started;
     yield* note(`${input.imageRef} available on ${input.registry.server} after ${waited}ms`);

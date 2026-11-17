@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { revokeHostIam, syncHostIam, type AppliedIamGrant, type GcpIamGrant } from "../Host.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { encodeOwnedDescription, hasOwnedDescription, parseOwnedDescription } from "./internal.ts";
@@ -62,8 +63,27 @@ export type ServiceAccount = Resource<
     iamGrants?: AppliedIamGrant[];
   },
   ServiceAccountBinding,
-  Providers
+  Providers,
+  ServiceAccountLookup
 >;
+
+/**
+ * Props for {@link ServiceAccount.lookup}: find a service account this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ServiceAccountLookup {
+  /**
+   * Account id used as the email prefix: 6-30 lowercase letters, digits, or
+   * hyphens.
+   */
+  accountId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /** What a binding grants a {@link ServiceAccount}. */
 export type ServiceAccountBinding = {
@@ -106,6 +126,19 @@ export type ServiceAccountBinding = {
  * });
  * ```
  *
+ * ### Looking up an existing service account
+ * `ServiceAccount.lookup` references a service account Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * service account.
+ *
+ * **Example:** Reference an existing service account
+ * ```typescript
+ * const serviceAccount = GCP.IAM.ServiceAccount.lookup({
+ *   accountId: "my-account",
+ * });
+ * ```
+ *
  * @resource
  * @category IAM
  */
@@ -113,7 +146,7 @@ export const ServiceAccount = Resource<ServiceAccount>("GCP.IAM.ServiceAccount")
 
 export class ServiceAccountNotResolved extends Data.TaggedError(
   "GCP.IAM.ServiceAccountNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const accountIdFromEmail = (email: string) => email.split("@")[0] ?? email;
 const emailOf = (project: string, accountId: string) =>
@@ -140,7 +173,7 @@ const toAttrs = (account: iam.ServiceAccount, project: string): ServiceAccount["
 const getByName = (name: string) =>
   iam
     .getProjectsServiceAccounts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAccountId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
@@ -171,6 +204,14 @@ export const ServiceAccountProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ accountId }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      const existing = yield* getByName(nameOf(project, accountId));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -235,14 +276,14 @@ export const ServiceAccountProvider = () =>
           );
       }
       if (current === undefined) {
-        return yield* new ServiceAccountNotResolved({ name });
+        return yield* new ServiceAccountNotResolved({ resourceName: name });
       }
       // A new account is eventually consistent: reads (and IAM bindings that
       // name it) fail with NotFound for a few seconds after create.
       current = yield* getByName(current.name ?? name).pipe(
         Effect.flatMap((account) =>
           account === undefined
-            ? Effect.fail(new ServiceAccountNotResolved({ name }))
+            ? Effect.fail(new ServiceAccountNotResolved({ resourceName: name }))
             : Effect.succeed(account),
         ),
         Effect.retry({

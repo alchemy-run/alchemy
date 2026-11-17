@@ -1,5 +1,5 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -133,7 +133,7 @@ export const TensorboardsExperimentsRunsTimeSery = TensorboardsExperimentsRunsTi
 export class TensorboardsExperimentsRunsTimeSeriesNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardsExperimentsRunsTimeSeriesNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_VALUE_TYPE = "SCALAR";
@@ -174,10 +174,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboardsExperimentsRunsTimeSeries({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listTensorboards = (project: string, location: string) =>
   aiplatform.listProjectsLocationsTensorboards
@@ -234,7 +234,7 @@ const findOwned = (parent: string, id: string) =>
       Stream.filterEffect((series) => ownedByAlchemy(id, series.description)),
       Stream.runHead,
       Effect.map(Option.getOrUndefined),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
@@ -272,7 +272,7 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       // Vertex AI rejects GETs for ids it did not assign ("Invalid
       // TensorboardTimeSeries resource name"), so recover by listing.
@@ -284,7 +284,9 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -337,7 +339,7 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
 
       if (current === undefined) {
         return yield* new TensorboardsExperimentsRunsTimeSeriesNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -374,7 +376,7 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
         .deleteProjectsLocationsTensorboardsExperimentsRunsTimeSeries({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

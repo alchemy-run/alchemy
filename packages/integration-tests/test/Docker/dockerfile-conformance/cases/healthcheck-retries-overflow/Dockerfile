@@ -1,0 +1,2 @@
+FROM alpine
+HEALTHCHECK --retries=4294967296 CMD true

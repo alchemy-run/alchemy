@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class TrackerUnexpectedResponse extends Data.TaggedError("TrackerUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type PositionFiltering = "TimeBased" | "DistanceBased" | "AccuracyBased";
 
@@ -63,8 +69,18 @@ export interface Tracker extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TrackerLookup
 > {}
+
+/**
+ * Props for {@link Tracker.lookup}: find a tracker this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TrackerLookup {
+  /** The tracker name of the existing tracker. */
+  trackerName: string;
+}
 
 /**
  * An Amazon Location Service tracker. A tracker records device positions and
@@ -88,6 +104,16 @@ export interface Tracker extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tracker
+ * `Tracker.lookup` references a tracker Alchemy doesn't manage (created in the
+ * console or by another stack), found by `trackerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing tracker
+ * ```typescript
+ * const existing = AWS.Location.Tracker.lookup({ trackerName: "my-tracker" });
+ * ```
+ *
  * @resource
  */
 export const Tracker = Resource<Tracker>("AWS.Location.Tracker");
@@ -101,7 +127,7 @@ const createTrackerName = (id: string, props: { trackerName?: string | undefined
 const readTracker = Effect.fn(function* (trackerName: string) {
   const found = yield* location
     .describeTracker({ TrackerName: trackerName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     trackerName: found.TrackerName,
@@ -135,6 +161,11 @@ export const TrackerProvider = () =>
             });
             return hydrated.filter((attrs): attrs is Tracker["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ trackerName }) {
+          const state = yield* readTracker(trackerName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const trackerName = output?.trackerName ?? (yield* createTrackerName(id, olds ?? {}));
           const state = yield* readTracker(trackerName);
@@ -169,7 +200,9 @@ export const TrackerProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readTracker(trackerName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created tracker ${trackerName}`));
+              return yield* new TrackerUnexpectedResponse({
+                message: `failed to read created tracker ${trackerName}`,
+              });
             }
           }
 
@@ -206,9 +239,9 @@ export const TrackerProvider = () =>
 
           const final = yield* readTracker(trackerName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled tracker ${trackerName}`),
-            );
+            return yield* new TrackerUnexpectedResponse({
+              message: `failed to read reconciled tracker ${trackerName}`,
+            });
           }
           return final;
         }),

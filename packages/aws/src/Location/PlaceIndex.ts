@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class PlaceIndexUnexpectedResponse extends Data.TaggedError("PlaceIndexUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PlaceIndexProps {
   /**
@@ -55,8 +61,18 @@ export interface PlaceIndex extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PlaceIndexLookup
 > {}
+
+/**
+ * Props for {@link PlaceIndex.lookup}: find a place index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PlaceIndexLookup {
+  /** The index name of the existing place index. */
+  indexName: string;
+}
 
 /**
  * An Amazon Location Service place index. A place index geocodes text and
@@ -82,6 +98,16 @@ export interface PlaceIndex extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing place index
+ * `PlaceIndex.lookup` references a place index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `indexName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing place index
+ * ```typescript
+ * const existing = AWS.Location.PlaceIndex.lookup({ indexName: "my-place-index" });
+ * ```
+ *
  * @resource
  */
 export const PlaceIndex = Resource<PlaceIndex>("AWS.Location.PlaceIndex");
@@ -95,7 +121,7 @@ const createIndexName = (id: string, props: { indexName?: string | undefined }) 
 const readIndex = Effect.fn(function* (indexName: string) {
   const found = yield* location
     .describePlaceIndex({ IndexName: indexName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     indexName: found.IndexName,
@@ -130,6 +156,11 @@ export const PlaceIndexProvider = () =>
               (attrs): attrs is PlaceIndex["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ indexName }) {
+          const state = yield* readIndex(indexName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const indexName = output?.indexName ?? (yield* createIndexName(id, olds ?? {}));
           const state = yield* readIndex(indexName);
@@ -166,9 +197,9 @@ export const PlaceIndexProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readIndex(indexName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created place index ${indexName}`),
-              );
+              return yield* new PlaceIndexUnexpectedResponse({
+                message: `failed to read created place index ${indexName}`,
+              });
             }
           }
 
@@ -203,9 +234,9 @@ export const PlaceIndexProvider = () =>
 
           const final = yield* readIndex(indexName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled place index ${indexName}`),
-            );
+            return yield* new PlaceIndexUnexpectedResponse({
+              message: `failed to read reconciled place index ${indexName}`,
+            });
           }
           return final;
         }),

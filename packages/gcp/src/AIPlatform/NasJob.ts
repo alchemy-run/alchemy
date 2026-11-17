@@ -126,11 +126,11 @@ export type NasJob = Resource<
 export const NasJob = Resource<NasJob>("GCP.AIPlatform.NasJob");
 
 export class NasJobNotResolved extends Data.TaggedError("GCP.AIPlatform.NasJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NasJobStillExists extends Data.TaggedError("GCP.AIPlatform.NasJobStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NasJob, project: string) => {
@@ -153,7 +153,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NasJob, project: string)
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsNasJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string, filter?: string) =>
   aiplatform.listProjectsLocationsNasJobs.pages({ parent, pageSize: 100, filter }).pipe(
@@ -173,7 +173,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new NasJobStillExists({ name }),
+      () => new NasJobStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -259,13 +259,13 @@ export const NasJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(env.project, location, desiredLabels));
       }
 
       if (current === undefined || current.name === undefined) {
         return yield* new NasJobNotResolved({
-          name: output?.name ?? `${location}/nasJobs`,
+          resourceName: output?.name ?? `${location}/nasJobs`,
         });
       }
 
@@ -295,7 +295,7 @@ export const NasJobProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -7,7 +8,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
 import { tagRecord } from "alchemy/Tags";
 import type { ExtraFile } from "alchemy/Util/extraFiles";
@@ -17,7 +18,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createGcpHostRuntimeContext,
   RPC_METHODS_ENV,
@@ -32,6 +38,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -44,7 +51,14 @@ import {
   waitForOperation as waitForLongRunningOperation,
 } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
-import { boundContainersOf, directContainerNames } from "./Container.ts";
+import {
+  boundContainersOf,
+  directContainerNames,
+  flattenContainers,
+  isContainerAttributes,
+  type BoundContainer,
+  type Container,
+} from "./Container.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
@@ -162,8 +176,13 @@ export type ContainerSpec = {
    */
   livenessProbe?: Probe;
   /**
-   * Names of containers that must start, and pass their startup probe,
-   * before this one starts.
+   * Names of containers in the same revision that must start, and pass
+   * their startup probe, before this one starts. Without it, every
+   * container starts at once. It only orders startup: a dependency that
+   * crashes later doesn't stop this container.
+   *
+   * A container bound with `GCP.Run.bindContainer` or `GCP.Run.bindPort`
+   * is added for you.
    */
   dependsOn?: string[];
 };
@@ -180,8 +199,12 @@ export type RevisionScaling = {
 };
 
 export type RevisionTemplate = {
-  /** Containers that make up the revision. */
-  containers?: ContainerSpec[];
+  /**
+   * Containers that make up the revision. A `GCP.Run.Container` can be
+   * listed directly: its spec joins the revision, its bindings' roles go to
+   * the revision's service account, and the sidecars it binds join too.
+   */
+  containers?: (ContainerSpec | Container)[];
   /** Request timeout (e.g. `"300s"`). */
   timeout?: string;
   /** Max concurrent requests per instance. `0` uses the server default. */
@@ -333,9 +356,10 @@ export type ServiceProps = PlatformProps & {
   /**
    * Bundler configuration for `main`. `install` lists packages
    * `npm install`ed into an unbundled Node program image (see
-   * {@link extraFiles}); Next.js needs `next`.
+   * {@link extraFiles}); Next.js needs `next`. `cache` configures the image
+   * build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & { install?: PackageInstall };
+  build?: Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall };
   /**
    * Host files or directories baked into the image next to `main`
    * (`dest` is relative to `/app`; `"."` merges into `/app`). When set on
@@ -405,8 +429,34 @@ export type Service = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{location}/services/{service}`). Must
+   * begin with a letter, not end with a hyphen, and be fewer than 50
+   * characters.
+   */
+  serviceId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type ServiceRuntimeContext = GcpHostRuntimeContext;
 export type ServiceServices = Credentials | GcpEnvironment | ServerHost;
@@ -519,6 +569,22 @@ export type ServiceShape = Main<ServiceServices>;
  * ```
  * The first container runs `main`; the rest deploy as sidecars.
  *
+ * **Example:** An image service with an Effect-native sidecar
+ * ```typescript
+ * const worker = yield* Worker; // a GCP.Run.Container
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       { image: proxyImage, ports: [{ containerPort: 8080 }], dependsOn: [worker.name] },
+ *       worker,
+ *     ],
+ *   },
+ * });
+ * ```
+ * A listed Container brings its bindings' roles and the sidecars it binds.
+ * `worker.name` is an Output that resolves to the container's name in the
+ * revision, so the proxy starts after it.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
@@ -572,6 +638,35 @@ export type ServiceShape = Main<ServiceServices>;
  * ) {}
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in Artifact Registry
+ * ```typescript
+ * const api = yield* GCP.Run.Service("Api", {
+ *   main: import.meta.url,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* GCP.Run.Service("Api", {
+ *   main: import.meta.url,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Updating a Service
  * **Example:** New revision
  * ```typescript
@@ -594,28 +689,38 @@ export type ServiceShape = Main<ServiceServices>;
  * const live = yield* getService();
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.Run.Service.lookup({ serviceId: "my-service" });
+ * ```
+ *
  * @resource
  * @category Run
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("GCP.Run.Service", {
-    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
-      rpc: "private",
-    }) as (id: string) => ServiceRuntimeContext,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("GCP.Run.Service", {
+  createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
+    rpc: "private",
+  }) as (id: string) => ServiceRuntimeContext,
+});
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ServiceNotReady extends Data.TaggedError("GCP.Run.ServiceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -632,7 +737,7 @@ export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic
 }
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -702,9 +807,22 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
     );
   });
 
+/** `GCP.Run.Container`s listed in the template, as their resolved attributes. */
+const declaredContainersOf = (news: ServiceProps): BoundContainer[] =>
+  (news.template?.containers ?? []).filter(isContainerAttributes).map((container) => ({
+    spec: container.spec,
+    iam: container.iam,
+    sidecars: container.sidecars,
+  }));
+
 const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionTemplate => {
   const template = news.template ?? {};
-  const [main = { image: DEFAULT_IMAGE }, ...rest] = template.containers ?? [];
+  // A listed `GCP.Run.Container` arrives resolved to its attributes, never
+  // as the resource the prop type names.
+  const containers = (template.containers ?? []).map((container): ContainerSpec =>
+    isContainerAttributes(container) ? container.spec : (container as ContainerSpec),
+  );
+  const [main = { image: DEFAULT_IMAGE }, ...rest] = containers;
   return {
     ...template,
     containers: [
@@ -1050,7 +1168,7 @@ const sourceOf = (news: ServiceProps, main: string) => ({
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
@@ -1102,13 +1220,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (service): service is cloudrun.GoogleCloudRunV2Service =>
         service !== undefined && service.deleteTime === undefined,
-      () => new ServiceNotResolved({ name }),
+      () => new ServiceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (service) => (service.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (service) =>
         new ServiceNotReady({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state ?? "",
           message: service.terminalCondition?.message ?? "revision failed",
         }),
@@ -1117,7 +1235,7 @@ const waitUntilReady = (name: string) =>
       (service) => !isPendingService(service),
       (service) =>
         new ServiceReconciling({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -1132,7 +1250,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((service) =>
-      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ name })),
+      service === undefined
+        ? Effect.void
+        : Effect.fail(new ServiceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.ServiceStillExists",
@@ -1192,6 +1312,23 @@ export const ServiceProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ serviceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, olds?.serviceId, output?.serviceId);
@@ -1248,7 +1385,14 @@ export const ServiceProvider = () =>
       const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
       // Bound sidecars run as this service's account, so their bindings'
       // roles are granted to it.
-      const boundContainers = boundContainersOf(hostBindings);
+      // Bound sidecars, plus the sidecars of Containers listed in the
+      // template. Listed Containers are already in `template`.
+      const declaredContainers = declaredContainersOf(news);
+      const declaredNames = new Set(declaredContainers.map((container) => container.spec.name));
+      const boundContainers = flattenContainers([
+        ...boundContainersOf(hostBindings),
+        ...declaredContainers.flatMap((container) => container.sidecars),
+      ]).filter((container) => !declaredNames.has(container.spec.name));
       const identity = yield* resolveHostIdentity({
         project: env.project,
         hostType: HOST_TYPE,
@@ -1257,7 +1401,7 @@ export const ServiceProvider = () =>
         effectNative: news.main !== undefined,
         bindings: [
           ...hostBindings,
-          ...boundContainers.map((container) => ({
+          ...[...declaredContainers, ...boundContainers].map((container) => ({
             sid: `GCP.Run.Container(${container.spec.name})`,
             data: { iam: container.iam },
           })),
@@ -1340,7 +1484,7 @@ export const ServiceProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -1350,7 +1494,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1431,7 +1575,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -1448,7 +1592,7 @@ export const ServiceProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

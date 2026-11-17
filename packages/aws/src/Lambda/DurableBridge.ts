@@ -40,7 +40,7 @@ import {
   type DurableRetryPolicy,
   type DurableStepOptions,
 } from "./Durable.ts";
-import { HandlerContext } from "./InvocationDeadline.ts";
+import { HandlerContext, withInvocationDeadline } from "./InvocationDeadline.ts";
 
 /** Module id of AWS's Durable Execution SDK (an optional peer dependency). */
 export const DURABLE_SDK_MODULE = "@aws/durable-execution-sdk-js";
@@ -351,6 +351,10 @@ export const makeDurableListener = (options: {
         // listener picks it up.
         return;
       }
+      // Durable invocations are never interrupted at the deadline: the SDK
+      // replays them from checkpoints, and interrupting the wait below would
+      // leave its promise running into the next invocation. The guard still
+      // flushes telemetry before Lambda's hard timeout.
       return Effect.gen(function* () {
         const context = yield* HandlerContext;
         // Lazily load + memoize the SDK on the first real invocation.
@@ -360,6 +364,6 @@ export const makeDurableListener = (options: {
         // Lambda interprets. A rejection here is a protocol-level failure —
         // let it surface as an invocation error.
         return yield* Effect.promise(() => run(event, context));
-      });
+      }).pipe(withInvocationDeadline({ interrupt: false }));
     }) as unknown as FunctionListener;
   });

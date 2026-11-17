@@ -44,8 +44,27 @@ export type InstantNamespace = Resource<
     accountId: string;
   },
   never,
-  Providers
+  Providers,
+  InstantNamespaceLookup
 >;
+
+/**
+ * Props for {@link InstantNamespace.lookup}: find an Instant namespace this
+ * stack doesn't manage, by its id or its title.
+ */
+export type InstantNamespaceLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing namespace.
+       */
+      namespaceId: string;
+    }
+  | {
+      /**
+       * The title of the existing namespace.
+       */
+      title: string;
+    };
 
 /**
  * A Cloudflare Workers KV Instant namespace, powered by Quicksilver.
@@ -86,6 +105,19 @@ export type InstantNamespace = Resource<
  * Namespace storage quotas, key-count limits, global replication, billing,
  * and write throttling are not emulated. Use Alchemy.remote()
  * to opt into a live namespace during development (requires beta access).
+ *
+ * ### Looking up an existing namespace
+ * `InstantNamespace.lookup` binds an Instant namespace Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `namespaceId` or
+ * `title`. It is read during plan/deploy and never created, updated or
+ * deleted. A classic namespace fails the lookup with `NamespaceModeMismatch`.
+ *
+ * **Example:** By title
+ * ```typescript
+ * const config = yield* Cloudflare.KV.ReadNamespace(
+ *   Cloudflare.KV.InstantNamespace.lookup({ title: "config" }),
+ * );
+ * ```
  *
  * @resource
  * @product KV
@@ -140,7 +172,7 @@ const ProviderLive = () =>
             accountId: acct,
             namespaceId: output.namespaceId,
           })
-          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined));
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -160,7 +192,7 @@ const ProviderLive = () =>
                 if (match) {
                   return match;
                 }
-                return yield* Effect.fail(error);
+                return yield* error;
               }),
             ),
           );
@@ -193,6 +225,26 @@ const ProviderLive = () =>
         namespaceId,
         supportsUrlEncoding,
         accountId: acct,
+      };
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const namespace =
+        "namespaceId" in props
+          ? yield* kv
+              .getNamespace({ accountId, namespaceId: props.namespaceId })
+              .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined))
+          : yield* findNamespaceByTitle(props.title);
+      if (!namespace) return undefined;
+      if (namespace.mode !== "instant") {
+        return yield* new NamespaceModeMismatch({ namespaceId: namespace.id, expected: "instant" });
+      }
+      return {
+        mode: "instant" as const,
+        title: namespace.title,
+        namespaceId: namespace.id,
+        supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
+        accountId,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -244,7 +296,7 @@ const ProviderLive = () =>
                     accountId: output.accountId,
                   }),
             ),
-            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NamespaceNotFound", () => Effect.undefined),
           );
       }
       const title = yield* createTitle(id, olds?.title);

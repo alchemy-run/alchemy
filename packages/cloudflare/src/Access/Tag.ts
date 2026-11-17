@@ -31,8 +31,20 @@ export type Tag = Resource<
     accountId: string;
   },
   never,
-  Providers
+  Providers,
+  TagLookup
 >;
+
+/**
+ * Props for {@link Tag.lookup}: find an Access tag this stack doesn't manage,
+ * by its name.
+ */
+export interface TagLookup {
+  /**
+   * The name of the existing tag.
+   */
+  name: string;
+}
 
 /**
  * A Cloudflare Zero Trust Access tag. Tags are plain labels that can be
@@ -65,6 +77,20 @@ export type Tag = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tag
+ * `Tag.lookup` references a tag Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Tag an application with an existing tag
+ * ```typescript
+ * const app = yield* Cloudflare.Access.Application("Dashboard", {
+ *   type: "self_hosted",
+ *   domain: "dash.example.com",
+ *   tags: [Cloudflare.Access.Tag.lookup({ name: "internal" }).name],
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -91,7 +117,7 @@ export const TagProvider = () =>
         ),
       );
     }),
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -102,17 +128,24 @@ export const TagProvider = () =>
         return { action: "replace" } as const;
       }
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const existing = yield* zeroTrust
+        .getAccessTag({ accountId, tagName: name })
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.undefined));
+      return existing ? { name: existing.name, accountId } : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const name = yield* createTagName(id, output?.name ?? olds?.name);
       const existing = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.undefined));
       if (!existing) return undefined;
       return { name: existing.name, accountId: acct };
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const name = yield* createTagName(id, news.name);
@@ -120,7 +153,7 @@ export const TagProvider = () =>
       // Observe — the name is the identity, so existence is the only state.
       const observed = yield* zeroTrust
         .getAccessTag({ accountId: acct, tagName: name })
-        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("AccessTagNotFound", () => Effect.undefined));
 
       // Ensure — create when missing; a create race resolves to the same tag.
       if (!observed) {

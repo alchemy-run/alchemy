@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -104,8 +105,29 @@ export type InstanceConfig = Resource<
     storageLimitPerProcessingUnit: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceConfigLookup
 >;
+
+/**
+ * Props for {@link InstanceConfig.lookup}: find an instance config this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InstanceConfigLookup {
+  /**
+   * Instance config id (the `{config}` segment of
+   * `projects/{project}/instanceConfigs/{config}`). User-managed ids must
+   * start with `custom-` and match `custom-[-a-z0-9]*[a-z0-9]` (2–64
+   * characters).
+   */
+  instanceConfigId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A user-managed Cloud Spanner instance configuration.
@@ -140,6 +162,19 @@ export type InstanceConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instance config
+ * `InstanceConfig.lookup` references an instance config Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * instance config.
+ *
+ * **Example:** Reference an existing instance config
+ * ```typescript
+ * const instanceConfig = GCP.Spanner.InstanceConfig.lookup({
+ *   instanceConfigId: "my-instance-config",
+ * });
+ * ```
+ *
  * @resource
  * @category Spanner
  */
@@ -148,18 +183,18 @@ export const InstanceConfig = Resource<InstanceConfig>("GCP.Spanner.InstanceConf
 export class InstanceConfigNotResolved extends Data.TaggedError(
   "GCP.Spanner.InstanceConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceConfigNotReady extends Data.TaggedError("GCP.Spanner.InstanceConfigNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceConfigStillExists extends Data.TaggedError(
   "GCP.Spanner.InstanceConfigStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceConfigNoOptionalReplicas extends Data.TaggedError(
@@ -220,12 +255,14 @@ const toAttrs = (config: spanner.InstanceConfig, project: string): InstanceConfi
 const getByName = (name: string) =>
   spanner
     .getProjectsInstanceConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config ? Effect.succeed(config) : Effect.fail(new InstanceConfigNotResolved({ name })),
+      config
+        ? Effect.succeed(config)
+        : Effect.fail(new InstanceConfigNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceConfigNotResolved",
@@ -241,13 +278,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (config): config is spanner.InstanceConfig => config !== undefined,
-      () => new InstanceConfigNotResolved({ name }),
+      () => new InstanceConfigNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (config) => isReady(config),
       (config) =>
         new InstanceConfigNotReady({
-          name,
+          resourceName: name,
           state: config.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -263,7 +300,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config === undefined ? Effect.void : Effect.fail(new InstanceConfigStillExists({ name })),
+      config === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceConfigStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceConfigStillExists",
@@ -324,6 +363,14 @@ export const InstanceConfigProvider = () =>
           (previousId !== undefined && nextId === previousId),
       };
     }),
+
+    lookup: Effect.fn(function* ({ instanceConfigId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instanceConfigName(env.project, instanceConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -394,7 +441,7 @@ export const InstanceConfigProvider = () =>
               },
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

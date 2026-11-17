@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -82,8 +83,32 @@ export type FolderNotificationConfig = Resource<
     serviceAccount: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderNotificationConfigLookup
 >;
+
+/**
+ * Props for {@link FolderNotificationConfig.lookup}: find a folder
+ * notification config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface FolderNotificationConfigLookup {
+  /**
+   * Config id (the `{config}` segment of
+   * `folders/{folder}/notificationConfigs/{config}`). Letters, digits, and
+   * hyphens; max 63 characters.
+   */
+  configId: string;
+  /**
+   * Parent folder (`folders/{folder}` or the numeric id).
+   */
+  folder?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A folder-scoped Security Command Center notification config.
@@ -119,6 +144,19 @@ export type FolderNotificationConfig = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing folder notification config
+ * `FolderNotificationConfig.lookup` references a folder notification config
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared folder notification config.
+ *
+ * **Example:** Reference an existing folder notification config
+ * ```typescript
+ * const folderNotificationConfig = GCP.SecurityCenter.FolderNotificationConfig.lookup({
+ *   configId: "my-config",
+ * });
+ * ```
+ *
  * @resource
  * @category SecurityCenter
  */
@@ -148,10 +186,10 @@ const toAttrs = (config: scc.NotificationConfig, folder: string, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getFoldersNotificationConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderNotificationConfigProvider = () =>
   Provider.succeed(FolderNotificationConfig, {
@@ -167,6 +205,15 @@ export const FolderNotificationConfigProvider = () =>
         )
       );
     }),
+
+    lookup: Effect.fn(function* ({ configId, folder: lookupFolder }) {
+      const env = yield* GcpEnvironment.current;
+      const folder = yield* resolveFolder(lookupFolder, undefined);
+      const name = resourceName(folder, configId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, folder, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -221,7 +268,7 @@ export const FolderNotificationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritycenterNotResolved({ name });
+        return yield* new SecuritycenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

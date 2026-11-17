@@ -69,28 +69,26 @@ const toFrameworkLayer: (
   candidate: unknown,
   options: Options.Options,
   specifier: string,
-) => Effect.Effect<
-  Options.Options.FrameworkLayer,
-  FrameworkError | unknown,
-  Options.Options.FrameworkServices
-> = Effect.fn(function* (candidate: unknown, options: Options.Options, specifier: string) {
-  const resolved = Effect.isEffect(candidate)
-    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
-      yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
-    : candidate;
-  if (Layer.isLayer(resolved)) {
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
-    return resolved as Options.Options.FrameworkLayer;
-  }
-  if (typeof resolved === "function") {
-    return yield* toFrameworkLayer(
-      (resolved as Options.Options.FrameworkFactory)(options),
-      options,
-      specifier,
-    );
-  }
-  return yield* invalidExport(specifier);
-});
+) => Effect.Effect<Options.Options.FrameworkLayer, unknown, Options.Options.FrameworkServices> =
+  Effect.fn(function* (candidate: unknown, options: Options.Options, specifier: string) {
+    const resolved = Effect.isEffect(candidate)
+      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- framework export from a dynamically imported module; `Options.FrameworkLayer` can only promise an unknown failure
+        yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
+      : candidate;
+    if (Layer.isLayer(resolved)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- framework export from a dynamically imported module; `Options.FrameworkLayer` can only promise an unknown failure
+      return resolved as Options.Options.FrameworkLayer;
+    }
+    if (typeof resolved === "function") {
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework factories come from e2e.config.ts untyped
+      return yield* toFrameworkLayer(
+        (resolved as Options.Options.FrameworkFactory)(options),
+        options,
+        specifier,
+      );
+    }
+    return yield* invalidExport(specifier);
+  });
 
 /**
  * Resolve the `Framework` Layer for a fixture from its options:
@@ -106,6 +104,7 @@ const toFrameworkLayer: (
 export const resolve = Effect.fn(function* (options: Options.Options) {
   const input = options.framework;
   if (input === undefined) {
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework factories come from e2e.config.ts untyped
     return makeViteFramework(options);
   }
   if (typeof input === "string") {
@@ -124,8 +123,10 @@ export const resolve = Effect.fn(function* (options: Options.Options) {
     if (candidate === undefined) {
       return yield* invalidExport(input);
     }
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework factories come from e2e.config.ts untyped
     return yield* toFrameworkLayer(candidate, options, input);
   }
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework factories come from e2e.config.ts untyped
   return yield* toFrameworkLayer(input, options, "e2e.config.ts framework option");
 });
 

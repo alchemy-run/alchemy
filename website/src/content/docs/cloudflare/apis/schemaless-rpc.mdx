@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-The schemaless RPC pattern — what makes a member callable, how the typed client arises, what crosses the wire — is documented at [Schemaless RPC](/apis/schemaless). This page walks Cloudflare's pairings. Worker → Worker and Worker → Durable Object ride the platform's native JSRPC channel (values move by structured clone, and service bindings never traverse the public internet); Containers ride the generic fetch transport.
+The schemaless RPC pattern — what makes a member callable, how the typed client arises, what crosses the wire — is documented at [Schemaless RPC](/apis/schemaless). On Cloudflare, Worker → Worker and Worker → Durable Object ride the platform's native JSRPC channel (values move by structured clone, and service bindings never traverse the public internet); Containers ride the generic fetch transport.
 
 ## Expose an interface
 

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -167,8 +168,30 @@ export type Reservation = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReservationLookup
 >;
+
+/**
+ * Props for {@link Reservation.lookup}: find a reservation this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ReservationLookup {
+  /**
+   * Reservation name (RFC1035, 1-63 characters).
+   */
+  reservationName: string;
+  /**
+   * Zone the reservation lives in (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine capacity reservation.
@@ -218,6 +241,19 @@ export type Reservation = Resource<
  *     count: 4,
  *     instanceProperties: { machineType: "n1-standard-1" },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing reservation
+ * `Reservation.lookup` references a reservation Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * reservation.
+ *
+ * **Example:** Reference an existing reservation
+ * ```typescript
+ * const reservation = GCP.Compute.Reservation.lookup({
+ *   reservationName: "my-reservation",
  * });
  * ```
  *
@@ -360,7 +396,7 @@ const sameJson = (left: unknown, right: unknown) =>
 const getByName = (project: string, zone: string, reservation: string) =>
   compute
     .getReservations({ project, zone, reservation })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReservationReady = (project: string, zone: string, reservationName: string) =>
   getByName(project, zone, reservationName).pipe(
@@ -490,6 +526,14 @@ export const ReservationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ reservationName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = normalizeZone(lookupZone);
+      const existing = yield* getByName(env.project, zone, reservationName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const reservationName = yield* toName(id, olds?.reservationName, output?.reservationName);
@@ -540,7 +584,7 @@ export const ReservationProvider = () =>
             zone,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -647,7 +691,7 @@ export const ReservationProvider = () =>
           reservation: output.reservationName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

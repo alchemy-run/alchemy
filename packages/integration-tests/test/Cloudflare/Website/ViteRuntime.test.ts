@@ -7,6 +7,8 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -489,11 +491,13 @@ describe.concurrent(
       ["dev"],
     );
 
-    // `cron-triggers/__tests__/cf-worker-header.spec.ts`: outbound fetches
-    // carry `CF-Worker` with the Worker's first custom domain. Attaching a
+    // `cron-triggers/__tests__/cf-worker-header.spec.ts` expects outbound
+    // fetches to carry `CF-Worker` with the Worker's custom domain. Alchemy
+    // deliberately adds none, even with a domain: Cloudflare-fronted sites
+    // answer 403 to one sent from a developer machine (#2965). Attaching a
     // domain deploys only to a zone the account owns, so this runs in dev.
     devTest.provider(
-      "Vite runtime: outbound fetches carry the custom domain as CF-Worker (dev)",
+      "Vite runtime: outbound fetches carry no CF-Worker, even with a custom domain (dev)",
       (stack) =>
         Effect.gen(function* () {
           const seen: Array<string | undefined> = [];
@@ -513,7 +517,7 @@ describe.concurrent(
           const site = yield* deploySite(stack, "dev", { domain: "vite-runtime.example.com" });
           const url = site.url!.replace(/\/$/, "");
           yield* expectJson(`${url}/cf-worker-header?echoUrl=${encodeURIComponent(echoUrl)}`, {
-            cfWorker: "vite-runtime.example.com",
+            cfWorker: null,
           });
         }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
@@ -727,6 +731,19 @@ describe.concurrent(
             yield* expectText(`${url}${prefix}/status`, "true");
             yield* expectText(`${url}${prefix}/fetch`, "Hello World!");
           }
+          // Deleting the site stops the containers its Workers started.
+          yield* stack.destroy();
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          const containers = yield* spawner.lines(
+            ChildProcess.make("docker", ["ps", "--all", "--format", "{{.Names}}"]),
+          );
+          expect(
+            containers.filter(
+              (name) =>
+                name.startsWith("workerd-cloudflare-website-viteruntime") &&
+                /-(DockerfileContainer|NamedImagesContainer)-/.test(name),
+            ),
+          ).toEqual([]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       {
         tags: ["provider:cloudflare:container", "provider:cloudflare:worker", "local"],
@@ -1182,6 +1199,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
+          const devLog = yield* Test.captureResourceLog("ViteWorkerdevdefault");
           const url = yield* deployWorkerSite(stack, "dev", "default");
           const host = new URL(url).host;
           yield* expectText(url, "Hello World!");
@@ -1202,16 +1220,11 @@ describe.concurrent(
           yield* expectResponse(`${url}/request-url`, (res) =>
             res.body.startsWith("http:") ? undefined : `url ${res.body}`,
           );
-          // The Worker's console output reaches its dev log, including the
+          // The Worker's console output reaches its resource log, including the
           // shared chunk's log that proves entry signatures are preserved,
           // and no unhandled rejection.
-          const fs = yield* FileSystem.FileSystem;
-          const logRoot = pathe.resolve(".alchemy/log");
           yield* Effect.gen(function* () {
-            const logs = (yield* fs.readDirectory(logRoot, { recursive: true }))
-              .filter((file) => file.includes("/ViteWorkerdevdefault/"))
-              .sort();
-            const log = yield* fs.readFileString(pathe.join(logRoot, logs.at(-1)!));
+            const log = yield* devLog;
             for (const line of [
               "__preserves-entry-signatures__",
               "__console log__",
@@ -1223,7 +1236,7 @@ describe.concurrent(
             }
             expect(log).not.toContain("__unhandled rejection__");
           }).pipe(Effect.retry({ times: 10, schedule: Schedule.spaced("1 second") }));
-        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
     );
 

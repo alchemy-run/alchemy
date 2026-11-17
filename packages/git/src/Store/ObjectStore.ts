@@ -949,7 +949,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         .pipe(
           Effect.flatMap((meta) =>
             meta === undefined
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : self.readContent(oid).pipe(Effect.map((content) => ({ type: meta.type, content }))),
           ),
         ),

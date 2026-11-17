@@ -4,17 +4,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-// Axiom credentials are resolved via the AuthProvider (env method reads
-// AXIOM_TOKEN / AXIOM_API_KEY). When neither is present the suite can't talk
-// to the real API, so skipIf-gate the live list test. On an entitled run the
-// failure mode without creds is a `ConfigError`:
-//   "Axiom env credentials not found. Set AXIOM_TOKEN (or AXIOM_API_KEY)."
-const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 
 // Minimal, deterministic dashboard document. `owner: ""` is required when
 // authenticating with an API token (Axiom rewrites it to the org-shared
@@ -33,7 +27,7 @@ const dashboardProps = {
   },
 };
 
-test.provider.skipIf(!hasAxiomCreds)(
+test.provider(
   "list enumerates the deployed dashboard",
   (stack) =>
     Effect.gen(function* () {
@@ -44,6 +38,7 @@ test.provider.skipIf(!hasAxiomCreds)(
           return yield* Axiom.Dashboard("ListDashboard", dashboardProps);
         }),
       );
+      yield* expectFound(Axiom.Dashboard.lookup({ uid: deployed.uid }), deployed);
 
       const provider = yield* Provider.findProvider(Axiom.Dashboard);
       const all = yield* provider.list();

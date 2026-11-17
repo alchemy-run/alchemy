@@ -16,6 +16,18 @@ import { durationToDays, unwrapRedactedString } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
 
+export class RedshiftClusterNotReady extends Data.TaggedError("RedshiftClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RedshiftClusterUnexpectedResponse extends Data.TaggedError(
+  "RedshiftClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Creating a provisioned Redshift cluster requires either a
  * `masterUserPassword` or `manageMasterPassword: true`.
@@ -228,8 +240,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster identifier of the existing cluster. */
+  clusterIdentifier: string;
+}
 
 /**
  * A provisioned Amazon Redshift data-warehouse cluster.
@@ -263,6 +285,16 @@ export interface Cluster extends Resource<
  *   publiclyAccessible: false,
  *   encrypted: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.Redshift.Cluster.lookup({ clusterIdentifier: "my-cluster" });
  * ```
  *
  * @resource
@@ -313,7 +345,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         const response = yield* redshift
           .describeClusters({ ClusterIdentifier: identifier })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -322,13 +354,15 @@ export const ClusterProvider = () =>
           readCluster(identifier).pipe(
             Effect.flatMap((cluster) => {
               if (cluster === undefined) {
-                return Effect.fail(new Error(`Cluster '${identifier}' not found`));
+                return Effect.fail(
+                  new RedshiftClusterNotReady({ message: `Cluster '${identifier}' not found` }),
+                );
               }
               if (cluster.ClusterStatus !== "available") {
                 return Effect.fail(
-                  new Error(
-                    `Cluster '${identifier}' not available (status: ${cluster.ClusterStatus})`,
-                  ),
+                  new RedshiftClusterNotReady({
+                    message: `Cluster '${identifier}' not available (status: ${cluster.ClusterStatus})`,
+                  }),
                 );
               }
               return Effect.succeed(cluster);
@@ -349,9 +383,9 @@ export const ClusterProvider = () =>
                 cluster.ClusterStatus !== "deleting"
               ) {
                 return Effect.fail(
-                  new Error(
-                    `Cluster '${identifier}' still settling (status: ${cluster.ClusterStatus})`,
-                  ),
+                  new RedshiftClusterNotReady({
+                    message: `Cluster '${identifier}' still settling (status: ${cluster.ClusterStatus})`,
+                  }),
                 );
               }
               return Effect.succeed(cluster);
@@ -363,7 +397,9 @@ export const ClusterProvider = () =>
       const toAttrs = Effect.fn(function* (cluster: redshift.Cluster) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!cluster.ClusterIdentifier) {
-          return yield* Effect.fail(new Error("Cluster is missing its identifier"));
+          return yield* new RedshiftClusterUnexpectedResponse({
+            message: "Cluster is missing its identifier",
+          });
         }
         return {
           clusterIdentifier: cluster.ClusterIdentifier,
@@ -422,6 +458,13 @@ export const ClusterProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ clusterIdentifier: identifier }) {
+          const cluster = yield* readCluster(identifier);
+          if (cluster === undefined) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier = output?.clusterIdentifier ?? (yield* toName(id, olds ?? {}));
           const cluster = yield* readCluster(identifier);
@@ -478,7 +521,7 @@ export const ClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.undefined));
           }
 
           // Provisioning and in-flight modifications both surface as a
@@ -615,7 +658,7 @@ export const ClusterProvider = () =>
                 ClusterIdentifier: identifier,
                 SkipFinalClusterSnapshot: true,
               })
-              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined)),
           ).pipe(Effect.catchTag("InvalidClusterStateFault", () => Effect.void));
         }),
 

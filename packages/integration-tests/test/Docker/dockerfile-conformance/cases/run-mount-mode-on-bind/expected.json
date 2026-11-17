@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "mode not allowed for \"bind\" type mounts"
+}

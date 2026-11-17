@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,38 @@ export type RepositoriesRule = Resource<
     condition: RuleCondition | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesRuleLookup
 >;
+
+/**
+ * Props for {@link RepositoriesRule.lookup}: find a repositories rule this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RepositoriesRuleLookup {
+  /**
+   * Rule id (the `{rule}` segment of
+   * `.../repositories/{repository}/rules/{rule}`). Max 256 characters:
+   * alphanumeric plus `-._~:@+^`.
+   */
+  ruleId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Artifact Registry download rule on a repository.
@@ -137,6 +168,20 @@ export type RepositoriesRule = Resource<
  *   action: "ALLOW",
  *   packageId: "app",
  *   condition: { expression: "pkg.version.id >= '1.0.0'" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing repositories rule
+ * `RepositoriesRule.lookup` references a repositories rule Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * repositories rule.
+ *
+ * **Example:** Reference an existing repositories rule
+ * ```typescript
+ * const repositoriesRule = GCP.ArtifactRegistry.RepositoriesRule.lookup({
+ *   ruleId: "my-rule",
+ *   repository: "my-repository",
  * });
  * ```
  *
@@ -239,6 +284,23 @@ export const RepositoriesRuleProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({
+      ruleId,
+      location: lookupLocation,
+      repository: lookupRepository,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? locationFromRepository(lookupRepository, env.region),
+        env.region,
+      );
+      const repository = expandRepository(lookupRepository ?? "", env.project, location);
+      const name = resourceNameOf(repository, ruleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
@@ -305,7 +367,7 @@ export const RepositoriesRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observed = current.name ?? name;

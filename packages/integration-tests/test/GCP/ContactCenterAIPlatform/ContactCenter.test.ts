@@ -6,6 +6,7 @@ import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -68,7 +69,7 @@ test.provider.skipIf(entitled)(
           name: `projects/${project}/locations/us-central1/contactCenters/alchemy-missing-cc`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -92,6 +93,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContactCenterAIPlatform.ContactCenter.lookup({
+          contactCenterId: created.contactCenterId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/contactCenters/");

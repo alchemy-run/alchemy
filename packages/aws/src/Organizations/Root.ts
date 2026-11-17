@@ -2,6 +2,7 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -11,6 +12,11 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+
+export class RootUnexpectedResponse extends Data.TaggedError("RootUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type RootId = string;
 export type RootArn = string;
@@ -174,13 +180,11 @@ export const RootProvider = () =>
             name: news.name,
           });
           if (!root) {
-            return yield* Effect.fail(
-              new Error(
-                output?.rootId
-                  ? `organization root '${output.rootId}' not found`
-                  : "organization root not found",
-              ),
-            );
+            return yield* new RootUnexpectedResponse({
+              message: output?.rootId
+                ? `organization root '${output.rootId}' not found`
+                : "organization root not found",
+            });
           }
 
           // Sync tags — diff observed cloud tags against desired. Using

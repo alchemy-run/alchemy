@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -302,8 +303,33 @@ export type Cluster = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `projects/{project}/locations/{location}/clusters/{cluster}`). Must
+   * match `[a-z0-9-]{1,63}`.
+   */
+  clusterId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An AlloyDB for PostgreSQL cluster (regional storage layer).
@@ -350,27 +376,37 @@ export type Cluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.AlloyDB.Cluster.lookup({ clusterId: "my-cluster" });
+ * ```
+ *
  * @resource
  * @category AlloyDB
  */
 export const Cluster = Resource<Cluster>("GCP.AlloyDB.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.AlloyDB.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.AlloyDB.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ClusterFailed extends Data.TaggedError("GCP.AlloyDB.ClusterFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.AlloyDB.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -626,12 +662,14 @@ const isPlaceholder = (cluster: alloydb.Cluster) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster ? Effect.succeed(cluster) : Effect.fail(new ClusterNotResolved({ name })),
+      cluster
+        ? Effect.succeed(cluster)
+        : Effect.fail(new ClusterNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterNotResolved",
@@ -644,17 +682,17 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const cluster = yield* getByName(name);
     if (cluster === undefined) {
-      return yield* new ClusterNotReady({ name, state: "MISSING" });
+      return yield* new ClusterNotReady({ resourceName: name, state: "MISSING" });
     }
     if (isFailed(cluster.state)) {
       return yield* new ClusterFailed({
-        name,
+        resourceName: name,
         state: cluster.state ?? "FAILED",
       });
     }
     if (!(isAvailable(cluster.state) && cluster.reconciling !== true)) {
       return yield* new ClusterNotReady({
-        name,
+        resourceName: name,
         state: cluster.state ?? "STATE_UNSPECIFIED",
       });
     }
@@ -670,7 +708,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterStillExists",
@@ -821,6 +861,15 @@ export const ClusterProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ clusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, clusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const clusterId = yield* toId(id, olds?.clusterId, output?.clusterId);
@@ -884,7 +933,7 @@ export const ClusterProvider = () =>
                 clusterId,
                 body,
               })
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -892,7 +941,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClusterNotResolved({ name });
+        return yield* new ClusterNotResolved({ resourceName: name });
       }
 
       if (!isAvailable(current.state) || current.reconciling === true) {
@@ -1006,7 +1055,7 @@ export const ClusterProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 40,

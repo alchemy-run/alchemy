@@ -119,8 +119,23 @@ export interface Role extends Resource<
      */
     assumeRolePolicyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  RoleLookup
 > {}
+
+/**
+ * Props for {@link Role.lookup}: find a role this stack doesn't manage, in
+ * the ambient account, by its name or ARN.
+ */
+export type RoleLookup =
+  | {
+      /** The name of the existing role. */
+      roleName: string;
+    }
+  | {
+      /** The ARN of the existing role. */
+      roleArn: string;
+    };
 
 /**
  * Name of the inline policy the role provider synthesizes from binding-supplied
@@ -222,6 +237,21 @@ const mergeBoundAssumeRolePolicy = (
  * });
  * ```
  *
+ * ### Looking up an existing role
+ * `Role.lookup` references a role Alchemy doesn't manage (created in the
+ * console or by another stack), found by `roleName` or `roleArn`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Pass an existing role to another resource
+ * ```typescript
+ * const deployer = AWS.IAM.Role.lookup({ roleName: "ci-deployer" });
+ *
+ * const schedule = yield* AWS.Scheduler.Schedule("Nightly", {
+ *   scheduleExpression: "cron(0 3 * * ? *)",
+ *   target: { Arn: fn.functionArn, RoleArn: deployer.roleArn },
+ * });
+ * ```
+ *
  * @resource
  */
 export const Role = Resource<Role>("AWS.IAM.Role");
@@ -257,22 +287,20 @@ export const RoleProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const entries = yield* Effect.all(
-          policyNames.map((policyName) =>
-            iam
-              .getRolePolicy({
-                RoleName: roleName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.map(
-                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
-                ),
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed([policyName, undefined] as const),
-                ),
+        const entries = yield* Effect.forEach(policyNames, (policyName) =>
+          iam
+            .getRolePolicy({
+              RoleName: roleName,
+              PolicyName: policyName,
+            })
+            .pipe(
+              Effect.map(
+                (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
               ),
-          ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed([policyName, undefined] as const),
+              ),
+            ),
         );
         return Object.fromEntries(
           entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
@@ -413,7 +441,7 @@ export const RoleProvider = () =>
                   };
                 }).pipe(
                   // A role may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 8 },
             );
@@ -431,13 +459,42 @@ export const RoleProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          // A role ARN ends in `role/<path>/<name>`; the name is its last segment.
+          const roleName = "roleArn" in props ? props.roleArn.split("/").at(-1)! : props.roleName;
+          const role = yield* iam
+            .getRole({ RoleName: roleName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          if (!role?.Role) return undefined;
+          const [managedPolicyArns, inlinePolicies, tags] = yield* Effect.all([
+            readManagedPolicies(roleName),
+            readInlinePolicies(roleName),
+            readTags(roleName),
+          ]);
+          return {
+            roleArn: role.Role.Arn as RoleArn,
+            roleName: role.Role.RoleName,
+            roleId: role.Role.RoleId,
+            path: role.Role.Path,
+            assumeRolePolicyDocument: parsePolicyDocument(role.Role.AssumeRolePolicyDocument) ?? {
+              Version: "2012-10-17",
+              Statement: [],
+            },
+            managedPolicyArns,
+            inlinePolicies,
+            description: role.Role.Description,
+            maxSessionDuration: role.Role.MaxSessionDuration,
+            permissionsBoundary: role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
+            tags,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const roleName = output?.roleName ?? (yield* toRoleName(id, olds ?? {}));
           const role = yield* iam
             .getRole({
               RoleName: roleName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!role?.Role) {
             return undefined;
           }
@@ -507,7 +564,7 @@ export const RoleProvider = () =>
           // upstream so adopting a `Unowned` role is the engine's call.
           let observedRole = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
           // Ensure — create the role when missing. A peer reconciler may
           // have created it concurrently; tolerate that race by reading
@@ -700,7 +757,7 @@ export const RoleProvider = () =>
           for (let attempt = 0; attempt < 30; attempt++) {
             const remaining = yield* iam
               .getRole({ RoleName: output.roleName })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
             if (remaining === undefined) return;
             yield* Effect.sleep("1 second");
           }

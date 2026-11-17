@@ -5,12 +5,25 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags } from "./internal.ts";
+
+export class MemoryDBUserNotReady extends Data.TaggedError("MemoryDBUserNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MemoryDBUserUnexpectedResponse extends Data.TaggedError(
+  "MemoryDBUserUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Authentication mode for a MemoryDB user.
@@ -74,8 +87,18 @@ export interface User extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  UserLookup
 > {}
+
+/**
+ * Props for {@link User.lookup}: find a user this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface UserLookup {
+  /** The user name of the existing user. */
+  userName: string;
+}
 
 /**
  * A MemoryDB user — an RBAC identity that authenticates to a cluster and is
@@ -101,6 +124,16 @@ export interface User extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing user
+ * `User.lookup` references a user Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user
+ * ```typescript
+ * const existing = AWS.MemoryDB.User.lookup({ userName: "my-user" });
+ * ```
+ *
  * @resource
  */
 export const User = Resource<User>("AWS.MemoryDB.User");
@@ -117,7 +150,7 @@ export const UserProvider = () =>
       const readUser = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeUsers({ UserName: name })
-          .pipe(Effect.catchTag("UserNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("UserNotFoundFault", () => Effect.undefined));
         return response?.Users?.[0];
       });
 
@@ -127,7 +160,11 @@ export const UserProvider = () =>
         return yield* readUser(name).pipe(
           Effect.flatMap((user) => {
             if (user !== undefined && user.Status === "modifying") {
-              return Effect.fail(new Error(`User '${name}' still modifying (${user.Status})`));
+              return Effect.fail(
+                new MemoryDBUserNotReady({
+                  message: `User '${name}' still modifying (${user.Status})`,
+                }),
+              );
             }
             return Effect.succeed(user);
           }),
@@ -139,7 +176,9 @@ export const UserProvider = () =>
 
       const toAttrs = Effect.fn(function* (user: memorydb.User) {
         if (!user.Name || !user.ARN) {
-          return yield* Effect.fail(new Error(`User '${user.Name}' is missing its ARN`));
+          return yield* new MemoryDBUserUnexpectedResponse({
+            message: `User '${user.Name}' is missing its ARN`,
+          });
         }
         return {
           userName: user.Name,
@@ -167,6 +206,13 @@ export const UserProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ userName: name }) {
+          const user = yield* readUser(name);
+          if (!user?.ARN) return undefined;
+          const attrs = yield* toAttrs(user);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -207,7 +253,9 @@ export const UserProvider = () =>
             observed = yield* waitUntilActive(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(new Error(`User '${name}' not found after create`));
+            return yield* new MemoryDBUserUnexpectedResponse({
+              message: `User '${name}' not found after create`,
+            });
           }
 
           // 3. Sync — access string is observable; auth passwords are not, so

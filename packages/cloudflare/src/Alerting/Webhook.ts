@@ -2,6 +2,7 @@ import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -10,6 +11,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class WebhookUnexpectedResponse extends Data.TaggedError("WebhookUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Alerting.Webhook" as const;
 type TypeId = typeof TypeId;
@@ -74,8 +80,28 @@ export type NotificationWebhook = Resource<
   NotificationWebhookProps,
   NotificationWebhookAttributes,
   never,
-  Providers
+  Providers,
+  NotificationWebhookLookup
 >;
+
+/**
+ * Props for {@link NotificationWebhook.lookup}: find a webhook destination
+ * this stack doesn't manage, by its id or its name.
+ */
+export type NotificationWebhookLookup =
+  | {
+      /**
+       * The id of the existing webhook destination.
+       */
+      webhookId: string;
+    }
+  | {
+      /**
+       * The name of the existing webhook destination. Names are not unique;
+       * the first destination with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Notifications webhook destination.
@@ -108,6 +134,21 @@ export type NotificationWebhook = Resource<
  * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { webhooks: [{ id: webhook.webhookId }] },
+ * });
+ * ```
+ *
+ * ### Looking up an existing webhook
+ * `NotificationWebhook.lookup` references a destination Alchemy doesn't
+ * manage (created in the dashboard or by another stack), found by
+ * `webhookId` or `name`. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Send a new policy to an existing destination
+ * ```typescript
+ * const pager = Cloudflare.Alerting.NotificationWebhook.lookup({ name: "pager" });
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
+ *   alertType: "universal_ssl_event_type",
+ *   mechanisms: { webhooks: [{ id: pager.webhookId }] },
  * });
  * ```
  *
@@ -155,6 +196,14 @@ export const NotificationWebhookProvider = () =>
       }
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "webhookId" in props
+          ? yield* observeWebhook(accountId, props.webhookId)
+          : yield* findWebhookByName(accountId, props.name);
+      return observed ? toWebhookAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -217,9 +266,9 @@ export const NotificationWebhookProvider = () =>
             }),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the created webhook destination"),
-          );
+          return yield* new WebhookUnexpectedResponse({
+            message: "Cloudflare did not return an id for the created webhook destination",
+          });
         }
         const fresh = yield* observeWebhook(accountId, created.id);
         return toWebhookAttributes(fresh ?? { id: created.id }, accountId);
@@ -308,7 +357,7 @@ const narrowWebhook = (raw: {
 const observeWebhook = (accountId: string, webhookId: string) =>
   alerting.getDestinationWebhook({ accountId, webhookId }).pipe(
     Effect.map((w) => narrowWebhook({ ...w, id: w.id ?? webhookId })),
-    Effect.catchTag("WebhookNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("WebhookNotFound", () => Effect.undefined),
   );
 
 const findWebhookByName = (accountId: string, name: string) =>

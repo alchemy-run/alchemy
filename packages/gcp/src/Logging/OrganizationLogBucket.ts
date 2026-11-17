@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -126,8 +127,38 @@ export type OrganizationLogBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationLogBucketLookup
 >;
+
+/**
+ * Props for {@link OrganizationLogBucket.lookup}: find an organization log
+ * bucket this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface OrganizationLogBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `organizations/{organization}/locations/{location}/buckets/{bucket}`).
+   * Limited to 100 characters: letters, digits, underscores, hyphens,
+   * periods; first character must be alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log bucket on an organization.
@@ -169,6 +200,19 @@ export type OrganizationLogBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing organization log bucket
+ * `OrganizationLogBucket.lookup` references an organization log bucket
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared organization log bucket.
+ *
+ * **Example:** Reference an existing organization log bucket
+ * ```typescript
+ * const organizationLogBucket = GCP.Logging.OrganizationLogBucket.lookup({
+ *   bucketId: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -179,13 +223,13 @@ export const OrganizationLogBucket = Resource<OrganizationLogBucket>(
 export class OrganizationLogBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationLogBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationLogBucketFailed extends Data.TaggedError(
   "GCP.Logging.OrganizationLogBucketFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -275,7 +319,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -286,16 +330,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeleted(bucket)) {
-      return yield* new OrganizationLogBucketNotResolved({ name });
+      return yield* new OrganizationLogBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new OrganizationLogBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPending(bucket.lifecycleState)) {
-      return yield* new OrganizationLogBucketNotResolved({ name });
+      return yield* new OrganizationLogBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -309,7 +353,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket) ? Effect.void : Effect.fail(new OrganizationLogBucketNotResolved({ name })),
+      isDeleted(bucket)
+        ? Effect.void
+        : Effect.fail(new OrganizationLogBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.OrganizationLogBucketNotResolved",
@@ -370,6 +416,21 @@ export const OrganizationLogBucketProvider = () =>
       if (!idChanged && !locationChanged && !orgChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({
+      bucketId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(organization, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      const attrs = toAttrs(existing, organization, env.project, location);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -448,7 +509,7 @@ export const OrganizationLogBucketProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new OrganizationLogBucketNotResolved({ name });
+        return yield* new OrganizationLogBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

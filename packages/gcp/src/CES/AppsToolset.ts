@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -106,8 +107,36 @@ export type AppsToolset = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppsToolsetLookup
 >;
+
+/**
+ * Props for {@link AppsToolset.lookup}: find an apps toolset this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppsToolsetLookup {
+  /**
+   * Toolset id.
+   */
+  toolsetId: string;
+  /**
+   * Region used when `app` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent CES app. Full name
+   * `projects/{project}/locations/{location}/apps/{app}` or the app id
+   * (combined with `location`).
+   */
+  app: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Customer Engagement Suite toolset — a dynamically managed group of
@@ -142,13 +171,27 @@ export type AppsToolset = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing apps toolset
+ * `AppsToolset.lookup` references an apps toolset Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apps toolset.
+ *
+ * **Example:** Reference an existing apps toolset
+ * ```typescript
+ * const appsToolset = GCP.CES.AppsToolset.lookup({
+ *   toolsetId: "my-toolset",
+ *   app: "my-app",
+ * });
+ * ```
+ *
  * @resource
  * @category CES
  */
 export const AppsToolset = Resource<AppsToolset>("GCP.CES.AppsToolset");
 
 export class AppsToolsetNotResolved extends Data.TaggedError("GCP.CES.AppsToolsetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, toolsetId: string) => `${app}/toolsets/${toolsetId}`;
@@ -186,10 +229,10 @@ const toAttrs = (toolset: ces.Toolset, project: string, region: string, appHint?
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsToolsets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -215,6 +258,16 @@ export const AppsToolsetProvider = () =>
         extra: previousKind !== nextKind && previousKind !== "openApiToolset",
       });
     }),
+
+    lookup: Effect.fn(function* ({ toolsetId, location: lookupLocation, app: lookupApp }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const app = lookupApp ? expandApp(lookupApp, env.project, location) : undefined;
+      const name = app !== undefined ? resourceName(app, toolsetId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region, app);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -275,7 +328,7 @@ export const AppsToolsetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsToolsetNotResolved({ name });
+        return yield* new AppsToolsetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

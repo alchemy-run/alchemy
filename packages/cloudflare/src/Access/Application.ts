@@ -6,6 +6,7 @@ import { isResourceOfType, Resource } from "alchemy/Resource";
 import { arrayEquals, subsetDiffers } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -17,6 +18,18 @@ import {
   type PolicyRequireRuleInput,
   type PolicyRuleInput,
 } from "./Policy.ts";
+
+export class ApplicationInvalidProps extends Data.TaggedError("ApplicationInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ApplicationUnexpectedResponse extends Data.TaggedError(
+  "ApplicationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Application type literal — every value Cloudflare's Access service
@@ -386,8 +399,34 @@ export type Application = Resource<
   ApplicationProps,
   ApplicationAttributes,
   ApplicationBinding,
-  Providers
+  Providers,
+  ApplicationLookup
 >;
+
+/**
+ * Props for {@link Application.lookup}: find an Access application this stack
+ * doesn't manage, by its id, its domain, or its name.
+ */
+export type ApplicationLookup =
+  | {
+      /**
+       * The UUID of the existing application.
+       */
+      applicationId: string;
+    }
+  | {
+      /**
+       * The domain the existing application protects.
+       */
+      domain: string;
+    }
+  | {
+      /**
+       * The name of the existing application. Names are not unique; the
+       * first application with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Access application.
@@ -567,6 +606,21 @@ export type Application = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `applicationId`,
+ * `domain` or `name`. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Validate Access JWTs for an existing application
+ * ```typescript
+ * const app = Cloudflare.Access.Application.lookup({ domain: "admin.example.com" });
+ * const worker = yield* Cloudflare.Worker("Admin", {
+ *   main: "./src/admin.ts",
+ *   env: { ACCESS_AUD: app.aud },
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -621,6 +675,17 @@ export const ApplicationProvider = () =>
       }
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "applicationId" in props
+          ? yield* observeById(accountId, props.applicationId)
+          : "domain" in props
+            ? yield* findByDomain(accountId, props.domain)
+            : yield* findByName(accountId, props.name);
+      return isComplete(observed) ? toAttributes(observed, accountId) : undefined;
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -664,13 +729,12 @@ export const ApplicationProvider = () =>
         resolvedPolicies.some((p) => typeof p !== "string" && isInlinePolicy(p)) &&
         resolvedPolicies.some((p) => typeof p === "string" || !isInlinePolicy(p))
       ) {
-        return yield* Effect.fail(
-          new Error(
+        return yield* new ApplicationInvalidProps({
+          message:
             "Cloudflare Access applications cannot mix inline policies with " +
-              "reusable policy references — use one form for the whole " +
-              "`policies` list.",
-          ),
-        );
+            "reusable policy references — use one form for the whole " +
+            "`policies` list.",
+        });
       }
       const body = buildMutableBody(news, resolvedName, resolvedIdps, resolvedPolicies);
       // Destinations contributed through the binding contract (e.g. Workers
@@ -691,12 +755,10 @@ export const ApplicationProvider = () =>
         observed = yield* observeById(accountId, knownId);
       }
       if (!observed && news.applicationId !== undefined) {
-        return yield* Effect.fail(
-          new DeclaredApplicationNotFound({
-            applicationId: news.applicationId,
-            message: `Cloudflare Access application ${news.applicationId} does not exist`,
-          }),
-        );
+        return yield* new DeclaredApplicationNotFound({
+          applicationId: news.applicationId,
+          message: `Cloudflare Access application ${news.applicationId} does not exist`,
+        });
       }
       if (!observed && news.type === "warp") {
         // Warp is a singleton per account — reuse any existing app.
@@ -745,9 +807,9 @@ export const ApplicationProvider = () =>
       // from the body is reset. Start from the live application so settings
       // this resource does not manage survive, then apply the desired body.
       if (!observed.id) {
-        return yield* Effect.fail(
-          new Error("Cloudflare did not return an application id for Access application"),
-        );
+        return yield* new ApplicationUnexpectedResponse({
+          message: "Cloudflare did not return an application id for Access application",
+        });
       }
       if (!bodyEqualsObserved(body, observed)) {
         // Without desired destinations, keep every live hostname unless the
@@ -791,9 +853,9 @@ export const ApplicationProvider = () =>
 
       // 4. Return
       if (!isComplete(observed)) {
-        return yield* Effect.fail(
-          new Error("Cloudflare returned an Access application without id/aud/type"),
-        );
+        return yield* new ApplicationUnexpectedResponse({
+          message: "Cloudflare returned an Access application without id/aud/type",
+        });
       }
       // Keep the provider output cloud-authoritative: if Cloudflare rejects
       // or clears a desired setting, do not mask that drift with the body.
@@ -893,6 +955,18 @@ const findByDomain = (accountId: string, domain: string) =>
     ),
   );
 
+// Lookup by name: names are not unique, so the first match wins.
+const findByName = (accountId: string, name: string) =>
+  zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
+    Stream.filter((a) => (a as { name?: string | null }).name === name),
+    Stream.runHead,
+    retryTransientAccessError,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((found) =>
+      found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
+    ),
+  );
+
 const observeById = (accountId: string, appId: string) =>
   Effect.gen(function* () {
     const r = yield* zeroTrust.getAccessApplicationForAccount({ accountId, appId }).pipe(
@@ -900,7 +974,7 @@ const observeById = (accountId: string, appId: string) =>
       // observe falls through to recreate. Transient 403 back-pressure is
       // retried; anything else is a real failure and propagates.
       retryTransientAccessError,
-      Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("AccessApplicationNotFound", () => Effect.undefined),
     );
     if (r === undefined) return undefined;
     return narrowApp(r as Parameters<typeof narrowApp>[0]);
@@ -1030,7 +1104,7 @@ const narrowApp = (raw: {
   id?: string | null;
   aud?: string | null;
   name?: string | null;
-  type?: ApplicationType | null | string;
+  type?: string | null;
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
   oauthConfiguration?: RawOAuthConfiguration | null;

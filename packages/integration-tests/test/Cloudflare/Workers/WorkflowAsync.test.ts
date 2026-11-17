@@ -915,6 +915,109 @@ test.provider(
   },
 );
 
+const jurisdictionHost = (jurisdiction?: Cloudflare.Workflows.WorkflowJurisdiction) =>
+  Cloudflare.Worker("JurisdictionHost", {
+    main: namedWorkflowMain,
+    env: {
+      MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", { jurisdiction }),
+    },
+  });
+
+test.provider(
+  "jurisdiction pins instances and replaces the workflow when it changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const eu = yield* stack.deploy(jurisdictionHost("eu"));
+      const workflowName = yield* readWorkflowName(eu.workerName);
+      const created = yield* workflows.getWorkflow({ accountId, workflowName });
+      expect(created.jurisdiction).toBe("eu");
+      const terminal = yield* runWorkflowToCompletion(eu.url!);
+      expect(terminal.status).toBe("complete");
+
+      const settled = yield* stack.plan(jurisdictionHost("eu"));
+      expect(settled.resources.MyWorkflow?.action).toEqual("noop");
+
+      const replacePlan = yield* stack.plan(jurisdictionHost("us"));
+      const replaceChange = replacePlan.resources.MyWorkflow!;
+      expect(replaceChange.action).toEqual("replace");
+      if (replaceChange.action === "replace") expect(replaceChange.deleteFirst).toBe(true);
+
+      yield* stack.deploy(jurisdictionHost("us"));
+      const us = yield* workflows.getWorkflow({ accountId, workflowName });
+      expect(us.id).not.toBe(created.id);
+      expect(us.jurisdiction).toBe("us");
+
+      const unrestricted = yield* stack.deploy(jurisdictionHost());
+      const removed = yield* workflows.getWorkflow({ accountId, workflowName });
+      expect(removed.id).not.toBe(us.id);
+      expect(removed.jurisdiction ?? undefined).toBeUndefined();
+      expect(yield* readWorkflowName(unrestricted.workerName)).toBe(workflowName);
+
+      yield* stack.destroy();
+      yield* expectWorkflowGone(accountId, workflowName);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+const namedJurisdictionHost = (
+  workflowName: string,
+  jurisdiction: Cloudflare.Workflows.WorkflowJurisdiction,
+) =>
+  Cloudflare.Worker("NamedJurisdictionHost", {
+    main: namedWorkflowMain,
+    env: {
+      MY_WORKFLOW: Cloudflare.Workflow("NamedWorkflow", {
+        className: "MyWorkflow",
+        workflowName,
+        jurisdiction,
+      }),
+    },
+  });
+
+test.provider(
+  "an explicitly named workflow replaces itself when its jurisdiction changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workflowName = yield* physicalName(stack);
+
+      yield* stack.deploy(namedJurisdictionHost(workflowName, "eu"));
+      const created = yield* workflows.getWorkflow({ accountId, workflowName });
+      expect(created.jurisdiction).toBe("eu");
+
+      // The delete-first replacement reads its own previous generation under
+      // the same explicit name; that is not a foreign workflow.
+      yield* stack.deploy(namedJurisdictionHost(workflowName, "us"));
+      const us = yield* workflows.getWorkflow({ accountId, workflowName });
+      expect(us.id).not.toBe(created.id);
+      expect(us.jurisdiction).toBe("us");
+
+      yield* stack.destroy();
+      yield* expectWorkflowGone(accountId, workflowName);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:workflow",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
 test.provider(
   "direct workflow sources with Effect props preserve explicit identity through omission and rename",
   (stack) =>

@@ -4,6 +4,7 @@ import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -15,9 +16,11 @@ import * as Redacted from "effect/Redacted";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { Dependencies } from "./Dependencies.ts";
+import { toFqn } from "./FQN.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Named, Tag } from "./Named.ts";
+import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -32,6 +35,7 @@ import {
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
+import { StackContext } from "./StackContext.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
 
@@ -122,6 +126,7 @@ export type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] ext
 export type PlatformServices =
   | NodeServices
   | HttpClient
+  | SecureRandom.SecureRandom
   | Provider<any>
   | ProviderCollectionLike
   | Stack
@@ -148,6 +153,28 @@ export interface Platform<
   Provider: Provider<Resource>;
 
   <Self, Shape, Deps = never>(): {
+    <
+      const Id extends string,
+      PropsReq = never,
+      InitReq extends Services | PlatformServices | Resource = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<InlineProps>
+        | Effect.Effect<InputProps<InlineProps>, ConfigError.ConfigError, PropsReq>,
+      impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+    ): Effect.Effect<
+      Resource & Rpc<Self>,
+      never,
+      | Resource["Providers"]
+      | Exclude<PropsReq, Services | PlatformServices | Resource>
+      | Exclude<InitReq, Services | PlatformServices | Resource>
+    > &
+      Named<Id> &
+      PlatformIdentity<Id> & {
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+      };
+
     <const Id extends string>(
       id: Id,
     ): Effect.Effect<Resource & Rpc<Self> & Dependencies<Deps>, never, Resource["Providers"]> &
@@ -253,6 +280,13 @@ export const Platform = <
       }
     | undefined
   >,
+  // Requirements and errors of the hooks below. They run in the
+  // resource-construction context, which carries the Stack's providers,
+  // so whatever they need is discharged there.
+  OnCreateE = never,
+  OnCreateR = never,
+  TransformE = never,
+  TransformR = never,
 >(
   type: R["Type"],
   hooks: {
@@ -267,9 +301,9 @@ export const Platform = <
     // `onCreate` runs inside the resource-construction context, which already
     // carries the Stack's providers — so the hook may yield child resources
     // (e.g. an async Worker registering a `WorkflowResource` for a bound
-    // Workflow). Allow an ambient requirement (`any`) rather than forcing
-    // `never`; it is discharged by the surrounding provider context.
-    onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    // Workflow). Its requirements are discharged by the surrounding
+    // provider context.
+    onCreate?: (resource: R, props: any) => Effect.Effect<void, OnCreateE, OnCreateR>;
     /**
      * Transform the user-supplied props before the underlying resource is
      * declared. Runs in the resource-construction context (Stack, Namespace,
@@ -279,7 +313,7 @@ export const Platform = <
      * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
      * wherever the props effect is, including inside deployed bundles.
      */
-    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    transformProps?: (id: string, props: any) => Effect.Effect<any, TransformE, TransformR>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -336,8 +370,8 @@ export const Platform = <
               isExternal: true,
             };
       };
-      const evaluate = () =>
-        (!isTag
+      const register = () =>
+        !isTag
           ? // this is a non-tagged resource yielded without providing an implementation
             // e.g.
             // yield* Cloudflare.Worker("id", { main: "./src/worker.ts" })
@@ -376,20 +410,39 @@ export const Platform = <
                   ),
                 onSome: Effect.succeed,
               }),
-            )
-        ).pipe(
-          Effect.tap((resource) =>
-            hooks.onCreate
-              ? Effect.flatMap(
-                  // `props` may itself be an Effect (e.g. when wrapped by
-                  // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
-                  // handing it to the hook so `onCreate` always sees the
-                  // plain props object — the second call site (in
-                  // `cls.make`) already does this.
-                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                  (resolved) => hooks.onCreate!(resource as R, resolved),
-                )
-              : Effect.void,
+            );
+      // Whether this `yield*` registers the resource. The stack holds one
+      // resource per FQN and every later `yield*` returns it. Outside a
+      // stack (at runtime) nothing registers, so the hook runs as before.
+      const isFirstRegistration = Effect.flatMap(
+        Effect.serviceOption(StackContext),
+        Option.match({
+          onNone: () => Effect.succeed(true),
+          onSome: (stack) =>
+            Effect.map(CurrentNamespace, (namespace) => !(toFqn(namespace, id) in stack.resources)),
+        }),
+      );
+      const evaluate = () =>
+        Effect.flatMap(isFirstRegistration, (firstRegistration) =>
+          register().pipe(
+            Effect.tap((resource) =>
+              // Run the hook only for the `yield*` that registered the
+              // resource. The hook yields the resource's `env`, so re-running
+              // it on every `yield*` lets two Workers whose `env` entries
+              // yield each other recurse forever (#2672). The resource is
+              // registered before the hook runs, so a cycle back to it stops.
+              hooks.onCreate && firstRegistration
+                ? Effect.flatMap(
+                    // `props` may itself be an Effect (e.g. when wrapped by
+                    // `Cloudflare.Website.Vite` via `Effect.map`); resolve it
+                    // before handing it to the hook so `onCreate` always sees
+                    // the plain props object — the second call site (in
+                    // `cls.make`) already does this.
+                    Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                  )
+                : Effect.void,
+            ),
           ),
         );
       return Object.assign(
@@ -478,8 +531,10 @@ export const Platform = <
 
               yield* impl.pipe(
                 Effect.flatMap((impl) => {
-                  if (!impl) return Effect.void;
-                  const shape = impl as Record<string, unknown>;
+                  // An `alwaysServe` runtime serves routes of its own, so it
+                  // boots even when the program returns nothing.
+                  if (!impl && runtimeContext.alwaysServe !== true) return Effect.void;
+                  const shape = (impl ?? {}) as Record<string, unknown>;
                   // Serve when there's a `fetch` handler OR any RPC shape
                   // methods. A pure-RPC impl (methods, no `fetch`) still needs
                   // the server to boot — hand `serveRpc` a default 404 fallback
@@ -489,7 +544,13 @@ export const Platform = <
                   // `Main.fetch` shape); `serve` accepts both.
                   const fetch = shape.fetch as any;
                   const hasRpcMethods = Object.keys(shape).some((key) => key !== "fetch");
-                  if (!fetch && !hasRpcMethods) return Effect.void;
+                  // `alwaysServe` runtimes (ones that route Durable Object calls) serve routes
+                  // of their own — boot the server even for an impl with no
+                  // fetch handler and no RPC methods (e.g. a worker that only
+                  // hosts Durable Objects).
+                  if (!fetch && !hasRpcMethods && runtimeContext.alwaysServe !== true) {
+                    return Effect.void;
+                  }
                   // Hand the full impl to `serve` so the runtime can expose any
                   // non-handler methods on the impl shape (RPC methods)
                   // alongside the standard `fetch` handler.

@@ -177,7 +177,7 @@ export const EventRuleProvider = () =>
         return yield* pinNotificationsRegion(
           notifications
             .getEventRule({ arn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
         );
       });
 
@@ -193,7 +193,7 @@ export const EventRuleProvider = () =>
             Stream.filter((rule) => rule.source === source && rule.eventType === eventType),
             Stream.runHead,
             Effect.map(Option.getOrUndefined),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           ),
         );
       });
@@ -276,7 +276,7 @@ export const EventRuleProvider = () =>
               .pipe(
                 pinNotificationsRegion,
                 retryWhileConflict,
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             live = created
               ? yield* getByArn(created.arn)

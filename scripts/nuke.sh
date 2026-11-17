@@ -43,6 +43,10 @@ fi
 # Cloudflare.Email.Address alchemy-list-test@: standing test address — Cloudflare
 # refuses to delete an address for ~15 min after creation (code 2032), so the
 # EmailAddress test retains and re-adopts it instead of create/destroy churn.
+# Daytona API keys "alchemy": the team's own key, not a
+# test leak. Keys carry no ownership marker, so it is spared by name.
+# AWS.KMS.Key "Alchemy state store key": encrypts the alchemy-state table and
+# buckets; scheduling it for deletion makes the state table INACCESSIBLE.
 pnpm -C ./stacks alchemy unsafe nuke --config ./src/nuke.ts  \
   --exclude 'AWS.BackupSearch.SearchJob' \
   --exclude 'Cloudflare.Zone*' \
@@ -79,6 +83,7 @@ pnpm -C ./stacks alchemy unsafe nuke --config ./src/nuke.ts  \
   --filter 'resource.Type === "Cloudflare.Email.Address" && resource.email === "alchemy-list-test@alchemy-test-2.us"' \
   --filter 'String(resource.logGroupName).startsWith("/aws/vendedlogs/b2bi/")' \
   --filter 'resource.Type === "AWS.Logs.LogGroup" && String(resource.logGroupName).startsWith("/aws-glue/")' \
-  --filter 'resource.Type === "Fly.Bucket" && resource.name === "fly-buovnrccm7qpb3be3utsdvlj6x"' \
   --filter 'resource.Type === "GCP.Storage.Bucket" && String(resource.bucketName).startsWith("alchemy-state-")' \
+  --filter 'resource.Type === "Daytona.ApiKey" && ["alchemy"].includes(resource.name)' \
+  --filter 'resource.Type === "AWS.KMS.Key" && String(resource.description).startsWith("Alchemy state store key")' \
   "$@"

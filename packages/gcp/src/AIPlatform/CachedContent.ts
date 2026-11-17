@@ -1,5 +1,5 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -154,7 +154,7 @@ export const CachedContent = Resource<CachedContent>("GCP.AIPlatform.CachedConte
 export class CachedContentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.CachedContentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toContents = (
@@ -191,7 +191,7 @@ const toAttrs = (cache: aiplatform.GoogleCloudAiplatformV1CachedContent, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsCachedContents({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listCaches = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -255,13 +255,15 @@ export const CachedContentProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseOwnership(existing.displayName);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -315,7 +317,7 @@ export const CachedContentProvider = () =>
 
       if (current === undefined) {
         return yield* new CachedContentNotResolved({
-          name: output?.name ?? parentOf(env.project, location),
+          resourceName: output?.name ?? parentOf(env.project, location),
         });
       }
 

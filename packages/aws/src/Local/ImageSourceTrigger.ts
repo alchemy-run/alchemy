@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * INTERNAL — the "image source changed" trigger stream shared by the floci
  * dev providers that rebuild a Docker image on file change
@@ -40,7 +38,7 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
   source: ImageSourceLike;
   isExternal: boolean | undefined;
 }) {
-  const { id, source } = options;
+  const { source } = options;
   const kind = imageSourceKind(source);
 
   if (kind === "main") {
@@ -59,7 +57,7 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
     return Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(
       Stream.tap((event) =>
         event._tag === "Error"
-          ? Effect.logWarning(`[alchemy dev] ${id}: rebuild failed: ${event.error.message}`)
+          ? Effect.logWarning(`rebuild failed: ${event.error.message}`)
           : Effect.void,
       ),
       Stream.filter((event) => {
@@ -95,9 +93,7 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
       Stream.debounce("300 millis"),
       Stream.map(() => undefined),
       Stream.catchCause((cause) =>
-        Stream.fromEffect(
-          Effect.logWarning(`[alchemy dev] ${id}: context watch failed`, cause),
-        ).pipe(Stream.drain),
+        Stream.fromEffect(Effect.logWarning(`context watch failed`, cause)).pipe(Stream.drain),
       ),
     ) as Stream.Stream<void>;
   }

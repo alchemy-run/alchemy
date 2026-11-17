@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -121,8 +122,36 @@ export type Posture = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PostureLookup
 >;
+
+/**
+ * Props for {@link Posture.lookup}: find a posture this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PostureLookup {
+  /**
+   * Posture id (the `{posture}` segment of
+   * `organizations/{organization}/locations/global/postures/{posture}`).
+   * Letters, digits, hyphens, and underscores; max 63 characters.
+   */
+  postureId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Location. Security postures live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Security Command Center security posture.
@@ -172,6 +201,18 @@ export type Posture = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing posture
+ * `Posture.lookup` references a posture Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared posture.
+ *
+ * **Example:** Reference an existing posture
+ * ```typescript
+ * const posture = GCP.SecurityPosture.Posture.lookup({
+ *   postureId: "my-posture",
+ * });
+ * ```
+ *
  * @resource
  * @category SecurityPosture
  */
@@ -211,10 +252,10 @@ const toAttrs = (posture: securityposture.Posture, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : securityposture
         .getOrganizationsLocationsPostures({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const desiredState = (news: PostureProps) => news.state ?? DEFAULT_STATE;
 
@@ -255,6 +296,22 @@ export const PostureProvider = () =>
         false,
       );
     }),
+
+    lookup: Effect.fn(function* ({
+      postureId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.SecurityPosture.OrganizationNotResolved", () => Effect.succeed("")),
+      );
+      const location = lastSegment(lookupLocation ?? DEFAULT_LOCATION);
+      const name = organization.length > 0 ? resourceName(organization, location, postureId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -322,7 +379,7 @@ export const PostureProvider = () =>
             postureId,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitPostureOperation(created);
         }
@@ -340,7 +397,7 @@ export const PostureProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritypostureNotResolved({ name });
+        return yield* new SecuritypostureNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = !sameText(current.description, desired.description);
@@ -408,7 +465,7 @@ export const PostureProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitPostureOperationGone(operation);

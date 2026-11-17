@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -85,8 +86,33 @@ export type DnsZone = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DnsZoneLookup
 >;
+
+/**
+ * Props for {@link DnsZone.lookup}: find a dns zone this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DnsZoneLookup {
+  /**
+   * DNS zone id (the `{dns_zone}` segment of
+   * `organizations/{org}/dnsZones/{dns_zone}`). Must be 1-63 characters,
+   * begin with a letter, end with a letter or digit, and contain only
+   * lowercase letters, digits, or dashes.
+   */
+  dnsZoneId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee DNS peering zone that lets runtime instances resolve hostnames
@@ -111,6 +137,16 @@ export type DnsZone = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dns zone
+ * `DnsZone.lookup` references a dns zone Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared dns zone.
+ *
+ * **Example:** Reference an existing dns zone
+ * ```typescript
+ * const dnsZone = GCP.Apigee.DnsZone.lookup({ dnsZoneId: "my-dns-zone" });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -120,7 +156,7 @@ export const DnsZone = Resource<DnsZone>("GCP.Apigee.DnsZone");
 export const Dn = DnsZone;
 
 export class DnsZoneNotResolved extends Data.TaggedError("GCP.Apigee.DnsZoneNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, dnsZoneId: string) =>
@@ -152,7 +188,7 @@ const toAttrs = (zone: apigee.GoogleCloudApigeeV1DnsZone, organization: string) 
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDnsZones({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const DnsZoneProvider = () =>
   Provider.succeed(DnsZone, {
@@ -183,6 +219,15 @@ export const DnsZoneProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ dnsZoneId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      const name = resourceName(organization, dnsZoneId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -242,7 +287,7 @@ export const DnsZoneProvider = () =>
               peeringConfig: news.peeringConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -250,7 +295,7 @@ export const DnsZoneProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DnsZoneNotResolved({ name });
+        return yield* new DnsZoneNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organization);
@@ -259,9 +304,7 @@ export const DnsZoneProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsDnsZones({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

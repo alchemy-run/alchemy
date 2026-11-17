@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import type { AddressInfo, Socket } from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { URL as NodeURL } from "node:url";
@@ -26,6 +27,7 @@ const devServer = async (source: string): Promise<string> => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -75,11 +77,11 @@ const listen = async (server: NodeHttp.Server): Promise<NodeURL> => {
 };
 
 // Proxies every request to `runtime` the way the dev server does.
-const proxyTo = (runtime: NodeURL): Promise<NodeURL> => {
+const proxyTo = (runtime: NodeURL, socketPath?: string): Promise<NodeURL> => {
   const logger = vite.createLogger("silent");
   return listen(
     NodeHttp.createServer((request, response) => {
-      forwardWorkerRequest(request, response, runtime, "secret", logger);
+      forwardWorkerRequest(request, response, runtime, socketPath, "secret", logger);
     }),
   );
 };
@@ -92,8 +94,14 @@ test("stops the Worker's stream when the client hangs up", async () => {
     let pulls = 0;
     export default {
       fetch(request) {
-        if (new URL(request.url).pathname === "/pulls") {
+        const { pathname } = new URL(request.url);
+        if (pathname === "/pulls") {
           return Response.json({ pulls });
+        }
+        // Only the test's own stream counts: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with \`GET /\`.
+        if (pathname !== "/events") {
+          return new Response("Not Found", { status: 404 });
         }
         return new Response(
           new ReadableStream({
@@ -118,11 +126,22 @@ test("stops the Worker's stream when the client hangs up", async () => {
   await stream.body!.getReader().read();
   client.abort();
 
-  // workerd stops pulling once it sees the request cancelled.
-  await sleep(500);
-  const afterHangUp = await pulls();
-  await sleep(500);
-  expect(await pulls()).toBe(afterHangUp);
+  // workerd stops pulling once it sees the request cancelled. The cancel can
+  // take a while to land on a loaded machine, so wait for the count to hold
+  // still: a live stream pulls every 50ms and never would.
+  let previous = await pulls();
+  await expect
+    .poll(
+      async () => {
+        await sleep(300);
+        const next = await pulls();
+        const stopped = next === previous;
+        previous = next;
+        return stopped;
+      },
+      { timeout: 15_000, interval: 0 },
+    )
+    .toBe(true);
 });
 
 test("keeps connections usable after the Worker answers without reading the body", async () => {
@@ -175,10 +194,9 @@ test("streams the Worker's response while the request body is still arriving", a
 });
 
 test("forwards each request on a connection of its own", async () => {
-  // Pins the defensive connection per request (see worker-request.ts). The
-  // reuse failure it guards against hasn't been reproduced with workerd, so a
-  // stand-in plays workerd having closed a connection the proxy still holds:
-  // a second request on any connection finds it gone.
+  // Pins the connection per request (see worker-request.ts). A stand-in plays
+  // workerd having closed a connection the proxy still holds (#1869): a second
+  // request on any connection finds it gone.
   const served = new WeakSet<Socket>();
   const runtime = await listen(
     NodeHttp.createServer((request, response) => {
@@ -200,6 +218,49 @@ test("forwards each request on a connection of its own", async () => {
   };
   expect(await get()).toEqual({ status: 200, body: "worker" });
   expect(await get()).toEqual({ status: 200, body: "worker" });
+});
+
+test.skipIf(process.platform === "win32")(
+  "forwards over the runtime's Unix socket, using no TCP port",
+  async () => {
+    // Over TCP every forwarded request takes an ephemeral port that TIME_WAIT
+    // holds after it closes, which exhausts the port range under load (#3194).
+    const socketPath = path.join(os.tmpdir(), `alchemy-proxy-test-${process.pid}.sock`);
+    await fs.rm(socketPath, { force: true });
+    const runtime = NodeHttp.createServer((_request, response) => response.end("worker"));
+    onTestFinished(() => new Promise<void>((resolve) => runtime.close(() => resolve())));
+    await new Promise<void>((resolve) => runtime.listen(socketPath, resolve));
+    // Nothing listens on the TCP address: only the socket can answer.
+    const proxy = await proxyTo(new NodeURL("http://127.0.0.1:1"), socketPath);
+
+    const response = await fetch(proxy, { signal: AbortSignal.timeout(5_000) });
+    expect({ status: response.status, body: await response.text() }).toEqual({
+      status: 200,
+      body: "worker",
+    });
+  },
+);
+
+test("reports the client's address as CF-Connecting-IP", async () => {
+  // workerd has no peer address for a Unix socket connection, and over TCP
+  // the peer is the proxy, so the proxy reports the client.
+  const url = await devServer(`
+    export default {
+      fetch(request) {
+        return new Response(request.headers.get("CF-Connecting-IP"));
+      },
+    };
+  `);
+  const ip = async (headers?: Record<string, string>) => {
+    const response = await fetch(new URL("/", url), {
+      headers,
+      signal: AbortSignal.timeout(5_000),
+    });
+    return response.text();
+  };
+  expect(await ip()).toBe("127.0.0.1");
+  // A header the client sent wins, as without the proxy.
+  expect(await ip({ "CF-Connecting-IP": "203.0.113.7" })).toBe("203.0.113.7");
 });
 
 test("never forwards to a host named in the request path", async () => {

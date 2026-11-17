@@ -50,8 +50,18 @@ export interface Schedule extends Resource<
     scheduleArn: string;
   },
   {},
-  Providers
+  Providers,
+  ScheduleLookup
 > {}
+
+/**
+ * Props for {@link Schedule.lookup}: find a schedule this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScheduleLookup {
+  /** The name of the existing schedule. */
+  scheduleName: string;
+}
 
 /**
  * An AWS Glue DataBrew schedule — a cron expression that starts one or more
@@ -75,6 +85,16 @@ export interface Schedule extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing schedule
+ * `Schedule.lookup` references a schedule Alchemy doesn't manage (created in the
+ * console or by another stack), found by `scheduleName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing schedule
+ * ```typescript
+ * const existing = AWS.DataBrew.Schedule.lookup({ scheduleName: "..." });
+ * ```
+ *
  * @resource
  */
 export const Schedule = Resource<Schedule>("AWS.DataBrew.Schedule");
@@ -93,7 +113,7 @@ export const ScheduleProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeSchedule({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Schedule.Provider.of({
@@ -110,6 +130,15 @@ export const ScheduleProvider = () =>
                 scheduleArn: s.ResourceArn ?? databrewArn(region, accountId, "schedule", s.Name),
               }));
           }),
+
+        lookup: Effect.fn(function* ({ scheduleName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const schedule = yield* observe(name);
+          if (schedule === undefined) return undefined;
+          const arn = schedule.ResourceArn ?? databrewArn(region, accountId, "schedule", name);
+          const attrs = { scheduleName: name, scheduleArn: arn };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -172,7 +201,7 @@ export const ScheduleProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           yield* retryWhileConflict(databrew.deleteSchedule({ Name: output.scheduleName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

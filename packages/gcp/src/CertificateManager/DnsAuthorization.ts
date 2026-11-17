@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -97,8 +98,35 @@ export type DnsAuthorization = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DnsAuthorizationLookup
 >;
+
+/**
+ * Props for {@link DnsAuthorization.lookup}: find a dns authorization this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DnsAuthorizationLookup {
+  /**
+   * DnsAuthorization id (the `{dnsAuthorization}` segment of
+   * `projects/{proj
+   * ect}/locations/{location}/dnsAuthorizations/{dnsAuthorization}`). Must
+   * be 1-63 characters, start with a letter, and match
+   * `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  dnsAuthorizationId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager DNS authorization proving ownership of a domain
@@ -158,6 +186,19 @@ export type DnsAuthorization = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dns authorization
+ * `DnsAuthorization.lookup` references a dns authorization Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * dns authorization.
+ *
+ * **Example:** Reference an existing dns authorization
+ * ```typescript
+ * const dnsAuthorization = GCP.CertificateManager.DnsAuthorization.lookup({
+ *   dnsAuthorizationId: "my-dns-authorization",
+ * });
+ * ```
+ *
  * @resource
  * @category CertificateManager
  */
@@ -168,13 +209,13 @@ export const DnsAuthorization = Resource<DnsAuthorization>(
 export class DnsAuthorizationNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.DnsAuthorizationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DnsAuthorizationStillExists extends Data.TaggedError(
   "GCP.CertificateManager.DnsAuthorizationStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -266,12 +307,14 @@ const toAttrs = (auth: certificatemanager.DnsAuthorization, project: string) => 
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsDnsAuthorizations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
-      auth ? Effect.succeed(auth) : Effect.fail(new DnsAuthorizationNotResolved({ name })),
+      auth
+        ? Effect.succeed(auth)
+        : Effect.fail(new DnsAuthorizationNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.DnsAuthorizationNotResolved",
@@ -283,7 +326,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
-      auth === undefined ? Effect.void : Effect.fail(new DnsAuthorizationStillExists({ name })),
+      auth === undefined
+        ? Effect.void
+        : Effect.fail(new DnsAuthorizationStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.DnsAuthorizationStillExists",
@@ -349,6 +394,15 @@ export const DnsAuthorizationProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ dnsAuthorizationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, dnsAuthorizationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const dnsAuthorizationId = yield* toId(
@@ -407,7 +461,7 @@ export const DnsAuthorizationProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -416,7 +470,7 @@ export const DnsAuthorizationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DnsAuthorizationNotResolved({ name });
+        return yield* new DnsAuthorizationNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -455,7 +509,7 @@ export const DnsAuthorizationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

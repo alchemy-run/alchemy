@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -74,8 +75,28 @@ export type NotificationConfig = Resource<
     serviceAccount: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NotificationConfigLookup
 >;
+
+/**
+ * Props for {@link NotificationConfig.lookup}: find a notification config
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface NotificationConfigLookup {
+  /**
+   * Config id (the `{config}` segment of
+   * `projects/{project}/notificationConfigs/{config}`). Letters, digits,
+   * and hyphens; must start with a letter; max 63 characters.
+   */
+  configId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Security Command Center notification config that
@@ -107,6 +128,19 @@ export type NotificationConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing notification config
+ * `NotificationConfig.lookup` references a notification config Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared notification config.
+ *
+ * **Example:** Reference an existing notification config
+ * ```typescript
+ * const notificationConfig = GCP.SecurityCenter.NotificationConfig.lookup({
+ *   configId: "my-config",
+ * });
+ * ```
+ *
  * @resource
  * @category SecurityCenter
  */
@@ -117,7 +151,7 @@ export const NotificationConfig = Resource<NotificationConfig>(
 export class NotificationConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.NotificationConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, configId: string) =>
@@ -143,10 +177,10 @@ const toAttrs = (config: scc.NotificationConfig, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsNotificationConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NotificationConfigProvider = () =>
   Provider.succeed(NotificationConfig, {
@@ -156,6 +190,14 @@ export const NotificationConfigProvider = () =>
       if (!isResolved(news)) return undefined;
       return replaceOn(olds?.configId ?? output?.configId, news.configId);
     }),
+
+    lookup: Effect.fn(function* ({ configId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, configId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -209,7 +251,7 @@ export const NotificationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotificationConfigNotResolved({ name });
+        return yield* new NotificationConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

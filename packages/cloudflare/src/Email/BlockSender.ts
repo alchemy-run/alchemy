@@ -221,7 +221,7 @@ type ObservedBlockSender = emailSecurity.GetSettingBlockSenderResponse;
 const getBlockSender = (accountId: string, patternId: string) =>
   emailSecurity.getSettingBlockSender({ accountId, patternId }).pipe(
     Effect.map((entry): ObservedBlockSender | undefined => entry),
-    Effect.catchTag("BlockSenderNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("BlockSenderNotFound", () => Effect.undefined),
   );
 
 /**

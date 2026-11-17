@@ -91,7 +91,7 @@ export const ChannelAssociationProvider = () =>
             Stream.runHead,
             Effect.map(Option.getOrUndefined),
             // The parent configuration may already be gone.
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           ),
         );
       });

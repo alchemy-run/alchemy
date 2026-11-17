@@ -97,7 +97,7 @@ export type View = Resource<
 export const View = Resource<View>("GCP.ContactCenterInsights.View");
 
 export class ViewNotResolved extends Data.TaggedError("GCP.ContactCenterInsights.ViewNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, viewId: string) =>
@@ -120,10 +120,10 @@ const toAttrs = (view: cci.GoogleCloudContactcenterinsightsV1View, project: stri
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsViews({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsViews.pages({ parent, pageSize: 100 }).pipe(
@@ -141,7 +141,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((view) => view.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const ViewProvider = () =>
@@ -222,7 +222,7 @@ export const ViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ViewNotResolved({ name });
+        return yield* new ViewNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

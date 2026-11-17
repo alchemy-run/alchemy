@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_PROTECTION: kms.ImportJobProtectionLevelEnum = "SOFTWARE";
@@ -91,8 +92,39 @@ export type ImportJob = Resource<
   ImportJobProps,
   ImportJobAttrs,
   never,
-  Providers
+  Providers,
+  ImportJobLookup
 >;
+
+/**
+ * Props for {@link ImportJob.lookup}: find an import job this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ImportJobLookup {
+  /**
+   * Import job id (the last path segment). Must match
+   * `[a-zA-Z0-9_-]{1,63}`.
+   */
+  importJobId: string;
+  /**
+   * Parent KeyRing. Full name
+   * `projects/{project}/locations/{location}/keyRings/{keyRing}` or the key
+   * ring id (combined with `location`).
+   */
+  keyRing: string;
+  /**
+   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * `keyRing` is a bare id. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud KMS ImportJob — a wrapping-key job used to import pre-existing
@@ -126,17 +158,31 @@ export type ImportJob = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing import job
+ * `ImportJob.lookup` references an import job Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * import job.
+ *
+ * **Example:** Reference an existing import job
+ * ```typescript
+ * const importJob = GCP.KMS.ImportJob.lookup({
+ *   importJobId: "my-import-job",
+ *   keyRing: "my-key-ring",
+ * });
+ * ```
+ *
  * @resource
  * @category KMS
  */
 export const ImportJob = Resource<ImportJob>("GCP.KMS.ImportJob");
 
 export class ImportJobNotResolved extends Data.TaggedError("GCP.KMS.ImportJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ImportJobPending extends Data.TaggedError("GCP.KMS.ImportJobPending")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -236,7 +282,7 @@ const toAttrs = (job: kms.ImportJob, project: string, region: string): ImportJob
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRingsImportJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const paginate = <A, E, R>(
   fetch: (
@@ -325,12 +371,12 @@ const waitReady = (
   > = getByName(name).pipe(
     Effect.flatMap((job): Effect.Effect<kms.ImportJob, ImportJobNotResolved | ImportJobPending> => {
       if (job === undefined) {
-        return Effect.fail(new ImportJobNotResolved({ name }));
+        return Effect.fail(new ImportJobNotResolved({ resourceName: name }));
       }
       if (job.state === "PENDING_GENERATION") {
         return Effect.fail(
           new ImportJobPending({
-            name,
+            resourceName: name,
             state: job.state,
           }),
         );
@@ -389,6 +435,20 @@ export const ImportJobProvider = () =>
       // Cannot delete the old job; create the replacement first.
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ importJobId, keyRing, location }) {
+      const env = yield* GcpEnvironment.current;
+      const name = keyRing
+        ? resourceName(
+            resolveParent(env.project, keyRing ?? "", location, env.region).parent,
+            importJobId,
+          )
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -473,7 +533,7 @@ export const ImportJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ImportJobNotResolved({ name });
+        return yield* new ImportJobNotResolved({ resourceName: name });
       }
 
       if (current.state === "PENDING_GENERATION") {

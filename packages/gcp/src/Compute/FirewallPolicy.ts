@@ -1,6 +1,6 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -257,7 +257,7 @@ const projectParent = (project: string) =>
         ? normalizeParent(resource.parent)
         : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const resolveParent = (news: FirewallPolicyProps, output: { parent?: string } | undefined) =>
@@ -404,7 +404,7 @@ const toAttrs = (policy: compute.FirewallPolicy, project: string): FirewallPolic
 const getById = (firewallPolicy: string) =>
   compute
     .getFirewallPolicies({ firewallPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByShortName = (parentId: string, shortName: string) =>
   compute.listFirewallPolicies
@@ -417,7 +417,7 @@ const findByShortName = (parentId: string, shortName: string) =>
       Stream.filter((policy) => policy.shortName === shortName),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const observe = (firewallPolicyId: string | undefined, parentId: string, shortName: string) =>
@@ -600,7 +600,7 @@ export const FirewallPolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const shortName = yield* toName(id, olds?.shortName, output?.shortName);
       const parent = yield* resolveParent(olds ?? {}, output).pipe(
@@ -612,7 +612,9 @@ export const FirewallPolicyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "shortName");
     }),
 
     list: () =>
@@ -663,7 +665,7 @@ export const FirewallPolicyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         const createdId = inserted !== undefined ? idFromOperation(inserted) : "";
         current = yield* awaitResource(

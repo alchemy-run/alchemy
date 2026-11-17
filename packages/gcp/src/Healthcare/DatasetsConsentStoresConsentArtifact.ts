@@ -131,7 +131,7 @@ export const DatasetsConsentStoresConsentArtifact = Resource<DatasetsConsentStor
 export class DatasetsConsentStoresConsentArtifactNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresConsentArtifactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const storeOf = (
@@ -165,10 +165,10 @@ const toAttrs = (artifact: healthcare.ConsentArtifact, project: string, region: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStoresConsentArtifacts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoresConsentArtifactProvider = () =>
   Provider.succeed(DatasetsConsentStoresConsentArtifact, {
@@ -256,7 +256,7 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresConsentArtifactNotResolved({
-          name: consentStore,
+          resourceName: consentStore,
         });
       }
 

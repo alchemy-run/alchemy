@@ -1207,6 +1207,8 @@ const onEvent = (tui: Tui, event: TestEvent): void => {
       if (entry !== undefined) entry.liveLogs = event.logs;
       break;
     }
+    case "TestLocked":
+      break;
     case "TestEnd":
       state.upsert(event.test, event.result.status, event.result);
       break;

@@ -24,6 +24,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -156,8 +157,22 @@ export type RecordSet = Resource<
   RecordSetProps,
   RecordSetAttributes,
   never,
-  Providers
+  Providers,
+  RecordSetLookup
 >;
+
+/**
+ * Props for {@link RecordSet.lookup}: find a record set this stack
+ * doesn't manage by its zone, name and type.
+ */
+export interface RecordSetLookup {
+  /** Zone domain name or numeric id. */
+  zone: string;
+  /** Record name relative to the zone (`@` for the apex). */
+  name: string;
+  /** Record type. */
+  type: RecordSetType;
+}
 
 /**
  * A Hetzner Cloud DNS resource record set (RRSet) — one `(name, type)`
@@ -213,19 +228,29 @@ export type RecordSet = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing record set
+ * `RecordSet.lookup` references a record set Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Read an existing record set
+ * ```typescript
+ * const mx = Hetzner.RecordSet.lookup({ zone: "example.com", name: "@", type: "MX" });
+ * ```
+ *
  * @resource
  * @product DNS
  */
 export const RecordSet = Resource<RecordSet>("Hetzner.RecordSet");
 
 export class RecordSetZoneMissing extends Data.TaggedError("Hetzner.RecordSetZoneMissing")<{
-  name: string;
+  recordName: string;
   type: string;
 }> {}
 
 class RecordSetStillExists extends Data.TaggedError("RecordSetStillExists")<{
   zoneId: number;
-  name: string;
+  recordName: string;
   type: string;
 }> {}
 
@@ -312,7 +337,7 @@ const getRrset = (zoneId: number, name: string, type: string) =>
     .getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
     .pipe(
       Effect.map(({ rrset }) => rrset),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const findByLabels = (zoneId: number, id: string) =>
@@ -369,7 +394,21 @@ export const RecordSetProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ zone, name, type }) {
+      const found = yield* Hetzner.zoneRrsets
+        .getZoneRrset({
+          id_or_name: zone,
+          rr_name: normalizeName(name),
+          rr_type: normalizeType(type),
+        })
+        .pipe(
+          Effect.map(({ rrset }) => rrset),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const zoneId = output?.zoneId ?? zoneIdOf(olds?.zone);
       const name =
         output?.name ?? (olds?.name !== undefined ? normalizeName(olds.name) : undefined);
@@ -384,6 +423,20 @@ export const RecordSetProvider = () =>
         current = yield* findByLabels(zoneId, id);
       }
       if (current === undefined) return undefined;
+      // A record set is identified by its name and type.
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: current.id,
+          claimedName:
+            olds?.name !== undefined && olds?.type !== undefined
+              ? `${normalizeName(olds.name)}/${normalizeType(olds.type)}`
+              : undefined,
+          foundName: `${current.name}/${current.type}`,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(current);
       return (yield* hasAlchemyLabels(id, tagRecord(current.labels))) ? attrs : Unowned(attrs);
     }),
@@ -392,7 +445,7 @@ export const RecordSetProvider = () =>
       const name = yield* resolveName(id, news, output);
       const type = normalizeType(news.type);
       if (zoneId === undefined) {
-        return yield* new RecordSetZoneMissing({ name, type });
+        return yield* new RecordSetZoneMissing({ recordName: name, type });
       }
 
       const desiredRecords = sortRecords(news.records);
@@ -441,7 +494,7 @@ export const RecordSetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RecordSetZoneMissing({ name, type });
+        return yield* new RecordSetZoneMissing({ recordName: name, type });
       }
 
       const zoneRef = String(zoneId);
@@ -526,7 +579,7 @@ export const RecordSetProvider = () =>
       const deleted = yield* retryLocked(
         Hetzner.zoneRrsets
           .deleteZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (deleted !== undefined) {
         yield* waitForZoneAction(deleted.action.id);
@@ -534,7 +587,9 @@ export const RecordSetProvider = () =>
 
       yield* getRrset(zoneId, name, type).pipe(
         Effect.flatMap((rrset) =>
-          rrset === undefined ? Effect.void : new RecordSetStillExists({ zoneId, name, type }),
+          rrset === undefined
+            ? Effect.void
+            : new RecordSetStillExists({ zoneId, recordName: name, type }),
         ),
         Effect.retry({
           while: (e) => e._tag === "RecordSetStillExists",

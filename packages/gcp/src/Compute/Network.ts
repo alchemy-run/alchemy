@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -126,8 +127,27 @@ export type Network = Resource<
     subnetworks: ReadonlyArray<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkLookup
 >;
+
+/**
+ * Props for {@link Network.lookup}: find a network this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface NetworkLookup {
+  /**
+   * Network name. Must be 1-63 characters and match
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  networkName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Compute Engine VPC network.
@@ -164,6 +184,16 @@ export type Network = Resource<
  * Auto mode is slower to create and delete (one subnet per region). Prefer
  * custom mode (`autoCreateSubnetworks: false`, the default) unless you
  * specifically want the pre-created ranges.
+ *
+ * ### Looking up an existing network
+ * `Network.lookup` references a network Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared network.
+ *
+ * **Example:** Reference an existing network
+ * ```typescript
+ * const network = GCP.Compute.Network.lookup({ networkName: "my-network" });
+ * ```
  *
  * @resource
  * @category Compute
@@ -257,7 +287,7 @@ const toAttrs = (network: compute.Network, project: string): Network["Attributes
 const getByName = (project: string, networkName: string) =>
   compute
     .getNetworks({ project, network: networkName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitInsertedNetwork = (
   project: string,
@@ -332,6 +362,13 @@ export const NetworkProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ networkName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, networkName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const networkName = yield* toNetworkName(id, olds?.networkName, output?.networkName);
@@ -402,7 +439,7 @@ export const NetworkProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((inserted) => waitInsertedNetwork(env.project, networkName, inserted)),
             Effect.retry({
               while: (error) => error._tag === "NotFound" || error._tag === "GCP.OperationFailed",

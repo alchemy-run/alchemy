@@ -89,8 +89,9 @@ export const CertificateAuthorityPolicyProvider = () =>
       const observe = (certificateAuthorityArn: string) =>
         acmpca.getPolicy({ ResourceArn: certificateAuthorityArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag(["ResourceNotFoundException", "InvalidStateException"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["ResourceNotFoundException", "InvalidStateException"],
+            () => Effect.undefined,
           ),
         );
 

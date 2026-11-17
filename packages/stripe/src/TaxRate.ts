@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetTaxRates,
   GetTaxRate,
@@ -131,8 +130,18 @@ export type TaxRate = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  TaxRateLookup
 >;
+
+/**
+ * Props for {@link TaxRate.lookup}: find a tax rate this stack
+ * doesn't manage by its id.
+ */
+export interface TaxRateLookup {
+  /** Stripe tax rate id, e.g. `"txr_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Tax Rate — a percent tax applied to invoices, subscriptions,
@@ -189,6 +198,16 @@ export type TaxRate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tax rate
+ * `TaxRate.lookup` references a tax rate Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing tax rate
+ * ```typescript
+ * const ref = Stripe.TaxRate.lookup({ id: "txr_1A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Tax
  */
@@ -232,9 +251,7 @@ const toAttrs = (rate: StripeTaxRate): TaxRateAttributes => ({
 const isMissingTaxRate = isMissingStripeResource;
 
 const getById = (taxRate: string) =>
-  GetTaxRate({ tax_rate: taxRate }).pipe(
-    Effect.catchIf(isMissingTaxRate, () => Effect.succeed(undefined)),
-  );
+  GetTaxRate({ tax_rate: taxRate }).pipe(Effect.catchIf(isMissingTaxRate, () => Effect.undefined));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const rates: StripeTaxRate[] = [];
@@ -320,6 +337,11 @@ export const TaxRateProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -368,11 +390,8 @@ export const TaxRateProvider = () =>
           ...(news.jurisdiction !== undefined ? { jurisdiction: news.jurisdiction } : {}),
           ...(news.state !== undefined ? { state: news.state } : {}),
           ...(news.taxType !== undefined ? { tax_type: news.taxType } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-tax-rate-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-tax-rate-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

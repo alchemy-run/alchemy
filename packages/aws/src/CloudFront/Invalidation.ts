@@ -7,6 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class InvalidationUnexpectedResponse extends Data.TaggedError(
+  "InvalidationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface InvalidationProps {
   /**
    * Distribution to invalidate.
@@ -151,7 +158,9 @@ export const InvalidationProvider = () =>
           : response.Invalidation;
 
         if (!invalidation?.Id) {
-          return yield* Effect.fail(new Error("createInvalidation returned no invalidation"));
+          return yield* new InvalidationUnexpectedResponse({
+            message: "createInvalidation returned no invalidation",
+          });
         }
 
         return invalidation;

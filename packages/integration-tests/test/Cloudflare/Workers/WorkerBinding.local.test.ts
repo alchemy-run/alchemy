@@ -7,6 +7,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { A as AsyncCycleA, B as AsyncCycleB } from "./fixtures/async-circular-bindings/stack.ts";
 import CycleWorkerALive, { WorkerA as CycleWorkerA } from "./fixtures/circular-bindings/workerA.ts";
 import CycleWorkerBLive, { WorkerB as CycleWorkerB } from "./fixtures/circular-bindings/workerB.ts";
 import BindingSelfWorkerLive, {
@@ -124,6 +125,39 @@ test.provider(
 
       // The other edge of the cycle: WorkerB calls WorkerA.
       expect(yield* getTextReady(`${deployed.urlB}/worker-a`)).toBe("WorkerA");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 180_000,
+  },
+);
+
+/**
+ * Two plain async Workers bind each other: A binds B's default entrypoint
+ * and B binds A's named `Callbacks` entrypoint. Declaring the stack used to
+ * recurse between the two `env` declarations until the heap ran out (#2672).
+ */
+test.provider(
+  "local async workers in a cycle call each other",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* AsyncCycleA;
+          const b = yield* AsyncCycleB;
+          return { urlA: a.url.as<string>(), urlB: b.url.as<string>() };
+        }),
+      );
+
+      expect(deployed.urlA).toMatch(/^http:\/\/localhost:\d+$/);
+      expect(deployed.urlB).toMatch(/^http:\/\/localhost:\d+$/);
+
+      // A → B.start → A's Callbacks.done: both edges of the cycle.
+      expect(yield* getTextReady(`${deployed.urlA}/?id=7`)).toBe("a got 7");
 
       yield* stack.destroy();
     }).pipe(logLevel),

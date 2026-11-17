@@ -5,8 +5,8 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as ts from "tsrs/unstable/ast";
-import { API, TypeFlags, type Type, type Project } from "tsrs/unstable/async";
+import * as ts from "tsrs/ast";
+import { API, TypeFlags, type Type, type Project } from "tsrs/async";
 
 /**
  * Lints every `Providers.ts` under a workspace package's `src` (alchemy's

@@ -514,7 +514,7 @@ function* dumpSql(
           if (!Number.isFinite(cell)) {
             return (cell as number) > 0 ? "9e999" : "-9e999";
           }
-          return cell;
+          return (cell as number).toString();
         } else if (cellType === "string") {
           return outputQuotedEscapedString(cell);
         } else if (cell instanceof ArrayBuffer) {

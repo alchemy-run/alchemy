@@ -3,10 +3,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { arrayEquals } from "alchemy/Util/equal";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class RuleUnexpectedResponse extends Data.TaggedError("RuleUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Action Cloudflare Gateway takes when a rule's traffic/identity/device-posture
@@ -327,9 +333,9 @@ export const RuleProvider = () =>
 
           // 3. Sync
           if (!observed.id) {
-            return yield* Effect.fail(
-              new Error("Cloudflare did not return a rule id for Gateway rule"),
-            );
+            return yield* new RuleUnexpectedResponse({
+              message: "Cloudflare did not return a rule id for Gateway rule",
+            });
           }
           if (!bodyEqualsObserved(body, observed)) {
             const updated = yield* updateRule({
@@ -356,9 +362,9 @@ export const RuleProvider = () =>
             !observed.filters ||
             observed.precedence === undefined
           ) {
-            return yield* Effect.fail(
-              new Error("Cloudflare returned a Gateway rule without id/action/filters/precedence"),
-            );
+            return yield* new RuleUnexpectedResponse({
+              message: "Cloudflare returned a Gateway rule without id/action/filters/precedence",
+            });
           }
           return {
             ruleId: observed.id,
@@ -431,7 +437,7 @@ const undefArr = <T>(
 const narrowRule = (raw: {
   id?: string | null;
   name?: string | null;
-  action?: RuleAction | null | string;
+  action?: string | null;
   filters?: ReadonlyArray<RuleFilter | null> | null;
   traffic?: string | null;
   identity?: string | null;

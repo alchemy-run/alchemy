@@ -57,8 +57,25 @@ export interface RepositoryLink extends Resource<
     encryptionKeyArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLinkLookup
 > {}
+
+/**
+ * Props for {@link RepositoryLink.lookup}: find a repository link this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type RepositoryLinkLookup =
+  | {
+      /** The id of the existing repository link. */
+      repositoryLinkId: string;
+    }
+  | {
+      /** The repository's owner. */
+      ownerId: string;
+      /** The repository's name. */
+      repositoryName: string;
+    };
 
 /**
  * An AWS CodeConnections repository link — associates a connection with a
@@ -87,6 +104,16 @@ export interface RepositoryLink extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing repository link
+ * `RepositoryLink.lookup` references a repository link Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryLinkId`, or `ownerId` and `repositoryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing repository link
+ * ```typescript
+ * const app = AWS.CodeConnections.RepositoryLink.lookup({ ownerId: "acme", repositoryName: "app" });
+ * ```
+ *
  * @resource
  */
 export const RepositoryLink = Resource<RepositoryLink>("AWS.CodeConnections.RepositoryLink");
@@ -99,7 +126,7 @@ export const RepositoryLinkProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const response = yield* codeconnections
           .getRepositoryLink({ RepositoryLinkId: id })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.RepositoryLinkInfo;
       });
 
@@ -148,6 +175,13 @@ export const RepositoryLinkProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const link =
+            "repositoryLinkId" in props
+              ? yield* getById(props.repositoryLinkId)
+              : yield* findByIdentity(props.ownerId, props.repositoryName);
+          return link === undefined ? undefined : toAttrs(link);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const link = output?.repositoryLinkId
             ? yield* getById(output.repositoryLinkId)

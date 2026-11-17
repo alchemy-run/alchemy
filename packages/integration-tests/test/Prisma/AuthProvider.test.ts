@@ -10,6 +10,7 @@ import { AuthProviders, getAuthProvider } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
 import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -22,6 +23,7 @@ const testLayer = (config: Record<string, string> = {}) => {
   const authRegistry = Layer.succeed(AuthProviders, authProviders);
   const base = Layer.mergeAll(
     NodeServices.layer,
+    SecureRandom.layerWebCrypto,
     authRegistry,
     Layer.succeed(ProfileStore, fakeProfile),
     ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
@@ -36,7 +38,10 @@ const prismaAuthProvider = getAuthProvider<PrismaAuthConfig, PrismaResolvedCrede
 
 const readStoredCredentials = Effect.gen(function* () {
   const auth = yield* prismaAuthProvider;
-  return yield* auth.read("default", { method: "stored", serviceToken: "stored-token" });
+  return yield* auth.read(
+    "default",
+    Effect.succeed({ method: "stored" as const, serviceToken: "stored-token" }),
+  );
 });
 
 const readEnvironmentCredentials = Effect.gen(function* () {
@@ -77,10 +82,10 @@ describe("Prisma auth provider", { tags: ["unit", "provider:prisma", "local"] },
   it.effect("returns redacted details for stored credentials", () =>
     Effect.gen(function* () {
       const auth = yield* prismaAuthProvider;
-      const details = yield* auth.details("default", {
-        method: "stored",
-        serviceToken: "stored-token",
-      });
+      const details = yield* auth.details(
+        "default",
+        Effect.succeed({ method: "stored" as const, serviceToken: "stored-token" }),
+      );
 
       expect(details.lines).toEqual([{ key: "serviceToken", value: "stor****" }]);
     }).pipe(Effect.provide(testLayer())),

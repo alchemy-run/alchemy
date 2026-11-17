@@ -211,7 +211,7 @@ export const DeploymentProvider = () =>
       const observeDeployment = (deploymentId: string) =>
         greengrassv2
           .getDeployment({ deploymentId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // The latest deployment revision for a target (cloud-authoritative).
       const observeLatestForTarget = (targetArn: string) =>
@@ -253,7 +253,7 @@ export const DeploymentProvider = () =>
             // cancellation — that is exactly the state we want.
             Effect.catchTag(
               ["ResourceNotFoundException", "ConflictException", "ValidationException"],
-              () => Effect.succeed(undefined),
+              () => Effect.undefined,
             ),
           );
           yield* greengrassv2.deleteDeployment({ deploymentId }).pipe(

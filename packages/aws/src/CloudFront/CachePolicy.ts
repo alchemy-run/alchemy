@@ -4,9 +4,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
+
+export class CachePolicyConflict extends Data.TaggedError("CachePolicyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CachePolicyUnexpectedResponse extends Data.TaggedError(
+  "CachePolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CachePolicyProps {
   /**
@@ -81,8 +95,23 @@ export interface CachePolicy extends Resource<
       | undefined;
   },
   never,
-  Providers
+  Providers,
+  CachePolicyLookup
 > {}
+
+/**
+ * Props for {@link CachePolicy.lookup}: find a cache policy this stack doesn't
+ * manage, custom or AWS managed.
+ */
+export type CachePolicyLookup =
+  | {
+      /** The id of the existing policy. */
+      cachePolicyId: string;
+    }
+  | {
+      /** The policy's name, including AWS managed policies such as `Managed-CachingOptimized`. */
+      name: string;
+    };
 
 /**
  * A CloudFront cache policy.
@@ -116,6 +145,17 @@ export interface CachePolicy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cache policy
+ * `CachePolicy.lookup` references a cache policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `cachePolicyId` or `name`, AWS managed policies included. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Use an AWS managed policy
+ * ```typescript
+ * const policy = AWS.CloudFront.CachePolicy.lookup({ name: "Managed-CachingOptimized" });
+ * const cachePolicyId = policy.cachePolicyId;
+ * ```
+ *
  * @resource
  */
 export const CachePolicy = Resource<CachePolicy>("AWS.CloudFront.CachePolicy");
@@ -127,7 +167,7 @@ export const CachePolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getCachePolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.undefined));
         if (!config?.CachePolicyConfig) return undefined;
         return { config: config.CachePolicyConfig, etag: config.ETag };
       });
@@ -177,6 +217,22 @@ export const CachePolicyProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const id =
+            "cachePolicyId" in props
+              ? props.cachePolicyId
+              : (yield* single(
+                  "AWS.CloudFront.CachePolicy",
+                  props.name,
+                  ((yield* cloudfront.listCachePolicies({})).CachePolicyList?.Items ?? []).filter(
+                    (item) => item.CachePolicy?.CachePolicyConfig?.Name === props.name,
+                  ),
+                  (item) => item.CachePolicy?.Id,
+                ))?.CachePolicy?.Id;
+          if (id === undefined) return undefined;
+          const found = yield* getById(id);
+          return found ? toAttrs(id, found.config, found.etag) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.cachePolicyId) {
@@ -252,16 +308,18 @@ export const CachePolicyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Cache policy '${name}' already exists but could not be recovered`,
-                            ),
+                            new CachePolicyConflict({
+                              message: `Cache policy '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.CachePolicy?.Id) {
-              return yield* Effect.fail(new Error("createCachePolicy returned no identifier"));
+              return yield* new CachePolicyUnexpectedResponse({
+                message: "createCachePolicy returned no identifier",
+              });
             }
             yield* session.note(created.CachePolicy.Id);
             return toAttrs(
@@ -280,7 +338,9 @@ export const CachePolicyProvider = () =>
             CachePolicyConfig: desired,
           });
           if (!updated.CachePolicy?.Id) {
-            return yield* Effect.fail(new Error("updateCachePolicy returned no identifier"));
+            return yield* new CachePolicyUnexpectedResponse({
+              message: "updateCachePolicy returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(

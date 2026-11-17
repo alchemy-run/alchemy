@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
+import * as Random from "effect/Random";
 
 /**
  * Write `contents` to `filePath` via a same-directory temp file + rename.
@@ -22,8 +23,8 @@ export const writeFileAtomic = (
   contents: string,
   mode?: number,
 ): Effect.Effect<void, PlatformError> =>
-  Effect.suspend(() => {
-    const tmp = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  Effect.flatMap(Random.next, (random) => {
+    const tmp = `${filePath}.${process.pid}.${random.toString(36).slice(2)}.tmp`;
     return fs.writeFileString(tmp, contents).pipe(
       Effect.flatMap(() => (mode === undefined ? Effect.void : fs.chmod(tmp, mode))),
       Effect.flatMap(() => fs.rename(tmp, filePath)),

@@ -205,10 +205,10 @@ export const collectPages = <Page, A, E, R>(
 
 export const getConfiguration = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : androiddeviceprovisioning
         .getCustomersConfigurations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listConfigurationsAt = (parent: string) =>
   parent.length === 0

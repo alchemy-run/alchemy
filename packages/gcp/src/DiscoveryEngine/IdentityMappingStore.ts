@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   identityMappingStoreIdOf,
@@ -65,8 +66,31 @@ export type IdentityMappingStore = Resource<
     cmekConfigName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  IdentityMappingStoreLookup
 >;
+
+/**
+ * Props for {@link IdentityMappingStore.lookup}: find an identity mapping
+ * store this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface IdentityMappingStoreLookup {
+  /**
+   * Identity Mapping Store id (the last path segment). Generated ids are
+   * prefixed with `alch` so `list` / nuke can find them.
+   */
+  identityMappingStoreId: string;
+  /**
+   * Location (`global`, `us`, `eu`).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Search Identity Mapping Store.
@@ -92,6 +116,19 @@ export type IdentityMappingStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing identity mapping store
+ * `IdentityMappingStore.lookup` references an identity mapping store
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared identity mapping store.
+ *
+ * **Example:** Reference an existing identity mapping store
+ * ```typescript
+ * const identityMappingStore = GCP.DiscoveryEngine.IdentityMappingStore.lookup({
+ *   identityMappingStoreId: "my-identity-mapping-store",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -102,7 +139,7 @@ export const IdentityMappingStore = Resource<IdentityMappingStore>(
 export class IdentityMappingStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.IdentityMappingStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -126,10 +163,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsIdentityMappingStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isAlchemyId = (storeId: string) => storeId.startsWith("alch");
 
@@ -184,6 +221,15 @@ export const IdentityMappingStoreProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ identityMappingStoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, identityMappingStoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const storeId = yield* toPhysical(
@@ -237,7 +283,7 @@ export const IdentityMappingStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IdentityMappingStoreNotResolved({ name });
+        return yield* new IdentityMappingStoreNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -248,7 +294,7 @@ export const IdentityMappingStoreProvider = () =>
       if (existing === undefined) return;
       const operation = yield* discoveryengine
         .deleteProjectsLocationsIdentityMappingStores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

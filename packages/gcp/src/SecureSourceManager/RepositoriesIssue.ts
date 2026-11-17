@@ -152,7 +152,7 @@ const toAttrs = (item: ssm.Issue, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(ssm.getProjectsLocationsRepositoriesIssues({ name }));
 
 const listOnRepository = (repository: string) =>
@@ -264,7 +264,7 @@ export const RepositoriesIssueProvider = () =>
               body,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
@@ -279,7 +279,7 @@ export const RepositoriesIssueProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: name || repository,
+          resourceName: name || repository,
         });
       }
 
@@ -314,7 +314,7 @@ export const RepositoriesIssueProvider = () =>
             name: output.name,
             etag: output.etag,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

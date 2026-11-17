@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -129,8 +130,34 @@ export type Workflow = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkflowLookup
 >;
+
+/**
+ * Props for {@link Workflow.lookup}: find a workflow this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface WorkflowLookup {
+  /**
+   * Workflow id (the `{workflow}` segment of
+   * `projects/{project}/locations/{location}/workflows/{workflow}`). Must
+   * match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1–64 characters, start
+   * with a letter, end with a letter or number).
+   */
+  workflowId: string;
+  /**
+   * Workflows location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Workflows workflow — YAML or JSON orchestration that
@@ -178,23 +205,35 @@ export type Workflow = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing workflow
+ * `Workflow.lookup` references a workflow Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared workflow.
+ *
+ * **Example:** Reference an existing workflow
+ * ```typescript
+ * const workflow = GCP.Workflows.Workflow.lookup({
+ *   workflowId: "my-workflow",
+ * });
+ * ```
+ *
  * @resource
  * @category Workflows
  */
 export const Workflow = Resource<Workflow>("GCP.Workflows.Workflow");
 
 export class WorkflowNotResolved extends Data.TaggedError("GCP.Workflows.WorkflowNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** The deployed workflow is in state `UNAVAILABLE` (see `stateError`). */
 export class WorkflowUnavailable extends Data.TaggedError("GCP.Workflows.WorkflowUnavailable")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
 export class WorkflowStillExists extends Data.TaggedError("GCP.Workflows.WorkflowStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -292,7 +331,7 @@ const toAttrs = (workflow: workflows.Workflow, project: string) => {
 const getByName = (name: string) =>
   workflows
     .getProjectsLocationsWorkflows({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a workflow operation. ALREADY_EXISTS (code 6) counts as success
@@ -317,19 +356,19 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (workflow): workflow is workflows.Workflow => workflow !== undefined,
-      () => new WorkflowNotResolved({ name }),
+      () => new WorkflowNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (workflow) => workflow.state !== "UNAVAILABLE",
       (workflow) =>
         new WorkflowUnavailable({
-          name,
+          resourceName: name,
           message: workflow.stateError?.details ?? "workflow is UNAVAILABLE",
         }),
     ),
     Effect.filterOrFail(
       (workflow) => workflow.state === "ACTIVE" || workflow.state === undefined,
-      () => new WorkflowNotResolved({ name }),
+      () => new WorkflowNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Workflows.WorkflowNotResolved",
@@ -341,7 +380,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((workflow) =>
-      workflow === undefined ? Effect.void : Effect.fail(new WorkflowStillExists({ name })),
+      workflow === undefined
+        ? Effect.void
+        : Effect.fail(new WorkflowStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Workflows.WorkflowStillExists",
@@ -370,6 +411,15 @@ export const WorkflowProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workflowId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, workflowId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -432,7 +482,7 @@ export const WorkflowProvider = () =>
             workflowId,
             body: desiredBody,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -440,7 +490,7 @@ export const WorkflowProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkflowNotResolved({ name });
+        return yield* new WorkflowNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -482,7 +532,7 @@ export const WorkflowProvider = () =>
             updateMask: updateMask.join(","),
             body: desiredBody,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* workflows
             .createProjectsLocationsWorkflows({
@@ -490,7 +540,7 @@ export const WorkflowProvider = () =>
               workflowId,
               body: desiredBody,
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -501,7 +551,7 @@ export const WorkflowProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkflowNotResolved({ name });
+        return yield* new WorkflowNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -510,7 +560,7 @@ export const WorkflowProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* workflows
         .deleteProjectsLocationsWorkflows({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

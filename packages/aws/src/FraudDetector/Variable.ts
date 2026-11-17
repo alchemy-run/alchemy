@@ -61,8 +61,18 @@ export interface Variable extends Resource<
     dataSource: string;
   },
   never,
-  Providers
+  Providers,
+  VariableLookup
 > {}
+
+/**
+ * Props for {@link Variable.lookup}: find a variable this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VariableLookup {
+  /** The name of the existing variable. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector variable — a named input to fraud-detection models
@@ -78,6 +88,16 @@ export interface Variable extends Resource<
  *   defaultValue: "unknown",
  *   variableType: "EMAIL_ADDRESS",
  * });
+ * ```
+ *
+ * ### Looking up an existing variable
+ * `Variable.lookup` references a variable Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing variable
+ * ```typescript
+ * const existing = AWS.FraudDetector.Variable.lookup({ name: "my-variable" });
  * ```
  *
  * @resource
@@ -96,7 +116,7 @@ export const VariableProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getVariables({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.variables?.[0];
       });
 
@@ -121,6 +141,13 @@ export const VariableProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const variable = yield* get(name);
+          if (variable === undefined) return undefined;
+          const attrs = toAttrs(variable);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

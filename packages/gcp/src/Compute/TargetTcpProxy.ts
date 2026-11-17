@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -85,8 +86,26 @@ export type TargetTcpProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetTcpProxyLookup
 >;
+
+/**
+ * Props for {@link TargetTcpProxy.lookup}: find a target tcp proxy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetTcpProxyLookup {
+  /**
+   * TargetTcpProxy name (RFC1035, 1-63 characters).
+   */
+  targetTcpProxyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine target TCP proxy.
@@ -132,6 +151,19 @@ export type TargetTcpProxy = Resource<
  *   targetTcpProxyName: "app-tcp",
  *   service: otherBackend.name,
  *   proxyHeader: "PROXY_V1",
+ * });
+ * ```
+ *
+ * ### Looking up an existing target tcp proxy
+ * `TargetTcpProxy.lookup` references a target tcp proxy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target tcp proxy.
+ *
+ * **Example:** Reference an existing target tcp proxy
+ * ```typescript
+ * const targetTcpProxy = GCP.Compute.TargetTcpProxy.lookup({
+ *   targetTcpProxyName: "my-target-tcp-proxy",
  * });
  * ```
  *
@@ -219,7 +251,7 @@ const toAttrs = (proxy: compute.TargetTcpProxy, project: string) => {
 const getByName = (project: string, targetTcpProxy: string) =>
   compute
     .getTargetTcpProxies({ project, targetTcpProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TargetTcpProxyProvider = () =>
   Provider.succeed(TargetTcpProxy, {
@@ -246,7 +278,14 @@ export const TargetTcpProxyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ targetTcpProxyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, targetTcpProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const targetTcpProxyName = yield* toName(
         id,
@@ -257,7 +296,9 @@ export const TargetTcpProxyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "targetTcpProxyName");
     }),
 
     list: () =>
@@ -312,7 +353,7 @@ export const TargetTcpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, targetTcpProxyName);
       }
@@ -363,7 +404,7 @@ export const TargetTcpProxyProvider = () =>
           project: env.project,
           targetTcpProxy: output.targetTcpProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

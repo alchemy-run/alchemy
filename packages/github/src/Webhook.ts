@@ -193,7 +193,7 @@ export const WebhookProvider = () =>
         // creating a fresh one.
         const observed = output?.webhookId
           ? yield* Repos.getWebhook({ ...scope, hook_id: output.webhookId }).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             )
           : undefined;
 

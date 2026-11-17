@@ -98,7 +98,7 @@ test.provider(
           .reconcile({
             ...context,
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
             olds: undefined,
             news: { ...props, regionId: "aws-us-west-2" },
             output: {

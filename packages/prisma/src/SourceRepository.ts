@@ -37,6 +37,23 @@ import {
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
+export class SourceRepositoryConflict extends Data.TaggedError("SourceRepositoryConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SourceRepositoryInvalidProps extends Data.TaggedError("SourceRepositoryInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SourceRepositoryOperationFailed extends Data.TaggedError(
+  "SourceRepositoryOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface SourceRepositoryProps {
   /**
    * Project ID or project output to link. Linking has Management API side
@@ -198,9 +215,9 @@ const findRepository = (projectId: string) =>
       const active = repos.filter((repo: ObservedSourceRepository) => repo.status === "active");
       return active.length > 1
         ? Effect.fail(
-            new Error(
-              `Prisma project '${projectId}' has multiple active source repositories; refusing to select one arbitrarily.`,
-            ),
+            new SourceRepositoryConflict({
+              message: `Prisma project '${projectId}' has multiple active source repositories; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(active[0]);
     }),
@@ -401,11 +418,9 @@ const ProviderLive = () =>
             (isResolved(news.installationId) && news.installationId !== olds.installationId) ||
             observedMismatch
           ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma source repository links cannot be replaced atomically: unlinking mutates branch/resource attachments and a failed relink cannot restore them. Create a new project or explicitly unlink and relink in separate reviewed deployments.`,
-              ),
-            );
+            return yield* new SourceRepositoryInvalidProps({
+              message: `Prisma source repository links cannot be replaced atomically: unlinking mutates branch/resource attachments and a failed relink cannot restore them. Create a new project or explicitly unlink and relink in separate reviewed deployments.`,
+            });
           }
           return undefined;
         }),
@@ -422,7 +437,7 @@ const ProviderLive = () =>
                 id: sourceRepositoryId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findRepositoryInProject;
           if (!repo) return undefined;
@@ -439,15 +454,13 @@ const ProviderLive = () =>
                 id: sourceRepositoryId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (repo && !matchesDesiredRepository(repo, projectId, news)) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma project '${projectId}' is already linked to '${repo.repoFullName}'. The Management API has no atomic relink or rollback operation, so this provider will not delete the live link during reconcile. Explicitly unlink it in a separate reviewed deployment before linking repository '${news.providerRepositoryId}'.`,
-              ),
-            );
+            return yield* new SourceRepositoryConflict({
+              message: `Prisma project '${projectId}' is already linked to '${repo.repoFullName}'. The Management API has no atomic relink or rollback operation, so this provider will not delete the live link during reconcile. Explicitly unlink it in a separate reviewed deployment before linking repository '${news.providerRepositoryId}'.`,
+            });
           }
           if (!repo) {
             const listUnassignedApps = Effect.gen(function* () {
@@ -510,9 +523,9 @@ const ProviderLive = () =>
               Effect.map((response) => response.data),
               Effect.catchTag("Conflict", () =>
                 Effect.fail(
-                  new Error(
-                    `Prisma source repository '${news.providerRepositoryId}' appeared after the adoption check. Refusing to take over the project link; rerun with adoption enabled if it is the intended repository.`,
-                  ),
+                  new SourceRepositoryConflict({
+                    message: `Prisma source repository '${news.providerRepositoryId}' appeared after the adoption check. Refusing to take over the project link; rerun with adoption enabled if it is the intended repository.`,
+                  }),
                 ),
               ),
             );
@@ -527,10 +540,10 @@ const ProviderLive = () =>
               }),
               Effect.mapError(
                 (error) =>
-                  new Error(
-                    `Prisma source repository link '${repo!.id}' was created but its branch/resource side effects did not converge. The link was not deleted because unlinking cannot roll back partial attachments; inspect it and adopt after repair.`,
-                    { cause: error },
-                  ),
+                  new SourceRepositoryOperationFailed({
+                    message: `Prisma source repository link '${repo!.id}' was created but its branch/resource side effects did not converge. The link was not deleted because unlinking cannot roll back partial attachments; inspect it and adopt after repair.`,
+                    cause: error,
+                  }),
               ),
             );
           } else {
@@ -544,7 +557,7 @@ const ProviderLive = () =>
             id: output.sourceRepositoryId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!repo) return;
           if (
@@ -553,11 +566,9 @@ const ProviderLive = () =>
             repo.provider !== output.provider ||
             repo.installationId !== output.installationId
           ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma source repository '${repo.id}' no longer matches its persisted project/repository/installation identity. Refusing to delete a mismatched link.`,
-              ),
-            );
+            return yield* new SourceRepositoryConflict({
+              message: `Prisma source repository '${repo.id}' no longer matches its persisted project/repository/installation identity. Refusing to delete a mismatched link.`,
+            });
           }
           yield* deleteSourceRepository({ id: repo.id }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),

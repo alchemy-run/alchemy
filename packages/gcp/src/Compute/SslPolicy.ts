@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -90,8 +91,26 @@ export type SslPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SslPolicyLookup
 >;
+
+/**
+ * Props for {@link SslPolicy.lookup}: find a ssl policy this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SslPolicyLookup {
+  /**
+   * SSL policy name (RFC1035, 1-63 chars).
+   */
+  sslPolicyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine SSL policy for HTTPS and SSL load balancing.
@@ -128,6 +147,19 @@ export type SslPolicy = Resource<
  *     "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
  *     "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing ssl policy
+ * `SslPolicy.lookup` references a ssl policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * ssl policy.
+ *
+ * **Example:** Reference an existing ssl policy
+ * ```typescript
+ * const sslPolicy = GCP.Compute.SslPolicy.lookup({
+ *   sslPolicyName: "my-ssl-policy",
  * });
  * ```
  *
@@ -288,7 +320,7 @@ const needsUpdate = (current: compute.SslPolicy, desired: compute.SslPolicy) => 
 const getByName = (project: string, sslPolicy: string) =>
   compute
     .getSslPolicies({ project, sslPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, sslPolicyName: string) =>
   getByName(project, sslPolicyName).pipe(
@@ -312,6 +344,13 @@ export const SslPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sslPolicyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, sslPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -353,7 +392,7 @@ export const SslPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, sslPolicyName);
       }
@@ -392,7 +431,7 @@ export const SslPolicyProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

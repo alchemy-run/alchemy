@@ -397,7 +397,7 @@ const injectIntoHtml = (res: ServerResponse, tag: string) => {
   let html: boolean | undefined;
   const isHtml = () => (html ??= String(res.getHeader("content-type") ?? "").includes("text/html"));
 
-  const writeHead = res.writeHead;
+  const writeHead = res.writeHead.bind(res);
   res.writeHead = function (this: ServerResponse, ...args: unknown[]) {
     const headers = args.find(
       (a): a is OutgoingHttpHeaders => typeof a === "object" && a !== null && !Array.isArray(a),
@@ -417,7 +417,7 @@ const injectIntoHtml = (res: ServerResponse, tag: string) => {
     return (writeHead as (...a: unknown[]) => ServerResponse).apply(this, args);
   } as typeof res.writeHead;
 
-  const end = res.end;
+  const end = res.end.bind(res);
   res.end = function (this: ServerResponse, ...args: unknown[]) {
     if (!isHtml()) return (end as (...a: unknown[]) => ServerResponse).apply(this, args);
     if (!res.headersSent) res.removeHeader("content-length");

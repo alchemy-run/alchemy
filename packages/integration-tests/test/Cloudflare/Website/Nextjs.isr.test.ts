@@ -124,11 +124,13 @@ describe.concurrent(
           // (The very first hits may race the initial cache write, so anchor
           // on two consecutive equal reads.)
           const client = yield* HttpClient.HttpClient;
-          const primed = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
-          const settled = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
-          if (primed === settled) {
-            // Cached: consecutive reads agree.
-            expect(settled).toBe(primed);
+          // Read until two consecutive reads agree (bounded): earlier reads can
+          // each race the first cache write and render fresh.
+          let settled = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
+          for (let attempt = 0; attempt < 10; attempt++) {
+            const next = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
+            if (next === settled) break;
+            settled = next;
           }
           const cached = yield* pollStamp(`${site.url!}/isr`, "isr-stamp", () => true);
           expect(cached).toBe(settled);

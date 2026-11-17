@@ -1,0 +1,120 @@
+---
+title: Account & API keys
+description: How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you create on Boat belongs to your **account**: its sandboxes, snapshots, environments, webhooks and API keys. If you belong to an organization, sandboxes can be billed to it instead, and each one stays private to the person who created it.
+
+## A key reaches only what it's given
+
+An **API key** can do only what you give it. It carries the **actions** it may take, and can be limited to some sandboxes or the sandboxes of some environments. The host that runs a Worker below gets a key that reaches one sandbox and can do nothing else.
+
+<Tree
+  nodes={[
+    { id: "account", label: "acme", type: "account" },
+    { id: "box", label: "DevBox", type: "sandbox", parent: "account" },
+    { id: "cmd", label: "exec", type: "action", parent: "box" },
+    { id: "files", label: "file.read · file.write", type: "action", parent: "box" },
+    { id: "task", label: "task-42", type: "sandbox", parent: "account" },
+    { id: "env", label: "MyEnv", type: "environment", parent: "account" },
+  ]}
+  scopes={[
+    { on: "account", label: "your key · admin" },
+    { on: "box", label: "the Worker's key" },
+  ]}
+  caption="Your key reaches the whole account. The key Alchemy creates for the Worker that connects to DevBox reaches only DevBox, and only for the actions the binding needs."
+/>
+
+## Sign in with a profile
+
+Alchemy deploys with the credentials in a [profile](/environments/profiles):
+
+<PackageManagers run="alchemy profile edit --add Boat" />
+
+Pick **Browser sign-in** for most setups. It works with every way you can sign in to Boat: GitHub, Google or an email code. Boat issues an API key that lasts a year, and Alchemy renews it before it runs out.
+
+Pick **API key** to paste one from the dashboard's **API Keys** tab. Deploying creates keys for your hosts, which takes `account.admin`, so give it the `admin` preset.
+
+## Work in an organization
+
+An organization has its own plan, its own wallet, and its own shared environments and credential profiles. You work in one the way the dashboard's organization select or `boat --org` do: the sandboxes you create bill it, and the environments and [credential profiles](/boat/security/credential-profiles) you manage are its shared ones.
+
+When you sign in, Alchemy picks your organization; it asks only when your account belongs to more than one. It stores the organization's id, so renaming the organization doesn't break the profile. Every call sends it, and so do the hosts Alchemy deploys.
+
+You can also follow your **active wallet**, the one `boat org switch` picks. Sandboxes then bill whatever it is when they are created, and environments stay personal, so most teams pin the organization.
+
+A Stack can pick its own organization, which overrides the profile's:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Team",
+  { providers: Boat.providers({ org: "acme" }) },
+  Effect.gen(function* () {
+    yield* Boat.Environment("Shared", { env: { REGION: "us" } });
+    yield* Boat.Sandbox("TeamBox", { noEnv: true, visibility: "shared" });
+  }),
+);
+```
+
+A sandbox's wallet is fixed when it is created, so changing the organization later leaves existing sandboxes where they are; their `org` attribute says which. An environment belongs to one organization for life, so changing the organization replaces it.
+
+`visibility: "shared"` lets every member use a sandbox. Sharing one that holds your logins wipes them at its next start, so share sandboxes with `noEnv`, or on an environment that passes none of your credentials, which is how a declared one starts.
+
+Creating organizations, inviting members and buying seats stay on the dashboard and `boat org`. Boat doesn't offer them in its public API.
+
+## Give production its own profile
+
+A [stage](/environments/stages) decides what you deploy. The profile decides where. Give production its own Boat account, and its own profile:
+
+<PackageManagers
+  script={`{run} alchemy profile create prod
+{run} alchemy profile edit --profile prod --add Boat
+{run} alchemy deploy --stage prod --profile prod`}
+/>
+
+## Narrow a key to what it needs
+
+A key lists the actions it may take, or uses a preset. `read-only` inspects sandboxes, files, snapshots and environments. `full-sandbox` works in sandboxes but can't create, resume, fork or delete them. `ci` adds creating, resuming and forking, and deletes only the sandboxes it created. `admin` can do everything.
+
+Declare a key for CI or another app:
+
+```typescript title="src/Keys.ts"
+import * as Boat from "@alchemy.run/boat";
+
+export const Ci = Boat.ApiKey("Ci", { preset: "ci", ttl: "90d" });
+```
+
+Or one that only runs commands in one sandbox:
+
+```typescript
+const box = yield* DevBox;
+const key = yield* Boat.ApiKey("BoxExec", {
+  actions: ["sandbox.read", "exec"],
+  sandboxIds: [box.sandboxId],
+});
+```
+
+`key.key` is the key, as a `Redacted` value. Boat shows a key only once, so Alchemy keeps it in state. A key can't be changed: new actions or sandboxes create a new key and delete the old one.
+
+A key can't do more, or live longer, than the key that creates it. A key your browser sign-in creates lasts at most a year, until your own key expires. Leave `ttl` out to get the longest lifetime Boat allows.
+
+## Deploy from CI with a key
+
+When `BOAT_API_KEY` is set, Alchemy uses it instead of the profile:
+
+<PackageManagers script={`BOAT_API_KEY=boat_... {run} alchemy deploy --stage prod`} />
+
+Give the key the `admin` preset if the Stack has bindings: they create keys. `BOAT_ORG` picks the organization, and `BOAT_API_BASE_URL` overrides Boat's API URL. See [CI](/environments/ci).
+
+## Your plan caps how many sandboxes start
+
+Your plan caps how many sandboxes may run at once and how many may start each minute, hour and day. Resumes and forks count as starts. Past the hourly limit, creates fail with `SandboxStartLimitExceeded` until the window reopens; the per-minute limit is retried for you.
+
+What a sandbox starts with, its variables, secret files and credentials, is in [Environments & secrets](/boat/security/environments). Where to run your code is in [Choosing a runtime](/boat/sandboxes/choosing-a-runtime).

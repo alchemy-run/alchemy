@@ -349,6 +349,7 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
         ? cast({
             directory: build.outdir,
             hash: build.hash.output,
+            // oxlint-disable-next-line typescript/no-misused-spread -- assets is a plain config object in practice; a top-level Output/Effect would be dropped (pre-existing)
             ...props.assets,
           })
         : undefined,
@@ -406,6 +407,7 @@ const serializeEnv = Effect.fn(function* (
       continue;
     } else if (isYieldableEffectLike(v)) {
       const resolved = serializeEnvValue(
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- env values are untyped declaration Effects; any failure dies
         yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(Effect.orDie),
       );
       if (resolved === undefined) continue;

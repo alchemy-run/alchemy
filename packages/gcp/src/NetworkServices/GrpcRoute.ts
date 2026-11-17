@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -206,8 +207,33 @@ export type GrpcRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GrpcRouteLookup
 >;
+
+/**
+ * Props for {@link GrpcRoute.lookup}: find a grpc route this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface GrpcRouteLookup {
+  /**
+   * GrpcRoute id (the `{grpcRoute}` segment of
+   * `projects/{project}/locations/{location}/grpcRoutes/{grpcRoute}`). Must
+   * be 1-63 characters and not start with a number.
+   */
+  grpcRouteId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Services GrpcRoute — how a Mesh or Gateway routes gRPC
@@ -245,6 +271,19 @@ export type GrpcRoute = Resource<
  *       action: { destinations: [{ serviceName: backend.selfLink }] },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing grpc route
+ * `GrpcRoute.lookup` references a grpc route Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * grpc route.
+ *
+ * **Example:** Reference an existing grpc route
+ * ```typescript
+ * const grpcRoute = GCP.NetworkServices.GrpcRoute.lookup({
+ *   grpcRouteId: "my-grpc-route",
  * });
  * ```
  *
@@ -371,7 +410,7 @@ const toAttrs = (route: networkservices.GrpcRoute, project: string) => {
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsGrpcRoutes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GrpcRouteProvider = () =>
   Provider.succeed(GrpcRoute, {
@@ -397,6 +436,15 @@ export const GrpcRouteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ grpcRouteId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, grpcRouteId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -471,7 +519,7 @@ export const GrpcRouteProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -527,7 +575,7 @@ export const GrpcRouteProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

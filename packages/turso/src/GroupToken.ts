@@ -1,6 +1,7 @@
 import * as turso from "@distilled.cloud/turso/turso";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { organization } from "./Credentials.ts";
 import {
@@ -11,6 +12,11 @@ import {
   type SqlTokenProps,
 } from "./DatabaseToken.ts";
 import type { Providers } from "./Providers.ts";
+
+export class GroupTokenUnexpectedResponse extends Data.TaggedError("GroupTokenUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface GroupTokenProps extends SqlTokenProps {
   /** Name of the group whose databases the token grants access to. */
@@ -101,7 +107,9 @@ export const GroupTokenProvider = () =>
               : undefined,
           });
           if (!jwt) {
-            return yield* Effect.fail(new Error(`Turso returned no token for group ${news.group}`));
+            return yield* new GroupTokenUnexpectedResponse({
+              message: `Turso returned no token for group ${news.group}`,
+            });
           }
           return {
             token: jwt,

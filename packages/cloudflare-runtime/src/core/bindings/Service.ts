@@ -90,8 +90,21 @@ export const self = (binding: string, { entrypoint, props }: SelfServiceProps = 
 /**
  * Bind to a deployed Cloudflare Worker via the remote bindings proxy.
  */
-export const remote = (name: string, service: string) =>
-  makeRemoteBinding({ name, type: "service", service }, (service) => ({
-    name,
-    service,
-  }));
+export const remote = (
+  name: string,
+  service: string,
+  { entrypoint, props }: Pick<LocalServiceProps, "entrypoint" | "props"> = {},
+) =>
+  makeRemoteBinding(
+    {
+      name,
+      type: "service",
+      service,
+      ...(entrypoint !== undefined ? { entrypoint } : undefined),
+      ...(props !== undefined ? { props } : undefined),
+    },
+    (service) => ({
+      name,
+      service,
+    }),
+  );

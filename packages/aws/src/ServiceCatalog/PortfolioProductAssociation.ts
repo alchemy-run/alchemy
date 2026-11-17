@@ -148,14 +148,15 @@ export const PortfolioProductAssociationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (yield* isAssociated(output.productId, output.portfolioId)) {
-            yield* retryWhileResourceInUse(
-              servicecatalog.disassociateProductFromPortfolio({
-                ProductId: output.productId,
-                PortfolioId: output.portfolioId,
-              }),
-            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-          }
+          // Always disassociate: the association list is eventually
+          // consistent, so a fresh association can be missing from it, and
+          // skipping the call would leave the portfolio undeletable.
+          yield* retryWhileResourceInUse(
+            servicecatalog.disassociateProductFromPortfolio({
+              ProductId: output.productId,
+              PortfolioId: output.portfolioId,
+            }),
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

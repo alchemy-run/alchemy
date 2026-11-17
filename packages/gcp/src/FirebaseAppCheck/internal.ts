@@ -1,6 +1,7 @@
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -17,7 +18,7 @@ export const MAX_DISPLAY_NAME = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.FirebaseAppCheck.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -140,7 +141,11 @@ export const toDisplayName = (id: string, explicit: string | undefined, existing
     });
   });
 
-export const randomUuid4 = () => Effect.sync(() => crypto.randomUUID());
+export const randomUuid4 = () =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    return yield* random.uuidV4();
+  });
 
 export const toToken = (explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -192,17 +197,17 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 
 export const getDebugToken = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebaseappcheck
         .getProjectsAppsDebugTokens({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getResourcePolicy = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebaseappcheck
         .getProjectsServicesResourcePolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 

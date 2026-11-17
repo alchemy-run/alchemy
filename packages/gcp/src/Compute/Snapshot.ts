@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -115,8 +116,26 @@ export type Snapshot = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SnapshotLookup
 >;
+
+/**
+ * Props for {@link Snapshot.lookup}: find a snapshot this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SnapshotLookup {
+  /**
+   * Snapshot name (RFC1035, 1-63 characters).
+   */
+  snapshotName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine persistent-disk snapshot.
@@ -146,6 +165,18 @@ export type Snapshot = Resource<
  *   snapshotType: "ARCHIVE",
  *   storageLocations: ["us-central1"],
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing snapshot
+ * `Snapshot.lookup` references a snapshot Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared snapshot.
+ *
+ * **Example:** Reference an existing snapshot
+ * ```typescript
+ * const snapshot = GCP.Compute.Snapshot.lookup({
+ *   snapshotName: "my-snapshot",
  * });
  * ```
  *
@@ -240,7 +271,7 @@ const toAttrs = (snapshot: compute.Snapshot, project: string) => ({
 const getByName = (project: string, snapshot: string) =>
   compute
     .getSnapshots({ project, snapshot })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitSnapshotReady = (project: string, snapshotName: string) =>
   getByName(project, snapshotName).pipe(
@@ -353,6 +384,13 @@ export const SnapshotProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ snapshotName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, snapshotName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const snapshotName = yield* toName(id, olds?.snapshotName, output?.snapshotName);
@@ -411,7 +449,7 @@ export const SnapshotProvider = () =>
               guestFlush: news.guestFlush,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitSnapshotOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -461,7 +499,7 @@ export const SnapshotProvider = () =>
           snapshot: output.snapshotName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

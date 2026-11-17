@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -62,8 +63,33 @@ export type Namespace = Resource<
     uid: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 >;
+
+/**
+ * Props for {@link Namespace.lookup}: find a namespace this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface NamespaceLookup {
+  /**
+   * Namespace id (the `{namespace}` segment of
+   * `projects/{project}/locations/{location}/namespaces/{namespace}`). Must
+   * be 1-63 characters and match `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`.
+   */
+  namespaceId: string;
+  /**
+   * Location of the namespace (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Service Directory namespace — a location-scoped container for
@@ -86,6 +112,18 @@ export type Namespace = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` references a namespace Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared namespace.
+ *
+ * **Example:** Reference an existing namespace
+ * ```typescript
+ * const namespace = GCP.ServiceDirectory.Namespace.lookup({
+ *   namespaceId: "my-namespace",
+ * });
+ * ```
+ *
  * @resource
  * @category ServiceDirectory
  */
@@ -94,7 +132,7 @@ export const Namespace = Resource<Namespace>("GCP.ServiceDirectory.Namespace");
 export class NamespaceNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.NamespaceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -160,7 +198,7 @@ const toAttrs = (namespace: servicedirectory.Namespace, project: string, region:
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespaces({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listNamespacesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
@@ -200,6 +238,15 @@ export const NamespaceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ namespaceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, namespaceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -280,7 +327,7 @@ export const NamespaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NamespaceNotResolved({ name });
+        return yield* new NamespaceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

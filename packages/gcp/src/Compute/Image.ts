@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -135,8 +136,26 @@ export type Image = Resource<
     archiveSizeBytes: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImageLookup
 >;
+
+/**
+ * Props for {@link Image.lookup}: find an image this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ImageLookup {
+  /**
+   * Image name (RFC1035, 1-63 characters).
+   */
+  imageName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Compute Engine custom image used to create boot disks for VMs.
@@ -174,6 +193,16 @@ export type Image = Resource<
  *   description: "golden image",
  *   labels: { env: "prod", role: "boot" },
  * });
+ * ```
+ *
+ * ### Looking up an existing image
+ * `Image.lookup` references an image Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared image.
+ *
+ * **Example:** Reference an existing image
+ * ```typescript
+ * const image = GCP.Compute.Image.lookup({ imageName: "my-image" });
  * ```
  *
  * @resource
@@ -251,9 +280,7 @@ const toAttrs = (image: compute.Image, project: string) => ({
 });
 
 const getByName = (project: string, image: string) =>
-  compute
-    .getImages({ project, image })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  compute.getImages({ project, image }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (project: string, imageName: string) =>
   getByName(project, imageName).pipe(
@@ -407,6 +434,13 @@ export const ImageProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ imageName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, imageName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const imageName = yield* toName(id, olds?.imageName, output?.imageName);
@@ -458,7 +492,7 @@ export const ImageProvider = () =>
             project: env.project,
             body: insertBody(imageName, news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -537,7 +571,7 @@ export const ImageProvider = () =>
           image: output.imageName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

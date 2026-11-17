@@ -64,8 +64,18 @@ export interface ContactChannel extends Resource<
     activationStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ContactChannelLookup
 > {}
+
+/**
+ * Props for {@link ContactChannel.lookup}: find a contact channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ContactChannelLookup {
+  /** The ARN of the existing contact channel. */
+  contactChannelArn: string;
+}
 
 /**
  * An Incident Manager contact channel — the method (SMS, voice, or email)
@@ -90,6 +100,16 @@ export interface ContactChannel extends Resource<
  *   deliveryAddress: { SimpleAddress: "+15551234567" },
  * });
  * ```
+ *
+ * ### Looking up an existing contact channel
+ * `ContactChannel.lookup` references a contact channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `contactChannelArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing contact channel
+ * ```typescript
+ * const pager = AWS.SSMContacts.ContactChannel.lookup({ contactChannelArn });
+ * ```
  */
 const ContactChannelResource = Resource<ContactChannel>("AWS.SSMContacts.ContactChannel");
 
@@ -106,7 +126,7 @@ export const ContactChannelProvider = () =>
       const getChannel = (arn: string) =>
         contacts
           .getContactChannel({ ContactChannelId: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // A channel's ARN embeds a generated UUID, so without cached output we
       // fall back to searching the owning contact's channels by name + type.
@@ -116,7 +136,7 @@ export const ContactChannelProvider = () =>
           Stream.take(1),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)[0]),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const buildAttrs = (channel: {
@@ -140,6 +160,10 @@ export const ContactChannelProvider = () =>
         // contacts is not meaningful here.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ contactChannelArn }) {
+          const channel = yield* getChannel(contactChannelArn);
+          return channel === undefined ? undefined : buildAttrs(channel);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output !== undefined) {
             const channel = yield* getChannel(output.contactChannelArn);

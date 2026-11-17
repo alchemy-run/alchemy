@@ -1,0 +1,265 @@
+---
+/**
+ * `<Timeline />` — what runs when. One lane per thing that runs (an
+ * environment, a step, a city), time running right, a bar for each span of
+ * work. Use it when the point is concurrency or waiting: one invocation at a
+ * time per environment, many requests sharing one, a Workflow sleeping for a
+ * day, a write reaching other cities a minute later.
+ *
+ *   <Timeline
+ *     end={10}
+ *     lanes={[{ id: "e1", label: "environment 1" }, { id: "e2", label: "environment 2" }]}
+ *     bars={[
+ *       { lane: "e1", start: 0, end: 3, label: "request" },
+ *       { lane: "e2", start: 1, end: 2, label: "cold start", tone: "warn" },
+ *     ]}
+ *     marks={[{ at: 1, label: "spike" }]}
+ *     ticks={[{ at: 0, label: "0s" }, { at: 10, label: "10s" }]}
+ *   />
+ *
+ * Several bars in one lane at overlapping times stack into rows, so a lane
+ * shows concurrency without extra props. A lane that stacks is drawn as one
+ * bordered box with its rows inside, so they read as one environment. `tone` is "accent" (the work),
+ * "muted" (waiting, no compute) or "warn" (a cold start, a retry).
+ */
+import "./diagram.css";
+
+interface Lane {
+  id: string;
+  label: string;
+  type?: string;
+}
+interface Bar {
+  lane: string;
+  start: number;
+  end: number;
+  label?: string;
+  tone?: "accent" | "default" | "muted" | "warn" | "danger";
+}
+interface Props {
+  lanes: Lane[];
+  bars: Bar[];
+  /** The time at the right edge. */
+  end: number;
+  marks?: { at: number; label: string }[];
+  ticks?: { at: number; label: string }[];
+  /** A key for bar tones, shown under the chart: [{ tone: "warn", label: "cold start" }]. */
+  legend?: { tone: Bar["tone"]; label: string }[];
+  caption?: string;
+}
+
+const { lanes, bars, end, marks = [], ticks = [], legend = [], caption } = Astro.props as Props;
+
+// Two layouts: wide (lane labels on the left, for desktop) and narrow (lane
+// labels above their bars, for phones), so the text keeps its size instead of
+// shrinking with the column. CSS shows one of them.
+const layout = (narrow: boolean) => {
+  const LABEL_W = narrow ? 0 : Math.max(...lanes.map((l) => Math.max(l.label.length * 7.4, (l.type ?? "").length * 6.4))) + 24;
+  const PLOT_W = narrow ? 318 : 560;
+  const BAR_H = 24;
+  const GAP = 6;
+  const LANE_PAD = narrow ? 6 : 10;
+  const HEAD = narrow ? 18 : 0;
+  const UNDER = 15;
+  const x = (t: number) => LABEL_W + (t / end) * PLOT_W;
+  // Marks whose labels would touch stagger onto a second line.
+  const markRow = marks.map(() => 0);
+  marks.forEach((m, i) => {
+    if (i > 0 && Math.abs(x(m.at) - x(marks[i - 1].at)) < (m.label.length + marks[i - 1].label.length) * 3.4 + 10 && markRow[i - 1] === 0) markRow[i] = 1;
+  });
+  const TOP = marks.length ? 30 + (markRow.some((r) => r) ? 14 : 0) : 8;
+  let y = TOP;
+  const laneBoxes = lanes.map((lane) => {
+    const rows: number[] = [];
+    const placed = bars
+      .filter((b) => b.lane === lane.id)
+      .sort((a, b) => a.start - b.start)
+      .map((bar) => {
+        let row = rows.findIndex((freeAt) => freeAt <= bar.start);
+        if (row === -1) row = rows.push(0) - 1;
+        rows[row] = bar.end;
+        return { bar, row };
+      });
+    // Where each bar's label goes: inside, after the bar, or (narrow only) under it.
+    const withLabels = placed.map((p) => {
+      const bx = x(p.bar.start);
+      const bw = Math.max(4, x(p.bar.end) - bx);
+      const tw = (p.bar.label ?? "").length * 6.4;
+      const next = placed.filter((q) => q.row === p.row && q.bar.start >= p.bar.end).map((q) => x(q.bar.start));
+      const room = Math.min(LABEL_W + PLOT_W + 8, ...next) - (bx + bw + 6);
+      const where: "in" | "after" | "under" | "none" = !p.bar.label || tw + 12 < bw ? "in" : !narrow || tw <= room ? "after" : "under";
+      return { ...p, bx, bw, where };
+    });
+    // Labels under bars that would run into the one before them are dropped
+    // (a repeat of the same word reads from the first, and the legend).
+    const underEnd: number[] = [];
+    for (const p of withLabels) {
+      if (p.where !== "under") continue;
+      const lx = Math.min(p.bx, LABEL_W + PLOT_W - (p.bar.label ?? "").length * 6.4);
+      if (lx < (underEnd[p.row] ?? -Infinity) + 8) (p as { where: string }).where = "none";
+      else underEnd[p.row] = lx + (p.bar.label ?? "").length * 6.4;
+    }
+    const rowCount = Math.max(1, ...placed.map((p) => p.row + 1));
+    const under = Array.from({ length: rowCount }, (_, r) => withLabels.some((p) => p.row === r && p.where === "under"));
+    const rowY: number[] = [];
+    let ry = y + HEAD + LANE_PAD;
+    for (let r = 0; r < rowCount; r++) {
+      rowY.push(ry);
+      ry += BAR_H + (under[r] ? UNDER : 0) + GAP;
+    }
+    const h = ry - GAP + LANE_PAD - y;
+    const box = { lane, y, h, placed: withLabels, rowY, stacked: rowCount > 1 };
+    y += h;
+    return box;
+  });
+  const PLOT_BOTTOM = y;
+  const H = PLOT_BOTTOM + (ticks.length ? 24 : 6);
+  const W = LABEL_W + PLOT_W + 12;
+  return { narrow, LABEL_W, PLOT_W, BAR_H, HEAD, x, TOP, markRow, laneBoxes, PLOT_BOTTOM, H, W };
+};
+const layouts = [layout(false), layout(true)];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  {
+    layouts.map(({ narrow, LABEL_W, PLOT_W, BAR_H, HEAD, x, TOP, markRow, laneBoxes, PLOT_BOTTOM, H, W }) => (
+      <svg
+        class:list={["alc-fig__svg", narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide"]}
+        viewBox={`0 0 ${W} ${H}`}
+        style={`max-width: ${Math.round(W * 1.15)}px`}
+        role="img"
+        aria-label={caption ?? "Timeline"}
+      >
+        {marks.map((m) => (
+          <line x1={x(m.at)} y1={TOP - 6} x2={x(m.at)} y2={PLOT_BOTTOM} class="alc-fig__line alc-fig__line--dashed" />
+        ))}
+        {laneBoxes.map((l, i) => (
+          <g>
+            {i > 0 && <line x1="0" y1={l.y} x2={W} y2={l.y} class="alc-fig__line alc-fig__line--muted" />}
+            {l.stacked && (
+              <rect x={LABEL_W - (narrow ? 0 : 8)} y={l.y + HEAD + 3} width={PLOT_W + (narrow ? 8 : 16)} height={l.h - HEAD - 6} rx="8" class="alc-fig__box alc-tl__env" />
+            )}
+            {narrow ? (
+              <text x="0" y={l.y + 14} class="alc-fig__label alc-fig__haloed">
+                {l.lane.label}
+                {l.lane.type && <tspan class="alc-fig__type" dx="8">{l.lane.type}</tspan>}
+              </text>
+            ) : (
+              <>
+                <text x="4" y={l.y + l.h / 2 + (l.lane.type ? -2 : 4)} class="alc-fig__label">{l.lane.label}</text>
+                {l.lane.type && <text x="4" y={l.y + l.h / 2 + 12} class="alc-fig__type">{l.lane.type}</text>}
+              </>
+            )}
+            {l.placed.map(({ bar, row, bx, bw, where }) => {
+              const by = l.rowY[row];
+              return (
+                <g>
+                  <rect
+                    x={bx}
+                    y={by}
+                    width={bw}
+                    height={BAR_H}
+                    rx="5"
+                    class:list={[
+                      "alc-fig__box",
+                      (bar.tone ?? "accent") === "accent" && "alc-fig__box--accent",
+                      bar.tone === "muted" && "alc-fig__box--muted",
+                      bar.tone === "warn" && "alc-fig__box--warn",
+                      bar.tone === "danger" && "alc-fig__box--danger",
+                    ]}
+                  />
+                  {bar.label && where !== "none" && (
+                    <text
+                      x={where === "in" ? bx + bw / 2 : where === "after" ? bx + bw + 6 : Math.min(bx, LABEL_W + PLOT_W - bar.label.length * 6.4)}
+                      y={where === "under" ? by + BAR_H + 12 : by + 16}
+                      text-anchor={where === "in" ? "middle" : "start"}
+                      class="alc-fig__small"
+                    >
+                      {bar.label}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </g>
+        ))}
+        {marks.map((m, i) => (
+          <text
+            x={x(m.at)}
+            y={TOP - 12 - (markRow[i] ? 0 : markRow.some((r) => r) ? 14 : 0)}
+            text-anchor={narrow && x(m.at) < 40 ? "start" : narrow && x(m.at) > W - 40 ? "end" : "middle"}
+            class="alc-fig__strong"
+          >
+            {m.label}
+          </text>
+        ))}
+        {ticks.length > 0 && <line x1={LABEL_W} y1={PLOT_BOTTOM} x2={LABEL_W + PLOT_W} y2={PLOT_BOTTOM} class="alc-fig__line alc-fig__line--muted" />}
+        {ticks.map((t) => (
+          <text x={x(t.at)} y={PLOT_BOTTOM + 16} text-anchor={t.at === 0 ? "start" : t.at === end ? "end" : "middle"} class="alc-fig__small">
+            {t.label}
+          </text>
+        ))}
+      </svg>
+    ))
+  }
+  {
+    legend.length > 0 && (
+      <div class="alc-tl__legend">
+        {legend.map((k) => (
+          <span class="alc-tl__key">
+            <span class:list={["alc-tl__swatch", `alc-tl__swatch--${k.tone ?? "accent"}`]} />
+            {k.label}
+          </span>
+        ))}
+      </div>
+    )
+  }
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-tl__env {
+    fill: color-mix(in srgb, var(--alc-hairline) 45%, transparent);
+    stroke: var(--alc-hairline-3);
+  }
+  .alc-tl__legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.25rem;
+    margin-top: 0.5rem;
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+    color: var(--alc-fg-3);
+  }
+  .alc-tl__key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .alc-tl__swatch {
+    width: 14px;
+    height: 10px;
+    border-radius: 3px;
+    border: 1.5px solid var(--alc-accent);
+    background: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+  }
+  .alc-tl__swatch--default {
+    border-color: var(--alc-accent-40);
+    background: var(--alc-bg-elev-2);
+  }
+  .alc-tl__swatch--warn {
+    border-color: var(--alc-warn);
+    background: color-mix(in srgb, var(--alc-warn) 14%, var(--alc-bg-elev-2));
+  }
+  .alc-tl__swatch--danger {
+    border-color: var(--alc-danger);
+    background: color-mix(in srgb, var(--alc-danger) 12%, var(--alc-bg-elev-2));
+  }
+  .alc-tl__swatch--muted {
+    border: 1.5px dashed var(--alc-hairline-3);
+    background: none;
+  }
+</style>

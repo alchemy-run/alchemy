@@ -238,7 +238,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         mapPromptCancellation,
         Effect.flatMap((input) => {
           const trimmed = (input ?? "").trim();
-          return trimmed === "" ? Effect.succeed(undefined) : normalizeGitHubBaseUrl(trimmed);
+          return trimmed === "" ? Effect.undefined : normalizeGitHubBaseUrl(trimmed);
         }),
       );
 

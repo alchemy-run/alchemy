@@ -12,6 +12,7 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -21,11 +22,11 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 
 // Deterministic per-test names (alphanumeric/hyphen/underscore only). The
 // same name is reused on every run — never derive from Date.now()/random.
-const NAME_UPDATE = "alchemy-healthcheck-update";
-const NAME_UPDATE_V2 = "alchemy-healthcheck-update-v2";
-const NAME_TYPE = "alchemy-healthcheck-type";
-const NAME_ADOPT = "alchemy-healthcheck-adopt";
-const NAME_LIST = "alchemy-healthcheck-list";
+const NAME_UPDATE = testName("alchemy-healthcheck-update");
+const NAME_UPDATE_V2 = testName("alchemy-healthcheck-update-v2");
+const NAME_TYPE = testName("alchemy-healthcheck-type");
+const NAME_ADOPT = testName("alchemy-healthcheck-adopt");
+const NAME_LIST = testName("alchemy-healthcheck-list");
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

@@ -1,5 +1,5 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -98,8 +99,30 @@ export type SemanticGovernancePolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SemanticGovernancePolicyLookup
 >;
+
+/**
+ * Props for {@link SemanticGovernancePolicy.lookup}: find a semantic
+ * governance policy this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SemanticGovernancePolicyLookup {
+  /**
+   * Policy id (the `{semantic_governance_policy}` segment).
+   */
+  semanticGovernancePolicyId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI SemanticGovernancePolicy constraining an Agent's tools.
@@ -116,6 +139,19 @@ export type SemanticGovernancePolicy = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing semantic governance policy
+ * `SemanticGovernancePolicy.lookup` references a semantic governance policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared semantic governance policy.
+ *
+ * **Example:** Reference an existing semantic governance policy
+ * ```typescript
+ * const semanticGovernancePolicy = GCP.AIPlatform.SemanticGovernancePolicy.lookup({
+ *   semanticGovernancePolicyId: "my-semantic-governance-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -126,7 +162,7 @@ export const SemanticGovernancePolicy = Resource<SemanticGovernancePolicy>(
 export class SemanticGovernancePolicyNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.SemanticGovernancePolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, policyId: string) =>
@@ -159,17 +195,17 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsSemanticGovernancePolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
       policy
         ? Effect.succeed(policy)
-        : Effect.fail(new SemanticGovernancePolicyNotResolved({ name })),
+        : Effect.fail(new SemanticGovernancePolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.SemanticGovernancePolicyNotResolved",
@@ -218,7 +254,16 @@ export const SemanticGovernancePolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ semanticGovernancePolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const name = resourceName(locationParent(env.project, location), semanticGovernancePolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const policyId = yield* toResourceId(
         id,
@@ -230,7 +275,9 @@ export const SemanticGovernancePolicyProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -274,7 +321,7 @@ export const SemanticGovernancePolicyProvider = () =>
               mcpTools,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -287,7 +334,7 @@ export const SemanticGovernancePolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SemanticGovernancePolicyNotResolved({ name });
+        return yield* new SemanticGovernancePolicyNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;
@@ -333,7 +380,7 @@ export const SemanticGovernancePolicyProvider = () =>
         .deleteProjectsLocationsSemanticGovernancePolicies({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -129,8 +130,30 @@ export type ApimServiceExtension = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApimServiceExtensionLookup
 >;
+
+/**
+ * Props for {@link ApimServiceExtension.lookup}: find an apim service
+ * extension this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ApimServiceExtensionLookup {
+  /**
+   * Service extension id (RFC-1034, max 63 characters).
+   */
+  apimServiceExtensionId: string;
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An APIM service extension that routes load-balancer traffic to an
@@ -155,6 +178,19 @@ export type ApimServiceExtension = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing apim service extension
+ * `ApimServiceExtension.lookup` references an apim service extension
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared apim service extension.
+ *
+ * **Example:** Reference an existing apim service extension
+ * ```typescript
+ * const apimServiceExtension = GCP.Apigee.ApimServiceExtension.lookup({
+ *   apimServiceExtensionId: "my-apim-service-extension",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -165,7 +201,7 @@ export const ApimServiceExtension = Resource<ApimServiceExtension>(
 export class ApimServiceExtensionNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApimServiceExtensionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, extensionId: string) =>
@@ -209,7 +245,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApimServiceExtensions({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const ApimServiceExtensionProvider = () =>
   Provider.succeed(ApimServiceExtension, {
@@ -231,6 +267,15 @@ export const ApimServiceExtensionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ apimServiceExtensionId, organizationId: lookupOrganizationId }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = lookupOrganizationId ?? (yield* resolveOrgId(env.project));
+      const name = resourceName(organizationId, apimServiceExtensionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, organizationId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -308,7 +353,7 @@ export const ApimServiceExtensionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApimServiceExtensionNotResolved({ name });
+        return yield* new ApimServiceExtensionNotResolved({ resourceName: name });
       }
 
       const needsUpdate =
@@ -334,9 +379,7 @@ export const ApimServiceExtensionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsApimServiceExtensions({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

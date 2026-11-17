@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { SuppressionListReason } from "./ConfigurationSet.ts";
+
+export class TenantUnexpectedResponse extends Data.TaggedError("TenantUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The scope of the tenant's suppression list: `ACCOUNT` shares the
@@ -67,8 +73,18 @@ export interface Tenant extends Resource<
     tenantArn: string;
   },
   never,
-  Providers
+  Providers,
+  TenantLookup
 > {}
+
+/**
+ * Props for {@link Tenant.lookup}: find a tenant this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TenantLookup {
+  /** The tenant name of the existing tenant. */
+  tenantName: string;
+}
 
 /**
  * An Amazon SES v2 tenant — a logical container that groups related SES
@@ -147,6 +163,16 @@ export interface Tenant extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tenant
+ * `Tenant.lookup` references a tenant Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tenantName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing tenant
+ * ```typescript
+ * const existing = AWS.SES.Tenant.lookup({ tenantName: "my-tenant" });
+ * ```
+ *
  * @resource
  */
 export const Tenant = Resource<Tenant>("AWS.SES.Tenant");
@@ -175,7 +201,7 @@ export const TenantProvider = () =>
       const getTenant = Effect.fn(function* (name: string) {
         return yield* sesv2.getTenant({ TenantName: name }).pipe(
           Effect.map((response) => response.Tenant),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 
@@ -199,6 +225,17 @@ export const TenantProvider = () =>
                   ]
                 : [],
             );
+        }),
+
+        lookup: Effect.fn(function* ({ tenantName: name }) {
+          const found = yield* getTenant(name);
+          if (!found || !found.TenantId || !found.TenantArn) return undefined;
+          const attrs = {
+            tenantName: name,
+            tenantId: found.TenantId,
+            tenantArn: found.TenantArn,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -258,7 +295,9 @@ export const TenantProvider = () =>
           }
 
           if (observed === undefined || !observed.TenantId || !observed.TenantArn) {
-            return yield* Effect.fail(new Error(`SES tenant ${name} was not found after create`));
+            return yield* new TenantUnexpectedResponse({
+              message: `SES tenant ${name} was not found after create`,
+            });
           }
           const tenantArn = observed.TenantArn;
 

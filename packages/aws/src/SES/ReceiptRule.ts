@@ -190,8 +190,8 @@ export const ReceiptRuleProvider = () =>
           .describeReceiptRule({ RuleSetName: ruleSetName, RuleName: ruleName })
           .pipe(
             Effect.catchTags({
-              RuleDoesNotExistException: () => Effect.succeed(undefined),
-              RuleSetDoesNotExistException: () => Effect.succeed(undefined),
+              RuleDoesNotExistException: () => Effect.undefined,
+              RuleSetDoesNotExistException: () => Effect.undefined,
             }),
           );
       });

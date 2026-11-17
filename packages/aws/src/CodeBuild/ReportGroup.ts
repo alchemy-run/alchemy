@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+
+export class ReportGroupUnexpectedResponse extends Data.TaggedError(
+  "ReportGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Where CodeBuild exports the raw report data.
@@ -78,8 +86,25 @@ export interface ReportGroup extends Resource<
     reportGroupName: string;
     /** ARN of the report group. */
     reportGroupArn: string;
-  }
+  },
+  never,
+  undefined,
+  ReportGroupLookup
 > {}
+
+/**
+ * Props for {@link ReportGroup.lookup}: find a report group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ReportGroupLookup =
+  | {
+      /** The ARN of the existing report group. */
+      reportGroupArn: string;
+    }
+  | {
+      /** The name of the existing report group. */
+      reportGroupName: string;
+    };
 
 /**
  * An AWS CodeBuild report group — a named collection of test or
@@ -105,6 +130,17 @@ export interface ReportGroup extends Resource<
  *     s3Destination: { bucket: bucket.bucketName, packaging: "ZIP" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing report group
+ * `ReportGroup.lookup` references a report group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `reportGroupArn` or `reportGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing report group
+ * ```typescript
+ * const tests = AWS.CodeBuild.ReportGroup.lookup({ reportGroupName: "unit-tests" });
+ * const reportGroupArn = tests.reportGroupArn;
  * ```
  *
  * @resource
@@ -183,6 +219,18 @@ export const ReportGroupProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn =
+            "reportGroupArn" in props
+              ? props.reportGroupArn
+              : yield* reportGroupArn(props.reportGroupName);
+          const group = yield* getReportGroup(arn);
+          if (group?.arn === undefined) return undefined;
+          return {
+            reportGroupName: group.name ?? arn.split("/").at(-1)!,
+            reportGroupArn: group.arn,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.reportGroupName ?? (yield* toName(id, olds ?? {}));
           const arn = output?.reportGroupArn ?? (yield* reportGroupArn(name));
@@ -227,7 +275,7 @@ export const ReportGroupProvider = () =>
               })
               .pipe(
                 Effect.map((res) => res.reportGroup),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
           }
 
@@ -247,9 +295,9 @@ export const ReportGroupProvider = () =>
           }
 
           if (observed === undefined || observed.arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`CodeBuild report group '${name}' disappeared while reconciling`),
-            );
+            return yield* new ReportGroupUnexpectedResponse({
+              message: `CodeBuild report group '${name}' disappeared while reconciling`,
+            });
           }
 
           yield* session.note(name);

@@ -20,7 +20,7 @@ const row: Row = {
   owner: { country: "NZ" },
 };
 
-describe("Domain Filter", () => {
+describe("Domain Filter", { tags: ["unit", "local"] }, () => {
   it("treats bare values as equality and sibling keys as AND", () => {
     expect(matches<Row>({ frozen: false, name: "savings" }, row)).toBe(true);
     expect(matches<Row>({ frozen: true, name: "savings" }, row)).toBe(false);

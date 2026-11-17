@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -110,8 +111,30 @@ export type GoldengateConnection = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GoldengateConnectionLookup
 >;
+
+/**
+ * Props for {@link GoldengateConnection.lookup}: find a goldengate
+ * connection this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface GoldengateConnectionLookup {
+  /**
+   * Connection id.
+   */
+  goldengateConnectionId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle GoldenGate connection on Google Cloud.
@@ -135,6 +158,19 @@ export type GoldengateConnection = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing goldengate connection
+ * `GoldengateConnection.lookup` references a goldengate connection Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared goldengate connection.
+ *
+ * **Example:** Reference an existing goldengate connection
+ * ```typescript
+ * const goldengateConnection = GCP.OracleDatabase.GoldengateConnection.lookup({
+ *   goldengateConnectionId: "my-goldengate-connection",
+ * });
+ * ```
+ *
  * @resource
  * @category OracleDatabase
  */
@@ -145,7 +181,7 @@ export const GoldengateConnection = Resource<GoldengateConnection>(
 const mergedProperties = (
   news: GoldengateConnectionProps,
 ): oracle.GoldengateConnectionProperties => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   connectionType: news.connectionType ?? news.properties?.connectionType,
   displayName: news.displayName ?? news.properties?.displayName,
   description: news.description ?? news.properties?.description,
@@ -190,7 +226,7 @@ const toAttrs = (connection: oracle.GoldengateConnection, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsGoldengateConnections({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listConnections = (project: string, region: string) => {
@@ -232,6 +268,15 @@ export const GoldengateConnectionProvider = () =>
         extra: nextType !== previousType || nextOdb !== previousOdb,
       });
     }),
+
+    lookup: Effect.fn(function* ({ goldengateConnectionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, goldengateConnectionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -283,7 +328,7 @@ export const GoldengateConnectionProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -292,7 +337,7 @@ export const GoldengateConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -311,7 +356,7 @@ export const GoldengateConnectionProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

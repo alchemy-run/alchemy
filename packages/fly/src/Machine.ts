@@ -33,6 +33,7 @@ import type { Providers } from "./Providers.ts";
 import {
   deleteReplicaSet,
   listReplicaSets,
+  lookupReplicaSet,
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
@@ -379,8 +380,24 @@ export type Machine = Resource<
     replicas: Replica[];
   },
   ServiceBinding,
-  Providers
+  Providers,
+  MachineLookup
 >;
+
+/**
+ * Props for {@link Machine.lookup}: find Machines this stack doesn't
+ * manage by their App and name.
+ */
+export interface MachineLookup {
+  /** Fly App name the Machines run in. */
+  appName: string;
+  /**
+   * Machine name (unique per App). Replicas named `{name}-{N}` are
+   * found with it, as are the replicas of an Alchemy Machine whose base
+   * name it is.
+   */
+  name: string;
+}
 
 /**
  * A Fly.Machine is a Firecracker VM running one image or a named container group.
@@ -838,13 +855,24 @@ export type Machine = Resource<
  * discovers unfinished owned generations.
  * See the [deployment guide](/fly/compute/deployments) for recovery and limits.
  *
+ * ### Looking up existing Machines
+ * `Machine.lookup` references Machines Alchemy doesn't manage (started with
+ * `fly machine run` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Machine
+ * ```typescript
+ * const worker = Fly.Machine.lookup({ appName: "my-app", name: "worker" });
+ * const address = worker.privateIp;
+ * ```
+ *
  * @resource
  * @product Machine
  */
 export const Machine = Resource<Machine>("Fly.Machine");
 
 export class MachineNotCreated extends Data.TaggedError("Fly.MachineNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -928,7 +956,7 @@ const desiredEnv = (
 const desiredMetadata = (
   props: MachineProps,
   alchemy: Record<string, string>,
-): Record<string, string> => ({ ...(props.metadata ?? {}), ...alchemy });
+): Record<string, string> => ({ ...props.metadata, ...alchemy });
 
 const buildConfig = (input: {
   image: string | undefined;
@@ -1154,6 +1182,11 @@ export const MachineProvider = () =>
       return output.rolloutPending ? { action: "update" as const } : undefined;
     }),
 
+    lookup: Effect.fn(function* ({ appName, name }) {
+      const found = yield* lookupReplicaSet({ appName, name });
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
       const appName = appNameOf(olds?.app) ?? output?.appName;
       const name = yield* resolveMachineName(id, olds?.name, output?.baseName ?? output?.name);
@@ -1245,7 +1278,9 @@ export const MachineProvider = () =>
           }),
       }).pipe(
         Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
-          Effect.fail(new MachineNotCreated({ name: error.name, appName: error.appName })),
+          Effect.fail(
+            new MachineNotCreated({ resourceName: error.resourceName, appName: error.appName }),
+          ),
         ),
       );
       return toAttrs(set);

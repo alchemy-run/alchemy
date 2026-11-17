@@ -1,5 +1,5 @@
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -157,7 +157,7 @@ export const AgentsTool = Resource<AgentsTool>("GCP.Dialogflow.AgentsTool");
 export class AgentsToolNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsToolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_FUNCTION_SPEC: ToolFunctionSpec = {
@@ -220,10 +220,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsTools({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsTools.pages({ parent, pageSize: 100 }).pipe(
@@ -243,7 +243,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((tool) => tool.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toBody = (
@@ -283,7 +283,7 @@ export const AgentsToolProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
@@ -301,7 +301,7 @@ export const AgentsToolProvider = () =>
       const attrs = toAttrs(existing, env.project, agent);
       const named = yield* ownedByAlchemy(id, existing.displayName);
       const described = yield* ownedByAlchemy(id, existing.description);
-      return named || described ? attrs : Unowned(attrs);
+      return named || described ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -341,7 +341,7 @@ export const AgentsToolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsToolNotResolved({ name });
+        return yield* new AgentsToolNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

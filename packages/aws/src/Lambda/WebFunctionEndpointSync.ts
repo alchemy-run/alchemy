@@ -193,8 +193,18 @@ export const createEndpointConfig = (spec: WebFunctionEndpointSpec): LambdaWeb.E
 
 export const getEndpoint = (functionName: string, endpointName: string) =>
   LambdaWeb.getWebFunctionEndpoint({ functionName, endpointName }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
+
+/**
+ * The rate limit and environment cap an endpoint enforces, as observed.
+ * Both endpoint resources report them so `alchemy drift` detects
+ * out-of-band changes.
+ */
+export const endpointLimits = (endpoint: LambdaWeb.GetWebFunctionEndpointResponse) => ({
+  rateLimit: endpoint.throttleConfig?.rateLimit,
+  maxEnvironments: endpoint.scalingConfig?.maxEnvironments,
+});
 
 /** Revisions an endpoint sends traffic to. */
 export const servedRevisions = (endpoint: {

@@ -116,8 +116,30 @@ export type OrganizationsAddressGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsAddressGroupLookup
 >;
+
+/**
+ * Props for {@link OrganizationsAddressGroup.lookup}: find an organizations
+ * address group this stack doesn't manage by its identifiers.
+ */
+export interface OrganizationsAddressGroupLookup {
+  /**
+   * Address group id (the `{addressGroup}` segment of
+   * `organizations/{organi
+   * zation}/locations/{location}/addressGroups/{addressGroup}`).
+   */
+  addressGroupId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Location (`global`, `us-central1`, …).
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped Network Security address group.
@@ -147,6 +169,19 @@ export type OrganizationsAddressGroup = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations address group
+ * `OrganizationsAddressGroup.lookup` references an organizations address
+ * group Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared organizations address group.
+ *
+ * **Example:** Reference an existing organizations address group
+ * ```typescript
+ * const organizationsAddressGroup = GCP.NetworkSecurity.OrganizationsAddressGroup.lookup({
+ *   addressGroupId: "my-address-group",
+ * });
  * ```
  *
  * @resource
@@ -186,7 +221,7 @@ const toAttrs = (group: networksecurity.AddressGroup) => {
 const getByName = (name: string) =>
   networksecurity
     .getOrganizationsLocationsAddressGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (organization: string) =>
   networksecurity.listOrganizationsLocationsAddressGroups
@@ -247,6 +282,23 @@ export const OrganizationsAddressGroupProvider = () =>
           previousId !== undefined &&
           nextId === previousId,
       };
+    }),
+
+    lookup: Effect.fn(function* ({
+      addressGroupId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeLocation(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, addressGroupId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -330,7 +382,7 @@ export const OrganizationsAddressGroupProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -339,7 +391,7 @@ export const OrganizationsAddressGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -381,7 +433,7 @@ export const OrganizationsAddressGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -166,7 +166,7 @@ Both capability calls return a callable Effect: `putObject` takes a
 Alchemy fills in for you) and `getObject` takes a `GetObjectRequest`.
 Each call is 1:1 with an IAM statement on the execution role — delete
 a capability call and the matching statement disappears next deploy.
-See [S3 → One binding, one IAM statement](/aws/data/s3#one-binding-one-iam-statement)
+See [IAM and bindings](/aws/iam#bindings-write-the-policy)
 for the exact mapping.
 
 ## Write objects with `PUT /:key`

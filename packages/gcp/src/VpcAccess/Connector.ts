@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -125,8 +126,33 @@ export type Connector = Resource<
     connectedProjects: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  ConnectorLookup
 >;
+
+/**
+ * Props for {@link Connector.lookup}: find a connector this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectorLookup {
+  /**
+   * Connector id (the `{connector}` segment of
+   * `projects/{project}/locations/{location}/connectors/{connector}`). Must
+   * be 1-25 characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  connectorId: string;
+  /**
+   * Region of the connector (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Serverless VPC Access connector.
@@ -173,32 +199,44 @@ export type Connector = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connector
+ * `Connector.lookup` references a connector Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared connector.
+ *
+ * **Example:** Reference an existing connector
+ * ```typescript
+ * const connector = GCP.VpcAccess.Connector.lookup({
+ *   connectorId: "my-connector",
+ * });
+ * ```
+ *
  * @resource
  * @category VpcAccess
  */
 export const Connector = Resource<Connector>("GCP.VpcAccess.Connector");
 
 export class ConnectorNotResolved extends Data.TaggedError("GCP.VpcAccess.ConnectorNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ConnectorRangeMissing extends Data.TaggedError("GCP.VpcAccess.ConnectorRangeMissing")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
 export class ConnectorFailed extends Data.TaggedError("GCP.VpcAccess.ConnectorFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class ConnectorNotReady extends Data.TaggedError("GCP.VpcAccess.ConnectorNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class ConnectorStillExists extends Data.TaggedError("GCP.VpcAccess.ConnectorStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -297,7 +335,7 @@ const toAttrs = (connector: vpcaccess.Connector, project: string, region: string
 const getByName = (name: string) =>
   vpcaccess
     .getProjectsLocationsConnectors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Connector create/delete takes 2-5 minutes.
 const waitForOperation = (operation: vpcaccess.Operation) =>
@@ -316,15 +354,15 @@ const waitUntilReady = (name: string) => {
   > = getByName(name).pipe(
     Effect.filterOrFail(
       (connector): connector is vpcaccess.Connector => connector !== undefined,
-      () => new ConnectorNotResolved({ name }),
+      () => new ConnectorNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (connector) => connector.state !== "ERROR",
-      (connector) => new ConnectorFailed({ name, state: connector.state }),
+      (connector) => new ConnectorFailed({ resourceName: name, state: connector.state }),
     ),
     Effect.filterOrFail(
       (connector) => connector.state === "READY" || connector.state === undefined,
-      (connector) => new ConnectorNotReady({ name, state: connector.state }),
+      (connector) => new ConnectorNotReady({ resourceName: name, state: connector.state }),
     ),
   );
   return ready.pipe(
@@ -341,7 +379,9 @@ const waitUntilReady = (name: string) => {
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connector) =>
-      connector === undefined ? Effect.void : Effect.fail(new ConnectorStillExists({ name })),
+      connector === undefined
+        ? Effect.void
+        : Effect.fail(new ConnectorStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.VpcAccess.ConnectorStillExists",
@@ -436,6 +476,15 @@ export const ConnectorProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ connectorId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const connectorId = yield* toId(id, olds?.connectorId, output?.connectorId);
@@ -469,7 +518,7 @@ export const ConnectorProvider = () =>
 
       if (news.subnet === undefined && news.ipCidrRange === undefined) {
         return yield* new ConnectorRangeMissing({
-          name,
+          resourceName: name,
           message:
             "VPC Access connectors require `ipCidrRange` (with optional `network`) or `subnet`.",
         });
@@ -484,7 +533,7 @@ export const ConnectorProvider = () =>
 
       if (current !== undefined && current.state === "ERROR") {
         return yield* new ConnectorFailed({
-          name,
+          resourceName: name,
           state: current.state,
         });
       }
@@ -496,13 +545,13 @@ export const ConnectorProvider = () =>
             connectorId,
             body: createBody(news),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         } else {
           const raced = yield* getByName(name);
           if (raced === undefined) {
-            return yield* new ConnectorNotResolved({ name });
+            return yield* new ConnectorNotResolved({ resourceName: name });
           }
         }
         current = yield* waitUntilReady(name);
@@ -511,7 +560,7 @@ export const ConnectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectorNotResolved({ name });
+        return yield* new ConnectorNotResolved({ resourceName: name });
       }
 
       const desiredMachine = news.machineType ?? DEFAULT_MACHINE_TYPE;
@@ -560,7 +609,7 @@ export const ConnectorProvider = () =>
       const operation = yield* vpcaccess
         .deleteProjectsLocationsConnectors({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

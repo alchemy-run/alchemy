@@ -41,7 +41,7 @@ export const RetrieveProductFeatureHttp = Layer.effect(
       }) {
         return yield* auth(
           GetProductFeature({
-            ...(request ?? {}),
+            ...request,
             id: yield* id,
             product: yield* product,
           }),

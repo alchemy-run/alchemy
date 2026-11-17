@@ -1,0 +1,110 @@
+---
+/**
+ * `<HubMap />` — a provider hub's map of its docs, one card per sidebar
+ * section, drawn from the sidebar itself so it never drifts from it.
+ *
+ * Place it on a hub page (`<provider>/index.mdx`). It finds the sidebar group
+ * that holds the current page and lists that group's sections, skipping the
+ * tutorial (the hub links it in "Where to start") and the API reference.
+ */
+import type { StarlightRouteData } from "@astrojs/starlight/route-data";
+import { sidebarGroupIcon } from "../docs-icons";
+
+type Entry = StarlightRouteData["sidebar"][number];
+type Group = Extract<Entry, { type: "group" }>;
+type Link = Extract<Entry, { type: "link" }>;
+
+const SKIP = new Set(["Tutorial", "API Reference", "Resources"]);
+
+const { sidebar } = Astro.locals.starlightRoute;
+
+const holdsCurrent = (entries: Entry[]): boolean =>
+  entries.some((e) => (e.type === "link" ? e.isCurrent : holdsCurrent(e.entries)));
+const links = (entries: Entry[]): Link[] =>
+  entries.flatMap((e) => (e.type === "link" ? [e] : links(e.entries)));
+
+// The hub's own group: the innermost group whose direct links include this page.
+const findHub = (entries: Entry[]): Entry[] | undefined => {
+  for (const e of entries) {
+    if (e.type !== "group" || !holdsCurrent(e.entries)) continue;
+    return findHub(e.entries) ?? e.entries;
+  }
+  return entries.some((e) => e.type === "link" && e.isCurrent) ? entries : undefined;
+};
+
+const sections = (findHub(sidebar) ?? []).filter(
+  (e): e is Group => e.type === "group" && !SKIP.has(e.label),
+);
+---
+
+<div class="alc-hubmap not-content">
+  {
+    sections.map((section) => {
+      const icon = sidebarGroupIcon(section.label);
+      return (
+        <section class="alc-hubmap__card">
+          <h3 class="alc-hubmap__title">
+            {icon && (
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" set:html={icon} />
+            )}
+            {section.label}
+          </h3>
+          <ul class="alc-hubmap__links">
+            {links(section.entries).map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      );
+    })
+  }
+</div>
+
+<style>
+  .alc-hubmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: 1rem;
+    margin-block: 1.5rem;
+  }
+  .alc-hubmap__card {
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: var(--alc-radius);
+    padding: 1rem 1.125rem;
+    background: var(--alc-bg-elev-1);
+  }
+  .alc-hubmap__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.625rem;
+    font-family: var(--alc-font-mono);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--alc-fg-2);
+  }
+  .alc-hubmap__title svg {
+    flex-shrink: 0;
+    color: var(--alc-fg-4);
+  }
+  .alc-hubmap__links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.875rem;
+    font-size: 0.9375rem;
+  }
+  .alc-hubmap__links a {
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+  }
+  .alc-hubmap__links a:hover {
+    text-decoration: underline;
+  }
+</style>

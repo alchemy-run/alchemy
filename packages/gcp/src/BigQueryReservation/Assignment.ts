@@ -1,5 +1,5 @@
 import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
@@ -107,8 +108,49 @@ export type Assignment = Resource<
     schedulingPolicy: bigqueryreservation.SchedulingPolicy | undefined;
   },
   never,
-  Providers
+  Providers,
+  AssignmentLookup
 >;
+
+/**
+ * Props for {@link Assignment.lookup}: find an assignment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AssignmentLookup {
+  /**
+   * Assignment id (the `{assignment}` segment). Max 64 characters,
+   * lowercase letters, digits, or dashes.
+   */
+  assignmentId: string;
+  /**
+   * Parent reservation resource name
+   * `projects/{project}/locations/{location}/reservations/{reservation}` or
+   * a bare reservation id (resolved in the current project and `location`).
+   */
+  reservation: string;
+  /**
+   * Location of the parent reservation. Used when `reservation` is a bare
+   * id.
+   */
+  location?: string;
+  /**
+   * Resource that consumes the reservation: `projects/{project}`,
+   * `folders/{folder}`, or `organizations/{org}`. One assignment per
+   * `(assignee, jobType, location)`.
+   */
+  assignee?: string;
+  /**
+   * Job type that uses the reservation (`QUERY`, `PIPELINE`, `ML_EXTERNAL`,
+   * `BACKGROUND`, `CONTINUOUS`, …).
+   */
+  jobType?: AssignmentJobType;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BigQuery reservation assignment — grants a project, folder, or
@@ -139,6 +181,20 @@ export type Assignment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing assignment
+ * `Assignment.lookup` references an assignment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * assignment.
+ *
+ * **Example:** Reference an existing assignment
+ * ```typescript
+ * const assignment = GCP.BigQueryReservation.Assignment.lookup({
+ *   assignmentId: "my-assignment",
+ *   reservation: "my-reservation",
+ * });
+ * ```
+ *
  * @resource
  * @category BigQueryReservation
  */
@@ -147,7 +203,7 @@ export const Assignment = Resource<Assignment>("GCP.BigQueryReservation.Assignme
 export class AssignmentNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.AssignmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_JOB_TYPE = "QUERY";
@@ -231,7 +287,7 @@ const listAt = (parent: string) =>
         );
 
 const getByName = (name: string) => {
-  if (name.length === 0) return Effect.succeed(undefined);
+  if (name.length === 0) return Effect.undefined;
   const parent = parseName(name).reservation;
   return listAt(parent).pipe(
     Effect.map((assignments) => assignments.find((item) => item.name === name)),
@@ -280,7 +336,37 @@ export const AssignmentProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({
+      assignmentId,
+      reservation,
+      location: lookupLocation,
+      assignee,
+      jobType,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (typeof reservation !== "string" || reservation.length === 0) {
+        return undefined;
+      }
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const parent = reservationParent(env.project, location, reservation ?? "");
+      const name = parent ? `${parent}/assignments/${assignmentId}` : "";
+      const existing =
+        (yield* getByName(name)) ??
+        (yield* findExisting(
+          parent,
+          assigneeOf(env.project, assignee),
+          jobTypeOf(jobType),
+          assignmentId,
+        ));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const parentRef = olds?.reservation ?? output?.reservation;
       // A recovery read of an interrupted create gets persisted props whose
@@ -308,7 +394,9 @@ export const AssignmentProvider = () =>
         ));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, attrs.assignmentId)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, attrs.assignmentId))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -368,7 +456,7 @@ export const AssignmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AssignmentNotResolved({ name });
+        return yield* new AssignmentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

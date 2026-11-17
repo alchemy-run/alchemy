@@ -194,7 +194,7 @@ export const Subscription = Resource<Subscription>("GCP.WorkspaceEvents.Subscrip
 export class SubscriptionNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.SubscriptionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const payloadOf = (options: we.PayloadOptions | undefined): PayloadOptions | undefined => {
@@ -351,7 +351,7 @@ export const SubscriptionProvider = () =>
               ttl: news.ttl,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           const settled = yield* waitForOperation(created).pipe(
@@ -371,7 +371,7 @@ export const SubscriptionProvider = () =>
 
       if (current === undefined) {
         return yield* new SubscriptionNotResolved({
-          name: lookup || news.targetResource,
+          resourceName: lookup || news.targetResource,
         });
       }
 
@@ -403,11 +403,7 @@ export const SubscriptionProvider = () =>
       if (current.state === "SUSPENDED") {
         const reactivated = yield* we
           .reactivateSubscriptions({ name, body: {} })
-          .pipe(
-            Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.undefined));
         if (reactivated !== undefined) {
           yield* waitForOperation(reactivated);
           current = (yield* getSubscription(name)) ?? current;
@@ -423,7 +419,7 @@ export const SubscriptionProvider = () =>
       if (name.length > 0) {
         const operation = yield* we
           .deleteSubscriptions({ name, allowMissing: true })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation !== undefined) {
           // NOT_FOUND (5): already gone.
           yield* waitForOperation(operation).pipe(

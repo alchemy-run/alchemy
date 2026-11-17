@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,8 +93,37 @@ export type GlossariesTerm = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlossariesTermLookup
 >;
+
+/**
+ * Props for {@link GlossariesTerm.lookup}: find a glossaries term this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface GlossariesTermLookup {
+  /**
+   * Term id (the `{term}` segment of
+   * `.../glossaries/{glossary}/terms/{term}`).
+   */
+  termId: string;
+  /**
+   * Region used when `glossary` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent glossary. Full name
+   * `projects/{project}/locations/{location}/glossaries/{glossary}` or the
+   * glossary id (combined with `location`).
+   */
+  glossary: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex glossary term — a defined business concept that can be
@@ -122,6 +152,20 @@ export type GlossariesTerm = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing glossaries term
+ * `GlossariesTerm.lookup` references a glossaries term Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * glossaries term.
+ *
+ * **Example:** Reference an existing glossaries term
+ * ```typescript
+ * const glossariesTerm = GCP.Dataplex.GlossariesTerm.lookup({
+ *   termId: "my-term",
+ *   glossary: "my-glossary",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
@@ -130,7 +174,7 @@ export const GlossariesTerm = Resource<GlossariesTerm>("GCP.Dataplex.GlossariesT
 export class GlossariesTermNotResolved extends Data.TaggedError(
   "GCP.Dataplex.GlossariesTermNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const glossaryOf = (glossary: string, project: string, location: string) =>
@@ -161,7 +205,7 @@ const toAttrs = (term: dataplex.GoogleCloudDataplexV1GlossaryTerm, project: stri
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsGlossariesTerms({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GlossariesTermProvider = () =>
   Provider.succeed(GlossariesTerm, {
@@ -195,6 +239,16 @@ export const GlossariesTermProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ termId, location: lookupLocation, glossary: lookupGlossary }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const glossary = glossaryOf(lookupGlossary ?? "", env.project, location);
+      const name = resourceName(glossary, termId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -254,7 +308,7 @@ export const GlossariesTermProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new GlossariesTermNotResolved({ name });
+        return yield* new GlossariesTermNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

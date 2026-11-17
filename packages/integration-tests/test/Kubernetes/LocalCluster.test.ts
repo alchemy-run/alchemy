@@ -13,12 +13,16 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import { kubectl } from "./fixtures/kind.ts";
+import LocalDockerfileJob, { BUILD_SECRET } from "./fixtures/local-dockerfile-job.ts";
 import LocalEffectJob from "./fixtures/local-job.ts";
 import LocalEffectServer from "./fixtures/local-server.ts";
 import { TestLocalCluster } from "./fixtures/local.ts";
+import { expectFound } from "./lookup.ts";
 
 const testOptions = { providers: Kubernetes.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -156,6 +160,7 @@ const stack = Core.scratchStack(testOptions, "LocalClusterE2E");
 describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
   let cluster: Kubernetes.LocalCluster["Attributes"];
   let jobName: string;
+  let dockerfileJobName: string;
 
   beforeAll(
     Effect.gen(function* () {
@@ -164,12 +169,14 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
         Effect.gen(function* () {
           const cluster = yield* TestLocalCluster;
           const job = yield* LocalEffectJob;
+          const dockerfileJob = yield* LocalDockerfileJob;
           yield* LocalEffectServer;
-          return { cluster, jobName: job.jobName };
+          return { cluster, jobName: job.jobName, dockerfileJobName: dockerfileJob.jobName };
         }),
       );
       cluster = deployed.cluster;
       jobName = deployed.jobName;
+      dockerfileJobName = deployed.dockerfileJobName;
     }),
     { timeout: 300_000 },
   );
@@ -187,6 +194,14 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
       expect(containers).not.toContain(cluster.registryContainer);
     }),
     { timeout: 180_000 },
+  );
+
+  test.provider("a lookup of the cluster finds the deployed attributes", () =>
+    expectFound(
+      cluster.connection,
+      Kubernetes.LocalCluster.lookup({ name: cluster.name, kubeconfig: cluster.kubeconfig }),
+      cluster,
+    ),
   );
 
   test.provider("the cluster exposes a connection with its registry and architecture", () =>
@@ -229,6 +244,74 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
         expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(/^localhost:5061\//);
       }),
     { timeout: 120_000 },
+  );
+
+  test.provider(
+    "a Dockerfile Job is built with its build args and BuildKit secrets",
+    () =>
+      Effect.gen(function* () {
+        const transport = yield* connectCluster(cluster.connection);
+        yield* readObject({
+          transport,
+          object: {
+            apiVersion: "batch/v1",
+            kind: "Job",
+            name: dockerfileJobName,
+            namespace: "default",
+          },
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (job) =>
+              ((job as { status?: { succeeded?: number } }).status?.succeeded ?? 0) >= 1,
+            times: 45,
+          }),
+        );
+        // The image prints the file its build wrote: the arg, and the
+        // secret's length rather than its value.
+        const logs = yield* kubectl(cluster, ["logs", `job/${dockerfileJobName}`]);
+        expect(logs.trim()).toBe(`hello ${BUILD_SECRET.length}`);
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "a Dockerfile Job exports its registry layer cache next to its image",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const transport = yield* connectCluster(cluster.connection);
+        const job = (yield* readObject({
+          transport,
+          object: {
+            apiVersion: "batch/v1",
+            kind: "Job",
+            name: dockerfileJobName,
+            namespace: "default",
+          },
+        })) as { spec?: { template?: { spec?: { containers?: { image?: string }[] } } } };
+        const image = job.spec?.template?.spec?.containers?.[0]?.image ?? "";
+        const match = /^localhost:5061\/(.+):[^:]+$/.exec(image);
+        expect(match).not.toBeNull();
+        // `:buildcache` holds a BuildKit cache export, not another image.
+        const cache = yield* client
+          .execute(
+            HttpClientRequest.get(
+              `http://localhost:5061/v2/${match![1]}/manifests/buildcache`,
+            ).pipe(
+              HttpClientRequest.setHeader(
+                "accept",
+                "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
+              ),
+            ),
+          )
+          .pipe(
+            Effect.flatMap(HttpClientResponse.filterStatusOk),
+            Effect.flatMap((response) => response.text),
+          );
+        expect(cache).toContain("application/vnd.buildkit.cacheconfig.v0");
+      }),
+    { timeout: 60_000 },
   );
 
   // The build targets the cluster's platform, so the push must too: an

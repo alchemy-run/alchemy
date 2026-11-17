@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -82,8 +83,32 @@ export type Model = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ModelLookup
 >;
+
+/**
+ * Props for {@link Model.lookup}: find a model this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface ModelLookup {
+  /**
+   * Location of the model (`us-central1`, `europe-west1`, …). Custom AutoML
+   * Translation models are regional.
+   */
+  location?: string;
+  /**
+   * Server-assigned model id (the `{model}` segment of
+   * `projects/{project}/locations/{location}/models/{model}`, e.g. `NM…`)
+   * of an existing model to manage. Omit to train a new model.
+   */
+  modelId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A trained Cloud Translation AutoML model.
@@ -111,6 +136,16 @@ export type Model = Resource<
  *   location: "us-central1",
  *   dataset: dataset.name,
  * });
+ * ```
+ *
+ * ### Looking up an existing model
+ * `Model.lookup` references a model Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared model.
+ *
+ * **Example:** Reference an existing model
+ * ```typescript
+ * const model = GCP.Translate.Model.lookup({ modelId: "my-model" });
  * ```
  *
  * @resource
@@ -146,10 +181,10 @@ const toAttrs = (model: translate.Model, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : translate
         .getProjectsLocationsModels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ModelProvider = () =>
   Provider.succeed(Model, {
@@ -174,6 +209,15 @@ export const ModelProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({ location: lookupLocation, modelId }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = modelId ? resourceName(env.project, location, modelId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -212,7 +256,7 @@ export const ModelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || parent });
+        return yield* new ResourceNotResolved({ resourceName: hinted || parent });
       }
 
       return toAttrs(current, env.project);
@@ -224,7 +268,7 @@ export const ModelProvider = () =>
         translate.deleteProjectsLocationsModels({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined && "done" in operation) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

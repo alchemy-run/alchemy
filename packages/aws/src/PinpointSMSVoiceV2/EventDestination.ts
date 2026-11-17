@@ -214,7 +214,7 @@ export const EventDestinationProvider = () =>
           .describeConfigurationSets({ ConfigurationSetNames: [name] })
           .pipe(
             retrySmsVoiceThrottled,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         return result?.ConfigurationSets?.find((cs) => cs.ConfigurationSetName === name);
       });

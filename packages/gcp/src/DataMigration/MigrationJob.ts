@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -249,8 +250,32 @@ export type MigrationJob = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MigrationJobLookup
 >;
+
+/**
+ * Props for {@link MigrationJob.lookup}: find a migration job this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MigrationJobLookup {
+  /**
+   * Migration job id (the `{migrationJob}` segment of
+   * `projects/{project}/locations/{location}/migrationJobs/{migrationJob}`).
+   */
+  migrationJobId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Database Migration Service migration job: copies data from a source
@@ -287,6 +312,19 @@ export type MigrationJob = Resource<
  *   source: source.name,
  *   destination: dest.name,
  *   staticIpConnectivity: {},
+ * });
+ * ```
+ *
+ * ### Looking up an existing migration job
+ * `MigrationJob.lookup` references a migration job Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * migration job.
+ *
+ * **Example:** Reference an existing migration job
+ * ```typescript
+ * const migrationJob = GCP.DataMigration.MigrationJob.lookup({
+ *   migrationJobId: "my-migration-job",
  * });
  * ```
  *
@@ -355,10 +393,10 @@ const toAttrs = (job: dm.MigrationJob, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dm
         .getProjectsLocationsMigrationJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   dm.listProjectsLocationsMigrationJobs
@@ -432,6 +470,15 @@ export const MigrationJobProvider = () =>
             previousDestination !== nextDestination),
       });
     }),
+
+    lookup: Effect.fn(function* ({ migrationJobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, migrationJobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -515,7 +562,7 @@ export const MigrationJobProvider = () =>
             migrationJobId,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -523,7 +570,7 @@ export const MigrationJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -612,7 +659,7 @@ export const MigrationJobProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

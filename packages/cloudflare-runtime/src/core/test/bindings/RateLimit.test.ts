@@ -5,9 +5,14 @@ import * as RateLimit from "../../bindings/rate-limit/RateLimit.ts";
 import makeBinding from "../../bindings/rate-limit/RateLimitBinding.worker.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
+// Only the test's own path counts against the limit: local tools (T3 Code,
+// VS Code port detection) probe fresh localhost servers with `GET /`.
 const RATE_LIMIT_SCRIPT = `
 export default {
   async fetch(request, env) {
+    if (new URL(request.url).pathname !== "/limit") {
+      return new Response("Not Found", { status: 404 });
+    }
     const { success } = await env.TESTRATE.limit({ key: "test" });
     if (!success) {
       return new Response("rate limited", { status: 429 });
@@ -68,15 +73,15 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
           ],
         });
 
-        let res = yield* fetch("/");
+        let res = yield* fetch("/limit");
         expect(res.status).toBe(200);
         expect(yield* Effect.promise(() => res.text())).toBe("success");
 
-        res = yield* fetch("/");
+        res = yield* fetch("/limit");
         expect(res.status).toBe(200);
         expect(yield* Effect.promise(() => res.text())).toBe("success");
 
-        res = yield* fetch("/");
+        res = yield* fetch("/limit");
         expect(res.status).toBe(429);
         expect(yield* Effect.promise(() => res.text())).toBe("rate limited");
       }),

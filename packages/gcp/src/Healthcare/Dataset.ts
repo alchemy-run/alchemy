@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   locationParent,
@@ -62,8 +63,34 @@ export type Dataset = Resource<
     satisfiesPzs: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatasetLookup
 >;
+
+/**
+ * Props for {@link Dataset.lookup}: find a dataset this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatasetLookup {
+  /**
+   * Dataset id (the `{dataset}` segment of
+   * `projects/{project}/locations/{location}/datasets/{dataset}`). Must
+   * match letters, numbers, underscores, hyphens, and periods; 1-256
+   * characters.
+   */
+  datasetId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Healthcare dataset — a container for DICOM, FHIR, HL7v2, and
@@ -89,13 +116,23 @@ export type Dataset = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared dataset.
+ *
+ * **Example:** Reference an existing dataset
+ * ```typescript
+ * const dataset = GCP.Healthcare.Dataset.lookup({ datasetId: "my-dataset" });
+ * ```
+ *
  * @resource
  * @category Healthcare
  */
 export const Dataset = Resource<Dataset>("GCP.Healthcare.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.Healthcare.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, datasetId: string) =>
@@ -117,10 +154,10 @@ const toAttrs = (dataset: healthcare.Dataset, project: string, region: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetProvider = () =>
   Provider.succeed(Dataset, {
@@ -143,6 +180,15 @@ export const DatasetProvider = () =>
         nextId: news.datasetId,
       });
     }),
+
+    lookup: Effect.fn(function* ({ datasetId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(
+        resourceName(env.project, normalizeLocation(location, env.region), datasetId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -182,7 +228,7 @@ export const DatasetProvider = () =>
               timeZone: news.timeZone,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -190,7 +236,7 @@ export const DatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetNotResolved({ name });
+        return yield* new DatasetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

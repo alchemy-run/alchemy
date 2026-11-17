@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -139,8 +140,38 @@ export type FolderBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderBucketLookup
 >;
+
+/**
+ * Props for {@link FolderBucket.lookup}: find a folder bucket this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FolderBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `{parent}/locations/{location}/buckets/{bucket}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Folder id (`folders/{folder}` or the numeric id).
+   */
+  folderId?: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log bucket owned by a folder (or the stack project).
@@ -180,6 +211,19 @@ export type FolderBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing folder bucket
+ * `FolderBucket.lookup` references a folder bucket Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * folder bucket.
+ *
+ * **Example:** Reference an existing folder bucket
+ * ```typescript
+ * const folderBucket = GCP.Logging.FolderBucket.lookup({
+ *   bucketId: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -188,11 +232,11 @@ export const FolderBucket = Resource<FolderBucket>("GCP.Logging.FolderBucket");
 export class FolderBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FolderBucketFailed extends Data.TaggedError("GCP.Logging.FolderBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -231,7 +275,7 @@ const toAttrs = (bucket: logging.LogBucket, parent: string, location: string) =>
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -242,16 +286,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeletedBucket(bucket)) {
-      return yield* new FolderBucketNotResolved({ name });
+      return yield* new FolderBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new FolderBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPendingBucket(bucket.lifecycleState)) {
-      return yield* new FolderBucketNotResolved({ name });
+      return yield* new FolderBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -265,7 +309,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeletedBucket(bucket) ? Effect.void : Effect.fail(new FolderBucketNotResolved({ name })),
+      isDeletedBucket(bucket)
+        ? Effect.void
+        : Effect.fail(new FolderBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.FolderBucketNotResolved",
@@ -312,6 +358,16 @@ export const FolderBucketProvider = () =>
       if (!idChanged && !locationChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ bucketId, folderId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = scopeParent(env.project, folderId);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(parent, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeletedBucket(existing)) return undefined;
+      return toAttrs(existing, parent, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -385,7 +441,7 @@ export const FolderBucketProvider = () =>
       }
 
       if (isDeletedBucket(current)) {
-        return yield* new FolderBucketNotResolved({ name });
+        return yield* new FolderBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

@@ -57,8 +57,18 @@ export interface Discoverer extends Resource<
     state: DiscovererState;
   },
   never,
-  Providers
+  Providers,
+  DiscovererLookup
 > {}
+
+/**
+ * Props for {@link Discoverer.lookup}: find a discoverer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DiscovererLookup {
+  /** The id of the existing discoverer. */
+  discovererId: string;
+}
 
 /**
  * An EventBridge schema discoverer — automatically infers schemas from the
@@ -86,6 +96,16 @@ export interface Discoverer extends Resource<
  * The discoverer is provisioned but paused; set `state: "STARTED"` (or omit
  * it) to resume discovery.
  *
+ * ### Looking up an existing discoverer
+ * `Discoverer.lookup` references a discoverer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `discovererId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing discoverer
+ * ```typescript
+ * const orders = AWS.Schemas.Discoverer.lookup({ discovererId });
+ * ```
+ *
  * @resource
  */
 export const Discoverer = Resource<Discoverer>("AWS.Schemas.Discoverer");
@@ -97,7 +117,7 @@ export const DiscovererProvider = () =>
       const describe = (discovererId: string) =>
         schemas
           .describeDiscoverer({ DiscovererId: discovererId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       const toAttrs = (d: {
         DiscovererId?: string;
@@ -128,6 +148,10 @@ export const DiscovererProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ discovererId }) {
+          const found = yield* describe(discovererId);
+          return found ? toAttrs(found) : undefined;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (output?.discovererId) {
             const found = yield* describe(output.discovererId);

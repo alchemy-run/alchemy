@@ -142,7 +142,7 @@ const isDeleted = (metadata: storage.HmacKeyMetadata | undefined) =>
 const getByAccessId = (projectId: string, accessId: string) =>
   storage.getProjectsHmacKeys({ projectId, accessId }).pipe(
     Effect.map((metadata) => (isDeleted(metadata) ? undefined : metadata)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const waitUntilGone = (projectId: string, accessId: string) =>
@@ -176,8 +176,8 @@ const deactivateThenDelete = (projectId: string, accessId: string) =>
         })
         .pipe(
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            Conflict: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            Conflict: () => Effect.undefined,
           }),
         );
     }

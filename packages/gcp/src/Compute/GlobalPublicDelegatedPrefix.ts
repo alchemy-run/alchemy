@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -85,8 +86,26 @@ export type GlobalPublicDelegatedPrefix = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlobalPublicDelegatedPrefixLookup
 >;
+
+/**
+ * Props for {@link GlobalPublicDelegatedPrefix.lookup}: find a global
+ * public delegated prefix this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface GlobalPublicDelegatedPrefixLookup {
+  /**
+   * Prefix name (RFC1035, 1-63 chars).
+   */
+  prefixName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine public delegated prefix (BYOIP).
@@ -104,6 +123,19 @@ export type GlobalPublicDelegatedPrefix = Resource<
  *   parentPrefix:
  *     "projects/my-project/global/publicAdvertisedPrefixes/edge",
  *   ipCidrRange: "203.0.113.0/24",
+ * });
+ * ```
+ *
+ * ### Looking up an existing global public delegated prefix
+ * `GlobalPublicDelegatedPrefix.lookup` references a global public delegated
+ * prefix Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared global public delegated prefix.
+ *
+ * **Example:** Reference an existing global public delegated prefix
+ * ```typescript
+ * const globalPublicDelegatedPrefix = GCP.Compute.GlobalPublicDelegatedPrefix.lookup({
+ *   prefixName: "my-prefix",
  * });
  * ```
  *
@@ -208,7 +240,7 @@ const toAttrs = (
 const getByName = (project: string, publicDelegatedPrefix: string) =>
   compute
     .getGlobalPublicDelegatedPrefixes({ project, publicDelegatedPrefix })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, prefixName: string) =>
   getByName(project, prefixName).pipe(
@@ -256,6 +288,13 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ prefixName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, prefixName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -311,7 +350,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, prefixName);
       }
@@ -357,7 +396,7 @@ export const GlobalPublicDelegatedPrefixProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

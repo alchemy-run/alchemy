@@ -1,5 +1,5 @@
 import * as observability from "@distilled.cloud/gcp/observability_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,46 @@ export type BucketsDatasetsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketsDatasetsLinkLookup
 >;
+
+/**
+ * Props for {@link BucketsDatasetsLink.lookup}: find a buckets datasets
+ * link this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface BucketsDatasetsLinkLookup {
+  /**
+   * Link id (the `{link}` segment of
+   * `.../datasets/{dataset}/links/{link}`). Also used as the linked
+   * BigQuery dataset id, so it may contain only letters, digits, and
+   * underscores and must start with a letter.
+   */
+  linkId: string;
+  /**
+   * Bucket location used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent observability dataset. Full name
+   * `projects/{project}/locations/{l
+   * ocation}/buckets/{bucket}/datasets/{dataset}` or the dataset id
+   * (combined with `bucket` and `location`). A dataset may have at most one
+   * link.
+   */
+  dataset: string;
+  /**
+   * Parent bucket used when `dataset` is a bare id. Full name or the bucket
+   * id.
+   */
+  bucket?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Observability dataset link that creates a linked BigQuery
@@ -137,6 +176,20 @@ export type BucketsDatasetsLink = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing buckets datasets link
+ * `BucketsDatasetsLink.lookup` references a buckets datasets link Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared buckets datasets link.
+ *
+ * **Example:** Reference an existing buckets datasets link
+ * ```typescript
+ * const bucketsDatasetsLink = GCP.Observability.BucketsDatasetsLink.lookup({
+ *   linkId: "my-link",
+ *   dataset: "my-dataset",
+ * });
+ * ```
+ *
  * @resource
  * @category Observability
  */
@@ -147,13 +200,13 @@ export const BucketsDatasetsLink = Resource<BucketsDatasetsLink>(
 export class BucketsDatasetsLinkNotResolved extends Data.TaggedError(
   "GCP.Observability.BucketsDatasetsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BucketsDatasetsLinkStillExists extends Data.TaggedError(
   "GCP.Observability.BucketsDatasetsLinkStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isValidLinkName = (name: string) => parseLinkName(name) !== undefined;
@@ -199,15 +252,17 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   !isValidLinkName(name)
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : observability
         .getProjectsLocationsBucketsDatasetsLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilPresent = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      link ? Effect.succeed(link) : Effect.fail(new BucketsDatasetsLinkNotResolved({ name })),
+      link
+        ? Effect.succeed(link)
+        : Effect.fail(new BucketsDatasetsLinkNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Observability.BucketsDatasetsLinkNotResolved",
@@ -219,7 +274,9 @@ const waitUntilPresent = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      link === undefined ? Effect.void : Effect.fail(new BucketsDatasetsLinkStillExists({ name })),
+      link === undefined
+        ? Effect.void
+        : Effect.fail(new BucketsDatasetsLinkStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Observability.BucketsDatasetsLinkStillExists",
@@ -263,7 +320,23 @@ export const BucketsDatasetsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ linkId, location: lookupLocation, dataset, bucket }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const parent = resolveDatasetParent(dataset ?? "", bucket, location, env.project);
+      const name = linkResourceName(
+        parent.project,
+        parent.location,
+        parent.bucketId,
+        parent.datasetId,
+        linkId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, parent.project, parent.location, parent.bucketId, parent.datasetId);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? env.region;
       const parent = resolveDatasetParent(
@@ -292,7 +365,9 @@ export const BucketsDatasetsLinkProvider = () =>
         parent.datasetId,
       );
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -360,7 +435,7 @@ export const BucketsDatasetsLinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BucketsDatasetsLinkNotResolved({ name });
+        return yield* new BucketsDatasetsLinkNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

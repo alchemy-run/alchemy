@@ -13,11 +13,11 @@ export const MAX_DESCRIPTION_LENGTH = 2048;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.AgentRegistry.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourcePending extends Data.TaggedError("GCP.AgentRegistry.Pending")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -229,7 +229,7 @@ export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>)
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new ResourcePending({ name: "" }),
+      () => new ResourcePending({ resourceName: "" }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourcePending,
@@ -238,7 +238,7 @@ export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>)
     }),
     Effect.catchIf(
       (error): error is ResourcePending => error instanceof ResourcePending,
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 

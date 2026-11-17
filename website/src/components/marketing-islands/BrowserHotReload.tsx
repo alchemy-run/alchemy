@@ -344,7 +344,7 @@ export default function BrowserHotReload() {
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

@@ -1,6 +1,7 @@
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
+import * as DeployRetry from "alchemy/DeployRetry";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { sha256, sha256Object } from "alchemy/Util";
 import { listFileSystemDirectory, parseIgnoreRules, walkIgnoring } from "alchemy/Util/Ignore";
@@ -140,7 +141,7 @@ export type ValidationError =
 
 export class AssetTooLargeError extends Data.TaggedError("AssetTooLargeError")<{
   message: string;
-  name: string;
+  assetPath: string;
   size: number;
 }> {}
 
@@ -157,7 +158,7 @@ export class AssetNotFoundError extends Data.TaggedError("AssetNotFoundError")<{
 
 export class FailedToReadAssetError extends Data.TaggedError("FailedToReadAssetError")<{
   message: string;
-  name: string;
+  assetPath: string;
   cause: PlatformError;
 }> {}
 
@@ -223,7 +224,7 @@ const maybeReadString = Effect.fn(function* (file: string) {
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
       (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 });
@@ -330,7 +331,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
       if (size > MAX_ASSET_SIZE) {
         return yield* new AssetTooLargeError({
           message: `Asset ${name} is too large (the maximum size is ${MAX_ASSET_SIZE / 1024 / 1024} MB; this asset is ${size / 1024 / 1024} MB)`,
-          name,
+          assetPath: name,
           size,
         });
       }
@@ -432,13 +433,13 @@ const isGatewayError = (error: unknown) =>
   Predicate.isTagged(error, "GatewayTimeout");
 
 /**
- * The SDK's default policy retries gateway errors internally (~20s of
+ * The deploy policy retries gateway errors internally (~20s of
  * backoff) before the caller ever sees one, so the concurrency fallback
  * below could never kick in. Let those surface to the bucket loop; every
  * other transient error keeps the default handling.
  */
 const surfaceGatewayErrors: Retry.Factory = (lastError) => {
-  const base = Retry.makeDefault(lastError);
+  const base = DeployRetry.policy(lastError);
   return {
     ...base,
     while: (error) => !isGatewayError(error) && (base.while?.(error) ?? false),
@@ -497,7 +498,7 @@ export const uploadAssets = Effect.fn(function* (
             (error) =>
               new FailedToReadAssetError({
                 message: `Failed to read asset ${name}: ${error.message}`,
-                name,
+                assetPath: name,
                 cause: error,
               }),
           ),

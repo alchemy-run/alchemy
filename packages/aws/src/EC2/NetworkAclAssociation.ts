@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -9,6 +10,20 @@ import type { Providers } from "../Providers.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
+
+export class NetworkAclAssociationUnexpectedResponse extends Data.TaggedError(
+  "NetworkAclAssociationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class NetworkAclAssociationOperationFailed extends Data.TaggedError(
+  "NetworkAclAssociationOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type NetworkAclAssociationId<ID extends string = string> = `aclassoc-${ID}`;
 export const NetworkAclAssociationId = <ID extends string>(
@@ -153,9 +168,9 @@ export const NetworkAclAssociationProvider = () =>
           if (!olds) return undefined;
           const assoc = yield* findAssociation(olds.subnetId as string);
           if (!assoc) {
-            return yield* Effect.fail(
-              new Error(`Network ACL Association not found for subnet ${olds.subnetId}`),
-            );
+            return yield* new NetworkAclAssociationUnexpectedResponse({
+              message: `Network ACL Association not found for subnet ${olds.subnetId}`,
+            });
           }
           return {
             associationId: assoc.associationId as NetworkAclAssociationId,
@@ -179,9 +194,9 @@ export const NetworkAclAssociationProvider = () =>
           // lookup always returns something for a live subnet.
           const currentAssoc = yield* findAssociation(news.subnetId as string);
           if (!currentAssoc) {
-            return yield* Effect.fail(
-              new Error(`No existing Network ACL Association found for subnet ${news.subnetId}`),
-            );
+            return yield* new NetworkAclAssociationOperationFailed({
+              message: `No existing Network ACL Association found for subnet ${news.subnetId}`,
+            });
           }
 
           // Sync — if the subnet already points at the desired NACL, the

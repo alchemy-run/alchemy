@@ -52,8 +52,18 @@ export interface SchemaMapping extends Resource<
     schemaArn: string;
   },
   never,
-  Providers
+  Providers,
+  SchemaMappingLookup
 > {}
+
+/**
+ * Props for {@link SchemaMapping.lookup}: find a schema mapping this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SchemaMappingLookup {
+  /** The schema name of the existing schema mapping. */
+  schemaName: string;
+}
 
 /**
  * An AWS Entity Resolution schema mapping — the schema of an input customer
@@ -86,6 +96,16 @@ export interface SchemaMapping extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing schema mapping
+ * `SchemaMapping.lookup` references a schema mapping Alchemy doesn't manage (created in the
+ * console or by another stack), found by `schemaName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing schema mapping
+ * ```typescript
+ * const existing = AWS.EntityResolution.SchemaMapping.lookup({ schemaName: "my-schema-mapping" });
+ * ```
+ *
  * @resource
  */
 export const SchemaMapping = Resource<SchemaMapping>("AWS.EntityResolution.SchemaMapping");
@@ -105,12 +125,21 @@ export const SchemaMappingProvider = () =>
       const getByName = Effect.fn(function* (schemaName: string) {
         return yield* entityresolution
           .getSchemaMapping({ schemaName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {
         stables: ["schemaName", "schemaArn"],
 
+        lookup: Effect.fn(function* ({ schemaName: name }) {
+          const mapping = yield* getByName(name);
+          if (mapping === undefined) return undefined;
+          const attrs = {
+            schemaName: mapping.schemaName,
+            schemaArn: mapping.schemaArn,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.schemaName ?? (yield* createName(id, olds ?? {}));
           const mapping = yield* getByName(name);

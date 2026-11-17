@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { toPhysicalSnake } from "./helpers.ts";
@@ -97,8 +98,33 @@ export type FeaturestoresEntityTypesFeature = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeaturestoresEntityTypesFeatureLookup
 >;
+
+/**
+ * Props for {@link FeaturestoresEntityTypesFeature.lookup}: find a
+ * featurestores entity types feature this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface FeaturestoresEntityTypesFeatureLookup {
+  /**
+   * Feature id (the `{feature}` segment). Must match `[a-z0-9_]` and start
+   * with a letter.
+   */
+  featureId: string;
+  /**
+   * Parent EntityType resource name
+   * `projects/{project}/locations/{location}
+   * /featurestores/{featurestore}/entityTypes/{entityType}`.
+   */
+  entityType: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Store (legacy) Feature under an EntityType.
@@ -120,6 +146,20 @@ export type FeaturestoresEntityTypesFeature = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing featurestores entity types feature
+ * `FeaturestoresEntityTypesFeature.lookup` references a featurestores
+ * entity types feature Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared featurestores entity types feature.
+ *
+ * **Example:** Reference an existing featurestores entity types feature
+ * ```typescript
+ * const featurestoresEntityTypesFeature = GCP.AIPlatform.FeaturestoresEntityTypesFeature.lookup({
+ *   featureId: "my-feature",
+ *   entityType: "my-entity-type",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -130,13 +170,13 @@ export const FeaturestoresEntityTypesFeature = Resource<FeaturestoresEntityTypes
 export class FeaturestoresEntityTypesFeatureNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypesFeatureNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoresEntityTypesFeatureStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypesFeatureStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_VALUE_TYPE = "STRING";
@@ -171,7 +211,7 @@ const toAttrs = (feature: aiplatform.GoogleCloudAiplatformV1Feature, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeaturestoresEntityTypesFeatures({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listFeatures = (parent: string) =>
   aiplatform.listProjectsLocationsFeaturestoresEntityTypesFeatures
@@ -206,7 +246,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feature): feature is aiplatform.GoogleCloudAiplatformV1Feature => feature !== undefined,
-      () => new FeaturestoresEntityTypesFeatureNotResolved({ name }),
+      () => new FeaturestoresEntityTypesFeatureNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypesFeatureNotResolved",
@@ -219,7 +259,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feature) => feature === undefined,
-      () => new FeaturestoresEntityTypesFeatureStillExists({ name }),
+      () => new FeaturestoresEntityTypesFeatureStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -260,6 +300,15 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ featureId, entityType }) {
+      const env = yield* GcpEnvironment.current;
+      const name = entityType !== undefined ? resourceName(entityType, featureId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -326,7 +375,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
               versionColumnName: news.versionColumnName,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -335,7 +384,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
 
       if (current === undefined) {
         return yield* new FeaturestoresEntityTypesFeatureNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -379,7 +428,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

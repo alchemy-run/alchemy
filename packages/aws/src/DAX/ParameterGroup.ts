@@ -3,9 +3,17 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class ParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "ParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ParameterGroupProps {
   /**
@@ -38,8 +46,18 @@ export interface ParameterGroup extends Resource<
     parameters: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link ParameterGroup.lookup}: find a parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ParameterGroupLookup {
+  /** The parameter group name of the existing parameter group. */
+  parameterGroupName: string;
+}
 
 /**
  * A DAX parameter group — a named set of DAX engine parameters (item and
@@ -71,6 +89,16 @@ export interface ParameterGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing parameter group
+ * `ParameterGroup.lookup` references a parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing parameter group
+ * ```typescript
+ * const existing = AWS.DAX.ParameterGroup.lookup({ parameterGroupName: "my-parameter-group" });
+ * ```
+ *
  * @resource
  */
 export const ParameterGroup = Resource<ParameterGroup>("AWS.DAX.ParameterGroup");
@@ -87,7 +115,7 @@ export const ParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeParameterGroups({ ParameterGroupNames: [name] })
-          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.ParameterGroups?.[0];
       });
 
@@ -136,6 +164,12 @@ export const ParameterGroupProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ parameterGroupName }) {
+          const group = yield* readGroup(parameterGroupName);
+          if (group?.ParameterGroupName === undefined) return undefined;
+          return toAttrs(group, yield* readParameters(parameterGroupName), undefined);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.parameterGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* readGroup(name);
@@ -164,9 +198,9 @@ export const ParameterGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`DAX parameter group '${name}' not found after create`),
-            );
+            return yield* new ParameterGroupUnexpectedResponse({
+              message: `DAX parameter group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync parameters — diff desired overrides against OBSERVED

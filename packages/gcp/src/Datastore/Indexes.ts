@@ -204,7 +204,7 @@ export const IndexProvider = () =>
             projectId: env.project,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           let indexId = indexIdFromOperation(created);
           if (indexId === undefined && created.name !== undefined) {

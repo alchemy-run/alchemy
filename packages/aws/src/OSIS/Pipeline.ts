@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -14,6 +15,13 @@ import {
   retryWhilePipelineConflict,
   waitForPipelineSettled,
 } from "./internal.ts";
+
+export class OSISPipelineUnexpectedResponse extends Data.TaggedError(
+  "OSISPipelineUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PipelineLogPublishingOptions {
   /**
@@ -142,8 +150,18 @@ export interface Pipeline extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PipelineLookup
 > {}
+
+/**
+ * Props for {@link Pipeline.lookup}: find a pipeline this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PipelineLookup {
+  /** The pipeline name of the existing pipeline. */
+  pipelineName: string;
+}
 
 /**
  * An Amazon OpenSearch Ingestion (OSIS) pipeline — a managed Data Prepper
@@ -193,6 +211,16 @@ export interface Pipeline extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing pipeline
+ * `Pipeline.lookup` references a pipeline Alchemy doesn't manage (created in the
+ * console or by another stack), found by `pipelineName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing pipeline
+ * ```typescript
+ * const existing = AWS.OSIS.Pipeline.lookup({ pipelineName: "my-pipeline" });
+ * ```
+ *
  * @resource
  */
 export const Pipeline = Resource<Pipeline>("AWS.OSIS.Pipeline");
@@ -222,23 +250,25 @@ export const PipelineProvider = () =>
       const readPipeline = Effect.fn(function* (name: string) {
         return yield* osis.getPipeline({ PipelineName: name }).pipe(
           Effect.map((response) => response.Pipeline),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
       const waitForActive = Effect.fn(function* (name: string) {
         const pipeline = yield* waitForPipelineSettled(name, readPipeline(name));
         if (pipeline === undefined) {
-          return yield* Effect.fail(new Error(`OSIS pipeline '${name}' not found while waiting`));
+          return yield* new OSISPipelineUnexpectedResponse({
+            message: `OSIS pipeline '${name}' not found while waiting`,
+          });
         }
         return pipeline;
       });
 
       const toAttrs = Effect.fn(function* (pipeline: osis.Pipeline) {
         if (!pipeline.PipelineName || !pipeline.PipelineArn) {
-          return yield* Effect.fail(
-            new Error(`OSIS pipeline '${pipeline.PipelineName}' is missing its ARN`),
-          );
+          return yield* new OSISPipelineUnexpectedResponse({
+            message: `OSIS pipeline '${pipeline.PipelineName}' is missing its ARN`,
+          });
         }
         return {
           pipelineName: pipeline.PipelineName,
@@ -265,6 +295,13 @@ export const PipelineProvider = () =>
           if (!jsonEquals(o.vpcOptions, n.vpcOptions)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ pipelineName: name }) {
+          const pipeline = yield* readPipeline(name);
+          if (pipeline === undefined) return undefined;
+          const attrs = yield* toAttrs(pipeline);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -434,7 +471,7 @@ export const PipelineProvider = () =>
                 (name) =>
                   osis.getPipeline({ PipelineName: name }).pipe(
                     Effect.map((response) => response.Pipeline),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   ),
                 { concurrency: 4 },
               ),

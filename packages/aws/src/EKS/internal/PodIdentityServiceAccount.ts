@@ -10,7 +10,7 @@ import * as Namespace from "alchemy/Namespace";
  */
 import * as Effect from "effect/Effect";
 import type { PolicyDocument } from "../../IAM/Policy.ts";
-import { Role, type RoleArn, type Role as RoleResource } from "../../IAM/Role.ts";
+import { Role, type Role as RoleResource } from "../../IAM/Role.ts";
 import type { Cluster } from "../Cluster.ts";
 import {
   PodIdentityAssociation,
@@ -57,7 +57,7 @@ export interface PodIdentityServiceAccountResources {
   /** The generated IAM role, or `undefined` when `roleArn` was supplied. */
   role: RoleResource | undefined;
   /** The ARN of the IAM role pods assume (generated or supplied). */
-  roleArn: Input<string> | RoleArn;
+  roleArn: Input<string>;
 }
 
 export const PodIdentityServiceAccount = (id: string, props: PodIdentityServiceAccountProps) =>

@@ -161,7 +161,7 @@ export const EmailIdentityPolicyProvider = () =>
       const getPolicies = Effect.fn(function* (emailIdentity: string) {
         return yield* sesv2.getEmailIdentityPolicies({ EmailIdentity: emailIdentity }).pipe(
           Effect.map((response) => response.Policies ?? {}),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 

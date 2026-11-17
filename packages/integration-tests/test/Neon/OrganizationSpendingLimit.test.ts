@@ -103,7 +103,7 @@ test.provider(
           .reconcile({
             ...context,
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
             olds: undefined,
             news: { orgId: "org-new", spendingLimitCents: 100 },
             output: {
@@ -165,8 +165,6 @@ test.provider(
               ...context,
               bindings: [],
               session: {
-                emit: () => Effect.void,
-                done: () => Effect.void,
                 note: () => Effect.void,
               },
               olds: undefined,

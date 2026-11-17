@@ -251,7 +251,7 @@ export const PolicyProvider = () =>
 const getPolicy = (zoneId: string, policyId: string) =>
   pageShield
     .getPolicy({ zoneId, policyId })
-    .pipe(Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PolicyNotFound", () => Effect.undefined));
 
 const createDescription = (id: string, description: string | undefined) =>
   Effect.gen(function* () {

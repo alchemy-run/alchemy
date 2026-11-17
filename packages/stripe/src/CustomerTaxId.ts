@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteCustomerTaxIds,
   GetCustomers,
@@ -135,10 +134,10 @@ const isMissing = isMissingStripeResource;
 const getById = (id: string, customer?: string) => {
   if (customer !== undefined) {
     return GetCustomerTaxIdsById({ customer, id }).pipe(
-      Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
+      Effect.catchIf(isMissing, () => Effect.undefined),
     );
   }
-  return GetTaxIdsById({ id }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+  return GetTaxIdsById({ id }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 };
 
 const listTaxIds = Effect.fn(function* (customer: string) {
@@ -149,7 +148,7 @@ const listTaxIds = Effect.fn(function* (customer: string) {
       customer,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }
@@ -294,10 +293,8 @@ export const CustomerTaxIdProvider = () =>
           customer: news.customer,
           type: news.type,
           value: news.value,
+          idempotencyKey: `alchemy-customer-tax-id-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-customer-tax-id-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

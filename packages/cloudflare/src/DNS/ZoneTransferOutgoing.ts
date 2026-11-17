@@ -138,10 +138,10 @@ export const ZoneTransferOutgoingProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           getOutgoing(zoneId).pipe(
-            Effect.catchTag("OutgoingZoneTransfersNotAllowed", () => Effect.succeed(undefined)),
+            Effect.catchTag("OutgoingZoneTransfersNotAllowed", () => Effect.undefined),
             Effect.flatMap((observed) =>
               observed === undefined
-                ? Effect.succeed(undefined)
+                ? Effect.undefined
                 : getEnabled(zoneId).pipe(
                     Effect.map((enabled) => toAttributes(observed, zoneId, enabled)),
                   ),
@@ -242,7 +242,7 @@ const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefi
 const getOutgoing = (zoneId: string) =>
   dns
     .getZoneTransferOutgoing({ zoneId })
-    .pipe(Effect.catchTag("OutgoingZoneTransferNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("OutgoingZoneTransferNotFound", () => Effect.undefined));
 
 /** Observe the enable/disable toggle (reported as e.g. "Enabled"). */
 const getEnabled = (zoneId: string) =>

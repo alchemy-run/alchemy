@@ -54,7 +54,6 @@ class SfnEffectImpl implements SfnEffect<any, any> {
   readonly [SfnTypeId] = variance;
   constructor(readonly node: AslNode) {}
   pipe() {
-    // eslint-disable-next-line prefer-rest-params
     return pipeArguments(this, arguments);
   }
   *[Symbol.iterator](): Generator<SfnEffect<any, any>, Expr<any>, any> {

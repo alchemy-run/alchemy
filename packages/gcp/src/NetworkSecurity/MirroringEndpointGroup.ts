@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,34 @@ export type MirroringEndpointGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MirroringEndpointGroupLookup
 >;
+
+/**
+ * Props for {@link MirroringEndpointGroup.lookup}: find a mirroring
+ * endpoint group this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface MirroringEndpointGroupLookup {
+  /**
+   * Endpoint group id (the `{mirroringEndpointGroup}` segment of
+   * `projects/{
+   * project}/locations/{location}/mirroringEndpointGroups/{mirroringEndpoint
+   * Group}`).
+   */
+  mirroringEndpointGroupId: string;
+  /**
+   * Location of the group. Endpoint groups are global — always `"global"`.
+   * `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security Integration mirroring endpoint group — the consumer
@@ -160,6 +187,19 @@ export type MirroringEndpointGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing mirroring endpoint group
+ * `MirroringEndpointGroup.lookup` references a mirroring endpoint group
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared mirroring endpoint group.
+ *
+ * **Example:** Reference an existing mirroring endpoint group
+ * ```typescript
+ * const mirroringEndpointGroup = GCP.NetworkSecurity.MirroringEndpointGroup.lookup({
+ *   mirroringEndpointGroupId: "my-mirroring-endpoint-group",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -170,20 +210,20 @@ export const MirroringEndpointGroup = Resource<MirroringEndpointGroup>(
 export class MirroringEndpointGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MirroringEndpointGroupFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class MirroringEndpointGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -233,21 +273,21 @@ const toAttrs = (group: networksecurity.MirroringEndpointGroup, project: string)
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsMirroringEndpointGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (group): group is networksecurity.MirroringEndpointGroup => group !== undefined,
-      () => new MirroringEndpointGroupNotResolved({ name }),
+      () => new MirroringEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (group) => group.state !== "DELETE_FAILED",
-      (group) => new MirroringEndpointGroupFailed({ name, state: group.state }),
+      (group) => new MirroringEndpointGroupFailed({ resourceName: name, state: group.state }),
     ),
     Effect.filterOrFail(
       (group) => !isPendingState(group.state),
-      () => new MirroringEndpointGroupNotResolved({ name }),
+      () => new MirroringEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupNotResolved",
@@ -261,7 +301,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new MirroringEndpointGroupStillExists({ name })),
+        : Effect.fail(new MirroringEndpointGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupStillExists",
@@ -319,6 +359,15 @@ export const MirroringEndpointGroupProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ mirroringEndpointGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, mirroringEndpointGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -380,7 +429,7 @@ export const MirroringEndpointGroupProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -389,7 +438,7 @@ export const MirroringEndpointGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MirroringEndpointGroupNotResolved({ name });
+        return yield* new MirroringEndpointGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -429,7 +478,7 @@ export const MirroringEndpointGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

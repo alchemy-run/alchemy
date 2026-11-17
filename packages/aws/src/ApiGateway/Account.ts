@@ -66,7 +66,7 @@ export const AccountProvider = () =>
         read: Effect.fn(function* ({ output }) {
           const a = yield* ag
             .getAccount({})
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           return {
             cloudwatchRoleArn: a?.cloudwatchRoleArn,
             managesCloudwatchRoleArn: output?.managesCloudwatchRoleArn ?? false,
@@ -96,7 +96,7 @@ export const AccountProvider = () =>
           // region, so there is no `ensure` step: we always sync.
           const observed = yield* ag
             .getAccount({})
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           const observedRoleArn = observed?.cloudwatchRoleArn;
 
           // Sync the cloudwatchRoleArn — observed ↔ desired. We treat

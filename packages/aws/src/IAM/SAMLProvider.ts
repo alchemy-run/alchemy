@@ -4,12 +4,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unwrapRedactedString } from "./common.ts";
+
+export class SAMLProviderConflict extends Data.TaggedError("SAMLProviderConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SAMLProviderProps {
   /**
@@ -53,8 +59,18 @@ export interface SAMLProvider extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SAMLProviderLookup
 > {}
+
+/**
+ * Props for {@link SAMLProvider.lookup}: find a SAML provider this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface SAMLProviderLookup {
+  /** The ARN of the existing SAML provider. */
+  samlProviderArn: string;
+}
 
 /**
  * An IAM SAML identity provider.
@@ -67,6 +83,17 @@ export interface SAMLProvider extends Resource<
  * const provider = yield* SAMLProvider("WorkforceSaml", {
  *   samlMetadataDocument: "<EntityDescriptor>...</EntityDescriptor>",
  * });
+ * ```
+ *
+ * ### Looking up an existing SAML provider
+ * `SAMLProvider.lookup` references a SAML provider Alchemy doesn't manage (created in the
+ * console or by another stack), found by `samlProviderArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Trust an existing SAML provider
+ * ```typescript
+ * const okta = AWS.IAM.SAMLProvider.lookup({ samlProviderArn });
+ * const providerArn = okta.samlProviderArn;
  * ```
  *
  * @resource
@@ -105,13 +132,28 @@ export const SAMLProviderProvider = () =>
         return { action: "replace" } as const;
       }
     }),
+    lookup: Effect.fn(function* ({ samlProviderArn }) {
+      const response = yield* iam
+        .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+      if (!response) return undefined;
+      const tags = yield* iam.listSAMLProviderTags({ SAMLProviderArn: samlProviderArn });
+      return {
+        samlProviderArn,
+        name: samlProviderArn.split("/").at(-1)!,
+        samlProviderUUID: response.SAMLProviderUUID,
+        samlMetadataDocument: response.SAMLMetadataDocument,
+        assertionEncryptionMode: response.AssertionEncryptionMode,
+        tags: toTagRecord(tags.Tags),
+      };
+    }),
     read: Effect.fn(function* ({ output }) {
       if (!output) {
         return undefined;
       }
       const response = yield* iam
         .getSAMLProvider({ SAMLProviderArn: output.samlProviderArn })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       if (!response) {
         return undefined;
       }
@@ -147,7 +189,7 @@ export const SAMLProviderProvider = () =>
             };
           }).pipe(
             // A provider can disappear between listing, reading and tag lookup.
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -165,7 +207,7 @@ export const SAMLProviderProvider = () =>
       // mode, and UUID; absence is `NoSuchEntityException`.
       let observed = yield* iam
         .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
       // Ensure — create when missing. Race with a peer is recovered by
       // verifying alchemy ownership tags on the existing provider.
@@ -188,11 +230,9 @@ export const SAMLProviderProvider = () =>
                   SAMLProviderArn: samlProviderArn,
                 });
                 if (!hasTags(internalTags, existingTags.Tags)) {
-                  return yield* Effect.fail(
-                    new Error(
-                      `SAML provider '${name}' already exists and is not managed by alchemy`,
-                    ),
-                  );
+                  return yield* new SAMLProviderConflict({
+                    message: `SAML provider '${name}' already exists and is not managed by alchemy`,
+                  });
                 }
                 return { SAMLProviderArn: samlProviderArn };
               }),

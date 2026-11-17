@@ -190,7 +190,7 @@ test.provider(
 );
 
 /**
- * `Hyperdrive.lookup` reads the real configuration from Cloudflare even in
+ * `Hyperdrive.Connection.lookup` reads the real configuration from Cloudflare even in
  * dev (it is not a resource, so there is nothing to emulate), while the
  * locally-served Worker's binding passes through to the lookup's `dev`
  * origin. Destroy leaves the configuration in place.
@@ -209,7 +209,7 @@ test.provider(
         Effect.gen(function* () {
           const created = yield* outOfBandConfig(
             accountId,
-            lookupConfigName("local"),
+            lookupConfigName("local", stack.stage),
             project.origin,
           );
 
@@ -271,21 +271,21 @@ test.provider(
 
       const project = yield* stack.deploy(Neon.Project("HyperdriveLookupLocalProject"));
 
-      const defect = yield* Effect.scoped(
+      const { defect, hyperdriveId } = yield* Effect.scoped(
         Effect.gen(function* () {
           const created = yield* outOfBandConfig(
             accountId,
-            `${lookupConfigName("local")}-nodev`,
+            `${lookupConfigName("local", stack.stage)}-nodev`,
             project.origin,
           );
-          return yield* stack
+          const defect = yield* stack
             .deploy(
               Effect.gen(function* () {
                 yield* Neon.Project("HyperdriveLookupLocalProject");
                 return yield* Cloudflare.Worker("HyperdriveLookupNoDevWorker", {
                   main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
                   env: {
-                    HD: Cloudflare.Hyperdrive.lookup("HyperdriveLookupNoDev", {
+                    HD: Cloudflare.Hyperdrive.Connection.lookup({
                       hyperdriveId: created.id,
                     }),
                   },
@@ -296,13 +296,15 @@ test.provider(
               Effect.flatMap(() => Effect.die(new Error("expected the dev deploy to die"))),
               Effect.catchDefect((defect) => Effect.succeed(defect)),
             );
+          return { defect, hyperdriveId: created.id };
         }),
       );
 
       expect(defect).toBeInstanceOf(HyperdriveDevOriginUnsupported);
       expect(defect).toMatchObject({
         _tag: "HyperdriveDevOriginUnsupported",
-        logicalId: "HyperdriveLookupNoDev",
+        // A lookup's binding is named after what it was looked up by.
+        logicalId: hyperdriveId,
         origin: "lookup",
       });
 
@@ -369,7 +371,12 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: ["provider:cloudflare", "provider:cloudflare:hyperdrive", "provider:cloudflare:worker"],
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "local",
+    ],
     timeout: 120_000,
   },
 );

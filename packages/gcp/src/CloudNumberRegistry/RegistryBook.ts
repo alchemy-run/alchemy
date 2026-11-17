@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,8 +93,32 @@ export type RegistryBook = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegistryBookLookup
 >;
+
+/**
+ * Props for {@link RegistryBook.lookup}: find a registry book this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegistryBookLookup {
+  /**
+   * Registry book id (the `{registryBook}` segment of
+   * `projects/{project}/locations/{location}/registryBooks/{registryBook}`).
+   */
+  registryBookId: string;
+  /**
+   * Location of the registry book. Cloud Number Registry is global —
+   * `global` is the only supported value.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Number Registry book — a container for IP address management
@@ -124,6 +149,19 @@ export type RegistryBook = Resource<
  * const book = yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
  *   registryBookId: "inventory",
  *   labels: { env: "prod", role: "ipam" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing registry book
+ * `RegistryBook.lookup` references a registry book Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * registry book.
+ *
+ * **Example:** Reference an existing registry book
+ * ```typescript
+ * const registryBook = GCP.CloudNumberRegistry.RegistryBook.lookup({
+ *   registryBookId: "my-registry-book",
  * });
  * ```
  *
@@ -162,10 +200,10 @@ const toAttrs = (item: cnr.RegistryBook, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cnr
         .getProjectsLocationsRegistryBooks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -192,6 +230,15 @@ export const RegistryBookProvider = () =>
         nextLocation: normalizeLocation(news.location ?? olds?.location ?? output?.location),
       });
     }),
+
+    lookup: Effect.fn(function* ({ registryBookId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, registryBookId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -244,7 +291,7 @@ export const RegistryBookProvider = () =>
               claimedScopes: claimedScopes.length > 0 ? claimedScopes : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -252,7 +299,7 @@ export const RegistryBookProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -293,7 +340,7 @@ export const RegistryBookProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

@@ -6,6 +6,7 @@ import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -66,6 +67,13 @@ test.provider(
           });
           return { store, artifact };
         }),
+      );
+      yield* expectFound(
+        GCP.AIPlatform.MetadataStoresArtifact.lookup({
+          artifactId: created.artifact.artifactId,
+          metadataStore: created.artifact.metadataStore,
+        }),
+        created.artifact,
       );
 
       expect(created.artifact.name).toContain("/artifacts/");

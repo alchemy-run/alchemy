@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   MAX_CONTEXT_LENGTH,
@@ -61,8 +62,32 @@ export type SynonymSet = Resource<
     synonyms: Synonym[] | undefined;
   },
   never,
-  Providers
+  Providers,
+  SynonymSetLookup
 >;
+
+/**
+ * Props for {@link SynonymSet.lookup}: find a synonym set this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SynonymSetLookup {
+  /**
+   * Context id (the `{context}` segment of
+   * `projects/{project}/locations/{location}/synonymSets/{context}`).
+   */
+  context: string;
+  /**
+   * Multi-region location (`us` or `eu`). `US` is accepted and normalized
+   * to `us`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 const DEFAULT_SYNONYMS: Synonym[] = [{ words: ["sale", "invoice", "bill"] }];
 
@@ -80,6 +105,19 @@ const DEFAULT_SYNONYMS: Synonym[] = [{ words: ["sale", "invoice", "bill"] }];
  * const synonyms = yield* GCP.ContentWarehouse.SynonymSet("Sales", {
  *   context: "sales",
  *   synonyms: [{ words: ["sale", "invoice", "bill"] }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing synonym set
+ * `SynonymSet.lookup` references a synonym set Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * synonym set.
+ *
+ * **Example:** Reference an existing synonym set
+ * ```typescript
+ * const synonymSet = GCP.ContentWarehouse.SynonymSet.lookup({
+ *   context: "my-context",
  * });
  * ```
  *
@@ -114,10 +152,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1SynonymSet, project: stri
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsSynonymSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const SynonymSetProvider = () =>
   Provider.succeed(SynonymSet, {
@@ -132,6 +170,14 @@ export const SynonymSetProvider = () =>
         nextLocation: news.location ?? olds?.location ?? output?.location,
       });
     }),
+
+    lookup: Effect.fn(function* ({ context, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const existing = yield* getByName(resourceName(env.project, location, context));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -168,7 +214,7 @@ export const SynonymSetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

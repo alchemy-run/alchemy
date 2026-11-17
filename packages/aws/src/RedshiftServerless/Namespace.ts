@@ -13,6 +13,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readTags, syncTags, toWireTags } from "./internal.ts";
 
+export class RedshiftServerlessNamespaceUnexpectedResponse extends Data.TaggedError(
+  "RedshiftServerlessNamespaceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface NamespaceProps {
   /**
    * Name of the namespace. Must be 3-64 characters, lowercase letters,
@@ -105,8 +112,18 @@ export interface Namespace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 > {}
+
+/**
+ * Props for {@link Namespace.lookup}: find a namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface NamespaceLookup {
+  /** The namespace name of the existing namespace. */
+  namespaceName: string;
+}
 
 /**
  * An Amazon Redshift Serverless namespace — the storage-and-database half of
@@ -149,6 +166,16 @@ export interface Namespace extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` references a namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namespaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing namespace
+ * ```typescript
+ * const existing = AWS.RedshiftServerless.Namespace.lookup({ namespaceName: "my-namespace" });
+ * ```
+ *
  * @resource
  */
 export const Namespace = Resource<Namespace>("AWS.RedshiftServerless.Namespace");
@@ -179,7 +206,7 @@ export const NamespaceProvider = () =>
       const readNamespace = Effect.fn(function* (name: string) {
         const response = yield* redshiftserverless
           .getNamespace({ namespaceName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.namespace;
       });
 
@@ -249,6 +276,13 @@ export const NamespaceProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ namespaceName: name }) {
+          const ns = yield* readNamespace(name);
+          if (ns === undefined) return undefined;
+          const attrs = toAttrs(ns);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.namespaceName ?? (yield* toName(id, olds ?? {}));
           const ns = yield* readNamespace(name);
@@ -298,9 +332,9 @@ export const NamespaceProvider = () =>
           const settled = yield* waitForAvailable(name);
           if (settled !== undefined) observed = settled;
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Redshift namespace '${name}' disappeared while reconciling`),
-            );
+            return yield* new RedshiftServerlessNamespaceUnexpectedResponse({
+              message: `Redshift namespace '${name}' disappeared while reconciling`,
+            });
           }
 
           // 3. Sync — apply mutable aspects the user specified when they drift

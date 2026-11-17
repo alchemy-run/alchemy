@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -268,8 +269,32 @@ export type Node = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NodeLookup
 >;
+
+/**
+ * Props for {@link Node.lookup}: find a node this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface NodeLookup {
+  /**
+   * Node id (the `{node}` segment of
+   * `projects/{project}/locations/{location}/nodes/{node}`). Must be 1-63
+   * characters, start with a letter, and end with a letter or digit.
+   */
+  nodeId: string;
+  /**
+   * Zone (`us-central1-c`, `us-central1-b`, …). TPU nodes are zonal.
+   * `US-CENTRAL1-C` is accepted and normalized to `us-central1-c`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud TPU node (TPU VM).
@@ -308,6 +333,16 @@ export type Node = Resource<
  *   acceleratorType: "v2-8",
  *   schedulingConfig: { spot: true, preemptible: true },
  * });
+ * ```
+ *
+ * ### Looking up an existing node
+ * `Node.lookup` references a node Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared node.
+ *
+ * **Example:** Reference an existing node
+ * ```typescript
+ * const node = GCP.TPU.Node.lookup({ nodeId: "my-node" });
  * ```
  *
  * @resource
@@ -516,9 +551,7 @@ const isPlaceholder = (node: tpu.Node) => {
 };
 
 const getByName = (name: string) =>
-  tpu
-    .getProjectsLocationsNodes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  tpu.getProjectsLocationsNodes({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NodeProvider = () =>
   Provider.succeed(Node, {
@@ -599,6 +632,15 @@ export const NodeProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ nodeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, nodeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const nodeId = yield* toPhysicalId(id, olds?.nodeId, output?.nodeId);
@@ -645,7 +687,7 @@ export const NodeProvider = () =>
             nodeId,
             body: toNodeBody(news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -653,7 +695,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const state = (current.state ?? "").toUpperCase();
@@ -667,7 +709,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -720,7 +762,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -728,7 +770,7 @@ export const NodeProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* tpu.deleteProjectsLocationsNodes({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -181,8 +182,33 @@ export type ContactCenter = Resource<
     purgeTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ContactCenterLookup
 >;
+
+/**
+ * Props for {@link ContactCenter.lookup}: find a contact center this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ContactCenterLookup {
+  /**
+   * Contact Center id (the `{contactCenter}` segment of
+   * `projects/{project}/
+   * locations/{location}/contactCenters/{contactCenter}`).
+   */
+  contactCenterId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center AI Platform (CCAIP) instance.
@@ -223,6 +249,19 @@ export type ContactCenter = Resource<
  *   customerDomainPrefix: "supdesk",
  *   displayName: "Support desk v2",
  *   labels: { env: "prod", team: "cx" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing contact center
+ * `ContactCenter.lookup` references a contact center Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * contact center.
+ *
+ * **Example:** Reference an existing contact center
+ * ```typescript
+ * const contactCenter = GCP.ContactCenterAIPlatform.ContactCenter.lookup({
+ *   contactCenterId: "my-contact-center",
  * });
  * ```
  *
@@ -284,10 +323,10 @@ const toAttrs = (item: ccaip.ContactCenter, project: string, region: string) => 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ccaip
         .getProjectsLocationsContactCenters({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getLive = (name: string) =>
   getByName(name).pipe(
@@ -334,6 +373,17 @@ export const ContactCenterProvider = () =>
             fingerprint(olds.instanceConfig) !== fingerprint(news.instanceConfig)),
       });
     }),
+
+    lookup: Effect.fn(function* ({ contactCenterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, contactCenterId);
+      const existing = yield* getLive(name);
+      if (existing === undefined) {
+        return undefined;
+      }
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -412,7 +462,7 @@ export const ContactCenterProvider = () =>
               critical: channel.critical,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -420,7 +470,7 @@ export const ContactCenterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ContactCenterNotResolved({ name });
+        return yield* new ContactCenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -514,7 +564,7 @@ export const ContactCenterProvider = () =>
       const deleted = yield* retryTransient(
         ccaip.deleteProjectsLocationsContactCenters({ name: output.name }),
       ).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,

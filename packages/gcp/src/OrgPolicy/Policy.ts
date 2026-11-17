@@ -203,7 +203,7 @@ export type Policy = Resource<
 export const Policy = Resource<Policy>("GCP.OrgPolicy.Policy");
 
 export class PolicyNotResolved extends Data.TaggedError("GCP.OrgPolicy.PolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const CONSTRAINTS_PREFIX = "constraints/";
@@ -370,7 +370,7 @@ const getByName = (name: string) => {
       : kind === "organizations"
         ? orgpolicy.getOrganizationsPolicies(request)
         : orgpolicy.getProjectsPolicies(request);
-  return get.pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  return get.pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 const createPolicy = (parent: string, body: orgpolicy.GoogleCloudOrgpolicyV2Policy) => {
@@ -498,7 +498,7 @@ export const PolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PolicyNotResolved({ name });
+        return yield* new PolicyNotResolved({ resourceName: name });
       }
 
       const specManaged = news.spec !== undefined;

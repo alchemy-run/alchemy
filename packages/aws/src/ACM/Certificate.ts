@@ -11,8 +11,26 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
+
+export class CertificateNotReady extends Data.TaggedError("CertificateNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CertificateUnexpectedResponse extends Data.TaggedError(
+  "CertificateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CertificateOperationFailed extends Data.TaggedError("CertificateOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CertificateProps {
   /**
@@ -170,8 +188,32 @@ export interface Certificate extends Resource<
     notAfter: Date | undefined;
   },
   CertificateBinding,
-  Providers
+  Providers,
+  CertificateLookup
 > {}
+
+/**
+ * Props for {@link Certificate.lookup}: find a certificate this stack doesn't
+ * manage, by its ARN or by the domain it was issued for.
+ */
+export type CertificateLookup =
+  | {
+      /** The certificate's ARN. */
+      certificateArn: string;
+    }
+  | {
+      /**
+       * The certificate's primary domain name. Only issued certificates match;
+       * the lookup fails when several do.
+       */
+      domainName: string;
+      /**
+       * The region the certificate lives in, as on a declared
+       * `Certificate`: CloudFront only accepts certificates in `us-east-1`.
+       * @default "us-east-1"
+       */
+      region?: string;
+    };
 
 /**
  * Effective SAN set: declared props plus bound SANs (see
@@ -288,6 +330,20 @@ export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")
  * );
  * ```
  *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage (created in the
+ * console or by another stack), found by `certificateArn`, or the `domainName` an
+issued certificate covers. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Serve a distribution with an existing certificate
+ * ```typescript
+ * const cert = AWS.ACM.Certificate.lookup({
+ *   domainName: "www.example.com",
+ *   region: "us-east-1",
+ * });
+ * ```
+ *
  * @resource
  */
 export const Certificate = Resource<Certificate>("AWS.ACM.Certificate");
@@ -299,7 +355,7 @@ export const CertificateProvider = () =>
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
         return yield* acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.map((response) => response.Certificate),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           withCertRegion(regionOfCertificateArn(certificateArn)),
         );
       });
@@ -366,13 +422,16 @@ export const CertificateProvider = () =>
               validations.length === 0 ||
               validations.some((option) => option.ResourceRecord === undefined)
             ) {
-              return Effect.fail(new Error("CertificateValidationRecordPending"));
+              return Effect.fail(
+                new CertificateNotReady({ message: "CertificateValidationRecordPending" }),
+              );
             }
             return Effect.succeed(detail!);
           }),
           Effect.retry({
             while: (error) =>
-              error instanceof Error && error.message === "CertificateValidationRecordPending",
+              error._tag === "CertificateNotReady" &&
+              error.message === "CertificateValidationRecordPending",
             schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
@@ -499,6 +558,33 @@ export const CertificateProvider = () =>
           // a replacement trigger — it is updated in place via
           // `UpdateCertificateOptions` in `reconcile`.
         }),
+        lookup: Effect.fn(function* (props) {
+          const certificateArn =
+            "certificateArn" in props
+              ? props.certificateArn
+              : (yield* withCertRegion(props.region)(
+                  Effect.gen(function* () {
+                    const issued = yield* acm.listCertificates
+                      .items({ CertificateStatuses: ["ISSUED"] })
+                      .pipe(
+                        Stream.filter((summary) => summary.DomainName === props.domainName),
+                        Stream.runCollect,
+                        Effect.map((chunk) => Array.from(chunk)),
+                      );
+                    return yield* single(
+                      "AWS.ACM.Certificate",
+                      props.domainName,
+                      issued,
+                      (summary) => summary.CertificateArn,
+                    );
+                  }),
+                ))?.CertificateArn;
+          if (certificateArn === undefined) return undefined;
+          const certificate = yield* describeCertificate(certificateArn);
+          if (!certificate?.CertificateArn) return undefined;
+          const tags = yield* listCertificateTags(certificate.CertificateArn);
+          return toAttrs({ domainName: certificate.DomainName! }, certificate, tags);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // `olds.domainName` may be `undefined` when a `creating` row was
           // persisted before upstream Outputs resolved — without a domain
@@ -577,19 +663,24 @@ export const CertificateProvider = () =>
                   Tags: createTagsList(desiredTags),
                 })
                 .pipe(
-                  Effect.flatMap((response) =>
-                    response.CertificateArn
-                      ? describeCertificate(response.CertificateArn).pipe(
-                          Effect.map((detail) => detail!),
-                        )
-                      : Effect.fail(new Error("requestCertificate returned no certificate ARN")),
+                  Effect.flatMap(
+                    Effect.fnUntraced(function* (response) {
+                      if (!response.CertificateArn) {
+                        return yield* new CertificateUnexpectedResponse({
+                          message: "requestCertificate returned no certificate ARN",
+                        });
+                      }
+                      return (yield* describeCertificate(response.CertificateArn))!;
+                    }),
                   ),
                 ),
             );
           }
 
           if (!certificate?.CertificateArn) {
-            return yield* Effect.fail(new Error("Failed to obtain ACM certificate"));
+            return yield* new CertificateOperationFailed({
+              message: "Failed to obtain ACM certificate",
+            });
           }
 
           const certificateArn = certificate.CertificateArn;
@@ -710,10 +801,11 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
       Effect.flatMap((changeInfo) =>
         changeInfo.Status === "INSYNC"
           ? Effect.succeed(changeInfo)
-          : Effect.fail(new Error("Route53ChangePending")),
+          : Effect.fail(new CertificateNotReady({ message: "Route53ChangePending" })),
       ),
       Effect.retry({
-        while: (error) => error instanceof Error && error.message === "Route53ChangePending",
+        while: (error) =>
+          error._tag === "CertificateNotReady" && error.message === "Route53ChangePending",
         schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
       }),
     );
@@ -830,7 +922,7 @@ export const validationRecordsOf = (
 export const describeCertificateDetail = (certificateArn: string) =>
   acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
     Effect.map((response) => response.Certificate),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
     withCertRegion(regionOfCertificateArn(certificateArn)),
   );
 
@@ -842,32 +934,31 @@ export const describeCertificateDetail = (certificateArn: string) =>
  */
 export const waitForCertificateIssued = (certificateArn: string) =>
   describeCertificateDetail(certificateArn).pipe(
-    Effect.flatMap((detail) => {
-      if (!detail?.CertificateArn) {
-        return Effect.fail(new Error("CertificateNotFound"));
-      }
-      if (detail.Status === "ISSUED") {
-        return Effect.succeed(detail);
-      }
-      if (isTerminalFailure(detail.Status)) {
-        if (detail.FailureReason === "CAA_ERROR") {
-          return Effect.fail(
-            new CertificateCaaError({
+    Effect.flatMap(
+      Effect.fnUntraced(function* (detail) {
+        if (!detail?.CertificateArn) {
+          return yield* new CertificateUnexpectedResponse({ message: "CertificateNotFound" });
+        }
+        if (detail.Status === "ISSUED") {
+          return detail;
+        }
+        if (isTerminalFailure(detail.Status)) {
+          if (detail.FailureReason === "CAA_ERROR") {
+            return yield* new CertificateCaaError({
               certificateArn,
               domainName: detail.DomainName ?? "",
-            }),
-          );
+            });
+          }
+          return yield* new CertificateOperationFailed({
+            message: `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
+          });
         }
-        return Effect.fail(
-          new Error(
-            `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
-          ),
-        );
-      }
-      return Effect.fail(new Error("CertificatePendingValidation"));
-    }),
+        return yield* new CertificateNotReady({ message: "CertificatePendingValidation" });
+      }),
+    ),
     Effect.retry({
-      while: (error) => error instanceof Error && error.message === "CertificatePendingValidation",
+      while: (error) =>
+        error._tag === "CertificateNotReady" && error.message === "CertificatePendingValidation",
       schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

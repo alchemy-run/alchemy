@@ -81,8 +81,23 @@ export interface LicenseConfiguration extends Resource<
     licenseCountingType: string;
   },
   never,
-  Providers
+  Providers,
+  LicenseConfigurationLookup
 > {}
+
+/**
+ * Props for {@link LicenseConfiguration.lookup}: find a license configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type LicenseConfigurationLookup =
+  | {
+      /** The ARN of the existing license configuration. */
+      licenseConfigurationArn: string;
+    }
+  | {
+      /** The name of the existing license configuration. */
+      name: string;
+    };
 
 /**
  * An AWS License Manager license configuration — an abstraction of a
@@ -118,6 +133,16 @@ export interface LicenseConfiguration extends Resource<
  *   licenseRules: ["#allowedTenancy=EC2-DedicatedHost"],
  *   description: "Oracle DB socket licenses",
  * });
+ * ```
+ *
+ * ### Looking up an existing license configuration
+ * `LicenseConfiguration.lookup` references a license configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `licenseConfigurationArn` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing license configuration
+ * ```typescript
+ * const windows = AWS.LicenseManager.LicenseConfiguration.lookup({ name: "windows-server" });
  * ```
  *
  * @resource
@@ -168,7 +193,7 @@ export const LicenseConfigurationProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const found = yield* licensemanager
           .getLicenseConfiguration({ LicenseConfigurationArn: arn })
-          .pipe(Effect.catchTag("LicenseConfigurationNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LicenseConfigurationNotFound", () => Effect.undefined));
         if (found === undefined || !isLive(found.Status)) return undefined;
         return found;
       });
@@ -206,6 +231,15 @@ export const LicenseConfigurationProvider = () =>
             return items.map(toAttributes);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn =
+            "licenseConfigurationArn" in props
+              ? props.licenseConfigurationArn
+              : (yield* findByName(props.name))?.LicenseConfigurationArn;
+          if (arn === undefined) return undefined;
+          const observed = yield* getByArn(arn);
+          return observed === undefined ? undefined : toAttributes(observed);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let observed: licensemanager.GetLicenseConfigurationResponse | undefined;
           if (output?.licenseConfigurationArn) {

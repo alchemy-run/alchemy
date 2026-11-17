@@ -9,12 +9,12 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 const managedEnabled = !!process.env.HCLOUD_TEST_MANAGED_CERT;
 const managedDomain = process.env.HCLOUD_TEST_MANAGED_CERT_DOMAIN;
 
@@ -142,7 +142,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete an uploaded certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -157,6 +157,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.Certificate.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -205,7 +206,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when the uploaded PEM changes",
   (stack) =>
     Effect.gen(function* () {
@@ -255,7 +256,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed certificate",
   (stack) =>
     Effect.gen(function* () {
@@ -289,7 +290,7 @@ test.provider.skipIf(!hasHetznerCreds)(
 const MANAGED_PROBE_NAME = "alchemy-test-managed-probe";
 const MANAGED_PROBE_DOMAIN = "alchemy-unmanaged-probe.example.com";
 
-test.provider.skipIf(!hasHetznerCreds || managedEnabled)(
+test.provider.skipIf(managedEnabled)(
   "managed issuance is rejected when the domain is not in Hetzner DNS",
   (stack) =>
     Effect.gen(function* () {
@@ -340,7 +341,7 @@ test.provider.skipIf(!hasHetznerCreds || managedEnabled)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds || !managedEnabled || !managedDomain)(
+test.provider.skipIf(!managedEnabled || !managedDomain)(
   "create, update, and delete a managed certificate",
   (stack) =>
     Effect.gen(function* () {

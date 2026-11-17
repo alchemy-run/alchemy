@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fingerprint,
@@ -180,8 +181,32 @@ export type LakesEntity = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesEntityLookup
 >;
+
+/**
+ * Props for {@link LakesEntity.lookup}: find a lakes entity this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LakesEntityLookup {
+  /**
+   * Entity id used as the published table name. Letters, numbers, and
+   * underscores; at most 256 characters.
+   */
+  entityId: string;
+  /**
+   * Parent zone. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}`.
+   */
+  zone: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex metadata entity — a table or fileset registered in a zone.
@@ -209,6 +234,20 @@ export type LakesEntity = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing lakes entity
+ * `LakesEntity.lookup` references a lakes entity Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes entity.
+ *
+ * **Example:** Reference an existing lakes entity
+ * ```typescript
+ * const lakesEntity = GCP.Dataplex.LakesEntity.lookup({
+ *   entityId: "my-entity",
+ *   zone: "us-central1-a",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
@@ -217,7 +256,7 @@ export const LakesEntity = Resource<LakesEntity>("GCP.Dataplex.LakesEntity");
 export class LakesEntityNotResolved extends Data.TaggedError(
   "GCP.Dataplex.LakesEntityNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE = "TABLE";
@@ -261,7 +300,7 @@ const toAttrs = (entity: dataplex.GoogleCloudDataplexV1Entity, project: string) 
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsLakesZonesEntities({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedEntities = (project: string, region: string) =>
   Effect.gen(function* () {
@@ -324,6 +363,15 @@ export const LakesEntityProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ entityId, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lookupZone ?? "";
+      const name = resourceNameOf(zone, entityId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -388,7 +436,7 @@ export const LakesEntityProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesEntityNotResolved({ name });
+        return yield* new LakesEntityNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== (description ?? "");

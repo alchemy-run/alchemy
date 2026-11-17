@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
+import type * as Plan from "alchemy/Plan";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -351,6 +352,8 @@ describe.concurrent(
                     TEST_MARKER: marker,
                     SITE_KV: siteKv,
                     PUBLIC_SITE_MARKER: "ASTRO_PUBLIC_ENV_MARKER",
+                    // Resolved to this Worker's own URL before the build.
+                    PUBLIC_SITE_URL: Cloudflare.Worker.URL,
                   },
                   assets: { htmlHandling: "auto-trailing-slash", notFoundHandling: "none" },
                 });
@@ -378,6 +381,10 @@ describe.concurrent(
           yield* expectUrlContains(`${site1.url!}/public-env/`, "ASTRO_PUBLIC_ENV_MARKER", {
             timeout: "60 seconds",
             label: "astro public env",
+          });
+          yield* expectUrlContains(`${site1.url!}/public-env/`, site1.url!, {
+            timeout: "60 seconds",
+            label: "astro Worker.URL env",
           });
           // Prerendered page served from static assets. Keep the body — the
           // hashed-asset assertion below extracts the `/_astro/*.css` href.
@@ -723,16 +730,20 @@ describe.concurrent(
             'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
           );
 
-          const site = yield* stack.deploy(
+          const program = (
+            astro?: { trailingSlash: "always" },
+            notFoundHandling: "404-page" | "none" = "404-page",
+          ) =>
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Astro("AstroStaticConfigSite", {
                 rootDir,
                 workersDev: { enabled: true, previewsEnabled: true },
                 compatibility: { date: "2026-03-10" },
-                assets: { notFoundHandling: "404-page" },
+                assets: { notFoundHandling },
+                astro,
               });
-            }),
-          );
+            });
+          const site = yield* stack.deploy(program());
 
           // No server bundle was produced or uploaded.
           expect(site.hash?.assets).toBeDefined();
@@ -751,6 +762,13 @@ describe.concurrent(
             Effect.map(Option.getOrUndefined),
           );
           expect(sessionNamespace).toBeUndefined();
+
+          // Unchanged files and options plan nothing; changing only a source
+          // option or the assets config plans an update through the props diff.
+          const actionOf = (plan: Plan.Plan) => plan.resources["AstroStaticConfigSite"]?.action;
+          expect(actionOf(yield* stack.plan(program()))).toBe("noop");
+          expect(actionOf(yield* stack.plan(program({ trailingSlash: "always" })))).toBe("update");
+          expect(actionOf(yield* stack.plan(program(undefined, "none")))).toBe("update");
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);
@@ -828,6 +846,95 @@ describe.concurrent(
           yield* expectUrlContains(`${site.url!}/static.txt`, "astro-static-public-asset", {
             timeout: "60 seconds",
             label: "static asset with SPA handling",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { timeout: 360_000 },
+    );
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Custom worker entry (seam: AstroProps.main → the cloudflare target's
+    // `worker.main` → the vite plugin's entry). `main` points the deploy at
+    // the user's own module, which wraps Astro's handler and re-exports the
+    // `Counter` Durable Object class — DO classes must live on the deployed
+    // worker for their namespace bindings to resolve. Mirrors Waku's test.
+    // ─────────────────────────────────────────────────────────────────────
+
+    test.provider(
+      "Astro: main deploys a custom worker entry hosting a Durable Object",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-astro-main-",
+            tempRoot,
+            entries: ["astro.config.mjs", "package.json", "public", "src"],
+          });
+
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Astro("AstroMainSite", {
+                rootDir,
+                // The user's own worker entry: wraps Astro's handler and
+                // exports the Counter DO.
+                main: "src/worker-entry.ts",
+                compatibility: { date: "2026-03-10" },
+                memo: {
+                  include: ["src/**", "public/**", "package.json", "astro.config.mjs"],
+                  workspaces: [],
+                },
+                env: {
+                  TEST_MARKER: "astro-main-marker",
+                  COUNTER: Cloudflare.DurableObject("Counter", { className: "Counter" }),
+                },
+              });
+            }),
+          );
+
+          expect(site.url).toBeDefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+
+          // The deployed entry is the USER module, not Astro's own entry.
+          yield* expectUrlContains(`${site.url!}/api/entry`, '"entry":"worker-entry"', {
+            timeout: "120 seconds",
+            label: "custom worker entry",
+          });
+
+          // The DO namespace is bound and state increments ACROSS requests.
+          const count = (body: string) => (JSON.parse(body) as { count: number }).count;
+          const first = count(
+            yield* expectUrlContains(`${site.url!}/api/counter/increment`, '"count"', {
+              timeout: "60 seconds",
+              label: "counter increment",
+            }),
+          );
+          const second = count(
+            yield* expectUrlContains(`${site.url!}/api/counter/increment`, '"count"', {
+              timeout: "60 seconds",
+              label: "counter increment",
+            }),
+          );
+          expect(second).toBe(first + 1);
+
+          // Wrapping Astro's handler keeps every Astro route working: the
+          // SSR page still renders and reads bindings, and the prerendered
+          // page and public asset still serve.
+          yield* expectUrlContains(`${site.url!}/`, "astro-main-marker", {
+            timeout: "60 seconds",
+            label: "SSR page through the custom entry",
+          });
+          yield* expectUrlContains(`${site.url!}/about/`, "prerendered-page", {
+            timeout: "60 seconds",
+            label: "prerendered page with custom entry",
+          });
+          yield* expectUrlContains(`${site.url!}/static.txt`, "astro-static-asset", {
+            timeout: "60 seconds",
+            label: "static asset with custom entry",
           });
 
           yield* stack.destroy();

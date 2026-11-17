@@ -71,8 +71,18 @@ export interface FindingsFilter extends Resource<
     action: FindingsFilterAction;
   },
   never,
-  Providers
+  Providers,
+  FindingsFilterLookup
 > {}
+
+/**
+ * Props for {@link FindingsFilter.lookup}: find a findings filter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FindingsFilterLookup {
+  /** The id of the existing findings filter. */
+  findingsFilterId: string;
+}
 
 /**
  * An Amazon Macie findings filter — matches findings against criteria and
@@ -104,6 +114,16 @@ export interface FindingsFilter extends Resource<
  *   },
  * });
  * ```
+ *
+ * ### Looking up an existing findings filter
+ * `FindingsFilter.lookup` references a findings filter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `findingsFilterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing findings filter
+ * ```typescript
+ * const existing = AWS.Macie2.FindingsFilter.lookup({ findingsFilterId });
+ * ```
  */
 const FindingsFilterResource = Resource<FindingsFilter>("AWS.Macie2.FindingsFilter");
 
@@ -126,16 +146,20 @@ export const FindingsFilterProvider = () =>
       const getFilter = (id: string) =>
         macie2.getFindingsFilter({ id }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
             // Macie disabled ⇒ the filter is unreachable (and disabling deletes
             // all Macie configuration), so report it as gone.
-            AccessDeniedException: () => Effect.succeed(undefined),
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
 
       return {
         stables: ["id", "arn"],
 
+        lookup: Effect.fn(function* ({ findingsFilterId }) {
+          const live = yield* getFilter(findingsFilterId);
+          return live ? buildFilterAttrs(findingsFilterId, live) : undefined;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.id) return undefined;
           const live = yield* getFilter(output.id);

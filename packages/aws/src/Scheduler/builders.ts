@@ -155,18 +155,41 @@ export const at = (date: Date, options: ScheduleOptions = {}) =>
     ...options,
   });
 
+// TODO(typescript>7.1.0): TypeScript 7.1 rejects the inferred type of the
+// self-recursive `makeBuilder` (TS5088 "cyclic structure which cannot be
+// trivially serialized" on `every`/`cron`/`at`/`makeBuilder`), so the builder
+// type is written out here. To revert, drop this interface and `makeBuilder`'s
+// return annotation, restore `type ScheduleBuilder = ReturnType<typeof
+// makeBuilder>`, and check that `pnpm exec tsrs -b` emits declarations for
+// `packages/aws` without TS5088.
 /**
  * The fluent schedule builder returned by `every`/`cron`/`at`. Route it to a
  * target with `.toLambda`/`.toQueue`/`.toEcsTask`, or consume it on the host
  * Function with `consumeSchedule(builder, handler)`.
  */
-export type ScheduleBuilder = ReturnType<typeof makeBuilder>;
-
-const makeBuilder = (state: ScheduleBuilderState) => ({
+export interface ScheduleBuilder {
   /**
    * The accumulated builder state (expression, name, group, ...). Read by
    * `consumeSchedule` to materialize the schedule against the host Function.
    */
+  readonly state: ScheduleBuilderState;
+  /** Give the backing schedule an explicit name. */
+  named(name: string): ScheduleBuilder;
+  /** Invoke a Lambda Function on the schedule. */
+  toLambda(fn: Function, props?: LambdaTargetProps): MaterializedSchedule;
+  /** Send `payload` to an SQS Queue on the schedule. */
+  toQueue(
+    queue: Queue,
+    payload?: unknown,
+    props?: Omit<QueueTargetProps, "input">,
+  ): MaterializedSchedule;
+  /** Run an ECS task on the schedule. */
+  toEcsTask(props: EcsTaskTargetProps): MaterializedSchedule;
+}
+
+type MaterializedSchedule = ReturnType<typeof materializeSchedule>;
+
+const makeBuilder = (state: ScheduleBuilderState): ScheduleBuilder => ({
   state,
 
   named: (name: string) =>

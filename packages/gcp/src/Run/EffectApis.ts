@@ -139,13 +139,12 @@ export const ServeHttpApi = <Id extends string, Groups extends HttpApiGroup.Cons
   api: HttpApi.HttpApi<Id, Groups>,
   groups: Layer.Layer<HttpApiGroup.ToService<Id, Groups>, never, R>,
 ) =>
-  servedOnce(
-    HttpRouter.toHttpEffect(
-      HttpApiBuilder.layer(api).pipe(
-        Layer.provide(groups),
-        Layer.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer)),
-      ),
-    ),
+  api.pipe(
+    HttpApiBuilder.layer,
+    Layer.provide(groups),
+    Layer.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer)),
+    HttpRouter.toHttpEffect,
+    servedOnce,
   );
 
 /**
@@ -192,6 +191,7 @@ export const makeRpcGroupClient = <Rpcs extends Rpc.Any>(
                     never,
                     Scope.Scope
                   >,
+                  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- handlers are registered by name and erased; each API's own types carry them
                   (effect) => effect,
                 ),
               );

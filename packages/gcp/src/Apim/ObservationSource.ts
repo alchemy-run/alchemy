@@ -1,5 +1,5 @@
 import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -143,10 +143,10 @@ const toAttrs = (location: string, item: apim.ObservationSource, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apim
         .getProjectsLocationsObservationSources({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -191,7 +191,7 @@ export const ObservationSourceProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const observationSourceId = yield* toPhysicalId(
         id,
@@ -210,7 +210,7 @@ export const ObservationSourceProvider = () =>
       if (output !== undefined || hasAlchemyId(attrs.observationSourceId)) {
         return attrs;
       }
-      return Unowned(attrs);
+      return unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -243,7 +243,7 @@ export const ObservationSourceProvider = () =>
               gclbObservationSource,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -251,7 +251,7 @@ export const ObservationSourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -273,7 +273,7 @@ export const ObservationSourceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

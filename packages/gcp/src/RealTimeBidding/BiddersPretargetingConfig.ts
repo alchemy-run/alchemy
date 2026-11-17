@@ -266,7 +266,7 @@ export class BiddersPretargetingConfigNotResolved extends Data.TaggedError(
   "GCP.RealTimeBidding.BiddersPretargetingConfigNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BiddersPretargetingConfigParentRequired extends Data.TaggedError(
@@ -432,7 +432,7 @@ export const BiddersPretargetingConfigProvider = () =>
       if (current === undefined) {
         return yield* new BiddersPretargetingConfigNotResolved({
           parent,
-          name: name || stamped,
+          resourceName: name || stamped,
         });
       }
 

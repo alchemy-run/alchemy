@@ -4,8 +4,9 @@ description: Orchestrate durable, multi-step work with Cloudflare Workflows — 
 sidebar:
   order: 10
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-This guide builds a Workflow end to end: a durable multi-step job
+Take a Workflow, built end to end: a durable multi-step job
 that writes to KV and broadcasts each task's progress back to a chat
 `Room` Durable Object. For the concept, start at
 [Workflows](/cloudflare/compute/workflows).
@@ -402,9 +403,7 @@ returned) or `error`.
 
 Deploy:
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Add a test that POSTs to `/workflow/start/:roomId`, then polls
 `/workflow/status/:instanceId` until the workflow reaches

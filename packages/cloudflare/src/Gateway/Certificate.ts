@@ -76,8 +76,20 @@ export type Certificate = Resource<
   CertificateProps,
   CertificateAttributes,
   never,
-  Providers
+  Providers,
+  CertificateLookup
 >;
+
+/**
+ * Props for {@link Certificate.lookup}: find a Gateway certificate this stack
+ * doesn't manage, by its id. Certificates have no name.
+ */
+export interface CertificateLookup {
+  /**
+   * The UUID of the existing certificate.
+   */
+  certificateId: string;
+}
 
 /**
  * A Cloudflare Zero Trust Gateway certificate — a Cloudflare-generated CA
@@ -108,6 +120,25 @@ export type Certificate = Resource<
  * **Example:** Wire into the Gateway configuration
  * ```typescript
  * const cert = yield* Cloudflare.Gateway.Certificate("InspectionCa", {});
+ * yield* Cloudflare.Gateway.Configuration("Gateway", {
+ *   settings: {
+ *     tlsDecrypt: { enabled: true },
+ *     certificate: { id: cert.certificateId },
+ *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage
+ * (generated in the dashboard or by another stack), found by
+ * `certificateId`. It is read during plan/deploy and never created,
+ * activated or deleted.
+ *
+ * **Example:** Inspect TLS with an existing certificate
+ * ```typescript
+ * const cert = Cloudflare.Gateway.Certificate.lookup({
+ *   certificateId: "f174e90a-fafe-4643-bbbc-4a0ed4fc8415",
+ * });
  * yield* Cloudflare.Gateway.Configuration("Gateway", {
  *   settings: {
  *     tlsDecrypt: { enabled: true },
@@ -160,6 +191,11 @@ export const CertificateProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ certificateId }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getCertificate(accountId, certificateId);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -193,7 +229,7 @@ export const CertificateProvider = () =>
       );
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       // 1. Observe — the cached id is a hint; a vanished certificate
@@ -271,7 +307,7 @@ type ObservedCertificate =
 const getCertificate = (accountId: string, certificateId: string) =>
   zeroTrust.getGatewayCertificate({ accountId, certificateId }).pipe(
     Effect.map((c): zeroTrust.GetGatewayCertificateResponse | undefined => c),
-    Effect.catchTag("GatewayCertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayCertificateNotFound", () => Effect.undefined),
   );
 
 /**

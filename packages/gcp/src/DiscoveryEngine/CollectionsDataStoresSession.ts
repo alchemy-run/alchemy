@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { parentOf, parseResourceName, sessionIdOf, toPhysical } from "./internal.ts";
 
@@ -74,8 +75,30 @@ export type CollectionsDataStoresSession = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsDataStoresSessionLookup
 >;
+
+/**
+ * Props for {@link CollectionsDataStoresSession.lookup}: find a collections
+ * data stores session this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CollectionsDataStoresSessionLookup {
+  /**
+   * Session id (`[a-z0-9]`, 1-63 characters).
+   */
+  sessionId: string;
+  /**
+   * Parent data store resource name.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine session on a collection data store.
@@ -98,6 +121,20 @@ export type CollectionsDataStoresSession = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing collections data stores session
+ * `CollectionsDataStoresSession.lookup` references a collections data
+ * stores session Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared collections data stores session.
+ *
+ * **Example:** Reference an existing collections data stores session
+ * ```typescript
+ * const collectionsDataStoresSession = GCP.DiscoveryEngine.CollectionsDataStoresSession.lookup({
+ *   sessionId: "my-session",
+ *   dataStore: "my-data-store",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -108,7 +145,7 @@ export const CollectionsDataStoresSession = Resource<CollectionsDataStoresSessio
 export class CollectionsDataStoresSessionNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, project: string) => {
@@ -134,10 +171,10 @@ const resourceName = (dataStore: string, sessionId: string) => `${dataStore}/ses
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresSessions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CollectionsDataStoresSessionProvider = () =>
   Provider.succeed(CollectionsDataStoresSession, {
@@ -161,6 +198,15 @@ export const CollectionsDataStoresSessionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sessionId, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const name = dataStore !== undefined ? resourceName(dataStore, sessionId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -205,7 +251,7 @@ export const CollectionsDataStoresSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoresSessionNotResolved({ name });
+        return yield* new CollectionsDataStoresSessionNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

@@ -14,6 +14,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 
+export class VpcLatticeTargetGroupUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeTargetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * The kind of compute a target group routes to.
  */
@@ -180,8 +187,18 @@ export interface TargetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TargetGroupLookup
 > {}
+
+/**
+ * Props for {@link TargetGroup.lookup}: find a target group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TargetGroupLookup {
+  /** The id of the existing target group. */
+  targetGroupId: string;
+}
 
 /**
  * An Amazon VPC Lattice target group — the collection of compute targets
@@ -212,6 +229,16 @@ export interface TargetGroup extends Resource<
  *   },
  *   targets: [{ id: "10.0.1.10", port: 80 }],
  * });
+ * ```
+ *
+ * ### Looking up an existing target group
+ * `TargetGroup.lookup` references a target group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `targetGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing target group
+ * ```typescript
+ * const existing = AWS.VpcLattice.TargetGroup.lookup({ targetGroupId: "..." });
  * ```
  *
  * @resource
@@ -259,7 +286,7 @@ export const TargetGroupProvider = () =>
       const observe = (targetGroupIdentifier: string) =>
         vpclattice
           .getTargetGroup({ targetGroupIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         vpclattice.listTargetGroups.pages({}).pipe(
@@ -269,9 +296,7 @@ export const TargetGroupProvider = () =>
               .flatMap((page) => page.items ?? [])
               .find((t) => t.name === name),
           ),
-          Effect.flatMap((summary) =>
-            summary?.id ? observe(summary.id) : Effect.succeed(undefined),
-          ),
+          Effect.flatMap((summary) => (summary?.id ? observe(summary.id) : Effect.undefined)),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -353,6 +378,22 @@ export const TargetGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ targetGroupId }) {
+          const group = yield* observe(targetGroupId);
+          if (!group?.arn || !group.id) return undefined;
+          const listed = yield* vpclattice.listTagsForResource({
+            resourceArn: group.arn,
+          });
+          const attrs = {
+            targetGroupId: group.id,
+            targetGroupArn: group.arn,
+            name: group.name!,
+            type: (group.type as TargetGroupType) ?? "IP",
+            status: group.status ?? "UNKNOWN",
+            tags: tagRecord(listed.tags),
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const group = output?.targetGroupId
             ? yield* observe(output.targetGroupId)
@@ -404,7 +445,9 @@ export const TargetGroupProvider = () =>
               })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(new Error(`Failed to create target group ${name}`));
+              return yield* new VpcLatticeTargetGroupUnexpectedResponse({
+                message: `Failed to create target group ${name}`,
+              });
             }
             group = yield* observe(created.id);
             if (!group?.arn || !group.id) {
@@ -414,7 +457,9 @@ export const TargetGroupProvider = () =>
           const targetGroupId = group.id;
           const targetGroupArn = group.arn;
           if (!targetGroupId || !targetGroupArn) {
-            return yield* Effect.fail(new Error(`Target group ${name} is missing its id/arn`));
+            return yield* new VpcLatticeTargetGroupUnexpectedResponse({
+              message: `Target group ${name} is missing its id/arn`,
+            });
           }
 
           // Target groups reject updates while CREATE_IN_PROGRESS.

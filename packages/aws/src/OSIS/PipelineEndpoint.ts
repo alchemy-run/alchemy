@@ -9,6 +9,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { jsonEquals } from "./internal.ts";
 
+export class PipelineEndpointUnexpectedResponse extends Data.TaggedError(
+  "PipelineEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface PipelineEndpointVpcOptions {
   /**
    * Subnet IDs the endpoint's network interfaces are placed into. Changing
@@ -61,8 +68,18 @@ export interface PipelineEndpoint extends Resource<
     ingestEndpointUrl: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PipelineEndpointLookup
 > {}
+
+/**
+ * Props for {@link PipelineEndpoint.lookup}: find a pipeline endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PipelineEndpointLookup {
+  /** The id of the existing pipeline endpoint. */
+  endpointId: string;
+}
 
 /**
  * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline — lets
@@ -88,6 +105,16 @@ export interface PipelineEndpoint extends Resource<
  *   },
  * });
  * // endpoint.ingestEndpointUrl — the VPC-private ingest URL
+ * ```
+ *
+ * ### Looking up an existing pipeline endpoint
+ * `PipelineEndpoint.lookup` references a pipeline endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing pipeline endpoint
+ * ```typescript
+ * const existing = AWS.OSIS.PipelineEndpoint.lookup({ endpointId: "..." });
  * ```
  *
  * @resource
@@ -126,11 +153,9 @@ export const PipelineEndpointProvider = () =>
 
       const toAttrs = Effect.fn(function* (endpoint: osis.PipelineEndpoint) {
         if (!endpoint.EndpointId || !endpoint.PipelineArn) {
-          return yield* Effect.fail(
-            new Error(
-              `OSIS pipeline endpoint '${endpoint.EndpointId}' is missing its id or pipeline ARN`,
-            ),
-          );
+          return yield* new PipelineEndpointUnexpectedResponse({
+            message: `OSIS pipeline endpoint '${endpoint.EndpointId}' is missing its id or pipeline ARN`,
+          });
         }
         return {
           endpointId: endpoint.EndpointId,
@@ -169,6 +194,12 @@ export const PipelineEndpointProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ endpointId }) {
+          const endpoint = yield* findEndpoint(endpointId);
+          if (endpoint === undefined) return undefined;
+          return yield* toAttrs(endpoint);
+        }),
+
         read: Effect.fn(function* ({ output }) {
           // The endpoint id is assigned by OSIS on create; without a
           // persisted id there is nothing deterministic to look up.
@@ -198,9 +229,9 @@ export const PipelineEndpointProvider = () =>
               },
             });
             if (created.EndpointId === undefined) {
-              return yield* Effect.fail(
-                new Error("OSIS createPipelineEndpoint returned no EndpointId"),
-              );
+              return yield* new PipelineEndpointUnexpectedResponse({
+                message: "OSIS createPipelineEndpoint returned no EndpointId",
+              });
             }
             observed = yield* findEndpoint(created.EndpointId);
           }
@@ -211,9 +242,9 @@ export const PipelineEndpointProvider = () =>
             observed = yield* waitForSettled(findEndpoint(observed.EndpointId));
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error("OSIS pipeline endpoint disappeared while waiting for create"),
-            );
+            return yield* new PipelineEndpointUnexpectedResponse({
+              message: "OSIS pipeline endpoint disappeared while waiting for create",
+            });
           }
           if (observed.Status === "CREATE_FAILED") {
             return yield* new PipelineEndpointCreateFailed({

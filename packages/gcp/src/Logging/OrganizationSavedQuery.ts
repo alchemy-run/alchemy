@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -119,8 +120,36 @@ export type OrganizationSavedQuery = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationSavedQueryLookup
 >;
+
+/**
+ * Props for {@link OrganizationSavedQuery.lookup}: find an organization
+ * saved query this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface OrganizationSavedQueryLookup {
+  /**
+   * Saved query id (the last segment of the resource name). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  savedQueryId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Location of the saved query.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging saved query on an organization.
@@ -158,6 +187,19 @@ export type OrganizationSavedQuery = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing organization saved query
+ * `OrganizationSavedQuery.lookup` references an organization saved query
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared organization saved query.
+ *
+ * **Example:** Reference an existing organization saved query
+ * ```typescript
+ * const organizationSavedQuery = GCP.Logging.OrganizationSavedQuery.lookup({
+ *   savedQueryId: "my-saved-query",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -168,7 +210,7 @@ export const OrganizationSavedQuery = Resource<OrganizationSavedQuery>(
 export class OrganizationSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationSavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, location: string, savedQueryId: string) =>
@@ -242,7 +284,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsSavedQueries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   props: OrganizationSavedQueryProps,
@@ -296,6 +338,21 @@ export const OrganizationSavedQueryProvider = () =>
       if (!idChanged && !locationChanged && !orgChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({
+      savedQueryId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(organization, location, savedQueryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization, env.project, location);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -361,7 +418,7 @@ export const OrganizationSavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationSavedQueryNotResolved({ name });
+        return yield* new OrganizationSavedQueryNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

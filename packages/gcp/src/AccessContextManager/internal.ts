@@ -14,11 +14,11 @@ export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_RESOURCE_ID_LENGTH = 50;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.AccessContextManager.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.AccessContextManager.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationRequired extends Data.TaggedError(
@@ -88,14 +88,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {
@@ -124,7 +124,7 @@ export const resolveOrganization = (explicit: string | undefined, existing: stri
 export const projectNumberOf = (project: string) =>
   resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
     Effect.map((resource) => lastSegment(resource.name ?? "")),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const normalizeScope = (scope: string, projectNumber?: string) => {
@@ -299,7 +299,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AccessContextManager.NotResolved",
@@ -314,7 +314,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new ResourceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AccessContextManager.StillExists",

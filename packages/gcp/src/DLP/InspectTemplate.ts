@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -78,8 +79,28 @@ export type InspectTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InspectTemplateLookup
 >;
+
+/**
+ * Props for {@link InspectTemplate.lookup}: find an inspect template this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InspectTemplateLookup {
+  /**
+   * Template id (the `{inspectTemplate}` segment of
+   * `projects/{project}/inspectTemplates/{inspectTemplate}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  templateId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Cloud DLP inspect template.
@@ -114,6 +135,19 @@ export type InspectTemplate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing inspect template
+ * `InspectTemplate.lookup` references an inspect template Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * inspect template.
+ *
+ * **Example:** Reference an existing inspect template
+ * ```typescript
+ * const inspectTemplate = GCP.DLP.InspectTemplate.lookup({
+ *   templateId: "my-template",
+ * });
+ * ```
+ *
  * @resource
  * @category DLP
  */
@@ -122,7 +156,7 @@ export const InspectTemplate = Resource<InspectTemplate>("GCP.DLP.InspectTemplat
 export class InspectTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.InspectTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, templateId: string) =>
@@ -146,10 +180,10 @@ const toAttrs = (template: dlp.GooglePrivacyDlpV2InspectTemplate, project: strin
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsInspectTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const InspectTemplateProvider = () =>
   Provider.succeed(InspectTemplate, {
@@ -162,6 +196,14 @@ export const InspectTemplateProvider = () =>
         previous !== undefined && news.templateId !== undefined && news.templateId !== previous,
       );
     }),
+
+    lookup: Effect.fn(function* ({ templateId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -222,7 +264,7 @@ export const InspectTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InspectTemplateNotResolved({ name });
+        return yield* new InspectTemplateNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

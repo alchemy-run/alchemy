@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -84,8 +85,31 @@ export type Group = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 >;
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface GroupLookup {
+  /**
+   * Group id (the `{group}` segment of
+   * `projects/{project}/locations/{location}/groups/{group}`).
+   */
+  groupId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration group that bundles migrating VMs so they can be
@@ -111,6 +135,16 @@ export type Group = Resource<
  *   groupId: "disk-workloads",
  *   migrationTargetType: "MIGRATION_TARGET_TYPE_DISKS",
  * });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared group.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const group = GCP.VMMigration.Group.lookup({ groupId: "my-group" });
  * ```
  *
  * @resource
@@ -142,10 +176,10 @@ const toAttrs = (group: vm.Group, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : vm
         .getProjectsLocationsGroups({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   vm.listProjectsLocationsGroups
@@ -196,6 +230,15 @@ export const GroupProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ groupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, groupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const groupId = yield* toPhysicalId(id, olds?.groupId, output?.groupId, "group");
@@ -237,7 +280,7 @@ export const GroupProvider = () =>
               migrationTargetType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -250,7 +293,7 @@ export const GroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== description;
@@ -284,7 +327,7 @@ export const GroupProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

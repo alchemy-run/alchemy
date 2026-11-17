@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -133,8 +134,31 @@ export type RegionAutoscaler = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionAutoscalerLookup
 >;
+
+/**
+ * Props for {@link RegionAutoscaler.lookup}: find a region autoscaler this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionAutoscalerLookup {
+  /**
+   * Autoscaler name (RFC1035, 1-63 characters).
+   */
+  autoscalerName: string;
+  /**
+   * Region of the managed instance group (e.g. `us-central1`).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine autoscaler for a managed instance group.
@@ -189,6 +213,19 @@ export type RegionAutoscaler = Resource<
  *     maxNumReplicas: 10,
  *     cpuUtilization: { utilizationTarget: 0.5 },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing region autoscaler
+ * `RegionAutoscaler.lookup` references a region autoscaler Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * region autoscaler.
+ *
+ * **Example:** Reference an existing region autoscaler
+ * ```typescript
+ * const regionAutoscaler = GCP.Compute.RegionAutoscaler.lookup({
+ *   autoscalerName: "my-autoscaler",
  * });
  * ```
  *
@@ -399,7 +436,7 @@ const samePolicy = (
 const getByName = (project: string, region: string, autoscaler: string) =>
   compute
     .getRegionAutoscalers({ project, region, autoscaler })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPresent = (project: string, region: string, autoscalerName: string) =>
   getByName(project, region, autoscalerName).pipe(
@@ -413,7 +450,7 @@ const waitPresent = (project: string, region: string, autoscalerName: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionAutoscalerNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.RegionAutoscalerNotResolved", () => Effect.undefined),
   );
 
 const waitGone = (project: string, region: string, autoscalerName: string) =>
@@ -461,7 +498,15 @@ export const RegionAutoscalerProvider = () =>
       };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ autoscalerName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, autoscalerName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const autoscalerName = yield* toName(id, olds?.autoscalerName, output?.autoscalerName);
       const region = normalizeRegion(olds?.region ?? output?.region, env.region);
@@ -469,7 +514,9 @@ export const RegionAutoscalerProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "autoscalerName");
     }),
 
     list: () =>
@@ -522,7 +569,7 @@ export const RegionAutoscalerProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -581,7 +628,7 @@ export const RegionAutoscalerProvider = () =>
           autoscaler: output.autoscalerName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

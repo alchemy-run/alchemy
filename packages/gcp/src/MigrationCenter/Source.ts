@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -102,8 +103,32 @@ export type Source = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SourceLookup
 >;
+
+/**
+ * Props for {@link Source.lookup}: find a source this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SourceLookup {
+  /**
+   * Source id (the `{source}` segment of
+   * `projects/{project}/locations/{location}/sources/{source}`).
+   */
+  sourceId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Migration Center source that streams asset frames into a project.
@@ -128,6 +153,16 @@ export type Source = Resource<
  *   type: "SOURCE_TYPE_DISCOVERY_CLIENT",
  *   description: "on-prem scanner",
  * });
+ * ```
+ *
+ * ### Looking up an existing source
+ * `Source.lookup` references a source Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared source.
+ *
+ * **Example:** Reference an existing source
+ * ```typescript
+ * const source = GCP.MigrationCenter.Source.lookup({ sourceId: "my-source" });
  * ```
  *
  * @resource
@@ -164,10 +199,10 @@ const toAttrs = (source: mc.Source, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : mc
         .getProjectsLocationsSources({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsSources
@@ -217,6 +252,15 @@ export const SourceProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ sourceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, sourceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const sourceId = yield* toPhysicalId(id, olds?.sourceId, output?.sourceId, "source");
@@ -259,7 +303,7 @@ export const SourceProvider = () =>
               priority: news.priority,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -267,7 +311,7 @@ export const SourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== description;
@@ -304,7 +348,7 @@ export const SourceProvider = () =>
           times: 10,
           schedule: Schedule.spaced("3 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

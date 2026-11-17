@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -80,8 +81,37 @@ export type ServicesBackup = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServicesBackupLookup
 >;
+
+/**
+ * Props for {@link ServicesBackup.lookup}: find a services backup this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ServicesBackupLookup {
+  /**
+   * Backup id (the `{backup}` segment). Must begin with a letter and end
+   * with a letter or number.
+   */
+  backupId: string;
+  /**
+   * Region used when `service` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Dataproc Metastore service. Full name
+   * `projects/{project}/locations/{location}/services/{service}` or the
+   * service id (combined with `location`).
+   */
+  service: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc Metastore service backup — a point-in-time capture of a
@@ -104,6 +134,20 @@ export type ServicesBackup = Resource<
  * const backup = yield* GCP.Metastore.ServicesBackup("Nightly", {
  *   service: hive.name,
  *   backupId: "nightly-01",
+ * });
+ * ```
+ *
+ * ### Looking up an existing services backup
+ * `ServicesBackup.lookup` references a services backup Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * services backup.
+ *
+ * **Example:** Reference an existing services backup
+ * ```typescript
+ * const servicesBackup = GCP.Metastore.ServicesBackup.lookup({
+ *   backupId: "my-backup",
+ *   service: "my-service",
  * });
  * ```
  *
@@ -134,12 +178,12 @@ const toAttrs = (item: metastore.Backup, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : metastore
         .getProjectsLocationsServicesBackups({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const listOwned = (project: string, region: string) =>
+const listOwned = (project: string) =>
   listAtNested(project, "services/-", (parent) =>
     listOwnedPages(
       metastore.listProjectsLocationsServicesBackups.pages({
@@ -171,6 +215,16 @@ export const ServicesBackupProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ backupId, location: lookupLocation, service: lookupService }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const service = expandParent(lookupService ?? "", env.project, location, "services");
+      const name = resourceName(service, backupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const backupId = yield* toPhysicalId(id, olds?.backupId, output?.backupId, "backup");
@@ -191,7 +245,7 @@ export const ServicesBackupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, env.region);
+        const items = yield* listOwned(env.project);
         return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
@@ -213,7 +267,7 @@ export const ServicesBackupProvider = () =>
             backupId,
             body: { description },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -227,7 +281,7 @@ export const ServicesBackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -242,7 +296,7 @@ export const ServicesBackupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

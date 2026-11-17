@@ -54,8 +54,18 @@ export interface CustomVerificationEmailTemplate extends Resource<
     templateName: string;
   },
   never,
-  Providers
+  Providers,
+  CustomVerificationEmailTemplateLookup
 > {}
+
+/**
+ * Props for {@link CustomVerificationEmailTemplate.lookup}: find a verification email template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CustomVerificationEmailTemplateLookup {
+  /** The name of the existing template. */
+  templateName: string;
+}
 
 /**
  * An Amazon SES v2 custom verification email template — the branded email SES
@@ -108,6 +118,16 @@ export interface CustomVerificationEmailTemplate extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing verification email template
+ * `CustomVerificationEmailTemplate.lookup` references a verification email template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `templateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing verification email template
+ * ```typescript
+ * const welcome = AWS.SES.CustomVerificationEmailTemplate.lookup({ templateName: "welcome" });
+ * ```
+ *
  * @resource
  */
 export const CustomVerificationEmailTemplate = Resource<CustomVerificationEmailTemplate>(
@@ -137,7 +157,7 @@ export const CustomVerificationEmailTemplateProvider = () =>
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getCustomVerificationEmailTemplate({ TemplateName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       // The get returns no tags, so ownership costs a second API call. Only
@@ -171,6 +191,10 @@ export const CustomVerificationEmailTemplateProvider = () =>
             .flatMap((meta) => (meta.TemplateName ? [{ templateName: meta.TemplateName }] : []));
         }),
 
+        lookup: Effect.fn(function* ({ templateName }) {
+          const found = yield* getTemplate(templateName);
+          return found ? { templateName } : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.templateName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTemplate(name);

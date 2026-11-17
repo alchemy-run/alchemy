@@ -14,7 +14,7 @@ import {
   type VolumeInstanceUpdateInput,
   type VolumeState,
 } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -203,8 +203,22 @@ export type Postgres = Resource<
     deploymentStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PostgresLookup
 >;
+
+/**
+ * Props for {@link Postgres.lookup}: find a Postgres service this stack
+ * doesn't manage by its project, environment and id.
+ */
+export interface PostgresLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+  /** Railway service id of the Postgres container. */
+  serviceId: string;
+}
 
 const resolvePostgresProps = (
   props: PostgresProps | Effect.Effect<PostgresProps, never, Providers>,
@@ -316,6 +330,21 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * export const Db = Railway.Postgres("Db", { project: Site });
  * ```
  *
+ * ### Looking up an existing Postgres service
+ * `Postgres.lookup` references a Postgres service Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing Postgres
+ * ```typescript
+ * const db = Railway.Postgres.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ *   serviceId: "c9d0e1f2-…",
+ * });
+ * const url = db.connectionUri;
+ * ```
+ *
  * @resource
  * @product Postgres
  */
@@ -326,7 +355,7 @@ export const Postgres: typeof PostgresResource = Object.assign(
 );
 
 export class PostgresNotCreated extends Data.TaggedError("Railway.PostgresNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -341,7 +370,7 @@ export class PostgresDeployFailed extends Data.TaggedError("Railway.PostgresDepl
 }> {}
 
 export class PostgresVolumeNotCreated extends Data.TaggedError("Railway.PostgresVolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   serviceId: string;
 }> {}
 
@@ -601,13 +630,13 @@ const liveEnvironmentIds = (projectId: string) =>
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -624,7 +653,7 @@ const findByName = (projectId: string, name: string) =>
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -792,6 +821,71 @@ const waitForVolume = (
 
 const stampVolumeName = (volumeId: string, name: string) => volumeUpdateName(volumeId, name);
 
+/**
+ * Observe a Postgres from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readPostgresAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: PostgresProps;
+  output?: Partial<Postgres["Attributes"]>;
+}) {
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const environmentId =
+    output?.environmentId ??
+    (olds !== undefined
+      ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
+      : undefined);
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  const byId =
+    output?.serviceId !== undefined && output.serviceId.length > 0
+      ? yield* getById(output.serviceId)
+      : undefined;
+  const found = byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
+  if (found === undefined) return undefined;
+  const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
+  const resolvedEnvId =
+    environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
+  const instance =
+    resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
+  const volume =
+    output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
+      ? yield* getVolumeByInstanceId(output.volumeInstanceId)
+      : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
+        ? yield* findVolume(
+            resolvedEnvId,
+            resolvedProjectId,
+            (row) =>
+              (row.serviceId ?? undefined) === found.id ||
+              (output?.volumeId !== undefined && row.volumeId === output.volumeId),
+          )
+        : undefined;
+  const proxy =
+    resolvedEnvId.length > 0 ? yield* findProxy(resolvedEnvId, found.id, POSTGRES_PORT) : undefined;
+  const vars =
+    resolvedProjectId.length > 0 && resolvedEnvId.length > 0
+      ? yield* listVariableMap(resolvedProjectId, resolvedEnvId, found.id)
+      : {};
+  const attrs = toAttrs({
+    service: found,
+    instance,
+    volume,
+    proxy,
+    projectId: resolvedProjectId,
+    environmentId: resolvedEnvId,
+    user: vars.POSTGRES_USER ?? output?.user ?? DEFAULT_POSTGRES_USER,
+    password: vars.POSTGRES_PASSWORD ?? "",
+    database: vars.POSTGRES_DB ?? output?.database ?? DEFAULT_POSTGRES_DATABASE,
+  });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const PostgresProvider = () =>
   Provider.succeed(Postgres, {
     stables: ["serviceId", "projectId", "environmentId", "volumeId"],
@@ -811,61 +905,19 @@ export const PostgresProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const environmentId =
-        output?.environmentId ??
-        (olds !== undefined
-          ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
-          : undefined);
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      const byId =
-        output?.serviceId !== undefined && output.serviceId.length > 0
-          ? yield* getById(output.serviceId)
-          : undefined;
-      const found =
-        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
-      if (found === undefined) return undefined;
-      const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
-      const resolvedEnvId =
-        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
-      const instance =
-        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
-      const volume =
-        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
-          ? yield* getVolumeByInstanceId(output.volumeInstanceId)
-          : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
-            ? yield* findVolume(
-                resolvedEnvId,
-                resolvedProjectId,
-                (row) =>
-                  (row.serviceId ?? undefined) === found.id ||
-                  (output?.volumeId !== undefined && row.volumeId === output.volumeId),
-              )
-            : undefined;
-      const proxy =
-        resolvedEnvId.length > 0
-          ? yield* findProxy(resolvedEnvId, found.id, POSTGRES_PORT)
-          : undefined;
-      const vars =
-        resolvedProjectId.length > 0 && resolvedEnvId.length > 0
-          ? yield* listVariableMap(resolvedProjectId, resolvedEnvId, found.id)
-          : {};
-      const attrs = toAttrs({
-        service: found,
-        instance,
-        volume,
-        proxy,
-        projectId: resolvedProjectId,
-        environmentId: resolvedEnvId,
-        user: vars.POSTGRES_USER ?? output?.user ?? DEFAULT_POSTGRES_USER,
-        password: vars.POSTGRES_PASSWORD ?? "",
-        database: vars.POSTGRES_DB ?? output?.database ?? DEFAULT_POSTGRES_DATABASE,
-      });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    lookup: ({ projectId, environmentId, serviceId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readPostgresAttributes({
+        id: serviceId,
+        output: { projectId, environmentId, serviceId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
+
+    read: readPostgresAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
@@ -975,12 +1027,12 @@ export const PostgresProvider = () =>
           name,
           source: { image: sourceImage },
           variables,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new PostgresNotCreated({ name, projectId });
+        return yield* new PostgresNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {
@@ -1045,7 +1097,10 @@ export const PostgresProvider = () =>
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new PostgresVolumeNotCreated({ name: volumeName, serviceId: current.id });
+        return yield* new PostgresVolumeNotCreated({
+          resourceName: volumeName,
+          serviceId: current.id,
+        });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);
@@ -1069,7 +1124,7 @@ export const PostgresProvider = () =>
           applicationPort: POSTGRES_PORT,
           environmentId,
           serviceId: current.id,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created

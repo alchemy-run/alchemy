@@ -105,7 +105,7 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.DataLabeling.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.DataLabeling.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, datasetId: string) =>
@@ -130,12 +130,12 @@ const toAttrs = (dataset: datalabeling.GoogleCloudDatalabelingV1beta1Dataset, pr
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalabeling.getProjectsDatasets({ name }).pipe(
         Effect.provide(noRetryLayer),
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          BadGateway: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          BadGateway: () => Effect.undefined,
         }),
       );
 
@@ -214,7 +214,7 @@ export const DatasetProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetNotResolved({
-          name: name || projectParent(env.project),
+          resourceName: name || projectParent(env.project),
         });
       }
 

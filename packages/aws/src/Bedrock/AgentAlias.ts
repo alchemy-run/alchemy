@@ -71,8 +71,29 @@ export interface AgentAlias extends Resource<
      * Name of the alias.
      */
     agentAliasName: string;
-  }
+  },
+  never,
+  undefined,
+  AgentAliasLookup
 > {}
+
+/**
+ * Props for {@link AgentAlias.lookup}: find an agent alias this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type AgentAliasLookup =
+  | {
+      /** The agent the alias points to. */
+      agentId: string;
+      /** The id of the existing alias. */
+      agentAliasId: string;
+    }
+  | {
+      /** The agent the alias points to. */
+      agentId: string;
+      /** The name of the existing alias. */
+      agentAliasName: string;
+    };
 
 /**
  * An alias for an Amazon Bedrock {@link Agent} — a stable, invocable pointer
@@ -107,6 +128,17 @@ export interface AgentAlias extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing agent alias
+ * `AgentAlias.lookup` references an agent alias Alchemy doesn't manage (created in the
+ * console or by another stack), found by `agentId` with `agentAliasId` or `agentAliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing agent alias
+ * ```typescript
+ * const live = AWS.Bedrock.AgentAlias.lookup({ agentId, agentAliasName: "live" });
+ * const agentAliasArn = live.agentAliasArn;
+ * ```
+ *
  * @resource
  */
 export const AgentAlias = Resource<AgentAlias>("AWS.Bedrock.AgentAlias");
@@ -128,7 +160,7 @@ export const AgentAliasProvider = () =>
       const getAliasOrUndefined = Effect.fn(function* (agentId: string, agentAliasId: string) {
         return yield* bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
           Effect.map((r) => r.agentAlias),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -151,7 +183,7 @@ export const AgentAliasProvider = () =>
       const waitForSettled = Effect.fn(function* (agentId: string, agentAliasId: string) {
         return yield* bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
           Effect.map((r) => r.agentAlias),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
             until: (alias) => alias === undefined || !ALIAS_TRANSIENT.has(alias.agentAliasStatus),
@@ -167,6 +199,21 @@ export const AgentAliasProvider = () =>
         // agent id, so this returns empty (the engine keys off state).
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* (props) {
+          const aliasId =
+            "agentAliasId" in props
+              ? props.agentAliasId
+              : yield* findByName(props.agentId, props.agentAliasName);
+          if (aliasId === undefined) return undefined;
+          const alias = yield* getAliasOrUndefined(props.agentId, aliasId);
+          if (alias === undefined || alias.agentAliasStatus === "DELETING") return undefined;
+          return {
+            agentId: alias.agentId,
+            agentAliasId: alias.agentAliasId,
+            agentAliasArn: alias.agentAliasArn,
+            agentAliasName: alias.agentAliasName,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const agentId = output?.agentId ?? olds?.agentId;
           if (agentId === undefined) return undefined;

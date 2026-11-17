@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -82,8 +83,36 @@ export type AppsVersion = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppsVersionLookup
 >;
+
+/**
+ * Props for {@link AppsVersion.lookup}: find an apps version this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppsVersionLookup {
+  /**
+   * App version id.
+   */
+  appVersionId: string;
+  /**
+   * Region used when `app` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent CES app. Full name
+   * `projects/{project}/locations/{location}/apps/{app}` or the app id
+   * (combined with `location`).
+   */
+  app: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Customer Engagement Suite app version — an immutable snapshot of an
@@ -104,13 +133,27 @@ export type AppsVersion = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing apps version
+ * `AppsVersion.lookup` references an apps version Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apps version.
+ *
+ * **Example:** Reference an existing apps version
+ * ```typescript
+ * const appsVersion = GCP.CES.AppsVersion.lookup({
+ *   appVersionId: "my-app-version",
+ *   app: "my-app",
+ * });
+ * ```
+ *
  * @resource
  * @category CES
  */
 export const AppsVersion = Resource<AppsVersion>("GCP.CES.AppsVersion");
 
 export class AppsVersionNotResolved extends Data.TaggedError("GCP.CES.AppsVersionNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, appVersionId: string) => `${app}/versions/${appVersionId}`;
@@ -134,10 +177,10 @@ const toAttrs = (version: ces.AppVersion, project: string, region: string, appHi
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -164,6 +207,16 @@ export const AppsVersionProvider = () =>
         nextParent: news.app,
       });
     }),
+
+    lookup: Effect.fn(function* ({ appVersionId, location: lookupLocation, app: lookupApp }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const app = lookupApp ? expandApp(lookupApp, env.project, location) : undefined;
+      const name = app !== undefined ? resourceName(app, appVersionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region, app);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -214,7 +267,7 @@ export const AppsVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsVersionNotResolved({ name });
+        return yield* new AppsVersionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, app);

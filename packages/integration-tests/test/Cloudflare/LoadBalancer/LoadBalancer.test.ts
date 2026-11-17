@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -23,9 +24,9 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 const lbEnabled = !!process.env.CLOUDFLARE_LB_ENABLED;
 
 // Deterministic per-test hostnames — reused on every run.
-const NAME_ENTITLEMENT = `alchemy-lb-entitlement-probe.${zoneName}`;
-const NAME_LIFECYCLE = `alchemy-lb-lifecycle.${zoneName}`;
-const NAME_POOL = "alchemy-lb-lifecycle-pool";
+const NAME_ENTITLEMENT = `${testName("alchemy-lb-entitlement-probe")}.${zoneName}`;
+const NAME_LIFECYCLE = `${testName("alchemy-lb-lifecycle")}.${zoneName}`;
+const NAME_POOL = testName("alchemy-lb-lifecycle-pool");
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

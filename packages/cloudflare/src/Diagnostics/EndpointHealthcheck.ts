@@ -236,7 +236,7 @@ type ObservedHealthcheck = diagnostics.GetEndpointHealthcheckResponse & {
 const getHealthcheck = (accountId: string, id: string) =>
   diagnostics.getEndpointHealthcheck({ accountId, id }).pipe(
     Effect.map((hc): ObservedHealthcheck => ({ ...hc, accountId })),
-    Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.undefined),
   );
 
 /**
@@ -253,7 +253,7 @@ const observeExisting = (accountId: string, id: string) =>
       while: (e) => e._tag === "EndpointHealthcheckNotFound",
       schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
-    Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.undefined),
   );
 
 /**

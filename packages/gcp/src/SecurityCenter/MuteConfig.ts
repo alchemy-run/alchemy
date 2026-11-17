@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -82,8 +83,28 @@ export type MuteConfig = Resource<
     mostRecentEditor: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MuteConfigLookup
 >;
+
+/**
+ * Props for {@link MuteConfig.lookup}: find a mute config this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MuteConfigLookup {
+  /**
+   * Mute config id (the `{muteConfig}` segment of
+   * `projects/{project}/muteConfigs/{muteConfig}`). Lowercase letters,
+   * digits, and hyphens; must start with a letter; max 63 characters.
+   */
+  muteConfigId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Security Command Center mute config that hides matching
@@ -111,6 +132,19 @@ export type MuteConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing mute config
+ * `MuteConfig.lookup` references a mute config Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * mute config.
+ *
+ * **Example:** Reference an existing mute config
+ * ```typescript
+ * const muteConfig = GCP.SecurityCenter.MuteConfig.lookup({
+ *   muteConfigId: "my-mute-config",
+ * });
+ * ```
+ *
  * @resource
  * @category SecurityCenter
  */
@@ -119,7 +153,7 @@ export const MuteConfig = Resource<MuteConfig>("GCP.SecurityCenter.MuteConfig");
 export class MuteConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.MuteConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, muteConfigId: string) =>
@@ -144,10 +178,10 @@ const toAttrs = (config: scc.GoogleCloudSecuritycenterV1MuteConfig, project: str
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsMuteConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MuteConfigProvider = () =>
   Provider.succeed(MuteConfig, {
@@ -160,6 +194,14 @@ export const MuteConfigProvider = () =>
         replaceOn(olds?.type ?? output?.type ?? "STATIC", news.type ?? "STATIC")
       );
     }),
+
+    lookup: Effect.fn(function* ({ muteConfigId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, muteConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -218,7 +260,7 @@ export const MuteConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MuteConfigNotResolved({ name });
+        return yield* new MuteConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

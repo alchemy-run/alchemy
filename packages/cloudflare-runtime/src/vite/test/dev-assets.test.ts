@@ -40,6 +40,7 @@ test.each([
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -106,6 +107,7 @@ test("a Worker reads HTML and binary files in Vite's publicDir through ASSETS", 
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -163,6 +165,7 @@ test("a Worker reads every byte of a publicDir file through ASSETS with SPA fall
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [
@@ -217,6 +220,7 @@ test("a Worker cannot read files outside the root through ASSETS when publicDir 
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     publicDir: false,
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
@@ -268,6 +272,7 @@ test("serves HTML through Vite with the dev server's headers", async () => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0, headers: { "x-dev-header": "from-vite" } },
     plugins: [
@@ -313,6 +318,7 @@ test("restarts the dev server when an additional module changes", async () => {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
     plugins: [

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -69,8 +70,29 @@ export type Api = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApiLookup
 >;
+
+/**
+ * Props for {@link Api.lookup}: find an api this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface ApiLookup {
+  /**
+   * API proxy id (`A-Za-z0-9._-`).
+   */
+  apiId: string;
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee API proxy. The proxy is not serving traffic until a revision
@@ -94,13 +116,23 @@ export type Api = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing api
+ * `Api.lookup` references an api Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared api.
+ *
+ * **Example:** Reference an existing api
+ * ```typescript
+ * const api = GCP.Apigee.Api.lookup({ apiId: "my-api" });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Api = Resource<Api>("GCP.Apigee.Api");
 
 export class ApiNotResolved extends Data.TaggedError("GCP.Apigee.ApiNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, apiId: string) =>
@@ -135,7 +167,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApis({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const ApiProvider = () =>
   Provider.succeed(Api, {
@@ -155,6 +187,15 @@ export const ApiProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ apiId, organizationId: lookupOrganizationId }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = lookupOrganizationId ?? (yield* resolveOrgId(env.project));
+      const name = resourceName(organizationId, apiId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, organizationId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -214,7 +255,7 @@ export const ApiProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApiNotResolved({ name });
+        return yield* new ApiNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

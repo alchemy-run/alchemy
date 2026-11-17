@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -149,8 +150,31 @@ export type Address = Resource<
     users: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  AddressLookup
 >;
+
+/**
+ * Props for {@link Address.lookup}: find an address this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AddressLookup {
+  /**
+   * Name of the address.
+   */
+  addressName: string;
+  /**
+   * Region to reserve the address in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine static IP address.
@@ -187,6 +211,16 @@ export type Address = Resource<
  *     "projects/my-project/regions/us-central1/subnetworks/default",
  *   purpose: "GCE_ENDPOINT",
  * });
+ * ```
+ *
+ * ### Looking up an existing address
+ * `Address.lookup` references an address Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared address.
+ *
+ * **Example:** Reference an existing address
+ * ```typescript
+ * const address = GCP.Compute.Address.lookup({ addressName: "my-address" });
  * ```
  *
  * @resource
@@ -268,7 +302,7 @@ const toAttrs = (address: compute.Address, project: string) => ({
 const getByName = (project: string, region: string, address: string) =>
   compute
     .getAddresses({ project, region, address })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (project: string, region: string, addressName: string) =>
   getByName(project, region, addressName).pipe(
@@ -390,14 +424,24 @@ export const AddressProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ addressName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, addressName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const addressName = yield* toName(id, olds?.addressName, output?.addressName);
       const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, addressName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "addressName");
     }),
 
     list: () =>

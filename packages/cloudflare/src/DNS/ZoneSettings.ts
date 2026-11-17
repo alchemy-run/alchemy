@@ -299,7 +299,7 @@ export const ZoneDnsSettingsProvider = () =>
             // (Transient 403/429 "Authentication error" blips under
             // concurrency are retried globally by the Cloudflare retry policy,
             // so they never reach here as a real failure.)
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -323,7 +323,7 @@ export const ZoneDnsSettingsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* dns.getSettingZone({ zoneId }).pipe(
         // Zone deleted out-of-band — its settings are gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       const snapshot = toSnapshot(observed);
@@ -376,7 +376,7 @@ export const ZoneDnsSettingsProvider = () =>
       // Observe — if the zone itself is gone, so are its settings.
       const observed = yield* dns
         .getSettingZone({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       const snapshot = toSnapshot(observed);
       // Restore only the fields this resource managed, and only the

@@ -1,41 +1,86 @@
 import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import { Scope } from "effect/Scope";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
+
+export { DefinitionError } from "./DefinitionError.ts";
+
+/** The defects {@link internalError} made: already logged, sent as they are. */
+const internalErrors = new WeakSet<object>();
 
 /**
- * Capture the services `R` for later use, minus the `Scope`: a captured
- * construction-time scope must never replace the scope of a later request or
- * event (finalizers would attach to the wrong lifetime, and on workerd the
- * work would be pinned to another request's I/O context).
+ * The one defect a client receives in place of any other: a defect's text
+ * can hold stacks, file paths and nested errors (an adapter's SQL error).
  *
  * @internal
  */
-export const captureContext = <R = never>(): Effect.Effect<
-  Context.Context<Exclude<R, Scope>>,
-  never,
-  R
-> =>
-  Effect.map(
-    Effect.context<R>(),
-    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
-  );
+export const internalError = (): Error => {
+  const error = new Error("Internal server error");
+  internalErrors.add(error);
+  return error;
+};
 
 /**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built, or when a handler returns something its declaration
- * does not allow.
+ * Keep what of a cause a client may see: interrupts, and the failures
+ * `declared` keeps. Anything else (a defect, an undeclared failure) is
+ * logged here with its whole cause, and becomes {@link internalError}.
+ *
+ * @internal
  */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export const redactCause =
+  (declared: (error: unknown) => boolean, rpc: string) =>
+  <E>(cause: Cause.Cause<E>): Effect.Effect<never, E> =>
+    cause.reasons.every(
+      (reason) =>
+        Cause.isInterruptReason(reason) ||
+        (Cause.isFailReason(reason) && declared(reason.error)) ||
+        (Cause.isDieReason(reason) &&
+          typeof reason.defect === "object" &&
+          reason.defect !== null &&
+          internalErrors.has(reason.defect)),
+    )
+      ? Effect.failCause(cause)
+      : Effect.logError("Domain: a request failed with an undeclared error", cause).pipe(
+          Effect.annotateLogs({ "domain.rpc": rpc }),
+          Effect.andThen(Effect.die(internalError())),
+        );
+
+/**
+ * The schema of a command's or a query's `input`. With no fields it is an
+ * empty record, not `Schema.Struct({})`: an empty Struct accepts any value
+ * but `null`, and its JSON Schema has no `type`, so an agent calling the tool
+ * may send the string `"{}"`. The empty record is a JSON object with no
+ * properties. The declared type stays `Schema.Struct<F>`.
+ *
+ * @internal
+ */
+export const inputSchema = <F extends Schema.Struct.Fields>(fields: F | undefined) =>
+  (fields === undefined || Object.keys(fields).length === 0
+    ? Schema.Record(Schema.String, Schema.Never)
+    : Schema.Struct(fields)) as unknown as Schema.Struct<F>;
+
+const tags = new WeakMap<object, string>();
+
+/**
+ * The `_tag` a rejection class declares: the literal its schema gives
+ * `_tag`, so any tagged error class can be a rejection.
+ *
+ * @internal
+ */
+export const rejectionTag = (rejection: Schema.Top): string => {
+  const cached = tags.get(rejection);
+  if (cached !== undefined) return cached;
+  const encoded = SchemaAST.toEncoded(rejection.ast);
+  const tag = SchemaAST.isObjects(encoded)
+    ? encoded.propertySignatures.find((property) => property.name === "_tag")?.type
+    : undefined;
+  const value = tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : "";
+  tags.set(rejection, value);
+  return value;
+};
 
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =
@@ -75,18 +120,23 @@ export const judge = (
   command: {
     readonly tag: string;
     readonly events: ReadonlyArray<{ readonly tag: string }>;
-    readonly rejects: ReadonlyArray<{ readonly tag: string }>;
+    readonly rejects: ReadonlyArray<Schema.Top>;
   },
   decision: unknown,
 ): Judged => {
   if (!Array.isArray(decision)) {
     const rejection = decision as { readonly _tag: string };
-    if (!command.rejects.some((r) => r.tag === rejection?._tag)) {
+    if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${rejection?._tag}', which ${command.tag} does not declare in rejects`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: String(rejection?._tag),
+            list: "rejects",
+          }),
+        }),
       };
     }
     return { _tag: "Rejected", rejection };
@@ -95,9 +145,14 @@ export const judge = (
     if (!command.events.some((e) => e.tag === event._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${event._tag}', which ${command.tag} does not declare in events`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: event._tag,
+            list: "events",
+          }),
+        }),
       };
     }
   }
@@ -190,4 +245,19 @@ export const evolveView = (
       }) ?? null;
   }
   return current;
+};
+
+/**
+ * Call a command's client with a decoded wire payload.
+ *
+ * @internal
+ */
+export const sendPayload = (
+  send: unknown,
+  payload: unknown,
+  options: object,
+): Effect.Effect<unknown, unknown> => {
+  const { input, commandId } = payload as { readonly input: unknown; readonly commandId?: string };
+  const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
+  return call(input, { ...options, ...(commandId === undefined ? {} : { commandId }) });
 };

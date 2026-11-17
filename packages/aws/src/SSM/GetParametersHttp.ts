@@ -48,9 +48,9 @@ export const GetParametersHttp = Layer.effect(
           ],
         });
       }
-      return Effect.fn(`AWS.SSM.GetParameters(${parameters})`)(function* (
-        request: GetParametersRequest = {},
-      ) {
+      return Effect.fn(
+        `AWS.SSM.GetParameters(${parameters.map((parameter) => parameter.LogicalId).join(", ")})`,
+      )(function* (request: GetParametersRequest = {}) {
         const names = yield* Effect.forEach(NameAccessors, (accessor) => accessor);
         return yield* getParameters({
           ...request,

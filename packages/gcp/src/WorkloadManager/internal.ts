@@ -14,22 +14,22 @@ export const ACTUATION_ID_PREFIX = "alch-";
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.WorkloadManager.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.WorkloadManager.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.WorkloadManager.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceFailed extends Data.TaggedError("GCP.WorkloadManager.ResourceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   details: string | undefined;
 }> {}
@@ -260,7 +260,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.WorkloadManager.ResourceNotResolved",
@@ -276,7 +276,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.WorkloadManager.ResourceStillExists",
@@ -303,13 +303,13 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !isFailedState(stateOf(value)),
       (value) =>
         new ResourceFailed({
-          name,
+          resourceName: name,
           state: stateOf(value) ?? "",
           details: detailsOf?.(value),
         }),
@@ -319,7 +319,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
         const state = stateOf(value) ?? "";
         return isReadyState(state) || state.length === 0;
       },
-      (value) => new ResourceNotReady({ name, state: stateOf(value) ?? "" }),
+      (value) => new ResourceNotReady({ resourceName: name, state: stateOf(value) ?? "" }),
     ),
     Effect.retry({
       while: (error) =>

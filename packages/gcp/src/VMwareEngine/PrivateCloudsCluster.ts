@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -163,8 +164,38 @@ export type PrivateCloudsCluster = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateCloudsClusterLookup
 >;
+
+/**
+ * Props for {@link PrivateCloudsCluster.lookup}: find a private clouds
+ * cluster this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface PrivateCloudsClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `.../privateClouds/{privateCloud}/clusters/{cluster}`).
+   */
+  clusterId: string;
+  /**
+   * Location of the parent private cloud. Inferred from `privateCloud` when
+   * that value is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent PrivateCloud resource name
+   * (`projects/{project}/locations/{location}/privateClouds/{privateCloud}`)
+   * or the cloud id.
+   */
+  privateCloud: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A workload cluster in a VMware Engine private cloud. The management
@@ -185,6 +216,20 @@ export type PrivateCloudsCluster = Resource<
  *   nodeTypeConfigs: {
  *     "standard-72": { nodeCount: 3 },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing private clouds cluster
+ * `PrivateCloudsCluster.lookup` references a private clouds cluster Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared private clouds cluster.
+ *
+ * **Example:** Reference an existing private clouds cluster
+ * ```typescript
+ * const privateCloudsCluster = GCP.VMwareEngine.PrivateCloudsCluster.lookup({
+ *   clusterId: "my-cluster",
+ *   privateCloud: "my-private-cloud",
  * });
  * ```
  *
@@ -313,12 +358,12 @@ const toAttrs = (item: vmwareengine.Cluster, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateCloudsClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getParentCloud = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateClouds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const defaultNodeTypeConfigs = (value: Record<string, NodeTypeConfig | undefined> | undefined) =>
   value ?? {
@@ -350,6 +395,20 @@ export const PrivateCloudsClusterProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ clusterId, location: lookupLocation, privateCloud }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? (privateCloud ? locationFromName(privateCloud, DEFAULT_ZONE) : undefined),
+        DEFAULT_ZONE,
+      );
+      const parent = parentCloudName(env.project, location, privateCloud ?? "");
+      const name = resourceNameOf(parent, clusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -436,7 +495,7 @@ export const PrivateCloudsClusterProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -445,7 +504,7 @@ export const PrivateCloudsClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -495,7 +554,7 @@ export const PrivateCloudsClusterProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

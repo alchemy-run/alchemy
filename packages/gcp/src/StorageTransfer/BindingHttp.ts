@@ -39,7 +39,7 @@ export const makeTransferJobHttpBinding = <I extends { jobName?: string }, A, E>
         const jobName = yield* name;
         const projectId = yield* project;
         const input = {
-          ...(request ?? {}),
+          ...request,
           jobName,
         } as I;
         if (options.projectInBody) {
@@ -47,7 +47,7 @@ export const makeTransferJobHttpBinding = <I extends { jobName?: string }, A, E>
             body?: { projectId?: string };
           };
           withBody.body = {
-            ...(withBody.body ?? {}),
+            ...withBody.body,
             projectId: withBody.body?.projectId ?? projectId,
           };
         }

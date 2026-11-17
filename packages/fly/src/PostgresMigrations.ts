@@ -1,52 +1,18 @@
 import {
-  makePgMigrationExecutor,
+  MigrationError,
   runMigrations,
+  withPgExecutor,
   type NormalizedMigrationsInput,
+  type SqlExecutor,
   type StampedMigrationsState,
 } from "@alchemy.run/sql/Migrations";
-import { importPg } from "@alchemy.run/sql/PostgresDriver";
-import { readSqlFile } from "@alchemy.run/sql/SqlFile";
-import * as Data from "effect/Data";
+import { stripSslQueryParams } from "@alchemy.run/sql/PostgresDriver";
+import { applySqlImports } from "@alchemy.run/sql/SqlFile";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import type { Client } from "pg";
 
-export class PostgresMigrationError extends Data.TaggedError("Fly.PostgresMigrationError")<{
-  message: string;
-  cause?: unknown;
-}> {}
+export { stripSslQueryParams };
 
-/**
- * Strip query-string SSL flags so `pg-connection-string` does not treat
- * `sslmode=require` as `verify-full`. TLS and certificate verification
- * are set on the client (`ssl.rejectUnauthorized: true`).
- */
-export const stripSslQueryParams = (uri: string): string => {
-  try {
-    const url = new URL(uri);
-    url.searchParams.delete("sslmode");
-    url.searchParams.delete("channel_binding");
-    return url.toString();
-  } catch {
-    return uri;
-  }
-};
-
-const toMigrationError = (cause: unknown) =>
-  new PostgresMigrationError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    cause,
-  });
-
-/**
- * A freshly-provisioned Fly Managed Postgres cluster reports `ready` on the
- * API before its hostname is resolvable and its endpoint accepts
- * connections — reconcile's first migration connect can fail with
- * `ENOTFOUND` (DNS still propagating) or a refused/reset socket. These are
- * eventual consistency, not failures: retry the connect on a bounded
- * schedule (~45s) before surfacing the error.
- */
 const TRANSIENT_CONNECT_CODES = new Set([
   "ENOTFOUND",
   "EAI_AGAIN",
@@ -55,40 +21,32 @@ const TRANSIENT_CONNECT_CODES = new Set([
   "ETIMEDOUT",
 ]);
 
-const isTransientConnectError = (error: PostgresMigrationError): boolean => {
-  const code = (error.cause as { code?: unknown } | null | undefined)?.code;
+const isTransientConnectError = (cause: unknown): boolean => {
+  const code = (cause as { code?: unknown } | null | undefined)?.code;
   return typeof code === "string" && TRANSIENT_CONNECT_CODES.has(code);
 };
 
-/** Open a pg client for the scope of `use`, closing it afterwards. */
-export const withPgClient = <A, E, R>(
+/**
+ * A verified-TLS `pg` session on a Fly Managed Postgres URI for the scope
+ * of `use`. A fresh cluster's hostname takes a moment to resolve, so
+ * connection failures are retried; one that persists is almost always a
+ * missing route — MPG hostnames only exist on the org's private network.
+ */
+const withFlyPgExecutor = <A, E, R>(
   connectionUri: Redacted.Redacted<string>,
-  use: (client: Client) => Effect.Effect<A, E, R>,
-): Effect.Effect<A, PostgresMigrationError | E, R> =>
-  Effect.acquireUseRelease(
-    Effect.tryPromise({
-      try: async () => {
-        const { Client } = await importPg();
-        const client = new Client({
-          connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
-          ssl: { rejectUnauthorized: true },
-        });
-        await client.connect();
-        return client;
-      },
-      catch: toMigrationError,
-    }).pipe(
-      Effect.retry({
-        while: isTransientConnectError,
-        schedule: Schedule.spaced("3 seconds"),
-        times: 15,
-      }),
-      // Still unreachable after the bounded retry: almost always a missing
-      // route rather than propagation — MPG hostnames only exist on the org
-      // private network. Say so instead of a bare `getaddrinfo ENOTFOUND`.
-      Effect.mapError((error) =>
-        isTransientConnectError(error)
-          ? new PostgresMigrationError({
+  use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, MigrationError | E, R> =>
+  withPgExecutor(
+    {
+      connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
+      ssl: { rejectUnauthorized: true },
+    },
+    use,
+    {
+      retryConnect: { while: isTransientConnectError, times: 15, interval: "3 seconds" },
+      onConnectFailure: (error) =>
+        isTransientConnectError(error.cause)
+          ? new MigrationError({
               message:
                 `${error.message} — Fly Managed Postgres is only reachable ` +
                 "on the org's private network. Run the deploy behind a " +
@@ -97,10 +55,7 @@ export const withPgClient = <A, E, R>(
               cause: error.cause,
             })
           : error,
-      ),
-    ),
-    use,
-    (client) => Effect.promise(() => client.end().catch(() => {})),
+    },
   );
 
 /**
@@ -114,40 +69,25 @@ export const runPgMigrations = (options: {
   stamped: StampedMigrationsState;
 }) =>
   runMigrations({
-    ...options,
-    withExecutor: (apply) =>
-      withPgClient(options.connectionUri, (client) => apply(makePgMigrationExecutor(client))),
+    input: options.input,
+    stamped: options.stamped,
+    withExecutor: (apply) => withFlyPgExecutor(options.connectionUri, apply),
   });
 
 /** Run a single SQL script against the database (used for `importFiles`). */
 export const runSql = (connectionUri: Redacted.Redacted<string>, sql: string) =>
-  withPgClient(connectionUri, (client) =>
-    Effect.tryPromise({
-      try: () => client.query(sql),
-      catch: toMigrationError,
-    }),
-  ).pipe(Effect.asVoid);
+  withFlyPgExecutor(connectionUri, (executor) => executor.query(sql)).pipe(Effect.asVoid);
 
+/** Apply `importFiles`, each once and again only when it changes. */
 export const runImports = (
   connectionUri: Redacted.Redacted<string>,
   importFiles: ReadonlyArray<string>,
   rootDir: string,
   previous: Record<string, string>,
 ) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runSql(connectionUri, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
+  applySqlImports({
+    importFiles,
+    rootDir,
+    previous,
+    apply: (file) => runSql(connectionUri, file.sql),
   });

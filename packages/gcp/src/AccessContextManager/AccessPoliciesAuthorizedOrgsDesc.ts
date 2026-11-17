@@ -81,8 +81,26 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
     orgs: string[];
   },
   never,
-  Providers
+  Providers,
+  AccessPoliciesAuthorizedOrgsDescLookup
 >;
+
+/**
+ * Props for {@link AccessPoliciesAuthorizedOrgsDesc.lookup}: find an access
+ * policies authorized orgs desc this stack doesn't manage by its
+ * identifiers.
+ */
+export interface AccessPoliciesAuthorizedOrgsDescLookup {
+  /**
+   * Authorized-orgs descriptor id (the `{authorized_orgs_desc}` segment).
+   * Must begin with a letter, then alphanumeric or `_`.
+   */
+  authorizedOrgsDescId: string;
+  /**
+   * Parent access policy (`accessPolicies/{policy}` or the policy id).
+   */
+  policy: string;
+}
 
 /**
  * An Access Context Manager authorized-orgs descriptor.
@@ -131,6 +149,20 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing access policies authorized orgs desc
+ * `AccessPoliciesAuthorizedOrgsDesc.lookup` references an access policies
+ * authorized orgs desc Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared access policies authorized orgs desc.
+ *
+ * **Example:** Reference an existing access policies authorized orgs desc
+ * ```typescript
+ * const accessPoliciesAuthorizedOrgsDesc = GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDesc.lookup({
+ *   authorizedOrgsDescId: "my-authorized-orgs-desc",
+ *   policy: "my-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category AccessContextManager
  */
@@ -141,7 +173,7 @@ export const AccessPoliciesAuthorizedOrgsDesc = Resource<AccessPoliciesAuthorize
 export class AccessPoliciesAuthorizedOrgsDescNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDescNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (desc: acm.AuthorizedOrgsDesc): AccessPoliciesAuthorizedOrgsDesc["Attributes"] => {
@@ -161,7 +193,7 @@ const toAttrs = (desc: acm.AuthorizedOrgsDesc): AccessPoliciesAuthorizedOrgsDesc
 const getByName = (name: string) =>
   acm
     .getAccessPoliciesAuthorizedOrgsDescs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDescs = (policy: string) =>
   collectPages(
@@ -206,6 +238,14 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
       return replaceOnIdentity(
         idChanged || policyChanged || directionChanged || assetChanged || typeChanged,
       );
+    }),
+
+    lookup: Effect.fn(function* ({ authorizedOrgsDescId, policy }) {
+      if (policy === undefined) return undefined;
+      const name = resourceNameOf(policy, "authorizedOrgsDescs", authorizedOrgsDescId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -261,7 +301,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
               orgs: desiredOrgs.length > 0 ? desiredOrgs : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -275,7 +315,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPoliciesAuthorizedOrgsDescNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -294,7 +334,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPoliciesAuthorizedOrgsDescNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -304,7 +344,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteAccessPoliciesAuthorizedOrgsDescs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

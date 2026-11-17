@@ -131,7 +131,7 @@ export const EnterprisesWebApp = Resource<EnterprisesWebApp>(
 export class EnterprisesWebAppNotResolved extends Data.TaggedError(
   "GCP.AndroidManagement.EnterprisesWebAppNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (app: androidmanagement.WebApp, project: string) => {
@@ -206,7 +206,7 @@ export const EnterprisesWebAppProvider = () =>
 
       if (current === undefined) {
         return yield* new EnterprisesWebAppNotResolved({
-          name: toWebAppName(parent, output?.name) || news.startUrl,
+          resourceName: toWebAppName(parent, output?.name) || news.startUrl,
         });
       }
 

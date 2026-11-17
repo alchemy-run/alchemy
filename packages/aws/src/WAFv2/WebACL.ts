@@ -6,7 +6,9 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fetchWafTags,
@@ -18,6 +20,11 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class WebACLUnexpectedResponse extends Data.TaggedError("WebACLUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface WebACLProps {
   /**
@@ -104,10 +111,44 @@ export interface WebACL extends Resource<
      * Scope the web ACL was created in.
      */
     scope: WafScope;
+    /**
+     * The rules, default action, visibility settings, the optional aspects
+     * the props declare (custom responses, CAPTCHA/challenge, association
+     * config) and the tags, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    configuration?: {
+      defaultAction?: unknown;
+      description?: string;
+      rules: unknown[];
+      visibilityConfig?: unknown;
+      tokenDomains?: string[];
+      customResponseBodies?: unknown;
+      captchaConfig?: unknown;
+      challengeConfig?: unknown;
+      associationConfig?: unknown;
+      tags: Record<string, string>;
+    };
   },
   never,
-  Providers
+  Providers,
+  WebACLLookup
 > {}
+
+/**
+ * Props for {@link WebACL.lookup}: find a web ACL this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface WebACLLookup {
+  /** The name of the existing web ACL. */
+  webAclName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 Web ACL — a collection of rules that inspect and control web
@@ -189,6 +230,17 @@ export interface WebACL extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing web ACL
+ * `WebACL.lookup` references a web ACL Alchemy doesn't manage (created in the
+ * console or by another stack), found by `webAclName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing web ACL
+ * ```typescript
+ * const firewall = AWS.WAFv2.WebACL.lookup({ webAclName: "edge", scope: "CLOUDFRONT" });
+ * const webAclArn = firewall.webAclArn;
+ * ```
+ *
  * @resource
  */
 export const WebACL = Resource<WebACL>("AWS.WAFv2.WebACL");
@@ -207,6 +259,30 @@ const toAttrs = (acl: WAFV2.WebACL, scope: WafScope) => ({
   webAclArn: acl.ARN,
   scope,
 });
+
+/**
+ * The configuration `read` and `reconcile` both report, so a converged web
+ * ACL reads unchanged. Aspects WAF fills with defaults are observed only
+ * when the props declare them, matching what reconcile converges.
+ */
+const observeWebACLConfiguration = (
+  acl: WAFV2.WebACL,
+  props: WebACLProps | undefined,
+  tags: Record<string, string>,
+) =>
+  plainJson({
+    defaultAction: acl.DefaultAction,
+    description: acl.Description || undefined,
+    rules: acl.Rules ?? [],
+    visibilityConfig: acl.VisibilityConfig,
+    tokenDomains: acl.TokenDomains?.length ? acl.TokenDomains : undefined,
+    customResponseBodies:
+      props?.customResponseBodies === undefined ? undefined : acl.CustomResponseBodies,
+    captchaConfig: props?.captchaConfig === undefined ? undefined : acl.CaptchaConfig,
+    challengeConfig: props?.challengeConfig === undefined ? undefined : acl.ChallengeConfig,
+    associationConfig: props?.associationConfig === undefined ? undefined : acl.AssociationConfig,
+    tags,
+  });
 
 export const WebACLProvider = () =>
   Provider.effect(
@@ -228,9 +304,7 @@ export const WebACLProvider = () =>
             scope,
             wafv2
               .getWebACL({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.WebACL) {
             return byId;
@@ -248,9 +322,7 @@ export const WebACLProvider = () =>
               scope,
               wafv2
                 .getWebACL({ Name: name, Scope: scope, Id: summary.Id })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.WebACLs?.length ?? 0) === 0) {
@@ -323,6 +395,20 @@ export const WebACLProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ webAclName, scope = defaultScope }) {
+          const found = yield* findWebACL(scope, webAclName, undefined);
+          return found?.WebACL
+            ? {
+                ...toAttrs(found.WebACL, scope),
+                configuration: observeWebACLConfiguration(
+                  found.WebACL,
+                  undefined,
+                  yield* fetchWafTags(scope, found.WebACL.ARN),
+                ),
+              }
+            : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const scope = output?.scope ?? olds?.scope ?? defaultScope;
           const name = output?.webAclName ?? (yield* createName(id, olds ?? {}));
@@ -330,8 +416,11 @@ export const WebACLProvider = () =>
           if (!found?.WebACL) {
             return undefined;
           }
-          const attrs = toAttrs(found.WebACL, scope);
           const tags = yield* fetchWafTags(scope, found.WebACL.ARN);
+          const attrs = {
+            ...toAttrs(found.WebACL, scope),
+            configuration: observeWebACLConfiguration(found.WebACL, olds, tags),
+          };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -358,16 +447,16 @@ export const WebACLProvider = () =>
                     ...desired,
                     Tags: createTagsList(desiredTags),
                   })
-                  .pipe(
-                    Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
               ),
             );
             observed = yield* findWebACL(scope, name, undefined);
           }
 
           if (!observed?.WebACL) {
-            return yield* Effect.fail(new Error(`Failed to observe WebACL '${name}' after create`));
+            return yield* new WebACLUnexpectedResponse({
+              message: `Failed to observe WebACL '${name}' after create`,
+            });
           }
 
           const acl = observed.WebACL;
@@ -437,7 +526,11 @@ export const WebACLProvider = () =>
           yield* syncWafTags(scope, acl.ARN, desiredTags);
 
           // 4. Return fresh attributes.
-          return toAttrs(acl, scope);
+          const final = yield* findWebACL(scope, name, acl.Id);
+          return {
+            ...toAttrs(acl, scope),
+            configuration: observeWebACLConfiguration(final?.WebACL ?? acl, news, desiredTags),
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {
@@ -454,9 +547,7 @@ export const WebACLProvider = () =>
                   Scope: scope,
                   Id: output.webAclId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.WebACL || found.LockToken === undefined) {
               return;

@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -75,8 +76,33 @@ export type LogScope = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LogScopeLookup
 >;
+
+/**
+ * Props for {@link LogScope.lookup}: find a log scope this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LogScopeLookup {
+  /**
+   * Log scope id (the `{logScope}` segment of
+   * `projects/{project}/locations/{location}/logScopes/{logScope}`).
+   * Limited to 100 characters: letters, digits, underscores, hyphens,
+   * periods; first character must be alphanumeric.
+   */
+  logScopeId: string;
+  /**
+   * Location. Log scopes are only available in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log scope — a named collection of projects and log
@@ -113,13 +139,23 @@ export type LogScope = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing log scope
+ * `LogScope.lookup` references a log scope Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared log scope.
+ *
+ * **Example:** Reference an existing log scope
+ * ```typescript
+ * const logScope = GCP.Logging.LogScope.lookup({ logScopeId: "my-log-scope" });
+ * ```
+ *
  * @resource
  * @category Logging
  */
 export const LogScope = Resource<LogScope>("GCP.Logging.LogScope");
 
 export class LogScopeNotResolved extends Data.TaggedError("GCP.Logging.LogScopeNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseScopeName = (name: string) => {
@@ -174,7 +210,7 @@ const toAttrs = (scope: logging.LogScope, project: string, location: string) => 
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LogScopeProvider = () =>
   Provider.succeed(LogScope, {
@@ -193,6 +229,15 @@ export const LogScopeProvider = () =>
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ logScopeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(env.project, location, logScopeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -249,7 +294,7 @@ export const LogScopeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LogScopeNotResolved({ name });
+        return yield* new LogScopeNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

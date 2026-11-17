@@ -160,7 +160,7 @@ export class DnsAdapterNotRegistered extends Data.TaggedError("DnsAdapterNotRegi
  */
 export interface DnsZone {
   /** Zone id or name (Route 53: hosted zone id). Inferred per hostname when omitted. */
-  zone?: string;
+  zone?: Input<string> | undefined;
   /** Host-specific options from the adapter constructor, e.g. `{ proxied: true }`. */
   options?: { readonly [key: string]: unknown };
 }
@@ -187,10 +187,11 @@ export interface DnsAdapter<R = never> {
    * A (possibly empty) set of hostnames pointed at a hostname target that
    * other composites extend by binding `{ names }` onto it (used by
    * `AWS.Website.Router`, whose attached sites add their hostnames).
+   * `ipv6` publishes IPv6 for every name in the set, as on {@link alias}.
    */
   aliasSet(
     id: string,
-    args: DnsZone & { names?: string[]; target: DnsHostnameTarget },
+    args: DnsZone & { names?: string[]; target: DnsHostnameTarget; ipv6?: boolean },
   ): Effect.Effect<DnsAliasSet, never, R>;
   /**
    * Publish explicit records whose values come from another resource
@@ -223,7 +224,7 @@ export const adapterLayer = <R>(
  */
 export const bind = <R>(adapter: DnsAdapter<R>, config: DnsConfig): DnsAdapter<R> => {
   const zone: DnsZone = {
-    ...(config.zone === undefined ? {} : { zone: config.zone as string }),
+    ...(config.zone === undefined ? {} : { zone: config.zone }),
     ...(config.options === undefined ? {} : { options: config.options }),
   };
   return {

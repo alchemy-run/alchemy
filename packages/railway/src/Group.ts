@@ -564,7 +564,7 @@ const getEnvironment = (environmentId: string, projectId: string) =>
     const environment = yield* readEnvironment(environmentId, projectId);
     const volumes = yield* environmentVolumes(environmentId, projectId, volumeSelection);
     return { ...environment, volumeInstances: volumes } satisfies EnvironmentResponse;
-  }).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchTag("RailwayNotFound", () => Effect.undefined));
 
 const _getEnvironmentConfig = (environmentId: string, projectId: string) =>
   getEnvironment(environmentId, projectId).pipe(
@@ -612,8 +612,9 @@ const commitPatch = (input: {
 
 const previewCanvas = (environmentId: string) =>
   canvasViewMergePreview(environmentId, environmentId).pipe(
-    Effect.catchTag(["RailwayNotFound", "RailwayValidationError", "RailwayInternalError"], () =>
-      Effect.succeed(undefined),
+    Effect.catchTag(
+      ["RailwayNotFound", "RailwayValidationError", "RailwayInternalError"],
+      () => Effect.undefined,
     ),
   );
 

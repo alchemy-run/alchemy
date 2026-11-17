@@ -63,7 +63,7 @@ export const connectEnvKeys = (mysql: Pick<MySQL, "LogicalId">) => {
 };
 
 export class MySQLUrlMissing extends Data.TaggedError("Railway.MySQLUrlMissing")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export interface ConnectMySQLClient {

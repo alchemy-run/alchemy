@@ -19,7 +19,7 @@ export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 
 export class CesPending extends Data.TaggedError("GCP.CES.Pending")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -302,7 +302,7 @@ export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>)
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new CesPending({ name: "" }),
+      () => new CesPending({ resourceName: "" }),
     ),
     Effect.retry({
       // New apps can take a couple of minutes to become readable.
@@ -312,7 +312,7 @@ export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>)
     }),
     Effect.catchIf(
       (error): error is CesPending => error instanceof CesPending,
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 

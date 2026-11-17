@@ -58,7 +58,6 @@ test.provider.skipIf(!entitled)(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
-            name: "alchemy-test-dlp-entry-list-profile",
             allowedMatchCount: 0,
             entries: [
               {
@@ -69,7 +68,6 @@ test.provider.skipIf(!entitled)(
             ],
           });
           const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
-            name: "alchemy-test-dlp-entry-list",
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,
           });

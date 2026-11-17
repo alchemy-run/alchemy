@@ -22,6 +22,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -62,6 +64,18 @@ export type LoadBalancerProtocol = "tcp" | "http" | "https";
 export type HealthCheckProtocol = "tcp" | "http";
 
 export type TargetHealthStatus = "healthy" | "unhealthy" | "unknown";
+
+/**
+ * Deletion was refused because the load balancer has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class LoadBalancerDeleteProtected extends Data.TaggedError(
+  "Hetzner.LoadBalancerDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface LoadBalancerHealthCheckHttp {
   /**
@@ -271,8 +285,8 @@ export interface LoadBalancerProps {
   publicInterface?: boolean;
   /**
    * Prevent the Load Balancer from being deleted in the Cloud Console /
-   * API until this is cleared. The provider disables protection before
-   * delete.
+   * API. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -371,8 +385,18 @@ export type LoadBalancer = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  LoadBalancerLookup
 >;
+
+/**
+ * Props for {@link LoadBalancer.lookup}: find a load balancer this stack
+ * doesn't manage by its name.
+ */
+export interface LoadBalancerLookup {
+  /** Load balancer name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Load Balancer. Create it in a Location (`nbg1` by
@@ -449,6 +473,16 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing load balancer
+ * `LoadBalancer.lookup` references a load balancer Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing load balancer
+ * ```typescript
+ * const lb = Hetzner.LoadBalancer.lookup({ name: "ingress" });
+ * ```
+ *
  * @resource
  * @product Load Balancer
  */
@@ -459,7 +493,7 @@ type CloudLoadBalancer =
   | ListLoadBalancersResponseLoadBalancersItem;
 
 export class LoadBalancerNotCreated extends Data.TaggedError("Hetzner.LoadBalancerNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const asAlgorithm = (value: string): LoadBalancerAlgorithm =>
@@ -1002,7 +1036,7 @@ const createLoadBalancerName = (id: string, name: string | undefined, existing?:
 const getById = (id: number) =>
   Hetzner.loadBalancers.getLoadBalancer({ id }).pipe(
     Effect.map(({ load_balancer }) => load_balancer),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -1277,7 +1311,18 @@ const syncTargets = (
           schedule: backoff,
         }),
         Effect.flatMap(({ action }) => waitForAction(action)),
-        Effect.catchIf(alreadyThere, () => Effect.void),
+        // A rejected add is only fine when the target is in fact there.
+        Effect.catchIf(alreadyThere, (error) =>
+          getById(loadBalancerId).pipe(
+            Effect.flatMap((current) =>
+              observedTargets(current?.targets).some(
+                (existing) => targetKey(existing) === targetKey(target),
+              )
+                ? Effect.void
+                : Effect.fail(error),
+            ),
+          ),
+        ),
       );
     }
   });
@@ -1330,22 +1375,37 @@ export const LoadBalancerProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.location !== undefined && news.location !== output.location) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.networkZone !== undefined && news.networkZone !== output.networkZone) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({
         id,
         name: olds?.name ?? output?.name,
         outputId: output?.id,
       });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
@@ -1395,7 +1455,7 @@ export const LoadBalancerProvider = () =>
           })
           .pipe(
             Effect.retry(busyRetry),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           if (created.action) {
@@ -1411,7 +1471,7 @@ export const LoadBalancerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LoadBalancerNotCreated({ name });
+        return yield* new LoadBalancerNotCreated({ resourceName: name });
       }
 
       current = yield* syncMetadata({
@@ -1435,11 +1495,19 @@ export const LoadBalancerProvider = () =>
       return toAttrs(yield* refresh(current.id));
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new LoadBalancerDeleteProtected({
+            id: current.id,
+            message: `Hetzner load balancer '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* runAction(
           Hetzner.loadBalancerActions.changeLoadBalancerProtection({
             id: current.id,

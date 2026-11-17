@@ -43,8 +43,18 @@ export interface Detector extends Resource<
     eventTypeName: string;
   },
   never,
-  Providers
+  Providers,
+  DetectorLookup
 > {}
+
+/**
+ * Props for {@link Detector.lookup}: find a detector this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DetectorLookup {
+  /** The detector id of the existing detector. */
+  detectorId: string;
+}
 
 /**
  * An Amazon Fraud Detector detector — the container that binds an event type
@@ -99,6 +109,16 @@ export interface Detector extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing detector
+ * `Detector.lookup` references a detector Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing detector
+ * ```typescript
+ * const existing = AWS.FraudDetector.Detector.lookup({ detectorId: "my-detector" });
+ * ```
+ *
  * @resource
  */
 export const Detector = Resource<Detector>("AWS.FraudDetector.Detector");
@@ -116,7 +136,7 @@ export const DetectorProvider = () =>
       const get = Effect.fn(function* (detectorId: string) {
         const response = yield* frauddetector
           .getDetectors({ detectorId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.detectors?.[0];
       });
 
@@ -139,6 +159,13 @@ export const DetectorProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ detectorId }) {
+          const detector = yield* get(detectorId);
+          if (detector === undefined) return undefined;
+          const attrs = toAttrs(detector);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

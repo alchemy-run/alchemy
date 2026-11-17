@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -165,8 +166,30 @@ export type ExadbVmCluster = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ExadbVmClusterLookup
 >;
+
+/**
+ * Props for {@link ExadbVmCluster.lookup}: find an exadb vm cluster this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ExadbVmClusterLookup {
+  /**
+   * Exadb VM Cluster id.
+   */
+  exadbVmClusterId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Exascale VM Cluster on Google Cloud.
@@ -196,13 +219,26 @@ export type ExadbVmCluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing exadb vm cluster
+ * `ExadbVmCluster.lookup` references an exadb vm cluster Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * exadb vm cluster.
+ *
+ * **Example:** Reference an existing exadb vm cluster
+ * ```typescript
+ * const exadbVmCluster = GCP.OracleDatabase.ExadbVmCluster.lookup({
+ *   exadbVmClusterId: "my-exadb-vm-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category OracleDatabase
  */
 export const ExadbVmCluster = Resource<ExadbVmCluster>("GCP.OracleDatabase.ExadbVmCluster");
 
 const mergedProperties = (news: ExadbVmClusterProps): ExadbVmClusterPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   nodeCount: news.nodeCount ?? news.properties?.nodeCount,
   gridImageId: news.gridImageId ?? news.properties?.gridImageId,
   hostnamePrefix: news.hostnamePrefix ?? news.properties?.hostnamePrefix,
@@ -289,7 +325,7 @@ const toAttrs = (cluster: oracle.ExadbVmCluster, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsExadbVmClusters({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listClusters = (project: string, region: string) => {
@@ -332,6 +368,15 @@ export const ExadbVmClusterProvider = () =>
           nextOdb !== previousOdb || nextBackup !== previousBackup || nextVault !== previousVault,
       });
     }),
+
+    lookup: Effect.fn(function* ({ exadbVmClusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, exadbVmClusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -383,7 +428,7 @@ export const ExadbVmClusterProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -392,7 +437,7 @@ export const ExadbVmClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -444,7 +489,7 @@ export const ExadbVmClusterProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

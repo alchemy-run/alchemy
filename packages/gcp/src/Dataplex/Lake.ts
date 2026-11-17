@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -95,8 +96,33 @@ export type Lake = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakeLookup
 >;
+
+/**
+ * Props for {@link Lake.lookup}: find a lake this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface LakeLookup {
+  /**
+   * Lake id (the `{lake}` segment of
+   * `projects/{project}/locations/{location}/lakes/{lake}`). Must contain
+   * only lowercase letters, numbers, and hyphens; start with a letter; end
+   * with a letter or number; and be 1-63 characters.
+   */
+  lakeId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex lake — a regional container for zones, assets, and tasks.
@@ -123,17 +149,27 @@ export type Lake = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing lake
+ * `Lake.lookup` references a lake Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared lake.
+ *
+ * **Example:** Reference an existing lake
+ * ```typescript
+ * const lake = GCP.Dataplex.Lake.lookup({ lakeId: "my-lake" });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
 export const Lake = Resource<Lake>("GCP.Dataplex.Lake");
 
 export class LakeNotResolved extends Data.TaggedError("GCP.Dataplex.LakeNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LakeStillExists extends Data.TaggedError("GCP.Dataplex.LakeStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, lakeId: string) =>
@@ -162,17 +198,17 @@ const toAttrs = (lake: dataplex.GoogleCloudDataplexV1Lake, project: string) => {
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsLakes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Lakes provision a metastore-backed control plane for 2-5 minutes.
 const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const lake = yield* getByName(name);
     if (lake === undefined) {
-      return yield* new LakeNotResolved({ name });
+      return yield* new LakeNotResolved({ resourceName: name });
     }
     if (isPendingState(lake.state)) {
-      return yield* new DataplexNotResolved({ name });
+      return yield* new DataplexNotResolved({ resourceName: name });
     }
     return lake;
   }).pipe(
@@ -189,7 +225,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((lake) =>
-      lake === undefined ? Effect.void : Effect.fail(new LakeStillExists({ name })),
+      lake === undefined ? Effect.void : Effect.fail(new LakeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakeStillExists",
@@ -224,6 +260,15 @@ export const LakeProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ lakeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, lakeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -276,7 +321,7 @@ export const LakeProvider = () =>
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -285,7 +330,7 @@ export const LakeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakeNotResolved({ name });
+        return yield* new LakeNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -327,7 +372,7 @@ export const LakeProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -72,7 +72,7 @@ export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
         parentOf(trimPath(path)).pipe(
           Effect.flatMap((name) => getDocument({ name })),
           Effect.map(snapshot),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         ),
       list: (collection, options) => {
         const { parent, last } = splitLast(collection);

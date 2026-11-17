@@ -119,6 +119,7 @@ export const failCredentialsRequired = (fqn: string) =>
         }),
       );
     return yield* self.pipe(
+      // oxlint-disable-next-line effecttsgo/catch-conditional-refail-to-catch-if -- catchIf cannot narrow a generic E
       Effect.catch((error) => (isUnavailable(error) ? required(error) : Effect.fail(error))),
       Effect.catchDefect((defect) =>
         isUnavailable(defect) ? required(defect) : Effect.die(defect),

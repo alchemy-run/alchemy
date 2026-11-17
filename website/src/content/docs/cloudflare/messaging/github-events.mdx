@@ -4,6 +4,7 @@ description: Subscribe a Cloudflare Worker to GitHub repository webhooks with ty
 sidebar:
   order: 20
 ---
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 A push lands on `main`, a pull request opens, a release tag appears —
 and you want code to run. `GitHub.consumeRepositoryEvents` subscribes
@@ -13,6 +14,20 @@ delivery's signature, and hands your handler a fully typed payload.
 
 This event source is **Cloudflare-only today** — see
 [the note below](#cloudflare-only-today).
+
+<Boundaries
+  nodes={[
+    { id: "other", label: "anyone else", type: "forged payload", col: 0, row: 0 },
+    { id: "gh", label: "GitHub", type: "repository webhook", col: 0, row: 1 },
+    { id: "handler", label: "your handler", type: "typed push payload", col: 1, row: 1, tone: "accent" },
+  ]}
+  zones={[{ id: "worker", label: "Deploys", type: "Worker · checks the signature", nodes: ["handler"], tone: "warn" }]}
+  links={[
+    { from: "gh", to: "handler", label: "signed" },
+    { from: "other", to: "worker", kind: "blocked", label: "401" },
+  ]}
+  caption="Alchemy creates the webhook with a secret only it and GitHub know. Deliveries GitHub signed reach your handler. Anything else gets a 401 before the handler runs."
+/>
 
 ## 1. Subscribe to push events
 

@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class QBusinessApplicationInvalidProps extends Data.TaggedError(
+  "QBusinessApplicationInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QBusinessApplicationUnexpectedResponse extends Data.TaggedError(
+  "QBusinessApplicationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ApplicationStatus = qbusiness.ApplicationStatus;
 export type IdentityType = qbusiness.IdentityType;
 
@@ -134,8 +148,23 @@ export interface Application extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The id of the existing application. */
+      applicationId: string;
+    }
+  | {
+      /** The display name of the existing application. */
+      displayName: string;
+    };
 
 /**
  * An Amazon Q Business application — the top-level container that indices,
@@ -164,6 +193,16 @@ export interface Application extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const assistant = AWS.QBusiness.Application.lookup({ displayName: "assistant" });
+ * ```
+ *
  * @resource
  */
 export const Application = Resource<Application>("AWS.QBusiness.Application");
@@ -176,7 +215,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -188,7 +227,7 @@ interface ApplicationState {
 const readApplicationById = Effect.fn(function* (applicationId: string) {
   const described = yield* qbusiness
     .getApplication({ applicationId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.applicationArn;
   if (arn === undefined) return undefined;
@@ -269,7 +308,7 @@ const waitForApplicationStatus = (applicationId: string, target: "ACTIVE" | "DEL
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getApplication({ applicationId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new ApplicationNotReady({ applicationId, status: described.status });
@@ -304,6 +343,13 @@ export const ApplicationProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "applicationId" in props
+              ? yield* readApplicationById(props.applicationId)
+              : yield* findApplicationByName(props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.applicationId
             ? yield* readApplicationById(output.applicationId)
@@ -331,7 +377,9 @@ export const ApplicationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness Application requires props"));
+            return yield* new QBusinessApplicationInvalidProps({
+              message: "QBusiness Application requires props",
+            });
           }
           const displayName = yield* createDisplayName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -364,9 +412,9 @@ export const ApplicationProvider = () =>
               })),
             });
             if (!created.applicationId) {
-              return yield* Effect.fail(
-                new Error(`CreateApplication for '${displayName}' returned no applicationId`),
-              );
+              return yield* new QBusinessApplicationUnexpectedResponse({
+                message: `CreateApplication for '${displayName}' returned no applicationId`,
+              });
             }
             yield* session.note(
               `Creating application ${displayName} (${created.applicationId})...`,
@@ -374,9 +422,9 @@ export const ApplicationProvider = () =>
             yield* waitForApplicationStatus(created.applicationId, "ACTIVE");
             state = yield* readApplicationById(created.applicationId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created application ${displayName}`),
-              );
+              return yield* new QBusinessApplicationUnexpectedResponse({
+                message: `failed to read created application ${displayName}`,
+              });
             }
           }
 
@@ -438,9 +486,9 @@ export const ApplicationProvider = () =>
 
           const final = yield* readApplicationById(state.attrs.applicationId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled application ${displayName}`),
-            );
+            return yield* new QBusinessApplicationUnexpectedResponse({
+              message: `failed to read reconciled application ${displayName}`,
+            });
           }
           return final.attrs;
         }),

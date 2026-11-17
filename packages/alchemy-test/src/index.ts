@@ -49,6 +49,7 @@ export type {
   Exclusive,
   FileSuite,
   Hook,
+  Limit,
   LogEntry,
   Mode,
   Suite,

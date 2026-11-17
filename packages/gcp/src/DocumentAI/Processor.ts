@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,8 +114,33 @@ export type Processor = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProcessorLookup
 >;
+
+/**
+ * Props for {@link Processor.lookup}: find a processor this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ProcessorLookup {
+  /**
+   * Processor id (the `{processor}` segment of
+   * `projects/{project}/locations/{location}/processors/{processor}`).
+   * Supply it to adopt an existing processor.
+   */
+  processorId: string;
+  /**
+   * Multi-region location (`us` or `eu`). Some processor types are also
+   * available in regional locations.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Document AI processor that extracts structure from documents.
@@ -153,6 +179,18 @@ export type Processor = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing processor
+ * `Processor.lookup` references a processor Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared processor.
+ *
+ * **Example:** Reference an existing processor
+ * ```typescript
+ * const processor = GCP.DocumentAI.Processor.lookup({
+ *   processorId: "my-processor",
+ * });
+ * ```
+ *
  * @resource
  * @category DocumentAI
  */
@@ -185,10 +223,10 @@ const toAttrs = (processor: documentai.GoogleCloudDocumentaiV1Processor, project
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : documentai
         .getProjectsLocationsProcessors({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -206,13 +244,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (processor): processor is documentai.GoogleCloudDocumentaiV1Processor =>
         processor !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (processor) => processor.state !== "FAILED",
       (processor) =>
         new ProcessorFailed({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -220,7 +258,7 @@ const waitUntilReady = (name: string) =>
       (processor) => processor.state === "ENABLED" || processor.state === "DISABLED",
       (processor) =>
         new ProcessorPending({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -236,13 +274,13 @@ const waitUntilState = (name: string, desired: "ENABLED" | "DISABLED") =>
     Effect.filterOrFail(
       (processor): processor is documentai.GoogleCloudDocumentaiV1Processor =>
         processor !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (processor) => processor.state !== "FAILED",
       (processor) =>
         new ProcessorFailed({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -250,7 +288,7 @@ const waitUntilState = (name: string, desired: "ENABLED" | "DISABLED") =>
       (processor) => processor.state === desired,
       (processor) =>
         new ProcessorPending({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -287,6 +325,15 @@ export const ProcessorProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({ processorId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(
+        resourceName(env.project, normalizeLocation(location), processorId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -353,7 +400,7 @@ export const ProcessorProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: hinted || `${parent}/processors`,
+          resourceName: hinted || `${parent}/processors`,
         });
       }
 
@@ -409,7 +456,7 @@ export const ProcessorProvider = () =>
         documentai.deleteProjectsLocationsProcessors({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

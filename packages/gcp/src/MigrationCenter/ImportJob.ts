@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -86,8 +87,32 @@ export type ImportJob = Resource<
     completeTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImportJobLookup
 >;
+
+/**
+ * Props for {@link ImportJob.lookup}: find an import job this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ImportJobLookup {
+  /**
+   * Import job id (the `{importJob}` segment of
+   * `projects/{project}/locations/{location}/importJobs/{importJob}`).
+   */
+  importJobId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Migration Center import job that ingests asset frames from uploaded
@@ -106,6 +131,19 @@ export type ImportJob = Resource<
  * const job = yield* GCP.MigrationCenter.ImportJob("Rvtools", {
  *   assetSource: source.name,
  *   displayName: "rvtools-import",
+ * });
+ * ```
+ *
+ * ### Looking up an existing import job
+ * `ImportJob.lookup` references an import job Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * import job.
+ *
+ * **Example:** Reference an existing import job
+ * ```typescript
+ * const importJob = GCP.MigrationCenter.ImportJob.lookup({
+ *   importJobId: "my-import-job",
  * });
  * ```
  *
@@ -140,13 +178,13 @@ const toAttrs = (item: mc.ImportJob, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : mc
         .getProjectsLocationsImportJobs({
           name,
           view: "IMPORT_JOB_VIEW_FULL",
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   mc.listProjectsLocationsImportJobs
@@ -204,6 +242,15 @@ export const ImportJobProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ importJobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, importJobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const importJobId = yield* toPhysicalId(
@@ -257,7 +304,7 @@ export const ImportJobProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -265,7 +312,7 @@ export const ImportJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -303,7 +350,7 @@ export const ImportJobProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

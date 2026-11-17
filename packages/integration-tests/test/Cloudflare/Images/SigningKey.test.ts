@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -93,7 +94,7 @@ test.provider.skipIf(!keysEntitled)(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const keyName = "alchemytestsigningkey";
+      const keyName = testName("alchemytestsigningkey");
 
       yield* stack.destroy();
 

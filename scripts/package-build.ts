@@ -20,11 +20,14 @@
 // `.cache/build-timings.jsonl`.
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Console from "effect/Console";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, CommandLine } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
 type Services = FileSystem.FileSystem | Path.Path | ChildProcessSpawner;
@@ -73,24 +76,36 @@ const workspaceRoot = Effect.gen(function* () {
 /** Give a step a readable name for the timing logs. */
 export const named = (name: string, step: Step): Step => ({ ...step, name });
 
+/**
+ * Build a command that runs on every platform. node_modules/.bin entries and
+ * pnpm are `.cmd` shims on Windows, which only a shell can run, and a shell
+ * takes one script, so the arguments are joined into it there.
+ */
+export const command = Effect.fn(function* (
+  bin: string,
+  args: ReadonlyArray<string>,
+  options: ChildProcess.CommandOptions,
+) {
+  if (process.platform !== "win32") return ChildProcess.make(bin, args, options);
+  const script = yield* Effect.fromResult(CommandLine.join([bin, ...args], { format: "windows" }));
+  return ChildProcess.make(script, [], { ...options, shell: true });
+});
+
 /** Run a command; fails when it exits non-zero. */
-export const exec = (command: string, ...args: Array<string>): Step => ({
-  name: [command, ...args].join(" "),
+export const exec = (bin: string, ...args: Array<string>): Step => ({
+  name: [bin, ...args].join(" "),
   run: Effect.fn(function* (packageDirectory) {
     const spawner = yield* ChildProcessSpawner;
     const exitCode = yield* spawner.exitCode(
-      ChildProcess.make(command, args, {
+      yield* command(bin, args, {
         cwd: packageDirectory,
-        // node_modules/.bin entries are `.cmd` shims on Windows, which only a
-        // shell can run.
-        shell: process.platform === "win32",
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
       }),
     );
     if (exitCode !== 0) {
-      return yield* Effect.fail(new Error(`${command} exited with code ${exitCode}`));
+      return yield* Effect.fail(new Error(`${bin} exited with code ${exitCode}`));
     }
   }),
 });
@@ -278,11 +293,11 @@ const writeStamp = Effect.fn(function* (packageDirectory: string, outDir: string
   const path = yield* Path.Path;
   const directory = path.join(packageDirectory, outDir);
   yield* fs.makeDirectory(directory, { recursive: true });
-  const at = yield* Effect.sync(() => new Date().toISOString());
+  const at = DateTime.formatIso(yield* DateTime.now);
   yield* fs.writeFileString(path.join(directory, stampFile), `${at}\n`);
 });
 
-const now = Effect.sync(() => Date.now());
+const now = Clock.currentTimeMillis;
 const formatSeconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
 
 /** Build the package whose `scripts/` directory is `scriptsDirectory` (pass `import.meta.dirname`). */
@@ -296,7 +311,10 @@ export const build = (scriptsDirectory: string, options: BuildOptions) =>
     ) as { name: string; version: string };
 
     // `scripts/sync-exports.ts` regenerates the export maps without building.
-    if (process.env.PACKAGE_BUILD_EXPORTS_ONLY === "1") {
+    const exportsOnly = yield* Config.String("PACKAGE_BUILD_EXPORTS_ONLY").pipe(
+      Config.withDefault(undefined),
+    );
+    if (exportsOnly === "1") {
       if (options.exports) yield* syncPublishExports(packageDirectory, options.exports);
       return;
     }
@@ -341,8 +359,12 @@ export const build = (scriptsDirectory: string, options: BuildOptions) =>
     yield* fs.makeDirectory(cacheDirectory, { recursive: true });
     yield* fs.writeFileString(
       path.join(cacheDirectory, "build-timings.jsonl"),
-      JSON.stringify({ at: new Date(startedAt).toISOString(), version, total, steps: timings }) +
-        "\n",
+      JSON.stringify({
+        at: DateTime.formatIso(DateTime.makeUnsafe(startedAt)),
+        version,
+        total,
+        steps: timings,
+      }) + "\n",
       { flag: "a" },
     );
   }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

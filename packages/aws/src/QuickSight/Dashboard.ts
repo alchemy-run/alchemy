@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
+
+export class QuickSightDashboardUnexpectedResponse extends Data.TaggedError(
+  "QuickSightDashboardUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Properties for an Amazon QuickSight dashboard — a published, read-only view
@@ -84,8 +92,18 @@ export interface Dashboard extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 > {}
+
+/**
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DashboardLookup {
+  /** The id of the existing dashboard. */
+  dashboardId: string;
+}
 
 /**
  * An Amazon QuickSight dashboard — a published, read-only view built from a
@@ -114,6 +132,16 @@ export interface Dashboard extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dashboardId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const sales = AWS.QuickSight.Dashboard.lookup({ dashboardId: "sales" });
+ * ```
+ *
  * @resource
  */
 export const Dashboard = Resource<Dashboard>("AWS.QuickSight.Dashboard");
@@ -133,7 +161,7 @@ export const DashboardProvider = () =>
             AwsAccountId: accountId,
             DashboardId: dashboardId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Dashboard;
       });
 
@@ -162,6 +190,11 @@ export const DashboardProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ dashboardId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readDashboard(accountId, dashboardId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const dashboardId = output?.dashboardId ?? (yield* toId(id, olds));
@@ -215,9 +248,9 @@ export const DashboardProvider = () =>
 
           observed = yield* settle(accountId, dashboardId);
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`QuickSight dashboard '${dashboardId}' not found after reconcile`),
-            );
+            return yield* new QuickSightDashboardUnexpectedResponse({
+              message: `QuickSight dashboard '${dashboardId}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags.

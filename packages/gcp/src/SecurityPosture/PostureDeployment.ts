@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -127,8 +128,37 @@ export type PostureDeployment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PostureDeploymentLookup
 >;
+
+/**
+ * Props for {@link PostureDeployment.lookup}: find a posture deployment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface PostureDeploymentLookup {
+  /**
+   * Posture deployment id (the `{postureDeployment}` segment of
+   * `organizatio
+   * ns/{organization}/locations/global/postureDeployments/{postureDeployment
+   * }`). Letters, digits, hyphens, and underscores; max 63 characters.
+   */
+  postureDeploymentId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Location. Posture deployments live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Security Command Center posture deployment.
@@ -175,6 +205,19 @@ export type PostureDeployment = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing posture deployment
+ * `PostureDeployment.lookup` references a posture deployment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared posture deployment.
+ *
+ * **Example:** Reference an existing posture deployment
+ * ```typescript
+ * const postureDeployment = GCP.SecurityPosture.PostureDeployment.lookup({
+ *   postureDeploymentId: "my-posture-deployment",
+ * });
+ * ```
+ *
  * @resource
  * @category SecurityPosture
  */
@@ -219,10 +262,10 @@ const toAttrs = (deployment: securityposture.PostureDeployment, project: string)
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : securityposture
         .getOrganizationsLocationsPostureDeployments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (deployment: securityposture.PostureDeployment) =>
   deployment.reconciling === true ||
@@ -234,10 +277,12 @@ const waitUntilSettled = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((current) => {
       if (current === undefined) {
-        return Effect.fail(new SecuritypostureNotResolved({ name }));
+        return Effect.fail(new SecuritypostureNotResolved({ resourceName: name }));
       }
       if (isBusy(current)) {
-        return Effect.fail(new SecuritypostureNotResolved({ name: `${name}:${current.state}` }));
+        return Effect.fail(
+          new SecuritypostureNotResolved({ resourceName: `${name}:${current.state}` }),
+        );
       }
       return Effect.succeed(current);
     }),
@@ -281,6 +326,23 @@ export const PostureDeploymentProvider = () =>
         true,
       );
     }),
+
+    lookup: Effect.fn(function* ({
+      postureDeploymentId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.SecurityPosture.OrganizationNotResolved", () => Effect.succeed("")),
+      );
+      const location = lastSegment(lookupLocation ?? DEFAULT_LOCATION);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, postureDeploymentId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -368,7 +430,7 @@ export const PostureDeploymentProvider = () =>
               annotations: desiredAnnotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitDeploymentOperation(created);
         }
@@ -377,7 +439,7 @@ export const PostureDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritypostureNotResolved({ name });
+        return yield* new SecuritypostureNotResolved({ resourceName: name });
       }
 
       const postureChanged = !sameText(current.postureId, news.postureId);
@@ -421,7 +483,7 @@ export const PostureDeploymentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitDeploymentOperationGone(operation);

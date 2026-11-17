@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -112,8 +113,33 @@ export type MessageBus = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MessageBusLookup
 >;
+
+/**
+ * Props for {@link MessageBus.lookup}: find a message bus this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MessageBusLookup {
+  /**
+   * Message bus id (the `{messageBus}` segment of
+   * `projects/{project}/locations/{location}/messageBuses/{messageBus}`).
+   * Must match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  messageBusId: string;
+  /**
+   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc Advanced message bus that routes published events to
@@ -155,6 +181,19 @@ export type MessageBus = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing message bus
+ * `MessageBus.lookup` references a message bus Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * message bus.
+ *
+ * **Example:** Reference an existing message bus
+ * ```typescript
+ * const messageBus = GCP.Eventarc.MessageBus.lookup({
+ *   messageBusId: "my-message-bus",
+ * });
+ * ```
+ *
  * @resource
  * @category Eventarc
  */
@@ -183,7 +222,7 @@ const toAttrs = (bus: eventarc.MessageBus, project: string, region: string) => {
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsMessageBuses({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MessageBusProvider = () =>
   Provider.succeed(MessageBus, {
@@ -207,6 +246,15 @@ export const MessageBusProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ messageBusId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, messageBusId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -280,7 +328,7 @@ export const MessageBusProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -328,7 +376,7 @@ export const MessageBusProvider = () =>
               name: output.name,
               allowMissing: true,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

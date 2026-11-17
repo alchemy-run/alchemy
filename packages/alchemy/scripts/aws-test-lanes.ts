@@ -69,7 +69,7 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 // This prevents prose such as "AWS Partner Network (...)" from becoming a
 // scarce-capacity seed. Imports are parsed separately from the original text.
 const maskCommentsAndStrings = (source: string) => {
-  const chars = [...source];
+  const chars = Array.from(source);
   let state: "code" | "line" | "block" | "single" | "double" | "template" = "code";
 
   for (let index = 0; index < chars.length; index++) {

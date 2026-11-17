@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -77,8 +78,33 @@ export type MetadataStore = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MetadataStoreLookup
 >;
+
+/**
+ * Props for {@link MetadataStore.lookup}: find a metadata store this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MetadataStoreLookup {
+  /**
+   * MetadataStore id (the `{metadatastore}` segment of
+   * `projects/{project}/l
+   * ocations/{location}/metadataStores/{metadatastore}`). Must be 4-128
+   * characters of `a-z` and `-`.
+   */
+  metadataStoreId: string;
+  /**
+   * Vertex AI location.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex ML Metadata store for artifacts, contexts, and executions.
@@ -95,6 +121,19 @@ export type MetadataStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing metadata store
+ * `MetadataStore.lookup` references a metadata store Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * metadata store.
+ *
+ * **Example:** Reference an existing metadata store
+ * ```typescript
+ * const metadataStore = GCP.AIPlatform.MetadataStore.lookup({
+ *   metadataStoreId: "my-metadata-store",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -103,13 +142,13 @@ export const MetadataStore = Resource<MetadataStore>("GCP.AIPlatform.MetadataSto
 export class MetadataStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, metadataStoreId: string) =>
@@ -134,7 +173,7 @@ const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1MetadataStore, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStores.pages({ parent, pageSize: 100 }).pipe(
@@ -149,7 +188,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1MetadataStore => store !== undefined,
-      () => new MetadataStoreNotResolved({ name }),
+      () => new MetadataStoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.MetadataStoreNotResolved",
@@ -162,7 +201,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store) => store === undefined,
-      () => new MetadataStoreStillExists({ name }),
+      () => new MetadataStoreStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -201,6 +240,15 @@ export const MetadataStoreProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ metadataStoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, metadataStoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -257,7 +305,7 @@ export const MetadataStoreProvider = () =>
               dataplexConfig: news.dataplexConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -279,7 +327,7 @@ export const MetadataStoreProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

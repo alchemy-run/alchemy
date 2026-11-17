@@ -195,6 +195,12 @@ describe("Diff", { tags: ["unit", "local"] }, () => {
   });
 
   describe("stripUnresolved semantics", () => {
+    test("preserves byte arrays by identity", () => {
+      const bytes = new Uint8Array([1, 2, 3]);
+      const stripped: any = stripUnresolved({ nested: [{ bytes }] });
+      expect(stripped.nested[0].bytes).toBe(bytes);
+    });
+
     test("preserves Date/Redacted/Duration by identity", () => {
       const date = new Date(0);
       const secret = Redacted.make("s");
@@ -266,6 +272,11 @@ describe("Diff", { tags: ["unit", "local"] }, () => {
     test("deepEqual compares Dates by value", () => {
       expect(deepEqual({ d: new Date("2027-01-01") }, { d: new Date("2027-01-01") })).toBe(true);
       expect(deepEqual({ d: new Date("2027-01-01") }, { d: new Date("2027-01-02") })).toBe(false);
+    });
+
+    test("deepEqual compares byte arrays by content", () => {
+      expect(deepEqual({ b: new Uint8Array([1, 2]) }, { b: new Uint8Array([1, 2]) })).toBe(true);
+      expect(deepEqual({ b: new Uint8Array([1, 2]) }, { b: new Uint8Array([1, 3]) })).toBe(false);
     });
 
     test("deepEqual compares Durations by value", () => {

@@ -1,43 +1,36 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import { resolveAstroSettings } from "alchemy/Website/AstroOutput";
 import * as Effect from "effect/Effect";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
-import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
-export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
-> {
+export interface AstroProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
-   * Astro project root directory.
-   * Defaults to the current working directory (`process.cwd()`).
+   * A custom Worker entry that wraps Astro's handler and adds exports of its
+   * own (Durable Object classes, a `scheduled` handler, ...). Import the Astro
+   * handler from `@alchemy.run/frontend-frameworks/astro/entrypoints/server`
+   * and re-export or extend its `default`:
+   *
+   * ```ts
+   * import handler from "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+   * export { MyDurableObject } from "./do.ts";
+   * export default { ...handler, scheduled: async () => {} };
+   * ```
+   *
+   * A relative path resolves against {@link rootDir}; a bare specifier resolves
+   * as a package import. When unset, Astro's server entrypoint is deployed.
    */
-  rootDir?: string;
-  /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file under `rootDir` is hashed, plus the
-   * nearest package-manager lockfile. Provide explicit globs to narrow the
-   * scope.
-   */
-  memo?: MemoOptions & {
-    /**
-     * Additional workspace directories to hash (relative to `rootDir`).
-     * By default (`"auto"`), workspaces are auto-detected from the build's
-     * module graph; an explicit array pins them.
-     * @default "auto"
-     */
-    workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
-  };
+  main?: string;
   /**
    * The name of the KV binding backing Astro's session API.
    *
@@ -90,11 +83,6 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
    * Defaults to astro's own config discovery.
    */
   config?: string;
-  /**
-   * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-   */
-  assets?: AssetsConfig;
 }
 
 // These options are inspected while constructing the Worker. Resolve them in
@@ -223,6 +211,31 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * const site = yield* Cloudflare.Website.Astro("Website");
  * ```
  *
+ * ### Custom Worker Entry
+ * By default the deployed Worker entry is Astro's server entrypoint.
+ * When the Worker must export more than Astro's fetch handler — Durable
+ * Object classes, a `scheduled` handler — point `main` at your own module
+ * that wraps Astro's handler (imported from
+ * `@alchemy.run/frontend-frameworks/astro/entrypoints/server`) and
+ * re-exports the extras.
+ *
+ * **Example:** Custom entry hosting a Durable Object
+ * ```typescript
+ * // src/worker-entry.ts
+ * // import handler from "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+ * // export class Counter extends DurableObject { ... }
+ * // export default { ...handler, scheduled: async () => { ... } };
+ *
+ * const site = yield* Cloudflare.Website.Astro("Website", {
+ *   main: "src/worker-entry.ts",
+ *   env: {
+ *     COUNTER: Cloudflare.DurableObject("Counter", {
+ *       className: "Counter",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project
@@ -349,13 +362,13 @@ export const Astro: {
             // and needs `nodejs_compat`; `getCompatibility` already adds it
             // to every non-python Worker (honoring an explicit
             // `no_nodejs_compat` opt-out and the v2-mode date guard).
-            main: undefined!,
+            main: null,
             source: {
               provider: "@alchemy.run/frontend-frameworks/astro/source",
               devMode: "server",
               rootDir: props.rootDir,
               options: {
-                rootDir: props.rootDir,
+                main: props.main,
                 memo: props.memo,
                 // Passed through verbatim (including `false`) so the
                 // source provider can skip its session-driver wiring on

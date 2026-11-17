@@ -126,8 +126,18 @@ export interface AppMonitor extends Resource<
     appMonitorArn: string;
   },
   never,
-  Providers
+  Providers,
+  AppMonitorLookup
 > {}
+
+/**
+ * Props for {@link AppMonitor.lookup}: find an app monitor this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AppMonitorLookup {
+  /** The name of the existing app monitor. */
+  appMonitorName: string;
+}
 
 /**
  * An Amazon CloudWatch RUM app monitor that collects client-side telemetry
@@ -163,6 +173,16 @@ export interface AppMonitor extends Resource<
  *   cwLogEnabled: true,
  *   customEvents: "ENABLED",
  * });
+ * ```
+ *
+ * ### Looking up an existing app monitor
+ * `AppMonitor.lookup` references an app monitor Alchemy doesn't manage (created in the
+ * console or by another stack), found by `appMonitorName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing app monitor
+ * ```typescript
+ * const existing = AWS.RUM.AppMonitor.lookup({ appMonitorName: "..." });
  * ```
  *
  * @resource
@@ -255,7 +275,7 @@ export const AppMonitorProvider = () =>
       const observeMonitor = (name: string) =>
         rum.getAppMonitor({ Name: name }).pipe(
           Effect.map((r) => r.AppMonitor),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return AppMonitor.Provider.of({
@@ -276,6 +296,17 @@ export const AppMonitorProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ appMonitorName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* observeMonitor(name);
+          if (found?.Id === undefined) return undefined;
+          const attrs = {
+            appMonitorName: name,
+            appMonitorId: found.Id,
+            appMonitorArn: appMonitorArn(region, accountId, name),
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.appMonitorName ?? (yield* createName(id, olds ?? {}));

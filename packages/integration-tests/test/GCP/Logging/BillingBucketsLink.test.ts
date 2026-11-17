@@ -5,6 +5,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -70,6 +71,15 @@ test.provider.skipIf(!billingAccountId)(
           });
           return { bucket, link };
         }),
+      );
+      yield* expectFound(
+        GCP.Logging.BillingBucketsLink.lookup({
+          linkId: created.link.linkId,
+          location: created.link.location,
+          bucketId: created.link.bucketId,
+          billingAccountId: created.link.billingAccountId,
+        }),
+        created.link,
       );
 
       expect(created.link.linkId).toEqual(expect.any(String));

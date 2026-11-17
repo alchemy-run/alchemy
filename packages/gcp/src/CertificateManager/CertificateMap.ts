@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -96,8 +97,36 @@ export type CertificateMap = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateMapLookup
 >;
+
+/**
+ * Props for {@link CertificateMap.lookup}: find a certificate map this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CertificateMapLookup {
+  /**
+   * Certificate map id (the `{certificateMap}` segment of
+   * `projects/{project
+   * }/locations/{location}/certificateMaps/{certificateMap}`). Must be 1-63
+   * characters, start with a letter, and match
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  certificateMapId: string;
+  /**
+   * Certificate Manager location. Certificate maps are global resources;
+   * omit or set `"global"`. `GLOBAL` is accepted and normalized to
+   * `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager certificate map — a collection of certificate
@@ -133,6 +162,19 @@ export type CertificateMap = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing certificate map
+ * `CertificateMap.lookup` references a certificate map Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * certificate map.
+ *
+ * **Example:** Reference an existing certificate map
+ * ```typescript
+ * const certificateMap = GCP.CertificateManager.CertificateMap.lookup({
+ *   certificateMapId: "my-certificate-map",
+ * });
+ * ```
+ *
  * @resource
  * @category CertificateManager
  */
@@ -141,13 +183,13 @@ export const CertificateMap = Resource<CertificateMap>("GCP.CertificateManager.C
 export class CertificateMapNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateMapStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -237,12 +279,14 @@ const toAttrs = (map: certificatemanager.CertificateMap, project: string) => {
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsCertificateMaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map ? Effect.succeed(map) : Effect.fail(new CertificateMapNotResolved({ name })),
+      map
+        ? Effect.succeed(map)
+        : Effect.fail(new CertificateMapNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapNotResolved",
@@ -254,7 +298,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map === undefined ? Effect.void : Effect.fail(new CertificateMapStillExists({ name })),
+      map === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateMapStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapStillExists",
@@ -302,6 +348,15 @@ export const CertificateMapProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ certificateMapId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, certificateMapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const certificateMapId = yield* toId(id, olds?.certificateMapId, output?.certificateMapId);
@@ -347,7 +402,7 @@ export const CertificateMapProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -356,7 +411,7 @@ export const CertificateMapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateMapNotResolved({ name });
+        return yield* new CertificateMapNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -395,7 +450,7 @@ export const CertificateMapProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

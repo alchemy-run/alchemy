@@ -15,6 +15,7 @@ import {
   type PolicyDocument,
   stringifyPolicyDocument,
 } from "../IAM/Policy.ts";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -126,8 +127,23 @@ export interface FileSystem extends Resource<
     fileSystemArn: string;
   },
   {},
-  Providers
+  Providers,
+  FileSystemLookup
 > {}
+
+/**
+ * Props for {@link FileSystem.lookup}: find a file system this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FileSystemLookup =
+  | {
+      /** The id of the existing file system. */
+      fileSystemId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 
 /**
  * An Amazon EFS file system — serverless, elastic, shared POSIX storage.
@@ -248,6 +264,20 @@ export interface FileSystem extends Resource<
  * ) {}
  * ```
  *
+ * ### Looking up an existing file system
+ * `FileSystem.lookup` references a file system Alchemy doesn't manage (created in the
+ * console or by another stack), found by `fileSystemId` or its `Name` tag. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Mount an existing file system
+ * ```typescript
+ * const shared = AWS.EFS.FileSystem.lookup({ name: "shared" });
+ *
+ * yield* AWS.EFS.AccessPoint("App", {
+ *   fileSystemId: shared.fileSystemId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const FileSystem = Resource<FileSystem>("AWS.EFS.FileSystem");
@@ -360,14 +390,14 @@ export const FileSystemProvider = () =>
       const findByToken = Effect.fn(function* (token: string) {
         return yield* efs.describeFileSystems({ CreationToken: token }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 
       const findById = Effect.fn(function* (fileSystemId: string) {
         return yield* efs.describeFileSystems({ FileSystemId: fileSystemId }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 
@@ -389,6 +419,29 @@ export const FileSystemProvider = () =>
               }),
             );
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const fs =
+            "fileSystemId" in props
+              ? yield* findById(props.fileSystemId)
+              : yield* single(
+                  "AWS.EFS.FileSystem",
+                  `Name=${props.name}`,
+                  yield* efs.describeFileSystems.items({}).pipe(
+                    Stream.filter(
+                      (fs) => fs.Name === props.name && fs.LifeCycleState !== "deleted",
+                    ),
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk)),
+                  ),
+                  (fs) => fs.FileSystemId,
+                );
+          if (fs === undefined || fs.LifeCycleState === "deleted") return undefined;
+          return {
+            fileSystemId: fs.FileSystemId,
+            fileSystemArn: fs.FileSystemArn ?? (yield* fileSystemArnOf(fs.FileSystemId)),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, output }) {
           const fs = output?.fileSystemId
@@ -513,7 +566,7 @@ export const FileSystemProvider = () =>
               .describeBackupPolicy({ FileSystemId: fileSystemId })
               .pipe(
                 Effect.map((r) => r.BackupPolicy?.Status),
-                Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("PolicyNotFound", () => Effect.undefined),
               );
             const observedBackup =
               observedBackupStatus === "ENABLED" || observedBackupStatus === "ENABLING";
@@ -553,7 +606,7 @@ export const FileSystemProvider = () =>
             .describeFileSystemPolicy({ FileSystemId: fileSystemId })
             .pipe(
               Effect.map((r) => r.Policy),
-              Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("PolicyNotFound", () => Effect.undefined),
             );
           const desiredPolicy =
             news.policy === undefined

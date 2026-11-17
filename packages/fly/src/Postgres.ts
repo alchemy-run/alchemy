@@ -93,6 +93,13 @@ export interface PostgresProps {
    * is reachable on the org private network; deploy-time apply needs a
    * route to that network (a WireGuard peer, `fly mpg proxy`, or a
    * machine already on 6PN).
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -143,8 +150,23 @@ export type Postgres = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PostgresLookup
 >;
+
+/**
+ * Props for {@link Postgres.lookup}: find a Managed Postgres cluster
+ * this stack doesn't manage by its name.
+ */
+export interface PostgresLookup {
+  /** Cluster name (unique in the org). */
+  name: string;
+  /**
+   * Organization slug.
+   * @default the current token's org
+   */
+  orgSlug?: string;
+}
 
 /**
  * A Fly.Postgres is a Managed Postgres (MPG) cluster. It is billed.
@@ -280,13 +302,25 @@ export type Postgres = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Postgres.lookup` references a cluster Alchemy doesn't manage (created
+ * with `fly mpg create` or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and its connection URIs
+ * come from Fly like a declared cluster's.
+ *
+ * **Example:** Connect to an existing cluster
+ * ```typescript
+ * const db = Fly.Postgres.lookup({ name: "my-db" });
+ * const sql = yield* Fly.ConnectPostgres(db);
+ * ```
+ *
  * @resource
  * @product Postgres
  */
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 
 export class PostgresNotCreated extends Data.TaggedError("Fly.PostgresNotCreated")<{
-  name: string;
+  resourceName: string;
   orgSlug: string;
 }> {}
 
@@ -369,7 +403,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 export const getLiveCluster = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res) => (isLiveCluster(res.data) ? res.data : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const getClusterResponse = (clusterId: string) =>
@@ -377,7 +411,7 @@ export const getClusterResponse = (clusterId: string) =>
     Effect.map((res): GetClusterResponse | undefined =>
       isLiveCluster(res.data) ? res : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listOrgClusters = (orgSlug: string) =>
@@ -535,7 +569,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
       times: 10,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.succeed(undefined)),
+    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.undefined),
   );
   if (creds === undefined) {
     return yield* new PostgresCredentialsMissing({ clusterId });
@@ -602,6 +636,14 @@ export const PostgresProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ name, orgSlug }) {
+      const org = orgSlug ?? (yield* resolveOrgSlug());
+      const found = yield* findByName(org, name);
+      if (found === undefined) return undefined;
+      const hydrated = found.id !== undefined ? yield* getClusterResponse(found.id) : undefined;
+      return toAttrs(hydrated?.data ?? found, { name, orgSlug: org }, hydrated?.credentials);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const found =
         output?.clusterId !== undefined && output.clusterId.length > 0
@@ -660,7 +702,7 @@ export const PostgresProvider = () =>
 
       if (current === undefined) {
         if (region === undefined || region.length === 0) {
-          return yield* new PostgresNotCreated({ name, orgSlug });
+          return yield* new PostgresNotCreated({ resourceName: name, orgSlug });
         }
         const created = yield* mpg
           .createCluster({
@@ -674,13 +716,13 @@ export const PostgresProvider = () =>
           })
           .pipe(
             Effect.map((res) => res.data),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = isLiveCluster(created) ? created : yield* findByName(orgSlug, name);
       }
 
       if (current === undefined || current.id === undefined) {
-        return yield* new PostgresNotCreated({ name, orgSlug });
+        return yield* new PostgresNotCreated({ resourceName: name, orgSlug });
       }
       // `current` is reassigned below; the id is stable across the waits.
       const clusterId = current.id;

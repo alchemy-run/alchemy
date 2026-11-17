@@ -32,7 +32,7 @@ const makeNamedHttpBinding = <
         request?: Omit<I, "name">,
       ) {
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: yield* name,
         } as I);
       });

@@ -26,6 +26,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -39,11 +40,11 @@ const MARKER = "worker-dns-ok";
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic hostnames under this suite's `worker-dns` prefix.
-const NATIVE_HOSTNAME = `worker-dns.${zoneName}`;
-const INVALID_HOSTNAME = `worker-dns-invalid.${zoneName}`;
+const NATIVE_HOSTNAME = `${testName("worker-dns")}.${zoneName}`;
+const INVALID_HOSTNAME = `${testName("worker-dns-invalid")}.${zoneName}`;
 const PROBE_HOSTNAME = "worker-dns-probe.alchemy-saas-example.com";
-const ORIGIN_NAME = `worker-dns-origin.${zoneName}`;
-const R53_ZONE_NAME = `worker-dns-r53.${zoneName}`;
+const ORIGIN_NAME = `${testName("worker-dns-origin")}.${zoneName}`;
+const R53_ZONE_NAME = `${testName("worker-dns-r53")}.${zoneName}`;
 const SAAS_HOSTNAME = `app.${R53_ZONE_NAME}`;
 
 const resolveZoneId = Effect.gen(function* () {
