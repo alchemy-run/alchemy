@@ -366,6 +366,37 @@ describe("Docker.run failure output", (it) => {
   );
 });
 
+describe("Docker CLI JSON decoding", (it) => {
+  it.effect(
+    "returns typed InvalidData errors for malformed inspect and swarm responses",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-json-" });
+        const executable = path.join(root, "docker-stub");
+        yield* fs.writeFileString(executable, "#!/bin/sh\nprintf '{invalid-json\\n'\n");
+        yield* fs.chmod(executable, 0o755);
+
+        yield* Effect.gen(function* () {
+          const docker = yield* Docker;
+          const inspect = yield* docker.volume.inspect("not-important").pipe(Effect.flip);
+          expect(inspect.reason._tag).toBe("InvalidData");
+
+          const swarm = yield* docker.swarm.info().pipe(Effect.flip);
+          expect(swarm.reason._tag).toBe("InvalidData");
+
+          const service = yield* docker.service.inspect("not-important");
+          expect(service.stdout).toBe("{invalid-json");
+        }).pipe(
+          Effect.provide(dockerLive({ bin: executable })),
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+        );
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+});
+
 describe("Docker.image", (it) => {
   it.effect(
     "builds a minimal image with content Dockerfile",

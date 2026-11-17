@@ -13,6 +13,7 @@ import * as Path from "effect/Path";
 import { PlatformError, SystemError, type SystemErrorTag } from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as EffectRecord from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -47,6 +48,38 @@ const decodeRegistryAuthConfig = Schema.Struct({
 }).pipe(Schema.fromJsonString, (schema) =>
   Schema.decodeEffect(schema, { onExcessProperty: "error" }),
 );
+
+// CLI output is untrusted JSON. Decoding through Schema keeps malformed
+// responses in Effect's typed error channel rather than throwing in map.
+const decodeInspectResult = Schema.NonEmptyArray(Schema.Unknown).pipe(
+  Schema.fromJsonString,
+  Schema.decodeEffect,
+);
+
+const decodeSwarmInfo = Schema.Struct({
+  NodeID: Schema.String,
+  LocalNodeState: Schema.String,
+  ControlAvailable: Schema.Boolean,
+  Cluster: Schema.NullOr(
+    Schema.Struct({ ID: Schema.String, CreatedAt: Schema.optional(Schema.String) }),
+  ).pipe(Schema.optional),
+  RemoteManagers: Schema.Array(Schema.Struct({ NodeID: Schema.String, Addr: Schema.String })).pipe(
+    Schema.NullOr,
+    Schema.optional,
+  ),
+  Managers: Schema.optional(Schema.Number),
+  Nodes: Schema.optional(Schema.Number),
+}).pipe(Schema.fromJsonString, Schema.decodeEffect);
+
+const DockerEndpointSpec = Schema.Struct({
+  host: Schema.NonEmptyString,
+  ca: Schema.optional(Schema.String),
+  cert: Schema.optional(Schema.String),
+  key: Schema.optional(Schema.String),
+  "skip-tls-verify": Schema.optional(
+    Schema.String.check(Schema.isPattern(/^(?:true|t|1|false|f|0)$/i)),
+  ),
+});
 
 export class Docker extends Context.Service<
   Docker,
@@ -534,7 +567,7 @@ export declare namespace Docker {
     LocalNodeState: "inactive" | "pending" | "active" | "error" | "locked" | (string & {});
     ControlAvailable: boolean;
     Cluster?: { ID: string; CreatedAt?: string } | null;
-    RemoteManagers?: Array<{ NodeID: string; Addr: string }> | null;
+    RemoteManagers?: ReadonlyArray<{ NodeID: string; Addr: string }> | null;
     Managers?: number;
     Nodes?: number;
   }
@@ -804,10 +837,18 @@ const makeDocker = (options: DockerOptions) =>
 
     const runInspect = <T>(args: Array<string>) =>
       run(args).pipe(
-        Effect.map((result) => {
-          const [item] = JSON.parse(result.stdout) as T[];
-          return item;
-        }),
+        Effect.flatMap(({ stdout }) =>
+          decodeInspectResult(stdout).pipe(
+            Effect.map(([item]) => item as T),
+            Effect.mapError(() =>
+              systemError({
+                _tag: "InvalidData",
+                args,
+                description: "Docker inspect returned malformed JSON or an empty result.",
+              }),
+            ),
+          ),
+        ),
       );
 
     // Merge `credentials` into the ambient auth config: the process's
@@ -1201,7 +1242,17 @@ const makeDocker = (options: DockerOptions) =>
           run([...dockerTargetArgs(context), "swarm", "init", ...formatArgs(options)]),
         info: (context) =>
           run([...dockerTargetArgs(context), "info", "--format", "{{json .Swarm}}"]).pipe(
-            Effect.map((result) => JSON.parse(result.stdout) as Docker.SwarmInfo),
+            Effect.flatMap(({ stdout }) =>
+              decodeSwarmInfo(stdout).pipe(
+                Effect.mapError(() =>
+                  systemError({
+                    _tag: "InvalidData",
+                    args: ["info", "--format", "{{json .Swarm}}"],
+                    description: "Docker info returned malformed Swarm metadata.",
+                  }),
+                ),
+              ),
+            ),
           ),
         leave: (force, context) =>
           run([...dockerTargetArgs(context), "swarm", "leave", ...(force ? ["--force"] : [])]),
@@ -1226,8 +1277,7 @@ const makeDocker = (options: DockerOptions) =>
             ...formatArgs({ ...options }),
             id,
           ]),
-        inspect: (id, context) =>
-          runInspect([...dockerTargetArgs(context), "service", "inspect", id]),
+        inspect: (id, context) => run([...dockerTargetArgs(context), "service", "inspect", id]),
         remove: (id, context) => run([...dockerTargetArgs(context), "service", "rm", id]),
       },
     });
@@ -1247,29 +1297,26 @@ export const dockerEndpointFromSpec = (
   spec: string | undefined,
 ): Docker.EndpointTarget | undefined => {
   if (!spec) return undefined;
-  const options = Object.fromEntries(
+  const options = EffectRecord.fromEntries(
     spec.split(",").map((field) => {
       const separator = field.indexOf("=");
       return separator < 0
-        ? [field.trim(), ""]
-        : [field.slice(0, separator).trim(), field.slice(separator + 1).trim()];
+        ? ([field.trim(), ""] as const)
+        : ([field.slice(0, separator).trim(), field.slice(separator + 1).trim()] as const);
     }),
   );
-  const host = options.host;
-  if (!host) return undefined;
-  const skipTlsVerify = options["skip-tls-verify"];
-  // Docker accepts Go's boolean spellings; unknown security settings must
-  // never silently become an unauthenticated TCP connection.
-  if (skipTlsVerify !== undefined && !/^(?:true|t|1|false|f|0)$/i.test(skipTlsVerify)) {
-    return undefined;
-  }
-  return {
-    host,
-    ...(options.ca ? { ca: options.ca } : {}),
-    ...(options.cert ? { cert: options.cert } : {}),
-    ...(options.key ? { key: options.key } : {}),
-    ...(/^(?:true|t|1)$/i.test(skipTlsVerify ?? "") ? { skipTlsVerify: true } : {}),
-  };
+  // Docker accepts Go's boolean spellings. Reject an unrecognized value
+  // instead of accidentally changing the TLS transport.
+  return Schema.decodeUnknownOption(DockerEndpointSpec)(options).pipe(
+    Option.map(({ host, ca, cert, key, "skip-tls-verify": skipTlsVerify }) => ({
+      host,
+      ...(ca ? { ca } : {}),
+      ...(cert ? { cert } : {}),
+      ...(key ? { key } : {}),
+      ...(/^(?:true|t|1)$/i.test(skipTlsVerify ?? "") ? { skipTlsVerify: true } : {}),
+    })),
+    Option.getOrUndefined,
+  );
 };
 
 /**

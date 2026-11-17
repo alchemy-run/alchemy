@@ -3,13 +3,14 @@
 // an isolated DOCKER_CONFIG. Keep credentials outside the spec: TLS uses
 // filesystem paths, while SSH uses the runner's SSH agent or key files.
 import * as Docker from "@alchemy.run/docker";
-import { dockerContextTarget, dockerTargetArgs } from "@alchemy.run/docker/Docker";
+import { dockerContextTarget } from "@alchemy.run/docker/Docker";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 
 const dockerSpec = process.env.ALCHEMY_DOCKER_REMOTE_SPEC ?? "";
 
@@ -19,6 +20,9 @@ const rotateTls = process.env.ALCHEMY_DOCKER_REMOTE_ROTATE_TLS === "1";
 // Stable per-stage names let reruns converge on and clean up the same objects.
 const resourceName = (stage: string, suffix: string) =>
   `alchemy-3375-${stage}-${transport}-${suffix}`.toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
+const decodeServiceVersion = Schema.NonEmptyArray(
+  Schema.Struct({ Version: Schema.Struct({ Index: Schema.Number }) }),
+).pipe(Schema.fromJsonString, Schema.decodeEffect);
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 test.provider.skipIf(!dockerSpec)(
@@ -264,16 +268,10 @@ test.provider.skipIf(!dockerSpec || !swarmEnabled)(
       expect((yield* docker.volume.inspect(volumeName, target)).Name).toBe(first.volume.name);
       expect((yield* docker.network.inspect(networkName, target)).Id).toBe(first.network.id);
       const serviceVersion = (id: string) =>
-        docker
-          .run([
-            ...dockerTargetArgs(target),
-            "service",
-            "inspect",
-            id,
-            "--format",
-            "{{.Version.Index}}",
-          ])
-          .pipe(Effect.map((result) => Number(result.stdout)));
+        docker.service.inspect(id, target).pipe(
+          Effect.flatMap(({ stdout }) => decodeServiceVersion(stdout)),
+          Effect.map(([service]) => service.Version.Index),
+        );
       const initialVersion = yield* serviceVersion(first.service.id);
       expect(Number.isSafeInteger(initialVersion)).toBe(true);
 
