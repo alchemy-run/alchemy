@@ -1,6 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
+import * as Fly from "@alchemy.run/fly";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -62,6 +63,9 @@ export const WorkerGateway = E2B.ReadTeamHttp.pipe(
 
 /** The program's bindings, built on a Lambda Web Function gateway. */
 export const WebFunctionGateway = E2B.ReadTeamHttp.pipe(Layer.provide(AWS.Lambda.SandboxGateway));
+
+/** The program's bindings, built on a Fly Service gateway. */
+export const FlyGateway = E2B.ReadTeamHttp.pipe(Layer.provide(Fly.SandboxGateway));
 
 /** What {@link app} answers. */
 export interface Served {
