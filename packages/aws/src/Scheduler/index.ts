@@ -6,4 +6,6 @@ export * from "./ListSchedules.ts";
 export * from "./Schedule.ts";
 export * from "./ScheduleEventSource.ts";
 export * from "./ScheduleGroup.ts";
+export * from "./SchedulerCallbacks.ts";
+export * from "./ScheduleWriteTypes.ts";
 export * from "./UpdateSchedule.ts";
