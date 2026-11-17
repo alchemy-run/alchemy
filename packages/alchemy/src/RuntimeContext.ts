@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { CallbackFactory } from "./Callback.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { Output } from "./Output.ts";
 
@@ -23,8 +22,6 @@ export interface BaseRuntimeContext {
    */
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Effect.Effect<Record<string, any>>;
-  /** Register a durable callback in the current host instance, when supported. */
-  makeCallback?: CallbackFactory;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },

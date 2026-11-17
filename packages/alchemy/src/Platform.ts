@@ -280,6 +280,13 @@ export const Platform = <
       }
     | undefined
   >,
+  // Requirements and errors of the hooks below. They run in the
+  // resource-construction context, which carries the Stack's providers,
+  // so whatever they need is discharged there.
+  OnCreateE = never,
+  OnCreateR = never,
+  TransformE = never,
+  TransformR = never,
 >(
   type: R["Type"],
   hooks: {
@@ -294,9 +301,9 @@ export const Platform = <
     // `onCreate` runs inside the resource-construction context, which already
     // carries the Stack's providers — so the hook may yield child resources
     // (e.g. an async Worker registering a `WorkflowResource` for a bound
-    // Workflow). Allow an ambient requirement (`any`) rather than forcing
-    // `never`; it is discharged by the surrounding provider context.
-    onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    // Workflow). Its requirements are discharged by the surrounding
+    // provider context.
+    onCreate?: (resource: R, props: any) => Effect.Effect<void, OnCreateE, OnCreateR>;
     /**
      * Transform the user-supplied props before the underlying resource is
      * declared. Runs in the resource-construction context (Stack, Namespace,
@@ -306,7 +313,7 @@ export const Platform = <
      * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
      * wherever the props effect is, including inside deployed bundles.
      */
-    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    transformProps?: (id: string, props: any) => Effect.Effect<any, TransformE, TransformR>;
   },
   methods?: { [key: string]: any },
 ): any => {

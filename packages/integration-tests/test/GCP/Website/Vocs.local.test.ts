@@ -19,11 +19,9 @@ describe(
   "GCP.Website.Vocs local",
   { tags: ["provider:gcp", "provider:gcp:website", "local"] },
   () => {
-    // Vocs' vite plugin reads `src/pages` from process.cwd() rather than
-    // the project `root`, so alchemy-test (cwd = packages/alchemy) cannot
-    // host the cloned fixture. Cloudflare.Website.Vocs local uses the
-    // Worker source provider instead.
-    test.provider.skipIf(true)(
+    // Vocs reads `src/pages` from process.cwd(); the dev child runs in the
+    // project root.
+    test.provider(
       "dev runs the framework server with no cloud resources",
       (stack) =>
         Effect.gen(function* () {

@@ -225,13 +225,13 @@ Your store is eventually consistent with the model. A caller who has just sent a
 ```typescript title="packages/domain/test/ledgerAfterWithdrawal.ts"
 export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) {
   const accounts = yield* Account;
-  const receipt = yield* accounts.send(accountId, new WithdrawMoney({ amount: 2_000 }));
+  const receipt = yield* accounts.send(new WithdrawMoney({ accountId, amount: 2_000 }));
   yield* Ledger.caughtUp(receipt);
   return yield* (yield* LedgerStore).forAccount(accountId, { after: undefined, take: 50 });
 });
 ```
 
-`caughtUp` waits until the projection has handled every event of the command that it consumes directly from that aggregate. A client's receipt carries only `stream` and `version`; given that, `caughtUp` reads the command's events back from the aggregate. That's how a [query](/domain/query) waits for its caller's write: `atLeast: receipt`.
+`caughtUp` waits until the projection has handled every event of the command that it consumes. For a projection that reads a [view](/domain/view), that means the events the view emitted for the command: `caughtUp` waits for the view to apply the command, then for the projection to handle what the view emitted. A client's receipt carries only `stream` and `version`; given that, `caughtUp` reads the command's events back from the aggregate. That's how a [query](/domain/query) waits for its caller's write: `atLeast: receipt`.
 
 ## Serve it with a query
 
@@ -257,7 +257,7 @@ Projections run for real in a [story](/domain/story). Read back what one wrote t
 ```typescript title="packages/domain/test/Bank.story.test.ts"
 given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
 as(sam),
-when(a1, new WithdrawMoney({ amount: 2_500 })),
+when(new WithdrawMoney({ accountId: a1.id, amount: 2_500 })),
 then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
 query(AccountLedger, { account: a1.id }, [
   { kind: "MoneyDeposited", amount: 10_000, balanceAfter: 10_000 },

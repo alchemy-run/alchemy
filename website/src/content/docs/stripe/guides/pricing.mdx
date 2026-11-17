@@ -1,0 +1,200 @@
+---
+title: Price your product
+description: Per-seat tiers, packs, pay what you want, several currencies, paid trials and payment links, declared as Stripe resources next to the Worker that sells them.
+---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A price is fixed once customers use it. To charge differently, you create a
+new price and stop offering the old one. Declared in your Stack, a change to
+a price's amount, tiers or currency deploys as exactly that: a new price, and
+the old one archived.
+
+Every snippet below sits inside a Worker's `Effect.gen`, next to the routes
+that sell it, as in [Sell a subscription](/stripe/guides/subscriptions).
+
+```typescript
+const product = yield* Stripe.Product("Team", {
+  name: "Team",
+  unitLabel: "seat",
+  marketingFeatures: ["Unlimited projects", "Priority support"],
+});
+```
+
+`unitLabel` names one unit on receipts and Checkout, and
+`marketingFeatures` are the bullet points a pricing table shows.
+
+## Charge per seat, cheaper in bulk
+
+Give a price `tiers` instead of `unitAmount`. With `graduated` tiers, each
+seat is priced by the tier it falls in: here the first 5 cost $15 and every
+seat after that $12.
+
+```typescript
+const seats = yield* Stripe.Price("Seats", {
+  product,
+  currency: "usd",
+  recurring: { interval: "month" },
+  tiersMode: "graduated",
+  tiers: [
+    { upTo: 5, unitAmount: 1500 },
+    { upTo: "inf", unitAmount: 1200 },
+  ],
+});
+```
+
+With `tiersMode: "volume"`, every seat is priced by the tier the total
+reaches, so 12 seats cost 12 × $12. Add `flatAmount` to a tier to charge a
+fixed fee once that tier is reached.
+
+## Sell in packs
+
+`transformQuantity` divides the quantity before billing. Seats sold in packs
+of 10 charge one $20 pack for any 1 to 10 seats:
+
+```typescript
+const pack = yield* Stripe.Price("SeatPack", {
+  product,
+  currency: "usd",
+  unitAmount: 2000,
+  transformQuantity: { divideBy: 10, round: "up" },
+});
+```
+
+## Let the customer choose the amount
+
+For donations and tips, set `customUnitAmount` instead of an amount.
+Checkout asks the customer how much to pay, within your bounds:
+
+```typescript
+const donation = yield* Stripe.Price("Donation", {
+  product,
+  currency: "usd",
+  customUnitAmount: { minimum: 500, maximum: 50_000, preset: 1500 },
+});
+```
+
+## Charge in several currencies
+
+One price can carry an amount per currency. Checkout shows the customer's
+own currency:
+
+```typescript
+const monthly = yield* Stripe.Price("Monthly", {
+  product,
+  currency: "usd",
+  unitAmount: 1000,
+  recurring: { interval: "month" },
+  currencyOptions: {
+    eur: { unitAmount: 900 },
+    gbp: { unitAmount: 800 },
+  },
+});
+```
+
+Adding a currency updates the price in place. Changing or removing one
+creates a new price, because Stripe can't change a currency once it's set.
+
+## Pick the price Checkout shows first
+
+A product can have many prices. `defaultForProduct` makes one of them the
+product's default price, the one Stripe shows for the product when you
+don't name a price, as pricing tables do:
+
+```typescript
+const monthly = yield* Stripe.Price("Monthly", {
+  product,
+  currency: "usd",
+  unitAmount: 1000,
+  recurring: { interval: "month" },
+  defaultForProduct: true,
+});
+```
+
+When the price is replaced, the new one takes over as the default.
+
+## Include tax, or add it on top
+
+With [Stripe Tax](https://docs.stripe.com/tax), give the product a tax code
+and each price a tax behavior. `exclusive` adds tax on top of the amount;
+`inclusive` takes it out of it.
+
+```typescript
+const product = yield* Stripe.Product("Team", {
+  name: "Team",
+  taxCode: "txcd_10103001",
+});
+const monthly = yield* Stripe.Price("Monthly", {
+  product,
+  currency: "usd",
+  unitAmount: 1000,
+  recurring: { interval: "month" },
+  taxBehavior: "exclusive",
+});
+```
+
+A price with no tax behavior takes one in place the first time you set it.
+After that, changing it creates a new price. See
+[Collect tax and pay out](/stripe/guides/tax-and-payouts) for the account's
+tax settings.
+
+## Start with a paid trial
+
+A trial offer starts a subscription on a cheaper price for a number of
+billing periods, then moves it to the full price.
+
+<Timeline
+  end={4}
+  lanes={[{ id: "sub", label: "sub_1Q…", type: "IntroOffer" }]}
+  bars={[
+    { lane: "sub", start: 0, end: 1, label: "Intro · $1", tone: "accent" },
+    { lane: "sub", start: 1, end: 2, label: "Monthly · $10" },
+    { lane: "sub", start: 2, end: 3, label: "Monthly · $10" },
+    { lane: "sub", start: 3, end: 4, label: "Monthly · $10" },
+  ]}
+  marks={[{ at: 1, label: "trial ends" }]}
+  caption="With duration: { iterations: 1 }, the first month bills the Intro price. From the second month, the subscription moves to the Monthly price on its own."
+/>
+
+```typescript
+const intro = yield* Stripe.Price("Intro", {
+  product,
+  currency: "usd",
+  unitAmount: 100,
+  recurring: { interval: "month" },
+});
+const offer = yield* Stripe.TrialOffer("IntroOffer", {
+  price: intro,
+  duration: { iterations: 1 },
+  endBehavior: { transition: { price: monthly } },
+});
+```
+
+Attach the offer to a subscription item as
+`items[0].current_trial.trial_offer` when you create the subscription.
+Destroying the stack deactivates the offer, so no new subscription can
+start on it.
+
+## Sell without a page of your own
+
+A payment link is a URL to a Checkout page Stripe hosts, for a fixed set of
+prices. Share it anywhere; there's nothing to deploy but the link.
+
+```typescript
+const link = yield* Stripe.PaymentLink("BuyTeam", {
+  lineItems: [{ price: monthly.id, quantity: 1, adjustableQuantity: { enabled: true } }],
+  allowPromotionCodes: true,
+  taxIdCollection: { enabled: true },
+  subscriptionData: { trialPeriodDays: 14 },
+  restrictions: { completedSessions: { limit: 100 } },
+});
+```
+
+`link.url` is the address to share. Most options update the link in place.
+Changing its prices, `currency` or `subscriptionData.description` creates a
+new link with a new URL, and the old one stops working.
+
+:::note
+Every option is listed on the [Price](/providers/stripe/reference/product#price),
+[TrialOffer](/providers/stripe/reference/product#trialoffer) and
+[PaymentLink](/providers/stripe/reference/checkout#paymentlink) reference pages.
+:::

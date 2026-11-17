@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -86,6 +87,22 @@ test.provider(
       expect(observedUpdated?.logGroupClass).toBe("INFREQUENT_ACCESS");
       expect(observedUpdated?.deletionProtectionEnabled).toBe(true);
       expect(observedUpdated?.retentionInDays).toBe(14);
+
+      // Deletion protection refuses the destroy (and a replacement): the
+      // provider never lifts it. Turn it off and deploy before replacing.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "ConfiguredLogGroup",
+        tag: "LogGroupDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* LogGroup("ConfiguredLogGroup", {
+            retention: "14 days",
+            logGroupClass: "INFREQUENT_ACCESS",
+            deletionProtectionEnabled: false,
+          });
+        }),
+      );
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {

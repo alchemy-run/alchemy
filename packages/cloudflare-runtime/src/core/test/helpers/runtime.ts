@@ -1,3 +1,4 @@
+import * as NodeHttp from "node:http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { Done } from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -176,3 +177,20 @@ export const makeTempDirectory = Effect.fn(function* (prefix?: string) {
   yield* Effect.addFinalizer(() => remove(0));
   return dir;
 });
+
+/** GETs `path` from a server listening on the Unix socket at `socketPath`. */
+export const fetchOverSocket = (socketPath: string, path: string) =>
+  Effect.callback<string, Error>((resume) => {
+    const request = NodeHttp.get(
+      { socketPath, path, headers: { host: "localhost" }, signal: AbortSignal.timeout(10_000) },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => (body += chunk));
+        response.on("end", () => resume(Effect.succeed(body)));
+        response.on("error", (error) => resume(Effect.fail(error)));
+      },
+    );
+    request.on("error", (error) => resume(Effect.fail(error)));
+    return Effect.sync(() => request.destroy());
+  });

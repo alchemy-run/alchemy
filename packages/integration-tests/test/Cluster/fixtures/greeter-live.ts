@@ -25,6 +25,15 @@ export const greeterLive = <R>(main: string, pool: Cluster.PoolLayer<R>) =>
               Effect.map((answer) => (Option.isSome(answer) ? answer.value : "timed out")),
               Effect.orDie,
             ),
+          AbandonCounter: ({ payload }) =>
+            counters.getByName(payload.id).pipe(
+              Effect.flatMap((counter) =>
+                payload.call === "Settle" ? counter.Settle() : Effect.as(counter.Mark(), "marked"),
+              ),
+              Effect.timeoutOption("500 millis"),
+              Effect.map((answer) => (Option.isSome(answer) ? answer.value : "timed out")),
+              Effect.orDie,
+            ),
         });
       });
     }).pipe(Effect.provide(pool)),

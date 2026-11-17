@@ -10,11 +10,12 @@ import type {
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { Artifacts } from "alchemy/Artifacts";
 import type * as Bundle from "alchemy/Bundle/Bundle";
+import { initialCwd } from "alchemy/Util/Node";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
+import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
@@ -94,11 +95,10 @@ export interface SourceContext {
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**
-   * Raw `props.env`. Deliberately unresolved: env entries may be Effects
-   * whose evaluation requires plan-phase context that is not available
-   * inside lifecycle operations — a source that needs literal values
-   * (e.g. vite's `import.meta.env` defines) resolves them itself, exactly
-   * as the vite arm always has.
+   * `props.env`. For `build`, entries that resolve to literals
+   * (`resolveBuildEnv`: `Worker.URL`, Redacted and env-bound Effects) are
+   * replaced by them and bindings are kept; for `hash` and `dev` it is the
+   * raw props value.
    */
   readonly env: Record<string, unknown> | undefined;
   /**
@@ -126,7 +126,15 @@ export interface SourceContext {
  */
 export type DevWorkerOptions = Pick<
   RuntimeWorker,
-  "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access" | "workerd"
+  | "workflows"
+  | "crons"
+  | "tails"
+  | "streamingTails"
+  | "cache"
+  | "cf"
+  | "access"
+  | "workerd"
+  | "publicUrl"
 >;
 
 /**
@@ -150,6 +158,12 @@ export interface DevContext extends SourceContext {
      * here reaches every source.
      */
     readonly options: DevWorkerOptions;
+    /**
+     * Named entrypoints the Worker binds to itself. workerd resolves them
+     * before the module is evaluated, so the source hands them to the
+     * Cloudflare Vite plugin up front.
+     */
+    readonly entrypoints?: ReadonlyArray<string> | undefined;
   };
   /** RuntimeServices context for providers that embed cloudflare-runtime. */
   readonly runtimeContext: Context.Context<RuntimeServices>;
@@ -283,6 +297,19 @@ export interface SourceProvider {
 }
 
 /**
+ * What the engine hands a source module's `make` besides its options.
+ */
+export interface SourceModuleContext {
+  /**
+   * The descriptor's {@link WorkerSourceDescriptor.rootDir}, resolved once
+   * to an absolute path. Sources read their project root from here, never
+   * from their own options, so the dev child's working directory and the
+   * root the source builds always agree.
+   */
+  readonly rootDir: string;
+}
+
+/**
  * The contract of a dynamically-imported source-provider module: its
  * default export builds a {@link SourceProvider} from the descriptor's
  * (JSON-serializable) options. `make` provides the package's own layers
@@ -291,6 +318,7 @@ export interface SourceProvider {
 export interface WorkerSourceModule {
   readonly make: (
     options: unknown,
+    context: SourceModuleContext,
   ) => Effect.Effect<SourceProvider, SourceProviderError, SourceServices>;
 }
 
@@ -343,14 +371,19 @@ const importSourceModule = (
 /**
  * Load an external source provider from its serializable descriptor:
  * dynamically import the module, validate the shape, and call
- * `make(options)`.
+ * `make(options, { rootDir })` with the descriptor's root resolved against
+ * the engine's initial working directory.
  */
 export const loadSource = (
   descriptor: WorkerSourceDescriptor,
 ): Effect.Effect<SourceProvider, SourceProviderError, SourceServices> =>
-  importSourceModule(descriptor.provider).pipe(
-    Effect.flatMap((mod) => mod.make(descriptor.options)),
-  );
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const mod = yield* importSourceModule(descriptor.provider);
+    return yield* mod.make(descriptor.options, {
+      rootDir: path.resolve(initialCwd, descriptor.rootDir ?? "."),
+    });
+  });
 
 /**
  * Whether a Worker has no code at all — no `main`, `script`, `vite` or
