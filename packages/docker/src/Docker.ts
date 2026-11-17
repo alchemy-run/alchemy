@@ -507,7 +507,21 @@ export class Docker extends Context.Service<
         "env-rm"?: string[];
         args?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
-      /** Inspects a service. */
+      /**
+       * Runs `docker service inspect` and returns the raw CLI result.
+       *
+       * `stdout` is a JSON array of service descriptions, not an already
+       * decoded service object. Parse it with `Schema.fromJsonString` and
+       * `Schema.decodeEffect` when consuming the Docker service metadata.
+       * `stderr` and `exitCode` follow the same `CommandOutput` contract as
+       * other low-level CLI methods. Docker command failures use the typed
+       * `PlatformError` channel.
+       *
+       * Earlier releases declared `CommandOutput` but accidentally returned
+       * the first decoded object at runtime. Consumers of that undocumented
+       * behavior must now decode `result.stdout`. The `Docker.Service`
+       * resource API is unaffected by this correction.
+       */
       readonly inspect: (
         id: string,
         context?: Docker.Target,

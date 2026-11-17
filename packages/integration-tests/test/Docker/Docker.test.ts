@@ -388,6 +388,16 @@ describe("Docker CLI JSON decoding", (it) => {
 
           const service = yield* docker.service.inspect("not-important");
           expect(service.stdout).toBe("{invalid-json");
+
+          // The low-level service inspector must honor its declared
+          // CommandOutput contract, even though Docker prints a JSON array.
+          const json = '[{"ID":"service-1","Spec":{"Name":"example"}}]';
+          yield* fs.writeFileString(executable, `#!/bin/sh\nprintf '%s\\n' '${json}'\n`);
+          const inspected = yield* docker.service.inspect("service-1");
+          expect(inspected.stdout).toBe(json);
+          expect(inspected.stderr).toBe("");
+          expect(Number(inspected.exitCode)).toBe(0);
+          expect("ID" in inspected).toBe(false);
         }).pipe(
           Effect.provide(dockerLive({ bin: executable })),
           Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),

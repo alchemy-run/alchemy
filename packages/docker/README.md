@@ -59,6 +59,14 @@ The runner still needs access to the remote engine and its SSH keys or TLS certi
 
 For mTLS connections, set `docker` to a Docker endpoint spec with `host`, `ca`, `cert`, and `key` file paths accessible to each runner. For SSH, the runner's Docker CLI must be able to authenticate to the remote host. A missing or unreachable remote Engine is an error, not an absent Docker resource.
 
+### Low-level Docker service inspection
+
+`docker.service.inspect(id, target?)` on the injected `Docker.Docker` client returns the declared `CommandOutput` (`stdout`, `stderr`, `exitCode`). Its `stdout` is the JSON **array** returned by `docker service inspect`; decode it with Effect Schema when reading service fields. Earlier versions accidentally returned the first parsed object at runtime despite declaring `CommandOutput`. If you relied on `result.ID` or `result.Spec` in JavaScript, read and decode `result.stdout` instead. The declarative `Docker.Service(...)` resource is unaffected. See [Services: low-level inspection](https://alchemy.run/docker/services#inspect-services-through-the-low-level-docker-client).
+
+### Remote integration-test isolation
+
+`packages/integration-tests/test/Docker/Context.Remote.test.ts` runs opt-in tests against an Engine specified by `ALCHEMY_DOCKER_REMOTE_SPEC`. Ordinary remote context/build tests never modify Swarm membership. The Swarm tests require **all** of the following before they initialize or leave Swarm: `ALCHEMY_DOCKER_REMOTE_SWARM=1`, an exact `ALCHEMY_DOCKER_REMOTE_SWARM_ENGINE_ID` matching `docker info --format '{{.ID}}'`, the **daemon** label `alchemy.test.disposable=true`, and no existing containers, volumes or custom networks. The Engine must also be outside Swarm. These are destructive tests: use a freshly provisioned, disposable Docker daemon (such as Docker-in-Docker), never a workstation or production daemon. Set the daemon label when creating the disposable Engine, not by changing a shared daemon's configuration. Set `ALCHEMY_DOCKER_REMOTE_ROTATE_TLS=1` to select the separate mTLS rotation case. Keep `DOCKER_CONFIG` isolated, and provide credentials through SSH or certificate files rather than the endpoint string.
+
 ## Network configuration
 
 A network can be internal, attachable, and pinned to an explicit subnet:

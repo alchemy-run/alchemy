@@ -65,6 +65,9 @@ export interface ServicePropsBase extends PlatformProps {
   endpointMode?: "vip" | "dnsrr";
   /**
    * Desired number of service replicas.
+   * Must be a non-negative integer. Invalid values fail with
+   * `DockerServiceInvalidConfiguration` in the typed Effect error channel,
+   * before creating or modifying a Docker service.
    *
    * @default 1
    */
