@@ -1,4 +1,5 @@
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 import { Credentials, fromDeployment, team } from "@alchemy.run/convex/Credentials";
 import * as management from "@distilled.cloud/convex/management";
@@ -10,12 +11,26 @@ import * as Stream from "effect/Stream";
 
 const PREFIX = "alchemy-convex-test-";
 
-/** A deterministic project name for this test and stage. */
-export const testName = (suffix: string) =>
-  Effect.gen(function* () {
-    const stage = yield* Stage;
-    return `${PREFIX}${suffix}-${stage}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-  });
+/**
+ * Convex derives a project's slug from its name and refuses one over 64
+ * characters. Tests add up to three more (`-a`, `-2`) for a second project.
+ */
+const MAX_NAME = 60;
+
+/**
+ * A deterministic project name for this test and stage. A long stage (a linked
+ * worktree's) is cut and suffixed with a hash, so the name stays under Convex's
+ * limit and still differs per stage.
+ */
+export const testName = Effect.fn(function* (suffix: string) {
+  const stage = yield* Stage;
+  const name = `${PREFIX}${suffix}-${stage}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  if (name.length <= MAX_NAME) return name;
+  const hash = yield* Effect.sync(() =>
+    NodeCrypto.createHash("sha256").update(name).digest("hex").slice(0, 8),
+  );
+  return `${name.slice(0, MAX_NAME - hash.length - 1)}-${hash}`;
+});
 
 /** The projects with exactly this name. */
 export const projectsNamed = Effect.fn(function* (name: string) {

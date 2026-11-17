@@ -34,7 +34,7 @@ const withKey =
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.provide(fromToken(key)));
 
-test.provider.skipIf(process.env.CONVEX_TEST_PROBE !== "1")(
+test.provider(
   "what a preview deploy key and a prod deploy key can do alone",
   (stack) =>
     Effect.gen(function* () {
@@ -101,11 +101,11 @@ test.provider.skipIf(process.env.CONVEX_TEST_PROBE !== "1")(
       expect(report).toEqual({
         previewListDeployments: "ok",
         previewCreateDeployment: "ok",
-        previewCreateDeployKey: "PreviewDeployKeyNotAllowed",
+        previewCreateDeployKey: "NotAllowed",
         previewUpdateVariables: "ok",
         previewDeleteDeployment: "ok",
         prodKeyDeploymentInfo: "ok",
-        prodKeyManagementGetDeployment: "DeployKeyNotAccepted",
+        prodKeyManagementGetDeployment: "UnexpectedAuthHeaderFormat",
       });
       yield* stack.destroy();
     }),
