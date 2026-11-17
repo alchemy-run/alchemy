@@ -140,7 +140,13 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     // `set`/`get` store keys verbatim, so canonicalize here (the caller's job).
     const key = sanitizeKey(id);
     return RuntimeContext.pipe(
-      Effect.flatMap((ctx) => Effect.map(ctx.set(key, this), (k) => ctx.get<A>(k))),
+      Effect.flatMap((ctx) =>
+        Effect.map(
+          // A sandbox's gateway holds what its bindings bind (see `Gateway.ts`).
+          ctx.gateway?.phase === "plan" ? ctx.gateway.set(key, this) : ctx.set(key, this),
+          (k) => ctx.get<A>(k),
+        ),
+      ),
     );
   }
 

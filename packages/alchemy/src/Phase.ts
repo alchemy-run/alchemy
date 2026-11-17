@@ -26,6 +26,12 @@ declare global {
    * the code that host never runs (signing with a key Alchemy created).
    */
   var __ALCHEMY_HOST_IDENTITY__: string | undefined;
+  /**
+   * Set by a sandbox gateway's entry before it runs the sandbox's program:
+   * this Construction is the gateway's, so bindings are built for real and
+   * kept for the sandbox to call. `undefined` everywhere else.
+   */
+  var __ALCHEMY_GATEWAY__: boolean | undefined;
 }
 
 export type AlchemyPhase = "plan" | "runtime";

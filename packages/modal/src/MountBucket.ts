@@ -82,7 +82,7 @@ export interface MountBucket extends Binding.Service<
   (bucket: string | BucketResource, options: MountBucketOptions) => Effect.Effect<BucketMountRef>
 > {}
 
-export const MountBucket = Binding.Service<MountBucket>("Modal.MountBucket");
+export const MountBucket = Binding.Service<MountBucket>("Modal.MountBucket", { local: true });
 
 const R2_BUCKET = "Cloudflare.R2.Bucket";
 

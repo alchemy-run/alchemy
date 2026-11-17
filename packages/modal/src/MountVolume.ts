@@ -63,7 +63,7 @@ export interface MountVolume extends Binding.Service<
   (volume: Volume, options: VolumeMountOptions) => Effect.Effect<VolumeMountRef>
 > {}
 
-export const MountVolume = Binding.Service<MountVolume>("Modal.MountVolume");
+export const MountVolume = Binding.Service<MountVolume>("Modal.MountVolume", { local: true });
 
 /** Runtimes that mount volumes into their own containers. */
 export const MODAL_RUNTIMES = new Set(["Modal.Function", "Modal.Server", "Modal.Sandbox"]);

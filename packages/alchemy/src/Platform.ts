@@ -574,7 +574,13 @@ export const Platform = <
                           if (phase === "plan" && node) {
                             // bind it to the RuntimeContext if running in plan phase
                             const output = Output.literal(Redacted.make(node.value));
-                            yield* ctx?.set(key, output) ?? Effect.void;
+                            // Under a sandbox gateway the program's Construction also
+                            // runs in the gateway, which reads the same config.
+                            yield* (
+                              (ctx?.gateway?.phase === "plan"
+                                ? ctx.gateway.set(key, output, { sandbox: true })
+                                : ctx?.set(key, output)) ?? Effect.void
+                            );
                             return node;
                           } else if (phase === "runtime" && ctx) {
                             // retrieve from the RuntimeContext if running in runtime phase

@@ -379,7 +379,7 @@ export interface MountDisk extends Binding.Service<
   ) => Effect.Effect<DiskMountRef & MountAnyDiskClient>)
 > {}
 
-export const MountDisk = Binding.Service<MountDisk>("Archil.MountDisk");
+export const MountDisk = Binding.Service<MountDisk>("Archil.MountDisk", { local: true });
 
 type BindableHost = {
   readonly Type: string;

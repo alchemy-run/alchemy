@@ -2,10 +2,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Gateway from "./Gateway.ts";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
 import { isResource, type ResourceLike } from "./Resource.ts";
+import { CurrentRuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import { taggedFunction } from "./Util/effect.ts";
 
@@ -101,6 +103,14 @@ export const Service = <
   },
 >(
   id: Self["key"],
+  options?: {
+    /**
+     * The binding configures the host it is provided on (a mount) and holds
+     * no credential: under a sandbox gateway it is still built on the
+     * sandbox, never on the gateway.
+     */
+    readonly local?: boolean;
+  },
 ): Self => {
   // Tag key is the caller-supplied `id`, so it can't be a class declaration.
   // oxlint-disable-next-line effecttsgo/service-not-as-class
@@ -111,7 +121,8 @@ export const Service = <
         concurrency: "unbounded",
       }).pipe(
         Effect.flatMap((resolved) =>
-          f(...resolved).pipe(
+          // A sandbox with a gateway builds its bindings there (see `Gateway.ts`).
+          Gateway.bind(id, resolved, f, options?.local === true).pipe(
             // Deploy-time data-plane routing: the client's calls must target
             // whatever data plane the bound resource actually lives on. In an
             // `alchemy dev` run a local-mode resource exists only on the
@@ -273,6 +284,13 @@ const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, nev
  * `host.bind` (e.g. Cloudflare's `isWorker`, or `AWSBindings.runsAsRole`);
  * both reject `undefined`.
  */
-export const Host: Effect.Effect<ResourceLike | undefined> = Effect.serviceOption(
-  Self as unknown as Context.Service<ResourceLike, ResourceLike>,
-).pipe(Effect.map(Option.getOrUndefined));
+export const Host: Effect.Effect<ResourceLike | undefined> = Effect.flatMap(
+  CurrentRuntimeContext,
+  (ctx) =>
+    // A sandbox's bindings attach to its gateway, not to the sandbox.
+    ctx?.gateway?.phase === "plan"
+      ? Effect.succeed(ctx.gateway.self as ResourceLike)
+      : Effect.serviceOption(Self as unknown as Context.Service<ResourceLike, ResourceLike>).pipe(
+          Effect.map(Option.getOrUndefined),
+        ),
+);

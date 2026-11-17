@@ -59,6 +59,12 @@ export interface BaseRuntimeContext {
    */
   inputGate?: boolean;
   /**
+   * Set during Construction by a sandbox gateway Layer (see `Gateway.ts`):
+   * every binding of this host is built with the gateway as its host, and
+   * the sandbox gets a client that calls it there.
+   */
+  gateway?: GatewayContext;
+  /**
    * Mint an OIDC ID token for `audience`, signed by the host's platform
    * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform
    * issues them. Bindings exchange it with a cloud's STS instead of
@@ -66,6 +72,44 @@ export interface BaseRuntimeContext {
    */
   oidcToken?: (audience: string) => Effect.Effect<Redacted.Redacted<string>, OidcTokenError>;
 }
+
+/**
+ * A sandbox's gateway, as the phase a program's Construction is running in
+ * sees it. The same program runs three times: at deploy, inside the gateway,
+ * and inside each sandbox.
+ */
+export type GatewayContext =
+  | {
+      /** At deploy: bindings attach to the gateway, and their values are stored on it. */
+      readonly phase: "plan";
+      /** The gateway, as the host bindings attach to. */
+      readonly self: { readonly Type: string; readonly LogicalId: string };
+      /**
+       * Store a value Construction binds. The gateway gets it; the sandbox
+       * gets it only with `sandbox` set (the program's own `Config`).
+       */
+      readonly set: (
+        key: string,
+        output: Output,
+        options?: { readonly sandbox?: boolean },
+      ) => Effect.Effect<string>;
+    }
+  | {
+      /** Inside the gateway: bindings are built for real, and their clients kept. */
+      readonly phase: "gateway";
+      /** Keep a binding's client for the sandbox to call. */
+      readonly register: (key: string, client: unknown) => Effect.Effect<void>;
+    }
+  | {
+      /** Inside the sandbox: bindings are not built; calls go to the gateway. */
+      readonly phase: "sandbox";
+      /** Call `path` on the client the gateway holds under `key`. */
+      readonly call: (
+        key: string,
+        path: ReadonlyArray<string>,
+        args: ReadonlyArray<unknown> | undefined,
+      ) => Effect.Effect<unknown, unknown>;
+    };
 
 /** The host's platform did not issue an OIDC token. */
 export class OidcTokenError extends Data.TaggedError("OidcTokenError")<{
