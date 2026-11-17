@@ -1596,8 +1596,9 @@ export const LiveContainerProvider = () =>
           }
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
 
-          // Special case: precreate produced an application without the
-          // durable object attachment, but the real reconcile now has one.
+          // Special case: the observed application's durable object
+          // attachment differs from the desired one (e.g. an adopted or
+          // detached application that is now attached).
           // The DO attachment is immutable, so we delete
           // and recreate. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
