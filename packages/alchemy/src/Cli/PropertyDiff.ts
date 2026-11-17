@@ -130,9 +130,16 @@ const CIRCULAR = "(circular)";
 export const toYamlDisplayValue = (
   value: unknown,
   ancestors: WeakSet<object> = new WeakSet(),
+): YamlDisplayValue => toYamlDisplayValueRedacting(value, undefined, ancestors);
+
+/** Desired secret wrappers also hide legacy plaintext at the same path. */
+const toYamlDisplayValueRedacting = (
+  value: unknown,
+  desired: unknown,
+  ancestors: WeakSet<object> = new WeakSet(),
 ): YamlDisplayValue => {
   // Output expressions are Effects too, so this order is security-sensitive.
-  if (Redacted.isRedacted(value)) return REDACTED;
+  if (Redacted.isRedacted(desired) || Redacted.isRedacted(value)) return REDACTED;
   if (Output.isExpr(value)) return KNOWN_AFTER_APPLY;
   if (Effect.isEffect(value) || typeof value === "function") return COMPUTED;
   if (value === undefined) return UNDEFINED;
@@ -145,14 +152,27 @@ export const toYamlDisplayValue = (
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item) => toYamlDisplayValue(item, ancestors));
+      return value.map((item, index) =>
+        toYamlDisplayValueRedacting(
+          item,
+          Array.isArray(desired) && Object.hasOwn(desired, index) ? desired[index] : undefined,
+          ancestors,
+        ),
+      );
     }
+    const desiredRecord = isPlainData(desired) && !Array.isArray(desired) ? desired : undefined;
     return Object.fromEntries(
       Object.keys(value)
         .sort((a, b) => a.localeCompare(b))
         .map((key) => [
           key,
-          toYamlDisplayValue((value as Record<string, unknown>)[key], ancestors),
+          toYamlDisplayValueRedacting(
+            (value as Record<string, unknown>)[key],
+            desiredRecord !== undefined && Object.hasOwn(desiredRecord, key)
+              ? desiredRecord[key]
+              : undefined,
+            ancestors,
+          ),
         ]),
     );
   } finally {
@@ -197,7 +217,11 @@ export const formatDeclaredPropertyYaml = (
     kind: "change",
     lines: [
       "properties:",
-      ...unifiedDriftLines(toYamlDisplayValue(oldProps ?? {}), toYamlDisplayValue(desired), 2),
+      ...unifiedDriftLines(
+        toYamlDisplayValueRedacting(oldProps ?? {}, desired),
+        toYamlDisplayValue(desired),
+        2,
+      ),
     ],
   };
 };
