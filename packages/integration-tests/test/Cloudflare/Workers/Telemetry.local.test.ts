@@ -163,6 +163,88 @@ test.provider(
 );
 
 test.provider(
+  "exports spans from fibers a Durable Object's instance phase forks or a call leaves running",
+  (stack) =>
+    Effect.gen(function* () {
+      const collector = yield* startOtlpCollector();
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
+      const deployment = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* OtelEventFlushWorker;
+            return { url: worker.url };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({
+                OTLP_EVENT_FLUSH_URL: `${collector.url}/v1/traces`,
+              }),
+              currentConfig,
+            ),
+          ),
+        );
+      if (deployment.url === undefined) {
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
+      }
+
+      // The first call constructs the object; its instance phase forks a
+      // fiber that records a span outside any event. The call also leaves a
+      // fiber running that records a span a second after the call ended.
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* client.get(`${deployment.url}/rpc-fork-late`);
+      expect(response.status).toBe(200);
+      expect(yield* response.text).toBe("worker-saw:durable-object-rpc-ok");
+
+      const spans = Effect.suspend(() =>
+        Effect.forEach(collector.requests, (batch) =>
+          Schema.decodeUnknownEffect(TraceExport)(batch.body),
+        ),
+      ).pipe(
+        Effect.map((exports) =>
+          exports.flatMap(({ resourceSpans }) =>
+            resourceSpans.flatMap((resource) =>
+              resource.scopeSpans.flatMap((scope) => scope.spans.map((span) => span.name)),
+            ),
+          ),
+        ),
+      );
+      const names = yield* spans.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("200 millis"),
+          until: (names) => names.includes("otel-event-flush.instance"),
+          times: 50,
+        }),
+      );
+      expect(names.filter((name) => name === "otel-event-flush.instance")).toHaveLength(1);
+
+      // The late span went to the instance's exporters, so the next event
+      // delivers it.
+      yield* Effect.sleep("2 seconds");
+      const next = yield* client.get(`${deployment.url}/rpc`);
+      expect(next.status).toBe(200);
+      yield* next.text;
+      const after = yield* spans.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("200 millis"),
+          until: (names) => names.includes("otel-event-flush.after-event"),
+          times: 50,
+        }),
+      );
+      expect(after.filter((name) => name === "otel-event-flush.after-event")).toHaveLength(1);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
   "flushes a streamed body's spans after the body settles without delaying its end",
   (stack) =>
     Effect.gen(function* () {
