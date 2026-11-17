@@ -14,6 +14,7 @@ import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { clients, decode, encode, TOKEN_HEADER, TOKEN_KEY } from "../Gateway.ts";
@@ -37,7 +38,13 @@ const reply = (value: unknown, status = 200) =>
  * Serve a sandbox's program as its gateway. `env` is the gateway's
  * environment: the values the program's bindings bound at deploy.
  */
-export const serve = (entrypoint: unknown) => {
+export const serve = (
+  entrypoint: unknown,
+  options?: {
+    /** Platform services the program's Construction may use (a Node host's file system, …). */
+    readonly services?: Layer.Layer<any>;
+  },
+) => {
   let construction: Promise<Context.Context<never>> | undefined;
 
   const construct = (env: Record<string, unknown>) => {
@@ -50,6 +57,7 @@ export const serve = (entrypoint: unknown) => {
     const layer = entrypointLayer(entrypoint).pipe(
       Layer.provideMerge(stackFromEnv),
       Layer.provideMerge(FetchHttpClient.layer),
+      Layer.provideMerge(options?.services ?? Layer.empty),
       Layer.provideMerge(
         Layer.succeed(
           ConfigProvider.ConfigProvider,
@@ -65,12 +73,11 @@ export const serve = (entrypoint: unknown) => {
 
   return async (request: Request, env: Record<string, unknown>): Promise<Response> => {
     const expected = unpackEnvValue<unknown>(env[TOKEN_KEY] as string | undefined);
-    const secret =
-      typeof expected === "string"
+    const secret = Redacted.isRedacted(expected)
+      ? String(Redacted.value(expected))
+      : typeof expected === "string"
         ? expected
-        : expected !== undefined
-          ? String((expected as { value?: unknown }).value ?? "")
-          : "";
+        : "";
     const presented = request.headers.get(TOKEN_HEADER);
     if (secret === "" || presented === null || !sameText(presented, secret)) {
       return new Response("forbidden", { status: 403 });

@@ -69,6 +69,33 @@ export interface Deployed {
   readonly set: (key: string, output: Output.Output) => Effect.Effect<void>;
 }
 
+/** The sandbox program a gateway runs: the sandbox's own `main` and export. */
+export const programOf = (sandbox: unknown) => {
+  const props = (sandbox as { Props?: { main?: string; handler?: string } }).Props ?? {};
+  return {
+    main: props.main?.startsWith("file:") ? new URL(props.main).pathname : (props.main ?? ""),
+    handler: props.handler ?? "default",
+  };
+};
+
+const PROGRAM = "virtual:alchemy-gateway-program";
+
+/**
+ * A bundler plugin for a gateway host's entry: resolves its
+ * `virtual:alchemy-gateway-program` import to the sandbox's program.
+ */
+export const programPlugin = (sandbox: unknown) => {
+  const { main, handler } = programOf(sandbox);
+  return {
+    name: "alchemy:gateway-program",
+    resolveId: (id: string) => (id === PROGRAM ? `\0${PROGRAM}` : null),
+    load: (id: string) =>
+      id === `\0${PROGRAM}`
+        ? `export { ${handler} as default } from ${JSON.stringify(main)};`
+        : null,
+  };
+};
+
 const literal = <A>(value: A) => Output.literal(value) as unknown as Output.Output<A, never>;
 
 /**

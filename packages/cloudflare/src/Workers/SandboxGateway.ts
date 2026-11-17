@@ -9,16 +9,6 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { Worker } from "./Worker.ts";
 
-const PROGRAM = "virtual:alchemy-gateway-program";
-
-/** Resolves the gateway entry's program import to the sandbox's own `main`. */
-const programPlugin = (main: string, handler: string) => ({
-  name: "alchemy:gateway-program",
-  resolveId: (id: string) => (id === PROGRAM ? `\0${PROGRAM}` : null),
-  load: (id: string) =>
-    id === `\0${PROGRAM}` ? `export { ${handler} as default } from ${JSON.stringify(main)};` : null,
-});
-
 const entry = new URL(
   import.meta.url.endsWith(".ts") ? "./SandboxGatewayEntry.ts" : "./SandboxGatewayEntry.js",
   import.meta.url,
@@ -46,10 +36,6 @@ export const SandboxGateway = Layer.effect(
     Gateway.make(
       Effect.gen(function* () {
         const sandbox = yield* Self;
-        const props = (sandbox as { Props?: { main?: string; handler?: string } }).Props ?? {};
-        const main = props.main?.startsWith("file:")
-          ? new URL(props.main).pathname
-          : (props.main ?? "");
         const secret = yield* Namespace.push(sandbox.LogicalId, makeRandom("GatewayToken"));
         const worker = (yield* Namespace.push(
           sandbox.LogicalId,
@@ -58,7 +44,7 @@ export const SandboxGateway = Layer.effect(
           Worker(`${sandbox.LogicalId}Gateway`, {
             main: entry,
             env: { [Gateway.TOKEN_KEY]: secret.text },
-            build: { input: { plugins: [programPlugin(main, props.handler ?? "default")] } },
+            build: { input: { plugins: [Gateway.programPlugin(sandbox)] } },
           }),
         )) as Worker;
         return {

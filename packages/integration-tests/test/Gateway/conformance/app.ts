@@ -1,5 +1,7 @@
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -30,7 +32,12 @@ export const app = Effect.gen(function* () {
         apiKey: env.E2B_API_KEY ?? null,
         gateway: env.ALCHEMY_GATEWAY_URL ?? null,
       });
-    }).pipe(Effect.orDie),
+    }).pipe(
+      // Say why, so a failing platform's test shows the cause.
+      Effect.catchCause((cause) =>
+        Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+      ),
+    ),
   };
 });
 
@@ -38,6 +45,9 @@ export const app = Effect.gen(function* () {
 export const WorkerGateway = E2B.ReadTeamHttp.pipe(
   Layer.provide(Cloudflare.Workers.SandboxGateway),
 );
+
+/** The program's bindings, built on a Lambda Web Function gateway. */
+export const WebFunctionGateway = E2B.ReadTeamHttp.pipe(Layer.provide(AWS.Lambda.SandboxGateway));
 
 /** What {@link app} answers. */
 export interface Served {
