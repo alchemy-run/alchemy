@@ -10,6 +10,7 @@ export * from "./ListAuthProviderAuthorizations.ts";
 export * from "./ListAuthProviders.ts";
 export * from "./QueryAuthProvider.ts";
 export * from "./QueryAuthProviderWorkloads.ts";
+export * from "./ResolveAuthProviderAuthorization.ts";
 export * from "./RevokeAuthProviderAuthorization.ts";
 export * from "./UndeleteAuthProvider.ts";
 export * from "./AuthProviderAuditLogs.ts";

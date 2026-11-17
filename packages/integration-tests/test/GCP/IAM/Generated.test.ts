@@ -67,7 +67,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "iam.policies.listPolicies: addressed under `policies/`, not a project",
+        "iam.policies.createPolicy: addressed under `policies/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -75,7 +75,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "iam.policies.createPolicy: addressed under `policies/`, not a project",
+        "iam.policies.listPolicies: addressed under `policies/`, not a project",
         () => Effect.void,
       );
     });

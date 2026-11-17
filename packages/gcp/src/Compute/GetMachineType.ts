@@ -24,7 +24,7 @@ export type GetMachineTypeShape = () => Effect.Effect<
  * **Example:** Call `machineTypes.get`
  * ```typescript
  * const getMachineType = yield* GCP.Compute.GetMachineType();
- * const response = yield* getMachineType({ machineType: "...", zone: "..." });
+ * const response = yield* getMachineType({ zone: "...", machineType: "..." });
  * ```
  *
  * @binding

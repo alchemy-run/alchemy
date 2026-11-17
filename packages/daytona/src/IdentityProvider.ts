@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import { declarable } from "./internal/Declared.ts";
 import { isOwnedName, resolveName } from "./internal/Names.ts";
 import {
   currentOrganizationId,
@@ -85,7 +86,9 @@ export type IdentityProvider = Resource<
  * @resource
  * @product Organization
  */
-export const IdentityProvider = Resource<IdentityProvider>("Daytona.IdentityProvider");
+export const IdentityProvider = declarable<IdentityProvider>()(
+  Resource<IdentityProvider>("Daytona.IdentityProvider"),
+);
 
 const toAttributes = (
   organizationId: string,

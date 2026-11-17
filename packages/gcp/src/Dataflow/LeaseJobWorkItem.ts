@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface LeaseJobWorkItemRequest extends Omit<
-  dataflow.LeaseProjectsJobsWorkItemsRequest,
+  dataflow.LeaseProjectsLocationsJobsWorkItemsRequest,
   "projectId"
 > {}
 
@@ -16,7 +16,7 @@ export type LeaseJobWorkItemShape = () => Effect.Effect<
     request: LeaseJobWorkItemRequest,
   ) => Effect.Effect<
     dataflow.LeaseWorkItemResponse,
-    dataflow.LeaseProjectsJobsWorkItemsError,
+    dataflow.LeaseProjectsLocationsJobsWorkItemsError,
     RuntimeContext
   >
 >;
@@ -31,7 +31,7 @@ export type LeaseJobWorkItemShape = () => Effect.Effect<
  * **Example:** Call `workItems.lease`
  * ```typescript
  * const leaseJobWorkItem = yield* GCP.Dataflow.LeaseJobWorkItem();
- * const response = yield* leaseJobWorkItem({ jobId: "..." });
+ * const response = yield* leaseJobWorkItem({ jobId: "...", location: "..." });
  * ```
  *
  * @binding
@@ -57,7 +57,7 @@ export const LeaseJobWorkItemHttp = Layer.effect(
     tag: "GCP.Dataflow.LeaseJobWorkItem",
     variants: [
       {
-        operation: dataflow.leaseProjectsJobsWorkItems,
+        operation: dataflow.leaseProjectsLocationsJobsWorkItems,
         projectField: "projectId",
         role: "roles/dataflow.worker",
       },

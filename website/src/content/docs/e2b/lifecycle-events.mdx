@@ -7,6 +7,8 @@ import Timeline from "../../../components/diagrams/Timeline.astro";
 
 E2B reports what happens to each sandbox in the team to a **webhook**: a URL you register, which E2B calls with one signed event each time a sandbox is created, paused, resumed, checkpointed or killed. The event carries the sandbox's metadata, so your handler can tell whose sandbox it was.
 
+## Each event is a sandbox changing state
+
 <Timeline
   end={10}
   lanes={[
@@ -31,7 +33,7 @@ E2B reports what happens to each sandbox in the team to a **webhook**: a URL you
   caption="Each change in the sandbox's state is one event, and E2B calls the Worker once for each."
 />
 
-## Handle events in a Worker
+## Subscribe a Worker to events
 
 ```typescript title="src/Events.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -53,19 +55,23 @@ export default class Events extends Cloudflare.Worker<Events>()(
 
 Deploying creates an E2B webhook that points at the Worker. Destroying the Worker deletes it.
 
-## Events
+## Pick the events you need
 
-`sandbox.lifecycle.created`, `updated`, `paused`, `resumed`, `checkpointed`, and `killed`. Leave out `events` to get all of them. `event.event_data.sandbox_metadata` holds the sandbox's metadata, so you can tell whose sandbox it was.
+`sandbox.lifecycle.created`, `updated`, `paused`, `resumed`, `checkpointed`, and `killed`. Leave out `events` to get all of them:
 
-## Signatures
+```typescript
+yield* E2B.consumeSandboxEvents({}, (event) =>
+  Effect.log(`${event.type} for ${event.event_data?.sandbox_metadata?.user}`),
+);
+```
 
-Each request's `e2b-signature` is checked before your handler runs. An unsigned or wrongly signed request gets a 401. Alchemy creates the signing secret unless you pass `secret`.
+ `event.event_data.sandbox_metadata` holds the sandbox's metadata, so you can tell whose sandbox it was.
 
-## Retries
+## The Worker checks every delivery
 
-E2B tries each event up to three times. Keep your handler idempotent on `event.id`.
+Each request's `e2b-signature` is checked before your handler runs. An unsigned or wrongly signed request gets a 401. Alchemy creates the signing secret unless you pass `secret`. E2B tries each event up to three times, so keep your handler idempotent on `event.id`.
 
-## A webhook for an endpoint you don't deploy
+## Point a webhook at any endpoint
 
 ```typescript
 export const Lifecycle = E2B.Webhook("Lifecycle", {

@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SummarizeSparkApplicationStagesRequest extends Omit<
-  dataproc.SummarizeStagesProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SummarizeStagesProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SummarizeSparkApplicationStagesRequest extends Omit<
 }
 
 export type SummarizeSparkApplicationStagesShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SummarizeSparkApplicationStagesRequest,
   ) => Effect.Effect<
-    | dataproc.SummarizeSparkApplicationStagesResponse
-    | dataproc.SummarizeSessionSparkApplicationStagesResponse,
-    | dataproc.SummarizeStagesProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SummarizeStagesProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SummarizeSessionSparkApplicationStagesResponse
+    | dataproc.SummarizeSparkApplicationStagesResponse,
+    | dataproc.SummarizeStagesProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SummarizeStagesProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SummarizeSparkApplicationStagesShape = (
 /**
  * Obtain summary of Stages for a Spark Application
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SummarizeSparkApplicationStagesHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SummarizeSparkApplicationStagesHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.summarizeStages`
  * ```typescript
- * const summarizeSparkApplicationStages = yield* GCP.Dataproc.SummarizeSparkApplicationStages(batch);
+ * const summarizeSparkApplicationStages = yield* GCP.Dataproc.SummarizeSparkApplicationStages(session);
  * const response = yield* summarizeSparkApplicationStages({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const SummarizeSparkApplicationStagesHttp = Layer.effect(
     tag: "GCP.Dataproc.SummarizeSparkApplicationStages",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.summarizeStagesProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.summarizeStagesProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.summarizeStagesProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.summarizeStagesProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

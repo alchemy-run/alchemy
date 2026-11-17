@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SearchSparkApplicationStageAttemptsRequest extends Omit<
-  dataproc.SearchStageAttemptsProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SearchStageAttemptsProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SearchSparkApplicationStageAttemptsRequest extends Omit<
 }
 
 export type SearchSparkApplicationStageAttemptsShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SearchSparkApplicationStageAttemptsRequest,
   ) => Effect.Effect<
-    | dataproc.SearchSparkApplicationStageAttemptsResponse
-    | dataproc.SearchSessionSparkApplicationStageAttemptsResponse,
-    | dataproc.SearchStageAttemptsProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SearchStageAttemptsProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SearchSessionSparkApplicationStageAttemptsResponse
+    | dataproc.SearchSparkApplicationStageAttemptsResponse,
+    | dataproc.SearchStageAttemptsProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SearchStageAttemptsProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SearchSparkApplicationStageAttemptsShape = (
 /**
  * Obtain data corresponding to a spark stage attempts for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SearchSparkApplicationStageAttemptsHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SearchSparkApplicationStageAttemptsHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.searchStageAttempts`
  * ```typescript
- * const searchSparkApplicationStageAttempts = yield* GCP.Dataproc.SearchSparkApplicationStageAttempts(batch);
+ * const searchSparkApplicationStageAttempts = yield* GCP.Dataproc.SearchSparkApplicationStageAttempts(session);
  * const response = yield* searchSparkApplicationStageAttempts({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const SearchSparkApplicationStageAttemptsHttp = Layer.effect(
     tag: "GCP.Dataproc.SearchSparkApplicationStageAttempts",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.searchStageAttemptsProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.searchStageAttemptsProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.searchStageAttemptsProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.searchStageAttemptsProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

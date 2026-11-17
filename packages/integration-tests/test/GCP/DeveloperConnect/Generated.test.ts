@@ -176,7 +176,47 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("ConnectionsGitRepositoryLink", { concurrent: true }, () => {
       test.provider.skip(
+        "AddGitRepositoryLinkPullRequestComment (developerconnect.projects.locations.connections.gitRepositoryLinks.addPullRequestComment): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "AddGitRepositoryLinkPullRequestReviewComment (developerconnect.projects.locations.connections.gitRepositoryLinks.addPullRequestReviewComment): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DiffGitRepositoryLinkCommit (developerconnect.projects.locations.connections.gitRepositoryLinks.diffCommit): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "FetchGitRepositoryLinkCommit (developerconnect.projects.locations.connections.gitRepositoryLinks.fetchCommit): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "FetchGitRepositoryLinkCommitList (developerconnect.projects.locations.connections.gitRepositoryLinks.fetchCommitList): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "FetchGitRepositoryLinkFileBlame (developerconnect.projects.locations.connections.gitRepositoryLinks.fetchFileBlame): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "FetchGitRepositoryLinkPullRequest (developerconnect.projects.locations.connections.gitRepositoryLinks.fetchPullRequest): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "FetchGitRepositoryLinkPullRequestList (developerconnect.projects.locations.connections.gitRepositoryLinks.fetchPullRequestList): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "GetGitRepositoryLink (developerconnect.projects.locations.connections.gitRepositoryLinks.get): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ModifyGitRepositoryLinkPullRequest (developerconnect.projects.locations.connections.gitRepositoryLinks.modifyPullRequest): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "OpenGitRepositoryLinkPullRequest (developerconnect.projects.locations.connections.gitRepositoryLinks.openPullRequest): ConnectionsGitRepositoryLink: a git link needs a connection whose GitHub App install is COMPLETE (GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID)",
         () => Effect.void,
       );
       test.provider.skip(

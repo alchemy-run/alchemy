@@ -31,7 +31,7 @@ export type ListStepTestCasesShape = () => Effect.Effect<
  * **Example:** Call `testCases.list`
  * ```typescript
  * const listStepTestCases = yield* GCP.ToolResults.ListStepTestCases();
- * const response = yield* listStepTestCases({ historyId: "...", executionId: "...", stepId: "..." });
+ * const response = yield* listStepTestCases({ stepId: "...", historyId: "...", executionId: "..." });
  * ```
  *
  * @binding

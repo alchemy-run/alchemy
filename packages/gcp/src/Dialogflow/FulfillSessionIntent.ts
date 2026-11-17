@@ -9,7 +9,7 @@ import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface FulfillSessionIntentRequest extends Omit<
-  dialogflow.FulfillIntentProjectsLocationsAgentsEnvironmentsSessionsRequest,
+  dialogflow.FulfillIntentProjectsLocationsAgentsSessionsRequest,
   "session"
 > {
   /** Id of the session under the bound resource (`sessions/{session}`). */
@@ -17,28 +17,28 @@ export interface FulfillSessionIntentRequest extends Omit<
 }
 
 export type FulfillSessionIntentShape = (
-  resource: AgentsEnvironment | Agent,
+  resource: Agent | AgentsEnvironment,
 ) => Effect.Effect<
   (
     request: FulfillSessionIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3FulfillIntentResponse,
-    | dialogflow.FulfillIntentProjectsLocationsAgentsEnvironmentsSessionsError
-    | dialogflow.FulfillIntentProjectsLocationsAgentsSessionsError,
+    | dialogflow.FulfillIntentProjectsLocationsAgentsSessionsError
+    | dialogflow.FulfillIntentProjectsLocationsAgentsEnvironmentsSessionsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.fulfillIntent`.
+ * Runtime binding for `dialogflow.projects.locations.agents.sessions.fulfillIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link FulfillSessionIntentHttp}. The
- * host gets `roles/dialogflow.environmentEditor`, `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
+ * Bind it to a {@link Agent} or {@link AgentsEnvironment} and provide {@link FulfillSessionIntentHttp}. The
+ * host gets `roles/dialogflow.admin`, `roles/dialogflow.environmentEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.fulfillIntent`
  * ```typescript
- * const fulfillSessionIntent = yield* GCP.Dialogflow.FulfillSessionIntent(agentsEnvironment);
+ * const fulfillSessionIntent = yield* GCP.Dialogflow.FulfillSessionIntent(agent);
  * const response = yield* fulfillSessionIntent({ session: "..." });
  * ```
  *
@@ -67,18 +67,18 @@ export const FulfillSessionIntentHttp = Layer.effect(
     tag: "GCP.Dialogflow.FulfillSessionIntent",
     variants: [
       {
-        resource: "GCP.Dialogflow.AgentsEnvironment",
-        operation: dialogflow.fulfillIntentProjectsLocationsAgentsEnvironmentsSessions,
-        param: "session",
-        children: [["sessions", "session"]],
-        iam: { role: "roles/dialogflow.environmentEditor" },
-      },
-      {
         resource: "GCP.Dialogflow.Agent",
         operation: dialogflow.fulfillIntentProjectsLocationsAgentsSessions,
         param: "session",
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.admin" },
+      },
+      {
+        resource: "GCP.Dialogflow.AgentsEnvironment",
+        operation: dialogflow.fulfillIntentProjectsLocationsAgentsEnvironmentsSessions,
+        param: "session",
+        children: [["sessions", "session"]],
+        iam: { role: "roles/dialogflow.environmentEditor" },
       },
     ],
   }),

@@ -92,8 +92,40 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "CreateSkill (agentregistry.projects.locations.skills.create)",
+        () => probe("CreateSkill", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "CreateSkillRevision (agentregistry.projects.locations.skills.revisions.create)",
+        () => probe("CreateSkillRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "DeleteService (agentregistry.projects.locations.services.delete)",
         () => probe("DeleteService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteSkill (agentregistry.projects.locations.skills.delete)",
+        () => probe("DeleteSkill", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteSkillRevision (agentregistry.projects.locations.skills.revisions.delete)",
+        () => probe("DeleteSkillRevision", false),
         {
           tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
           timeout: 600_000,
@@ -116,6 +148,30 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetAiApplicationAgent (agentregistry.projects.locations.aiApplications.agents.get)",
+        () => probe("GetAiApplicationAgent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAiApplicationEndpoint (agentregistry.projects.locations.aiApplications.endpoints.get)",
+        () => probe("GetAiApplicationEndpoint", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAiApplicationMcpServer (agentregistry.projects.locations.aiApplications.mcpServers.get)",
+        () => probe("GetAiApplicationMcpServer", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetEndpoint (agentregistry.projects.locations.endpoints.get)",
         () => probe("GetEndpoint", false),
         {
@@ -132,6 +188,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetPublisher (agentregistry.projects.locations.publishers.get)",
+        () => probe("GetPublisher", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetService (agentregistry.projects.locations.services.get)",
         () => probe("GetService", false),
         {
@@ -140,8 +204,48 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetSkill (agentregistry.projects.locations.skills.get)",
+        () => probe("GetSkill", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetSkillRevision (agentregistry.projects.locations.skills.revisions.get)",
+        () => probe("GetSkillRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListAgents (agentregistry.projects.locations.agents.list)",
         () => probe("ListAgents", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAiApplicationAgents (agentregistry.projects.locations.aiApplications.agents.list)",
+        () => probe("ListAiApplicationAgents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAiApplicationEndpoints (agentregistry.projects.locations.aiApplications.endpoints.list)",
+        () => probe("ListAiApplicationEndpoints", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAiApplicationMcpServers (agentregistry.projects.locations.aiApplications.mcpServers.list)",
+        () => probe("ListAiApplicationMcpServers", false),
         {
           tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
           timeout: 600_000,
@@ -172,6 +276,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListPublishers (agentregistry.projects.locations.publishers.list)",
+        () => probe("ListPublishers", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListServices (agentregistry.projects.locations.services.list)",
         () => probe("ListServices", true),
         {
@@ -180,8 +292,32 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListSkillRevisions (agentregistry.projects.locations.skills.revisions.list)",
+        () => probe("ListSkillRevisions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListSkills (agentregistry.projects.locations.skills.list)",
+        () => probe("ListSkills", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "PatchService (agentregistry.projects.locations.services.patch)",
         () => probe("PatchService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PatchSkill (agentregistry.projects.locations.skills.patch)",
+        () => probe("PatchSkill", false),
         {
           tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
           timeout: 600_000,
@@ -202,6 +338,34 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
           timeout: 600_000,
         },
+      );
+      test.provider(
+        "SearchSkill (agentregistry.projects.locations.skills.search)",
+        () => probe("SearchSkill", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "agentregistry.projects.locations.aiApplications.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "agentregistry.projects.locations.aiApplications.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "agentregistry.projects.locations.findings.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "agentregistry.projects.locations.findings.list: no predefined role grants its permission",
+        () => Effect.void,
       );
     });
   },

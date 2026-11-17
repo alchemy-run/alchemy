@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteTerminalLocation,
   GetTerminalLocations,
@@ -512,11 +511,8 @@ export const TerminalLocationProvider = () =>
             ? { display_name_kanji: desiredDisplayNameKanji }
             : {}),
           ...(desiredPhone.length > 0 ? { phone: desiredPhone } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-terminal-location-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-terminal-location-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

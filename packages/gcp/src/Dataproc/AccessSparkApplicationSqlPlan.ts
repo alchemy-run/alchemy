@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationSqlPlanRequest extends Omit<
-  dataproc.AccessSqlPlanProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessSqlPlanProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface AccessSparkApplicationSqlPlanRequest extends Omit<
 }
 
 export type AccessSparkApplicationSqlPlanShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationSqlPlanRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationSqlSparkPlanGraphResponse
-    | dataproc.AccessSessionSparkApplicationSqlSparkPlanGraphResponse,
-    | dataproc.AccessSqlPlanProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessSqlPlanProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationSqlSparkPlanGraphResponse
+    | dataproc.AccessSparkApplicationSqlSparkPlanGraphResponse,
+    | dataproc.AccessSqlPlanProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessSqlPlanProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type AccessSparkApplicationSqlPlanShape = (
 /**
  * Obtain Spark Plan Graph for a Spark Application SQL execution.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationSqlPlanHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationSqlPlanHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessSqlPlan`
  * ```typescript
- * const accessSparkApplicationSqlPlan = yield* GCP.Dataproc.AccessSparkApplicationSqlPlan(batch);
+ * const accessSparkApplicationSqlPlan = yield* GCP.Dataproc.AccessSparkApplicationSqlPlan(session);
  * const response = yield* accessSparkApplicationSqlPlan({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const AccessSparkApplicationSqlPlanHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationSqlPlan",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessSqlPlanProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessSqlPlanProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessSqlPlanProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessSqlPlanProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

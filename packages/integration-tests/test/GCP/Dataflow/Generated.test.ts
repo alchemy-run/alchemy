@@ -84,10 +84,14 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("CreateJob (dataflow.projects.jobs.create)", () => probe("CreateJob", false), {
-        tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
-        timeout: 600_000,
-      });
+      test.provider(
+        "CreateJob (dataflow.projects.locations.jobs.create)",
+        () => probe("CreateJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "CreateTemplate (dataflow.projects.templates.create)",
         () => probe("CreateTemplate", false),
@@ -101,7 +105,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider(
-        "GetDebugConfig (dataflow.projects.jobs.debug.getConfig)",
+        "GetDebugConfig (dataflow.projects.locations.jobs.debug.getConfig)",
         () => probe("GetDebugConfig", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -116,7 +120,7 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("GetJob (dataflow.projects.jobs.get)", () => probe("GetJob", false), {
+      test.provider("GetJob (dataflow.projects.locations.jobs.get)", () => probe("GetJob", false), {
         tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
         timeout: 600_000,
       });
@@ -129,7 +133,7 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "GetJobMetrics (dataflow.projects.jobs.getMetrics)",
+        "GetJobMetrics (dataflow.projects.locations.jobs.getMetrics)",
         () => probe("GetJobMetrics", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -137,7 +141,7 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "GetSnapshot (dataflow.projects.snapshots.get)",
+        "GetSnapshot (dataflow.projects.locations.snapshots.get)",
         () => probe("GetSnapshot", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -177,7 +181,7 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "LeaseJobWorkItem (dataflow.projects.jobs.workItems.lease)",
+        "LeaseJobWorkItem (dataflow.projects.locations.jobs.workItems.lease)",
         () => probe("LeaseJobWorkItem", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -185,17 +189,21 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListJobMessages (dataflow.projects.jobs.messages.list)",
+        "ListJobMessages (dataflow.projects.locations.jobs.messages.list)",
         () => probe("ListJobMessages", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
           timeout: 600_000,
         },
       );
-      test.provider("ListJobs (dataflow.projects.jobs.list)", () => probe("ListJobs", true), {
-        tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
-        timeout: 600_000,
-      });
+      test.provider(
+        "ListJobs (dataflow.projects.locations.jobs.list)",
+        () => probe("ListJobs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "ListJobSnapshots (dataflow.projects.locations.jobs.snapshots.list)",
         () => probe("ListJobSnapshots", false),
@@ -205,7 +213,7 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListSnapshots (dataflow.projects.snapshots.list)",
+        "ListSnapshots (dataflow.projects.locations.snapshots.list)",
         () => probe("ListSnapshots", true),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -213,7 +221,7 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ReportWorkItemStatus (dataflow.projects.jobs.workItems.reportStatus)",
+        "ReportWorkItemStatus (dataflow.projects.locations.jobs.workItems.reportStatus)",
         () => probe("ReportWorkItemStatus", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -221,7 +229,7 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "SnapshotJob (dataflow.projects.jobs.snapshot)",
+        "SnapshotJob (dataflow.projects.locations.jobs.snapshot)",
         () => probe("SnapshotJob", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataflow", "live"],
@@ -233,115 +241,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "dataflow.projects.workerMessages: called by Dataflow workers, not user code",
+        "dataflow.folders.locations.configStoreSettings.create: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "dataflow.projects.jobs.debug.sendCapture: called by Dataflow workers, not user code",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.configStoreSettings.create: Dataflow config store settings are not documented in IAM",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.configStoreSettings.list: Dataflow config store settings are not documented in IAM",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.configStoreSettings.get: Dataflow config store settings are not documented in IAM",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.configStoreSettings.delete: Dataflow config store settings are not documented in IAM",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.configStoreSettings.resolve: Dataflow config store settings are not documented in IAM",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.getMetrics: name collision on GetJobMetrics",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.list: name collision on ListJobs",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.snapshot: name collision on SnapshotJob",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.create: name collision on CreateJob",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.get: name collision on GetJob",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.debug.sendCapture: called by Dataflow workers, not user code",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.debug.getConfig: name collision on GetDebugConfig",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.workItems.reportStatus: name collision on ReportWorkItemStatus",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.workItems.lease: name collision on LeaseJobWorkItem",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.jobs.messages.list: name collision on ListJobMessages",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.snapshots.get: name collision on GetSnapshot",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.snapshots.list: name collision on ListSnapshots",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.templates.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.templates.launch: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.projects.locations.templates.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.organizations.locations.configStoreSettings.create: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.organizations.locations.configStoreSettings.resolve: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.organizations.locations.configStoreSettings.delete: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.organizations.locations.configStoreSettings.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.organizations.locations.configStoreSettings.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataflow.folders.locations.configStoreSettings.list: addressed under `folders/`, not a project",
+        "dataflow.folders.locations.configStoreSettings.get: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -353,11 +257,112 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "dataflow.folders.locations.configStoreSettings.get: addressed under `folders/`, not a project",
+        "dataflow.folders.locations.configStoreSettings.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "dataflow.folders.locations.configStoreSettings.create: addressed under `folders/`, not a project",
+        "dataflow.projects.workerMessages: called by Dataflow workers, not user code",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.configStoreSettings.create: Dataflow config store settings are not documented in IAM",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.configStoreSettings.resolve: Dataflow config store settings are not documented in IAM",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.configStoreSettings.list: Dataflow config store settings are not documented in IAM",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.configStoreSettings.delete: Dataflow config store settings are not documented in IAM",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.configStoreSettings.get: Dataflow config store settings are not documented in IAM",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.jobs.debug.sendCapture: called by Dataflow workers, not user code",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.templates.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.templates.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.locations.templates.launch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.getMetrics: name collision on GetJobMetrics",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.create: name collision on CreateJob",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.snapshot: name collision on SnapshotJob",
+        () => Effect.void,
+      );
+      test.provider.skip("dataflow.projects.jobs.get: name collision on GetJob", () => Effect.void);
+      test.provider.skip(
+        "dataflow.projects.jobs.list: name collision on ListJobs",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.messages.list: name collision on ListJobMessages",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.workItems.lease: name collision on LeaseJobWorkItem",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.workItems.reportStatus: name collision on ReportWorkItemStatus",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.debug.getConfig: name collision on GetDebugConfig",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.jobs.debug.sendCapture: called by Dataflow workers, not user code",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.snapshots.get: name collision on GetSnapshot",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.projects.snapshots.list: name collision on ListSnapshots",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.organizations.locations.configStoreSettings.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.organizations.locations.configStoreSettings.resolve: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.organizations.locations.configStoreSettings.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.organizations.locations.configStoreSettings.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataflow.organizations.locations.configStoreSettings.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
     });

@@ -9,7 +9,7 @@ import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface MatchSessionIntentRequest extends Omit<
-  dialogflow.MatchIntentProjectsLocationsAgentsEnvironmentsSessionsRequest,
+  dialogflow.MatchIntentProjectsLocationsAgentsSessionsRequest,
   "session"
 > {
   /** Id of the session under the bound resource (`sessions/{session}`). */
@@ -17,28 +17,28 @@ export interface MatchSessionIntentRequest extends Omit<
 }
 
 export type MatchSessionIntentShape = (
-  resource: AgentsEnvironment | Agent,
+  resource: Agent | AgentsEnvironment,
 ) => Effect.Effect<
   (
     request: MatchSessionIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3MatchIntentResponse,
-    | dialogflow.MatchIntentProjectsLocationsAgentsEnvironmentsSessionsError
-    | dialogflow.MatchIntentProjectsLocationsAgentsSessionsError,
+    | dialogflow.MatchIntentProjectsLocationsAgentsSessionsError
+    | dialogflow.MatchIntentProjectsLocationsAgentsEnvironmentsSessionsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.matchIntent`.
+ * Runtime binding for `dialogflow.projects.locations.agents.sessions.matchIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link MatchSessionIntentHttp}. The
- * host gets `roles/dialogflow.environmentEditor`, `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
+ * Bind it to a {@link Agent} or {@link AgentsEnvironment} and provide {@link MatchSessionIntentHttp}. The
+ * host gets `roles/dialogflow.admin`, `roles/dialogflow.environmentEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.matchIntent`
  * ```typescript
- * const matchSessionIntent = yield* GCP.Dialogflow.MatchSessionIntent(agentsEnvironment);
+ * const matchSessionIntent = yield* GCP.Dialogflow.MatchSessionIntent(agent);
  * const response = yield* matchSessionIntent({ session: "..." });
  * ```
  *
@@ -67,18 +67,18 @@ export const MatchSessionIntentHttp = Layer.effect(
     tag: "GCP.Dialogflow.MatchSessionIntent",
     variants: [
       {
-        resource: "GCP.Dialogflow.AgentsEnvironment",
-        operation: dialogflow.matchIntentProjectsLocationsAgentsEnvironmentsSessions,
-        param: "session",
-        children: [["sessions", "session"]],
-        iam: { role: "roles/dialogflow.environmentEditor" },
-      },
-      {
         resource: "GCP.Dialogflow.Agent",
         operation: dialogflow.matchIntentProjectsLocationsAgentsSessions,
         param: "session",
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.admin" },
+      },
+      {
+        resource: "GCP.Dialogflow.AgentsEnvironment",
+        operation: dialogflow.matchIntentProjectsLocationsAgentsEnvironmentsSessions,
+        param: "session",
+        children: [["sessions", "session"]],
+        iam: { role: "roles/dialogflow.environmentEditor" },
       },
     ],
   }),

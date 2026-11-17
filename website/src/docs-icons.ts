@@ -32,6 +32,14 @@ const brandMarks: Record<string, string> = Object.fromEntries(
 const l = (name: string): string | undefined => lucide.icons[name]?.body;
 const b = (name: string): string | undefined => brandMarks[name];
 
+/**
+ * An icon for a diagram node: a lucide name (`database`, `server`), or a
+ * vendored brand mark as `brand:<name>` (`brand:docker`, `brand:postgresql`).
+ */
+export function diagramIcon(name: string): string | undefined {
+  return name.startsWith("brand:") ? b(name.slice("brand:".length)) : l(name);
+}
+
 /** Tab bar icons, keyed by tab label (see docs-tabs.ts). */
 export const TAB_ICONS: Record<string, string | undefined> = {
   Core: l("book-open"),
@@ -49,7 +57,11 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Daytona: b("daytona"),
   Modal: b("modal"),
   Archil: b("archil"),
+  Boat: b("boat"),
+  // The Sandboxes dropdown's link to the AWS hub's Nitro Sandboxes page.
+  "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
+  DigitalOcean: b("digitalocean"),
   // Brand-colored prism for marketing surfaces.
   PrismaColor: b("prisma-color"),
   Axiom: b("axiom"),
@@ -99,6 +111,9 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   AI: l("sparkles"),
   "Security & secrets": l("lock"),
   "Accounts & access": l("key-round"),
+  "Engines & access": l("key-round"),
+  Images: l("package"),
+  Swarm: l("network"),
   "Access & security": l("key-round"),
   "Storage & databases": l("database"),
   "Networking & edge": l("globe"),
@@ -122,9 +137,11 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Objects: l("file-code"),
   Frontends: l("monitor-smartphone"),
   Security: l("shield-check"),
-  Sandboxes: l("box"),
   "Consistency patterns": l("git-merge"),
   Hosting: l("server"),
+  Clients: l("plug"),
+  Patterns: l("puzzle"),
+  Operations: l("gauge"),
   Platforms: l("cloud"),
   "Building Actors": l("boxes"),
   "Running Rivet": l("server-cog"),
@@ -147,9 +164,11 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Daytona: b("daytona"),
   Modal: b("modal"),
   Archil: b("archil"),
+  Boat: b("boat"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: b("prisma"),
+  DigitalOcean: b("digitalocean"),
   Axiom: b("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),

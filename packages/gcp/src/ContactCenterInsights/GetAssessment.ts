@@ -9,19 +9,19 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface GetAssessmentRequest extends Omit<
-  contactcenterinsights.GetProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsRequest,
+  contactcenterinsights.GetProjectsLocationsConversationsAssessmentsRequest,
   "name"
 > {}
 
 export type GetAssessmentShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request?: GetAssessmentRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1Assessment,
-    | contactcenterinsights.GetProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError
-    | contactcenterinsights.GetProjectsLocationsConversationsAssessmentsError,
+    | contactcenterinsights.GetProjectsLocationsConversationsAssessmentsError
+    | contactcenterinsights.GetProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type GetAssessmentShape = (
 /**
  * Get Assessment.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link GetAssessmentHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link GetAssessmentHttp}. The
  * host gets `roles/contactcenterinsights.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `assessments.get`
  * ```typescript
- * const getAssessment = yield* GCP.ContactCenterInsights.GetAssessment(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const getAssessment = yield* GCP.ContactCenterInsights.GetAssessment(conversationsAssessment);
  * const response = yield* getAssessment();
  * ```
  *
@@ -64,16 +64,16 @@ export const GetAssessmentHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.GetAssessment",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.getProjectsLocationsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.viewer" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.getProjectsLocationsConversationsAssessments,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.viewer" },
       },

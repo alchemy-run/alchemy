@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
-export interface UpdateSinkRequest extends Omit<logging.UpdateProjectsSinksRequest, "sinkName"> {
+export interface UpdateSinkRequest extends Omit<logging.UpdateSinksRequest, "sinkName"> {
   /** Id of the sink (`sinks/{sink}`). */
   sink: string;
 }
@@ -14,7 +14,7 @@ export interface UpdateSinkRequest extends Omit<logging.UpdateProjectsSinksReque
 export type UpdateSinkShape = () => Effect.Effect<
   (
     request: UpdateSinkRequest,
-  ) => Effect.Effect<logging.LogSink, logging.UpdateProjectsSinksError, RuntimeContext>
+  ) => Effect.Effect<logging.LogSink, logging.UpdateSinksError, RuntimeContext>
 >;
 
 /**
@@ -53,7 +53,7 @@ export const UpdateSinkHttp = Layer.effect(
     tag: "GCP.Logging.UpdateSink",
     variants: [
       {
-        operation: logging.updateProjectsSinks,
+        operation: logging.updateSinks,
         param: "sinkName",
         children: [["sinks", "sink"]],
         role: "roles/logging.configWriter",

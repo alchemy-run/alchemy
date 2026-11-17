@@ -100,12 +100,28 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("CloudVmCluster", { concurrent: true }, () => {
       test.provider.skip(
+        "DisableCloudVmClusterIdentityConnector (oracledatabase.projects.locations.cloudVmClusters.disableIdentityConnector): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "EnableCloudVmClusterIdentityConnector (oracledatabase.projects.locations.cloudVmClusters.enableIdentityConnector): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "ListCloudVmClusterDbNodes (oracledatabase.projects.locations.cloudVmClusters.dbNodes.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });
 
     describe("ExadbVmCluster", { concurrent: true }, () => {
+      test.provider.skip(
+        "DisableExadbVmClusterIdentityConnector (oracledatabase.projects.locations.exadbVmClusters.disableIdentityConnector): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "EnableExadbVmClusterIdentityConnector (oracledatabase.projects.locations.exadbVmClusters.enableIdentityConnector): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
       test.provider.skip(
         "ListExadbVmClusterDbNodes (oracledatabase.projects.locations.exadbVmClusters.dbNodes.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
@@ -136,6 +152,22 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("OdbNetwork", { concurrent: true }, () => {
       test.provider.skip(
+        "CreateOdbNetworkOdbDnsZone (oracledatabase.projects.locations.odbNetworks.odbDnsZones.create): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DeleteOdbNetworkOdbDnsZone (oracledatabase.projects.locations.odbNetworks.odbDnsZones.delete): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetOdbNetworkOdbDnsZone (oracledatabase.projects.locations.odbNetworks.odbDnsZones.get): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListOdbNetworkOdbDnsZones (oracledatabase.projects.locations.odbNetworks.odbDnsZones.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "ListOdbNetworkOdbSubnets (oracledatabase.projects.locations.odbNetworks.odbSubnets.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
@@ -143,7 +175,23 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider.skip(
+        "CreateDatabaseConnection (oracledatabase.projects.locations.databaseConnections.create): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DeleteDatabaseConnection (oracledatabase.projects.locations.databaseConnections.delete): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ExecuteDatabaseConnectionSql (oracledatabase.projects.locations.databaseConnections.executeSql): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "GetDatabase (oracledatabase.projects.locations.databases.get): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetDatabaseConnection (oracledatabase.projects.locations.databaseConnections.get): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
       test.provider.skip(
@@ -179,7 +227,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "ListDatabaseConnections (oracledatabase.projects.locations.databaseConnections.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "ListDatabases (oracledatabase.projects.locations.databases.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListDbSystemComputePerformances (oracledatabase.projects.locations.dbSystemComputePerformances.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
       test.provider.skip(
@@ -208,6 +264,10 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "ListExascaleDbStorageVaults (oracledatabase.projects.locations.exascaleDbStorageVaults.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListFlexComponents (oracledatabase.projects.locations.flexComponents.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
       test.provider.skip(
@@ -252,6 +312,14 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "ListPluggableDatabases (oracledatabase.projects.locations.pluggableDatabases.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "PatchDatabaseConnection (oracledatabase.projects.locations.databaseConnections.patch): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "TestDatabaseConnection (oracledatabase.projects.locations.databaseConnections.test): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });

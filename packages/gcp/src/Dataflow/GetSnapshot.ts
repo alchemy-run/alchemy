@@ -7,14 +7,14 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface GetSnapshotRequest extends Omit<
-  dataflow.GetProjectsSnapshotsRequest,
+  dataflow.GetProjectsLocationsSnapshotsRequest,
   "projectId"
 > {}
 
 export type GetSnapshotShape = () => Effect.Effect<
   (
     request: GetSnapshotRequest,
-  ) => Effect.Effect<dataflow.Snapshot, dataflow.GetProjectsSnapshotsError, RuntimeContext>
+  ) => Effect.Effect<dataflow.Snapshot, dataflow.GetProjectsLocationsSnapshotsError, RuntimeContext>
 >;
 
 /**
@@ -27,7 +27,7 @@ export type GetSnapshotShape = () => Effect.Effect<
  * **Example:** Call `snapshots.get`
  * ```typescript
  * const getSnapshot = yield* GCP.Dataflow.GetSnapshot();
- * const response = yield* getSnapshot({ snapshotId: "..." });
+ * const response = yield* getSnapshot({ snapshotId: "...", location: "..." });
  * ```
  *
  * @binding
@@ -53,7 +53,7 @@ export const GetSnapshotHttp = Layer.effect(
     tag: "GCP.Dataflow.GetSnapshot",
     variants: [
       {
-        operation: dataflow.getProjectsSnapshots,
+        operation: dataflow.getProjectsLocationsSnapshots,
         projectField: "projectId",
         role: "roles/dataflow.viewer",
       },

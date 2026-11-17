@@ -9,7 +9,7 @@ import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface ServerSessionStreamingDetectIntentRequest extends Omit<
-  dialogflow.ServerStreamingDetectIntentProjectsLocationsAgentsEnvironmentsSessionsRequest,
+  dialogflow.ServerStreamingDetectIntentProjectsLocationsAgentsSessionsRequest,
   "session"
 > {
   /** Id of the session under the bound resource (`sessions/{session}`). */
@@ -17,28 +17,28 @@ export interface ServerSessionStreamingDetectIntentRequest extends Omit<
 }
 
 export type ServerSessionStreamingDetectIntentShape = (
-  resource: AgentsEnvironment | Agent,
+  resource: Agent | AgentsEnvironment,
 ) => Effect.Effect<
   (
     request: ServerSessionStreamingDetectIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3DetectIntentResponse,
-    | dialogflow.ServerStreamingDetectIntentProjectsLocationsAgentsEnvironmentsSessionsError
-    | dialogflow.ServerStreamingDetectIntentProjectsLocationsAgentsSessionsError,
+    | dialogflow.ServerStreamingDetectIntentProjectsLocationsAgentsSessionsError
+    | dialogflow.ServerStreamingDetectIntentProjectsLocationsAgentsEnvironmentsSessionsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent`.
+ * Runtime binding for `dialogflow.projects.locations.agents.sessions.serverStreamingDetectIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link ServerSessionStreamingDetectIntentHttp}. The
- * host gets `roles/dialogflow.environmentEditor`, `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
+ * Bind it to a {@link Agent} or {@link AgentsEnvironment} and provide {@link ServerSessionStreamingDetectIntentHttp}. The
+ * host gets `roles/dialogflow.admin`, `roles/dialogflow.environmentEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.serverStreamingDetectIntent`
  * ```typescript
- * const serverSessionStreamingDetectIntent = yield* GCP.Dialogflow.ServerSessionStreamingDetectIntent(agentsEnvironment);
+ * const serverSessionStreamingDetectIntent = yield* GCP.Dialogflow.ServerSessionStreamingDetectIntent(agent);
  * const response = yield* serverSessionStreamingDetectIntent({ session: "..." });
  * ```
  *
@@ -68,19 +68,19 @@ export const ServerSessionStreamingDetectIntentHttp = Layer.effect(
     tag: "GCP.Dialogflow.ServerSessionStreamingDetectIntent",
     variants: [
       {
+        resource: "GCP.Dialogflow.Agent",
+        operation: dialogflow.serverStreamingDetectIntentProjectsLocationsAgentsSessions,
+        param: "session",
+        children: [["sessions", "session"]],
+        iam: { role: "roles/dialogflow.admin" },
+      },
+      {
         resource: "GCP.Dialogflow.AgentsEnvironment",
         operation:
           dialogflow.serverStreamingDetectIntentProjectsLocationsAgentsEnvironmentsSessions,
         param: "session",
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.environmentEditor" },
-      },
-      {
-        resource: "GCP.Dialogflow.Agent",
-        operation: dialogflow.serverStreamingDetectIntentProjectsLocationsAgentsSessions,
-        param: "session",
-        children: [["sessions", "session"]],
-        iam: { role: "roles/dialogflow.admin" },
       },
     ],
   }),

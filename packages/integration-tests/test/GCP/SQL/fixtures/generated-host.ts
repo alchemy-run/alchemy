@@ -178,12 +178,7 @@ export default class SQLGeneratedHost extends GCP.Function<SQLGeneratedHost>()(
           Retry.none(p45({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         StopWorkloadCaptureReplay: probeOutcome(
-          Retry.none(
-            p46({
-              workloadId: "alchemy-missing",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p46({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         SwitchoverBlueGreenDeployment: probeOutcome(
           Retry.none(

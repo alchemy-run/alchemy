@@ -22,7 +22,7 @@ export type GetDnsKeyShape = () => Effect.Effect<
  * **Example:** Call `dnsKeys.get`
  * ```typescript
  * const getDnsKey = yield* GCP.DNS.GetDnsKey();
- * const response = yield* getDnsKey({ managedZone: "...", dnsKeyId: "..." });
+ * const response = yield* getDnsKey({ dnsKeyId: "...", managedZone: "..." });
  * ```
  *
  * @binding

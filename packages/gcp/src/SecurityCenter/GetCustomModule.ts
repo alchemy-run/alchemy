@@ -13,44 +13,44 @@ import type { OrganizationsSecurityHealthAnalyticsSettingsCustomModule } from ".
 import type { SecurityHealthAnalyticsSettingsCustomModule } from "./SecurityHealthAnalyticsSettingsCustomModule.ts";
 
 export interface GetCustomModuleRequest extends Omit<
-  securitycenter.GetFoldersEventThreatDetectionSettingsCustomModulesRequest,
+  securitycenter.GetOrganizationsEventThreatDetectionSettingsCustomModulesRequest,
   "name"
 > {}
 
 export type GetCustomModuleShape = (
   resource:
-    | FolderEventThreatDetectionSettingsCustomModule
-    | FolderSecurityHealthAnalyticsSettingsCustomModule
-    | EventThreatDetectionSettingsCustomModule
-    | SecurityHealthAnalyticsSettingsCustomModule
+    | OrganizationEventThreatDetectionSettingsCustomModule
     | OrganizationsSecurityHealthAnalyticsSettingsCustomModule
-    | OrganizationEventThreatDetectionSettingsCustomModule,
+    | SecurityHealthAnalyticsSettingsCustomModule
+    | EventThreatDetectionSettingsCustomModule
+    | FolderSecurityHealthAnalyticsSettingsCustomModule
+    | FolderEventThreatDetectionSettingsCustomModule,
 ) => Effect.Effect<
   (
     request?: GetCustomModuleRequest,
   ) => Effect.Effect<
     | securitycenter.EventThreatDetectionCustomModule
     | securitycenter.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule,
-    | securitycenter.GetFoldersEventThreatDetectionSettingsCustomModulesError
-    | securitycenter.GetFoldersSecurityHealthAnalyticsSettingsCustomModulesError
-    | securitycenter.GetProjectsEventThreatDetectionSettingsCustomModulesError
-    | securitycenter.GetProjectsSecurityHealthAnalyticsSettingsCustomModulesError
+    | securitycenter.GetOrganizationsEventThreatDetectionSettingsCustomModulesError
     | securitycenter.GetOrganizationsSecurityHealthAnalyticsSettingsCustomModulesError
-    | securitycenter.GetOrganizationsEventThreatDetectionSettingsCustomModulesError,
+    | securitycenter.GetProjectsSecurityHealthAnalyticsSettingsCustomModulesError
+    | securitycenter.GetProjectsEventThreatDetectionSettingsCustomModulesError
+    | securitycenter.GetFoldersSecurityHealthAnalyticsSettingsCustomModulesError
+    | securitycenter.GetFoldersEventThreatDetectionSettingsCustomModulesError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `securitycenter.folders.eventThreatDetectionSettings.customModules.get`.
+ * Runtime binding for `securitycenter.organizations.eventThreatDetectionSettings.customModules.get`.
  *
- * Bind it to a {@link FolderEventThreatDetectionSettingsCustomModule} or {@link FolderSecurityHealthAnalyticsSettingsCustomModule} or {@link EventThreatDetectionSettingsCustomModule} or {@link SecurityHealthAnalyticsSettingsCustomModule} or {@link OrganizationsSecurityHealthAnalyticsSettingsCustomModule} or {@link OrganizationEventThreatDetectionSettingsCustomModule} and provide {@link GetCustomModuleHttp}. The
+ * Bind it to a {@link OrganizationEventThreatDetectionSettingsCustomModule} or {@link OrganizationsSecurityHealthAnalyticsSettingsCustomModule} or {@link SecurityHealthAnalyticsSettingsCustomModule} or {@link EventThreatDetectionSettingsCustomModule} or {@link FolderSecurityHealthAnalyticsSettingsCustomModule} or {@link FolderEventThreatDetectionSettingsCustomModule} and provide {@link GetCustomModuleHttp}. The
  * host gets `roles/securitycenter.settingsViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `customModules.get`
  * ```typescript
- * const getCustomModule = yield* GCP.SecurityCenter.GetCustomModule(folderEventThreatDetectionSettingsCustomModule);
+ * const getCustomModule = yield* GCP.SecurityCenter.GetCustomModule(organizationEventThreatDetectionSettingsCustomModule);
  * const response = yield* getCustomModule();
  * ```
  *
@@ -79,26 +79,8 @@ export const GetCustomModuleHttp = Layer.effect(
     tag: "GCP.SecurityCenter.GetCustomModule",
     variants: [
       {
-        resource: "GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule",
-        operation: securitycenter.getFoldersEventThreatDetectionSettingsCustomModules,
-        param: "name",
-        iam: { role: "roles/securitycenter.settingsViewer" },
-      },
-      {
-        resource: "GCP.SecurityCenter.FolderSecurityHealthAnalyticsSettingsCustomModule",
-        operation: securitycenter.getFoldersSecurityHealthAnalyticsSettingsCustomModules,
-        param: "name",
-        iam: { role: "roles/securitycenter.settingsViewer" },
-      },
-      {
-        resource: "GCP.SecurityCenter.EventThreatDetectionSettingsCustomModule",
-        operation: securitycenter.getProjectsEventThreatDetectionSettingsCustomModules,
-        param: "name",
-        iam: { role: "roles/securitycenter.settingsViewer" },
-      },
-      {
-        resource: "GCP.SecurityCenter.SecurityHealthAnalyticsSettingsCustomModule",
-        operation: securitycenter.getProjectsSecurityHealthAnalyticsSettingsCustomModules,
+        resource: "GCP.SecurityCenter.OrganizationEventThreatDetectionSettingsCustomModule",
+        operation: securitycenter.getOrganizationsEventThreatDetectionSettingsCustomModules,
         param: "name",
         iam: { role: "roles/securitycenter.settingsViewer" },
       },
@@ -109,8 +91,26 @@ export const GetCustomModuleHttp = Layer.effect(
         iam: { role: "roles/securitycenter.settingsViewer" },
       },
       {
-        resource: "GCP.SecurityCenter.OrganizationEventThreatDetectionSettingsCustomModule",
-        operation: securitycenter.getOrganizationsEventThreatDetectionSettingsCustomModules,
+        resource: "GCP.SecurityCenter.SecurityHealthAnalyticsSettingsCustomModule",
+        operation: securitycenter.getProjectsSecurityHealthAnalyticsSettingsCustomModules,
+        param: "name",
+        iam: { role: "roles/securitycenter.settingsViewer" },
+      },
+      {
+        resource: "GCP.SecurityCenter.EventThreatDetectionSettingsCustomModule",
+        operation: securitycenter.getProjectsEventThreatDetectionSettingsCustomModules,
+        param: "name",
+        iam: { role: "roles/securitycenter.settingsViewer" },
+      },
+      {
+        resource: "GCP.SecurityCenter.FolderSecurityHealthAnalyticsSettingsCustomModule",
+        operation: securitycenter.getFoldersSecurityHealthAnalyticsSettingsCustomModules,
+        param: "name",
+        iam: { role: "roles/securitycenter.settingsViewer" },
+      },
+      {
+        resource: "GCP.SecurityCenter.FolderEventThreatDetectionSettingsCustomModule",
+        operation: securitycenter.getFoldersEventThreatDetectionSettingsCustomModules,
         param: "name",
         iam: { role: "roles/securitycenter.settingsViewer" },
       },

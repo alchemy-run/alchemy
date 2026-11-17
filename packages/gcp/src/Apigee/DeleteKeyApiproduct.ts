@@ -9,7 +9,7 @@ import type { AppgroupsAppsKey } from "./AppgroupsAppsKey.ts";
 import type { DevelopersAppsKey } from "./DevelopersAppsKey.ts";
 
 export interface DeleteKeyApiproductRequest extends Omit<
-  apigee.DeleteOrganizationsAppgroupsAppsKeysApiproductsRequest,
+  apigee.DeleteOrganizationsDevelopersAppsKeysApiproductsRequest,
   "name"
 > {
   /** Id of the apiproduct under the bound resource (`apiproducts/{apiproduct}`). */
@@ -17,14 +17,14 @@ export interface DeleteKeyApiproductRequest extends Omit<
 }
 
 export type DeleteKeyApiproductShape = (
-  resource: AppgroupsAppsKey | DevelopersAppsKey,
+  resource: DevelopersAppsKey | AppgroupsAppsKey,
 ) => Effect.Effect<
   (
     request: DeleteKeyApiproductRequest,
   ) => Effect.Effect<
-    apigee.GoogleCloudApigeeV1AppGroupAppKey | apigee.GoogleCloudApigeeV1DeveloperAppKey,
-    | apigee.DeleteOrganizationsAppgroupsAppsKeysApiproductsError
-    | apigee.DeleteOrganizationsDevelopersAppsKeysApiproductsError,
+    apigee.GoogleCloudApigeeV1DeveloperAppKey | apigee.GoogleCloudApigeeV1AppGroupAppKey,
+    | apigee.DeleteOrganizationsDevelopersAppsKeysApiproductsError
+    | apigee.DeleteOrganizationsAppgroupsAppsKeysApiproductsError,
     RuntimeContext
   >
 >;
@@ -32,13 +32,13 @@ export type DeleteKeyApiproductShape = (
 /**
  * Removes an API product from an app's consumer key.
  *
- * Bind it to a {@link AppgroupsAppsKey} or {@link DevelopersAppsKey} and provide {@link DeleteKeyApiproductHttp}. The
+ * Bind it to a {@link DevelopersAppsKey} or {@link AppgroupsAppsKey} and provide {@link DeleteKeyApiproductHttp}. The
  * host gets `roles/apigee.spaceContentEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `apiproducts.delete`
  * ```typescript
- * const deleteKeyApiproduct = yield* GCP.Apigee.DeleteKeyApiproduct(appgroupsAppsKey);
+ * const deleteKeyApiproduct = yield* GCP.Apigee.DeleteKeyApiproduct(developersAppsKey);
  * const response = yield* deleteKeyApiproduct({ apiproduct: "..." });
  * ```
  *
@@ -67,15 +67,15 @@ export const DeleteKeyApiproductHttp = Layer.effect(
     tag: "GCP.Apigee.DeleteKeyApiproduct",
     variants: [
       {
-        resource: "GCP.Apigee.AppgroupsAppsKey",
-        operation: apigee.deleteOrganizationsAppgroupsAppsKeysApiproducts,
+        resource: "GCP.Apigee.DevelopersAppsKey",
+        operation: apigee.deleteOrganizationsDevelopersAppsKeysApiproducts,
         param: "name",
         children: [["apiproducts", "apiproduct"]],
         iam: { role: "roles/apigee.spaceContentEditor" },
       },
       {
-        resource: "GCP.Apigee.DevelopersAppsKey",
-        operation: apigee.deleteOrganizationsDevelopersAppsKeysApiproducts,
+        resource: "GCP.Apigee.AppgroupsAppsKey",
+        operation: apigee.deleteOrganizationsAppgroupsAppsKeysApiproducts,
         param: "name",
         children: [["apiproducts", "apiproduct"]],
         iam: { role: "roles/apigee.spaceContentEditor" },

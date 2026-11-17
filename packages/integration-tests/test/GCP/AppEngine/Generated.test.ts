@@ -137,11 +137,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "appengine.apps.patch: addressed under `apps/`, not a project",
+        "appengine.apps.listRuntimes: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "appengine.apps.listRuntimes: addressed under `apps/`, not a project",
+        "appengine.apps.patch: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -153,63 +153,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "appengine.apps.firewall.ingressRules.delete: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.firewall.ingressRules.list: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.firewall.ingressRules.get: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.firewall.ingressRules.patch: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.firewall.ingressRules.batchUpdate: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.authorizedDomains.list: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.domainMappings.patch: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.domainMappings.get: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.domainMappings.list: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.domainMappings.delete: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.authorizedCertificates.list: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.authorizedCertificates.get: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.authorizedCertificates.delete: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.authorizedCertificates.patch: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "appengine.apps.services.list: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.services.get: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -221,15 +169,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "appengine.apps.services.get: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.services.versions.delete: addressed under `apps/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "appengine.apps.services.versions.patch: addressed under `apps/`, not a project",
+        "appengine.apps.services.versions.get: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -237,7 +177,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "appengine.apps.services.versions.get: addressed under `apps/`, not a project",
+        "appengine.apps.services.versions.patch: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.services.versions.delete: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -249,7 +193,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "appengine.apps.services.versions.instances.delete: addressed under `apps/`, not a project",
+        "appengine.apps.services.versions.instances.debug: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -257,7 +201,63 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "appengine.apps.services.versions.instances.debug: addressed under `apps/`, not a project",
+        "appengine.apps.services.versions.instances.delete: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.firewall.ingressRules.delete: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.firewall.ingressRules.batchUpdate: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.firewall.ingressRules.list: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.firewall.ingressRules.patch: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.firewall.ingressRules.get: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.authorizedDomains.list: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.authorizedCertificates.get: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.authorizedCertificates.patch: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.authorizedCertificates.delete: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.authorizedCertificates.list: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.domainMappings.get: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.domainMappings.patch: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.domainMappings.list: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "appengine.apps.domainMappings.delete: addressed under `apps/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

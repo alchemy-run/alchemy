@@ -27,7 +27,7 @@ export type GetRegionDiskTypeShape = () => Effect.Effect<
  * **Example:** Call `regionDiskTypes.get`
  * ```typescript
  * const getRegionDiskType = yield* GCP.Compute.GetRegionDiskType();
- * const response = yield* getRegionDiskType({ diskType: "...", region: "..." });
+ * const response = yield* getRegionDiskType({ region: "...", diskType: "..." });
  * ```
  *
  * @binding

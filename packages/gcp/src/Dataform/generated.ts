@@ -3,6 +3,7 @@ export * from "./CancelWorkflowInvocation.ts";
 export * from "./CommitRepository.ts";
 export * from "./CommitWorkspace.ts";
 export * from "./ComputeRepositoryAccessTokenStatus.ts";
+export * from "./CreateCompilationResultLongRunning.ts";
 export * from "./CreateRepositoryCompilationResult.ts";
 export * from "./DeleteFolderTree.ts";
 export * from "./DeleteTeamFolderTree.ts";

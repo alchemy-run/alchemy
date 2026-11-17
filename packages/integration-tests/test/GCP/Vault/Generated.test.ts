@@ -79,7 +79,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.removePermissions: addressed under `matters/`, not a project",
+        "vault.matters.count: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -87,7 +87,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.delete: addressed under `matters/`, not a project",
+        "vault.matters.get: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -95,23 +95,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.get: addressed under `matters/`, not a project",
+        "vault.matters.delete: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.count: addressed under `matters/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "vault.matters.savedQueries.get: addressed under `matters/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "vault.matters.savedQueries.delete: addressed under `matters/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "vault.matters.savedQueries.list: addressed under `matters/`, not a project",
+        "vault.matters.removePermissions: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -123,15 +111,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.holds.addHeldAccounts: addressed under `matters/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "vault.matters.holds.update: addressed under `matters/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "vault.matters.holds.delete: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -139,11 +119,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.holds.accounts.delete: addressed under `matters/`, not a project",
+        "vault.matters.holds.delete: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.holds.accounts.list: addressed under `matters/`, not a project",
+        "vault.matters.holds.addHeldAccounts: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -151,7 +131,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.exports.list: addressed under `matters/`, not a project",
+        "vault.matters.holds.accounts.list: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.accounts.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.exports.get: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -159,7 +147,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "vault.matters.exports.get: addressed under `matters/`, not a project",
+        "vault.matters.exports.list: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.savedQueries.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.savedQueries.get: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.savedQueries.list: addressed under `matters/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

@@ -9,19 +9,19 @@ import type { ProductsSfdcInstancesSfdcChannel } from "./ProductsSfdcInstancesSf
 import type { SfdcInstancesSfdcChannel } from "./SfdcInstancesSfdcChannel.ts";
 
 export interface GetSfdcChannelRequest extends Omit<
-  integrations.GetProjectsLocationsProductsSfdcInstancesSfdcChannelsRequest,
+  integrations.GetProjectsLocationsSfdcInstancesSfdcChannelsRequest,
   "name"
 > {}
 
 export type GetSfdcChannelShape = (
-  resource: ProductsSfdcInstancesSfdcChannel | SfdcInstancesSfdcChannel,
+  resource: SfdcInstancesSfdcChannel | ProductsSfdcInstancesSfdcChannel,
 ) => Effect.Effect<
   (
     request?: GetSfdcChannelRequest,
   ) => Effect.Effect<
     integrations.GoogleCloudIntegrationsV1alphaSfdcChannel,
-    | integrations.GetProjectsLocationsProductsSfdcInstancesSfdcChannelsError
-    | integrations.GetProjectsLocationsSfdcInstancesSfdcChannelsError,
+    | integrations.GetProjectsLocationsSfdcInstancesSfdcChannelsError
+    | integrations.GetProjectsLocationsProductsSfdcInstancesSfdcChannelsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type GetSfdcChannelShape = (
 /**
  * Gets an sfdc channel.
  *
- * Bind it to a {@link ProductsSfdcInstancesSfdcChannel} or {@link SfdcInstancesSfdcChannel} and provide {@link GetSfdcChannelHttp}. The
+ * Bind it to a {@link SfdcInstancesSfdcChannel} or {@link ProductsSfdcInstancesSfdcChannel} and provide {@link GetSfdcChannelHttp}. The
  * host gets `roles/integrations.sfdcInstanceViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sfdcChannels.get`
  * ```typescript
- * const getSfdcChannel = yield* GCP.Integrations.GetSfdcChannel(productsSfdcInstancesSfdcChannel);
+ * const getSfdcChannel = yield* GCP.Integrations.GetSfdcChannel(sfdcInstancesSfdcChannel);
  * const response = yield* getSfdcChannel();
  * ```
  *
@@ -62,14 +62,14 @@ export const GetSfdcChannelHttp = Layer.effect(
     tag: "GCP.Integrations.GetSfdcChannel",
     variants: [
       {
-        resource: "GCP.Integrations.ProductsSfdcInstancesSfdcChannel",
-        operation: integrations.getProjectsLocationsProductsSfdcInstancesSfdcChannels,
+        resource: "GCP.Integrations.SfdcInstancesSfdcChannel",
+        operation: integrations.getProjectsLocationsSfdcInstancesSfdcChannels,
         param: "name",
         iam: { role: "roles/integrations.sfdcInstanceViewer" },
       },
       {
-        resource: "GCP.Integrations.SfdcInstancesSfdcChannel",
-        operation: integrations.getProjectsLocationsSfdcInstancesSfdcChannels,
+        resource: "GCP.Integrations.ProductsSfdcInstancesSfdcChannel",
+        operation: integrations.getProjectsLocationsProductsSfdcInstancesSfdcChannels,
         param: "name",
         iam: { role: "roles/integrations.sfdcInstanceViewer" },
       },

@@ -10,20 +10,20 @@ import type { EnvironmentsKeyvaluemap } from "./EnvironmentsKeyvaluemap.ts";
 import type { Keyvaluemap } from "./Keyvaluemap.ts";
 
 export interface GetKeyvaluemapRequest extends Omit<
-  apigee.GetOrganizationsEnvironmentsKeyvaluemapsRequest,
+  apigee.GetOrganizationsKeyvaluemapsRequest,
   "name"
 > {}
 
 export type GetKeyvaluemapShape = (
-  resource: EnvironmentsKeyvaluemap | ApisKeyvaluemap | Keyvaluemap,
+  resource: Keyvaluemap | ApisKeyvaluemap | EnvironmentsKeyvaluemap,
 ) => Effect.Effect<
   (
     request?: GetKeyvaluemapRequest,
   ) => Effect.Effect<
     apigee.GoogleCloudApigeeV1KeyValueMap,
-    | apigee.GetOrganizationsEnvironmentsKeyvaluemapsError
+    | apigee.GetOrganizationsKeyvaluemapsError
     | apigee.GetOrganizationsApisKeyvaluemapsError
-    | apigee.GetOrganizationsKeyvaluemapsError,
+    | apigee.GetOrganizationsEnvironmentsKeyvaluemapsError,
     RuntimeContext
   >
 >;
@@ -31,13 +31,13 @@ export type GetKeyvaluemapShape = (
 /**
  * Get the key value map scoped to an organization, environment, or API proxy.
  *
- * Bind it to a {@link EnvironmentsKeyvaluemap} or {@link ApisKeyvaluemap} or {@link Keyvaluemap} and provide {@link GetKeyvaluemapHttp}. The
+ * Bind it to a {@link Keyvaluemap} or {@link ApisKeyvaluemap} or {@link EnvironmentsKeyvaluemap} and provide {@link GetKeyvaluemapHttp}. The
  * host gets `roles/apigee.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `keyvaluemaps.get`
  * ```typescript
- * const getKeyvaluemap = yield* GCP.Apigee.GetKeyvaluemap(environmentsKeyvaluemap);
+ * const getKeyvaluemap = yield* GCP.Apigee.GetKeyvaluemap(keyvaluemap);
  * const response = yield* getKeyvaluemap();
  * ```
  *
@@ -64,8 +64,8 @@ export const GetKeyvaluemapHttp = Layer.effect(
     tag: "GCP.Apigee.GetKeyvaluemap",
     variants: [
       {
-        resource: "GCP.Apigee.EnvironmentsKeyvaluemap",
-        operation: apigee.getOrganizationsEnvironmentsKeyvaluemaps,
+        resource: "GCP.Apigee.Keyvaluemap",
+        operation: apigee.getOrganizationsKeyvaluemaps,
         param: "name",
         iam: { role: "roles/apigee.viewer" },
       },
@@ -76,8 +76,8 @@ export const GetKeyvaluemapHttp = Layer.effect(
         iam: { role: "roles/apigee.viewer" },
       },
       {
-        resource: "GCP.Apigee.Keyvaluemap",
-        operation: apigee.getOrganizationsKeyvaluemaps,
+        resource: "GCP.Apigee.EnvironmentsKeyvaluemap",
+        operation: apigee.getOrganizationsEnvironmentsKeyvaluemaps,
         param: "name",
         iam: { role: "roles/apigee.viewer" },
       },

@@ -31,7 +31,7 @@ export type GetStepShape = () => Effect.Effect<
  * **Example:** Call `steps.get`
  * ```typescript
  * const getStep = yield* GCP.ToolResults.GetStep();
- * const response = yield* getStep({ executionId: "...", stepId: "...", historyId: "..." });
+ * const response = yield* getStep({ stepId: "...", executionId: "...", historyId: "..." });
  * ```
  *
  * @binding

@@ -10,35 +10,35 @@ import type { AgentsEnvironmentsSessionsEntityType } from "./AgentsEnvironmentsS
 import type { AgentsSessionsEntityType } from "./AgentsSessionsEntityType.ts";
 
 export interface GetEntityTypeRequest extends Omit<
-  dialogflow.GetProjectsLocationsAgentsEnvironmentsSessionsEntityTypesRequest,
+  dialogflow.GetProjectsLocationsAgentsSessionsEntityTypesRequest,
   "name"
 > {}
 
 export type GetEntityTypeShape = (
-  resource: AgentsEnvironmentsSessionsEntityType | AgentsEntityType | AgentsSessionsEntityType,
+  resource: AgentsSessionsEntityType | AgentsEnvironmentsSessionsEntityType | AgentsEntityType,
 ) => Effect.Effect<
   (
     request?: GetEntityTypeRequest,
   ) => Effect.Effect<
     | dialogflow.GoogleCloudDialogflowCxV3SessionEntityType
     | dialogflow.GoogleCloudDialogflowCxV3EntityType,
+    | dialogflow.GetProjectsLocationsAgentsSessionsEntityTypesError
     | dialogflow.GetProjectsLocationsAgentsEnvironmentsSessionsEntityTypesError
-    | dialogflow.GetProjectsLocationsAgentsEntityTypesError
-    | dialogflow.GetProjectsLocationsAgentsSessionsEntityTypesError,
+    | dialogflow.GetProjectsLocationsAgentsEntityTypesError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.entityTypes.get`.
+ * Runtime binding for `dialogflow.projects.locations.agents.sessions.entityTypes.get`.
  *
- * Bind it to a {@link AgentsEnvironmentsSessionsEntityType} or {@link AgentsEntityType} or {@link AgentsSessionsEntityType} and provide {@link GetEntityTypeHttp}. The
+ * Bind it to a {@link AgentsSessionsEntityType} or {@link AgentsEnvironmentsSessionsEntityType} or {@link AgentsEntityType} and provide {@link GetEntityTypeHttp}. The
  * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `entityTypes.get`
  * ```typescript
- * const getEntityType = yield* GCP.Dialogflow.GetEntityType(agentsEnvironmentsSessionsEntityType);
+ * const getEntityType = yield* GCP.Dialogflow.GetEntityType(agentsSessionsEntityType);
  * const response = yield* getEntityType();
  * ```
  *
@@ -65,6 +65,12 @@ export const GetEntityTypeHttp = Layer.effect(
     tag: "GCP.Dialogflow.GetEntityType",
     variants: [
       {
+        resource: "GCP.Dialogflow.AgentsSessionsEntityType",
+        operation: dialogflow.getProjectsLocationsAgentsSessionsEntityTypes,
+        param: "name",
+        iam: { role: "roles/dialogflow.reader" },
+      },
+      {
         resource: "GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType",
         operation: dialogflow.getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes,
         param: "name",
@@ -73,12 +79,6 @@ export const GetEntityTypeHttp = Layer.effect(
       {
         resource: "GCP.Dialogflow.AgentsEntityType",
         operation: dialogflow.getProjectsLocationsAgentsEntityTypes,
-        param: "name",
-        iam: { role: "roles/dialogflow.reader" },
-      },
-      {
-        resource: "GCP.Dialogflow.AgentsSessionsEntityType",
-        operation: dialogflow.getProjectsLocationsAgentsSessionsEntityTypes,
         param: "name",
         iam: { role: "roles/dialogflow.reader" },
       },

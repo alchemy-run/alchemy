@@ -199,6 +199,14 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("EntryGroup", { concurrent: true }, () => {
       test.provider(
+        "BatchEntryGroupChangeMetadata (dataplex.projects.locations.entryGroups.batchChangeMetadata)",
+        () => probe("BatchEntryGroupChangeMetadata", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetEntryGroup (dataplex.projects.locations.entryGroups.get)",
         () => probe("GetEntryGroup", true),
         {
@@ -209,6 +217,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListEntryGroupEntries (dataplex.projects.locations.entryGroups.entries.list)",
         () => probe("ListEntryGroupEntries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "RequestEntryGroupBatchMetadataChange (dataplex.projects.locations.entryGroups.requestBatchMetadataChange)",
+        () => probe("RequestEntryGroupBatchMetadataChange", false),
         {
           tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
           timeout: 600_000,

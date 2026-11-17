@@ -123,10 +123,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "spanner.projects.instanceConfigs.create: creates long-lived infrastructure that belongs in a resource, not a runtime call",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "spanner.projects.instances.databases.getScans: Key Visualizer scans; no predefined role grants the permission it checks",
         () => Effect.void,
       );
@@ -135,11 +131,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "spanner.projects.instances.databases.sessions.streamingRead: a streaming RPC (chunked JSON); the request/response client can't consume it",
+        "spanner.projects.instances.databases.sessions.adaptMessage: the Cassandra adapter's wire protocol, not a REST call",
         () => Effect.void,
       );
       test.provider.skip(
         "spanner.projects.instances.databases.sessions.adapter: the Cassandra adapter's wire protocol, not a REST call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.sessions.streamingRead: a streaming RPC (chunked JSON); the request/response client can't consume it",
         () => Effect.void,
       );
       test.provider.skip(
@@ -151,7 +151,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "spanner.projects.instances.databases.sessions.adaptMessage: the Cassandra adapter's wire protocol, not a REST call",
+        "spanner.projects.instanceConfigs.create: creates long-lived infrastructure that belongs in a resource, not a runtime call",
         () => Effect.void,
       );
     });

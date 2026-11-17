@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SearchSparkApplicationSqlQueriesRequest extends Omit<
-  dataproc.SearchSqlQueriesProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SearchSqlQueriesProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SearchSparkApplicationSqlQueriesRequest extends Omit<
 }
 
 export type SearchSparkApplicationSqlQueriesShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SearchSparkApplicationSqlQueriesRequest,
   ) => Effect.Effect<
-    | dataproc.SearchSparkApplicationSqlQueriesResponse
-    | dataproc.SearchSessionSparkApplicationSqlQueriesResponse,
-    | dataproc.SearchSqlQueriesProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SearchSqlQueriesProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SearchSessionSparkApplicationSqlQueriesResponse
+    | dataproc.SearchSparkApplicationSqlQueriesResponse,
+    | dataproc.SearchSqlQueriesProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SearchSqlQueriesProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SearchSparkApplicationSqlQueriesShape = (
 /**
  * Obtain data corresponding to SQL Queries for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SearchSparkApplicationSqlQueriesHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SearchSparkApplicationSqlQueriesHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.searchSqlQueries`
  * ```typescript
- * const searchSparkApplicationSqlQueries = yield* GCP.Dataproc.SearchSparkApplicationSqlQueries(batch);
+ * const searchSparkApplicationSqlQueries = yield* GCP.Dataproc.SearchSparkApplicationSqlQueries(session);
  * const response = yield* searchSparkApplicationSqlQueries({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const SearchSparkApplicationSqlQueriesHttp = Layer.effect(
     tag: "GCP.Dataproc.SearchSparkApplicationSqlQueries",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.searchSqlQueriesProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.searchSqlQueriesProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.searchSqlQueriesProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.searchSqlQueriesProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

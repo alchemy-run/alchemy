@@ -9,19 +9,19 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface PublishAssessmentRequest extends Omit<
-  contactcenterinsights.PublishProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsRequest,
+  contactcenterinsights.PublishProjectsLocationsConversationsAssessmentsRequest,
   "name"
 > {}
 
 export type PublishAssessmentShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request?: PublishAssessmentRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1Assessment,
-    | contactcenterinsights.PublishProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError
-    | contactcenterinsights.PublishProjectsLocationsConversationsAssessmentsError,
+    | contactcenterinsights.PublishProjectsLocationsConversationsAssessmentsError
+    | contactcenterinsights.PublishProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type PublishAssessmentShape = (
 /**
  * Publish an Assessment.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link PublishAssessmentHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link PublishAssessmentHttp}. The
  * host gets `roles/contactcenterinsights.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `assessments.publish`
  * ```typescript
- * const publishAssessment = yield* GCP.ContactCenterInsights.PublishAssessment(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const publishAssessment = yield* GCP.ContactCenterInsights.PublishAssessment(conversationsAssessment);
  * const response = yield* publishAssessment();
  * ```
  *
@@ -64,16 +64,16 @@ export const PublishAssessmentHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.PublishAssessment",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.publishProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.publishProjectsLocationsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.editor" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.publishProjectsLocationsConversationsAssessments,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.publishProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.editor" },
       },

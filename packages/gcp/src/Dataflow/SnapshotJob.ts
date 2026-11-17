@@ -7,14 +7,14 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface SnapshotJobRequest extends Omit<
-  dataflow.SnapshotProjectsJobsRequest,
+  dataflow.SnapshotProjectsLocationsJobsRequest,
   "projectId"
 > {}
 
 export type SnapshotJobShape = () => Effect.Effect<
   (
     request: SnapshotJobRequest,
-  ) => Effect.Effect<dataflow.Snapshot, dataflow.SnapshotProjectsJobsError, RuntimeContext>
+  ) => Effect.Effect<dataflow.Snapshot, dataflow.SnapshotProjectsLocationsJobsError, RuntimeContext>
 >;
 
 /**
@@ -27,7 +27,7 @@ export type SnapshotJobShape = () => Effect.Effect<
  * **Example:** Call `jobs.snapshot`
  * ```typescript
  * const snapshotJob = yield* GCP.Dataflow.SnapshotJob();
- * const response = yield* snapshotJob({ jobId: "..." });
+ * const response = yield* snapshotJob({ jobId: "...", location: "..." });
  * ```
  *
  * @binding
@@ -53,7 +53,7 @@ export const SnapshotJobHttp = Layer.effect(
     tag: "GCP.Dataflow.SnapshotJob",
     variants: [
       {
-        operation: dataflow.snapshotProjectsJobs,
+        operation: dataflow.snapshotProjectsLocationsJobs,
         projectField: "projectId",
         role: "roles/dataflow.developer",
       },

@@ -67,15 +67,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudchannel.integrators.registerSubscriber: addressed under `integrators/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.integrators.unregisterSubscriber: addressed under `integrators/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.integrators.listSubscribers: addressed under `integrators/`, not a project",
+        "cloudchannel.accounts.listSubscribers: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -83,15 +75,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.listTransferableOffers: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudchannel.accounts.register: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.checkCloudIdentityAccountsExist: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -99,55 +83,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.listSubscribers: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.checkCloudIdentityAccountsExist: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.list: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.get: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.create: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.patch: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.customers.list: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.customers.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.customers.import: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.list: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.get: no predefined role grants its permission",
+        "cloudchannel.accounts.listTransferableOffers: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "cloudchannel.accounts.offers.list: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.skuGroups.list: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.skuGroups.billableSkus.list: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -159,11 +103,51 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.queryEligibleBillingAccounts: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.channelPartnerLinks.patch: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.get: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.channelPartnerLinks.get: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.create: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.list: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.list: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.channelPartnerRepricingConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.customers.list: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.customers.import: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.channelPartnerLinks.customers.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.skuGroups.list: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.skuGroups.billableSkus.list: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.reportJobs.fetchReportResults: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -171,11 +155,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.provisionCloudIdentity: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.listPurchasableOffers: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.customers.import: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -183,15 +163,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.transferEntitlements: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.listPurchasableSkus: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.import: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.customers.get: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -199,55 +171,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudchannel.accounts.customers.listPurchasableOffers: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.listPurchasableSkus: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudchannel.accounts.customers.transferEntitlementsToGoogle: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.changeOffer: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.customers.provisionCloudIdentity: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.create: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.customers.queryEligibleBillingAccounts: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.listEntitlementChanges: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.lookupOffer: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.list: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.cancel: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.suspend: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.changeRenewalSettings: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.changeParameters: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.get: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.startPaidService: addressed under `accounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudchannel.accounts.customers.entitlements.activate: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.customers.transferEntitlements: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -259,11 +203,67 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudchannel.accounts.reportJobs.fetchReportResults: addressed under `accounts/`, not a project",
+        "cloudchannel.accounts.customers.entitlements.changeParameters: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.activate: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.suspend: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.startPaidService: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.create: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.changeRenewalSettings: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.listEntitlementChanges: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.get: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.changeOffer: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.list: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.cancel: addressed under `accounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.accounts.customers.entitlements.lookupOffer: addressed under `accounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "cloudchannel.products.skus.list: addressed under `products/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.integrators.listSubscribers: addressed under `integrators/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.integrators.registerSubscriber: addressed under `integrators/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudchannel.integrators.unregisterSubscriber: addressed under `integrators/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

@@ -146,10 +146,6 @@ describe.skipIf(!!process.env.FAST)(
         "storage.projects.serviceAccount.get: returns Cloud Storage's service agent for the project: setup information, not a runtime call",
         () => Effect.void,
       );
-      test.provider.skip(
-        "storage.channels.stop: object change notification channels are deprecated; use GCP.Storage.BucketEventSource",
-        () => Effect.void,
-      );
     });
   },
 );

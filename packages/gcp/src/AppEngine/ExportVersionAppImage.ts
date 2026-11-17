@@ -31,7 +31,7 @@ export type ExportVersionAppImageShape = () => Effect.Effect<
  * **Example:** Call `versions.exportAppImage`
  * ```typescript
  * const exportVersionAppImage = yield* GCP.AppEngine.ExportVersionAppImage();
- * const response = yield* exportVersionAppImage({ versionsId: "...", servicesId: "...", locationsId: "...", applicationsId: "..." });
+ * const response = yield* exportVersionAppImage({ servicesId: "...", versionsId: "...", applicationsId: "...", locationsId: "..." });
  * ```
  *
  * @binding

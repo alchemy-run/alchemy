@@ -13,9 +13,16 @@ export const ProbeReportConfig = Effect.gen(function* () {
   });
   return yield* GCP.StorageInsights.ReportConfig("ProbeReportConfig", {
     location: "us-central1",
-    sourceBucket: source.bucketName,
-    destinationBucket: reports.bucketName,
-    startDate: "2027-01-01",
-    endDate: "2027-12-31",
+    frequencyOptions: {
+      frequency: "DAILY",
+      startDate: { year: 2090, month: 1, day: 1 },
+      endDate: { year: 2091, month: 1, day: 1 },
+    },
+    csvOptions: { delimiter: ",", headerRequired: true },
+    objectMetadataReportOptions: {
+      metadataFields: ["project", "bucket", "name"],
+      storageFilters: { bucket: source.bucketName },
+      storageDestinationOptions: { bucket: reports.bucketName },
+    },
   });
 });

@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SearchSparkApplicationExecutorsRequest extends Omit<
-  dataproc.SearchExecutorsProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SearchExecutorsProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SearchSparkApplicationExecutorsRequest extends Omit<
 }
 
 export type SearchSparkApplicationExecutorsShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SearchSparkApplicationExecutorsRequest,
   ) => Effect.Effect<
-    | dataproc.SearchSparkApplicationExecutorsResponse
-    | dataproc.SearchSessionSparkApplicationExecutorsResponse,
-    | dataproc.SearchExecutorsProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SearchExecutorsProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SearchSessionSparkApplicationExecutorsResponse
+    | dataproc.SearchSparkApplicationExecutorsResponse,
+    | dataproc.SearchExecutorsProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SearchExecutorsProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SearchSparkApplicationExecutorsShape = (
 /**
  * Obtain data corresponding to executors for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SearchSparkApplicationExecutorsHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SearchSparkApplicationExecutorsHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.searchExecutors`
  * ```typescript
- * const searchSparkApplicationExecutors = yield* GCP.Dataproc.SearchSparkApplicationExecutors(batch);
+ * const searchSparkApplicationExecutors = yield* GCP.Dataproc.SearchSparkApplicationExecutors(session);
  * const response = yield* searchSparkApplicationExecutors({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const SearchSparkApplicationExecutorsHttp = Layer.effect(
     tag: "GCP.Dataproc.SearchSparkApplicationExecutors",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.searchExecutorsProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.searchExecutorsProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.searchExecutorsProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.searchExecutorsProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

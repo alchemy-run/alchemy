@@ -27,7 +27,7 @@ export type FetchDbFrameworkComplianceReportShape = () => Effect.Effect<
 >;
 
 /**
- * Fetches the framework compliance report for a given scope.
+ * Fetches the current compliance report for a framework that's deployed in a Data Boundary scope (an organization, folder, or project).
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
  * Provide {@link FetchDbFrameworkComplianceReportHttp}. The host gets `roles/assuredworkloads.reader` on the project.

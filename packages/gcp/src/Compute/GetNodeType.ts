@@ -24,7 +24,7 @@ export type GetNodeTypeShape = () => Effect.Effect<
  * **Example:** Call `nodeTypes.get`
  * ```typescript
  * const getNodeType = yield* GCP.Compute.GetNodeType();
- * const response = yield* getNodeType({ zone: "...", nodeType: "..." });
+ * const response = yield* getNodeType({ nodeType: "...", zone: "..." });
  * ```
  *
  * @binding

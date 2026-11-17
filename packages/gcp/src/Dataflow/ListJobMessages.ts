@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface ListJobMessagesRequest extends Omit<
-  dataflow.ListProjectsJobsMessagesRequest,
+  dataflow.ListProjectsLocationsJobsMessagesRequest,
   "projectId"
 > {}
 
@@ -16,7 +16,7 @@ export type ListJobMessagesShape = () => Effect.Effect<
     request: ListJobMessagesRequest,
   ) => Effect.Effect<
     dataflow.ListJobMessagesResponse,
-    dataflow.ListProjectsJobsMessagesError,
+    dataflow.ListProjectsLocationsJobsMessagesError,
     RuntimeContext
   >
 >;
@@ -31,7 +31,7 @@ export type ListJobMessagesShape = () => Effect.Effect<
  * **Example:** Call `messages.list`
  * ```typescript
  * const listJobMessages = yield* GCP.Dataflow.ListJobMessages();
- * const response = yield* listJobMessages({ jobId: "..." });
+ * const response = yield* listJobMessages({ location: "...", jobId: "..." });
  * ```
  *
  * @binding
@@ -57,7 +57,7 @@ export const ListJobMessagesHttp = Layer.effect(
     tag: "GCP.Dataflow.ListJobMessages",
     variants: [
       {
-        operation: dataflow.listProjectsJobsMessages,
+        operation: dataflow.listProjectsLocationsJobsMessages,
         projectField: "projectId",
         role: "roles/dataflow.viewer",
       },

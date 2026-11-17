@@ -535,11 +535,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "managedkafka.projects.locations.schemaRegistries.contexts.subjects.lookupVersion: the registry-level LookupSubjectVersion reads the same subjects; contexts add a prefix only",
+        "managedkafka.projects.locations.schemaRegistries.contexts.compatibility.checkCompatibility: name collision on CheckCompatibility",
         () => Effect.void,
       );
       test.provider.skip(
-        "managedkafka.projects.locations.schemaRegistries.contexts.compatibility.checkCompatibility: name collision on CheckCompatibility",
+        "managedkafka.projects.locations.schemaRegistries.contexts.subjects.lookupVersion: the registry-level LookupSubjectVersion reads the same subjects; contexts add a prefix only",
         () => Effect.void,
       );
     });

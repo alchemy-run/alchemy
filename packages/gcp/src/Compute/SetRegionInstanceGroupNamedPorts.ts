@@ -31,7 +31,7 @@ export type SetRegionInstanceGroupNamedPortsShape = () => Effect.Effect<
  * **Example:** Call `regionInstanceGroups.setNamedPorts`
  * ```typescript
  * const setRegionInstanceGroupNamedPorts = yield* GCP.Compute.SetRegionInstanceGroupNamedPorts();
- * const response = yield* setRegionInstanceGroupNamedPorts({ instanceGroup: "...", region: "..." });
+ * const response = yield* setRegionInstanceGroupNamedPorts({ region: "...", instanceGroup: "..." });
  * ```
  *
  * @binding

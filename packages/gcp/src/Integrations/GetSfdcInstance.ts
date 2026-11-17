@@ -9,19 +9,19 @@ import type { ProductsSfdcInstance } from "./ProductsSfdcInstance.ts";
 import type { SfdcInstance } from "./SfdcInstance.ts";
 
 export interface GetSfdcInstanceRequest extends Omit<
-  integrations.GetProjectsLocationsProductsSfdcInstancesRequest,
+  integrations.GetProjectsLocationsSfdcInstancesRequest,
   "name"
 > {}
 
 export type GetSfdcInstanceShape = (
-  resource: ProductsSfdcInstance | SfdcInstance,
+  resource: SfdcInstance | ProductsSfdcInstance,
 ) => Effect.Effect<
   (
     request?: GetSfdcInstanceRequest,
   ) => Effect.Effect<
     integrations.GoogleCloudIntegrationsV1alphaSfdcInstance,
-    | integrations.GetProjectsLocationsProductsSfdcInstancesError
-    | integrations.GetProjectsLocationsSfdcInstancesError,
+    | integrations.GetProjectsLocationsSfdcInstancesError
+    | integrations.GetProjectsLocationsProductsSfdcInstancesError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type GetSfdcInstanceShape = (
 /**
  * Gets an sfdc instance.
  *
- * Bind it to a {@link ProductsSfdcInstance} or {@link SfdcInstance} and provide {@link GetSfdcInstanceHttp}. The
+ * Bind it to a {@link SfdcInstance} or {@link ProductsSfdcInstance} and provide {@link GetSfdcInstanceHttp}. The
  * host gets `roles/integrations.sfdcInstanceViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sfdcInstances.get`
  * ```typescript
- * const getSfdcInstance = yield* GCP.Integrations.GetSfdcInstance(productsSfdcInstance);
+ * const getSfdcInstance = yield* GCP.Integrations.GetSfdcInstance(sfdcInstance);
  * const response = yield* getSfdcInstance();
  * ```
  *
@@ -62,14 +62,14 @@ export const GetSfdcInstanceHttp = Layer.effect(
     tag: "GCP.Integrations.GetSfdcInstance",
     variants: [
       {
-        resource: "GCP.Integrations.ProductsSfdcInstance",
-        operation: integrations.getProjectsLocationsProductsSfdcInstances,
+        resource: "GCP.Integrations.SfdcInstance",
+        operation: integrations.getProjectsLocationsSfdcInstances,
         param: "name",
         iam: { role: "roles/integrations.sfdcInstanceViewer" },
       },
       {
-        resource: "GCP.Integrations.SfdcInstance",
-        operation: integrations.getProjectsLocationsSfdcInstances,
+        resource: "GCP.Integrations.ProductsSfdcInstance",
+        operation: integrations.getProjectsLocationsProductsSfdcInstances,
         param: "name",
         iam: { role: "roles/integrations.sfdcInstanceViewer" },
       },

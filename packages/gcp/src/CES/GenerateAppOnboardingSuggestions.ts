@@ -25,7 +25,7 @@ export type GenerateAppOnboardingSuggestionsShape = (
 >;
 
 /**
- * Generates personalized onboarding suggestions for the AI assistant zero state: classifies the requesting user (new / exploring / returning) from their assistant-session history in the app and returns suggestion chips (resume a session, continue work, or start something new) to render before any message is sent.
+ * Generates personalized onboarding suggestions for the Arc zero state: classifies the requesting user (new / exploring / returning) from their assistant-session history in the app and returns suggestion chips (resume a session, continue work, or start something new) to render before any message is sent.
  *
  * Bind it to a {@link App} and provide {@link GenerateAppOnboardingSuggestionsHttp}. The
  * host gets `roles/ces.appEditor` on the project (the service has no per-resource IAM policy).

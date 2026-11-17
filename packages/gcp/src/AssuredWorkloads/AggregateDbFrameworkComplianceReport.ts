@@ -27,7 +27,7 @@ export type AggregateDbFrameworkComplianceReportShape = () => Effect.Effect<
 >;
 
 /**
- * Gets the aggregated compliance report over time for a given scope.
+ * Gets daily compliance reports over a time range for a framework that's deployed in a Data Boundary scope.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
  * Provide {@link AggregateDbFrameworkComplianceReportHttp}. The host gets `roles/assuredworkloads.reader` on the project.

@@ -24,7 +24,7 @@ export type GetHostVersionShape = () => Effect.Effect<
  * **Example:** Call `hosts.getVersion`
  * ```typescript
  * const getHostVersion = yield* GCP.Compute.GetHostVersion();
- * const response = yield* getHostVersion({ host: "...", association: "...", zone: "..." });
+ * const response = yield* getHostVersion({ zone: "...", host: "...", association: "..." });
  * ```
  *
  * @binding

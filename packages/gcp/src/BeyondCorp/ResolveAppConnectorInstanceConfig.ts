@@ -4,19 +4,21 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpBinding } from "../HttpBinding.ts";
-import type { AppConnector } from "./AppConnector.ts";
+import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface ResolveAppConnectorInstanceConfigRequest extends Omit<
   beyondcorp.ResolveInstanceConfigProjectsLocationsAppConnectorsRequest,
   "appConnector"
-> {}
+> {
+  /** Location to call in (`projects/{project}/locations/{location}`). */
+  location: string;
+  /** Id of the appConnector (`appConnectors/{appConnector}`). */
+  appConnector: string;
+}
 
-export type ResolveAppConnectorInstanceConfigShape = (
-  resource: AppConnector,
-) => Effect.Effect<
+export type ResolveAppConnectorInstanceConfigShape = () => Effect.Effect<
   (
-    request?: ResolveAppConnectorInstanceConfigRequest,
+    request: ResolveAppConnectorInstanceConfigRequest,
   ) => Effect.Effect<
     beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1ResolveInstanceConfigResponse,
     beyondcorp.ResolveInstanceConfigProjectsLocationsAppConnectorsError,
@@ -27,14 +29,14 @@ export type ResolveAppConnectorInstanceConfigShape = (
 /**
  * Gets instance configuration for a given AppConnector.
  *
- * Bind it to a {@link AppConnector} and provide {@link ResolveAppConnectorInstanceConfigHttp}. The
- * host gets `roles/beyondcorp.editor` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project or one of its locations, so it takes no resource.
+ * Provide {@link ResolveAppConnectorInstanceConfigHttp}. The host gets `roles/beyondcorp.editor` on the project.
  *
  * ### Usage
  * **Example:** Call `appConnectors.resolveInstanceConfig`
  * ```typescript
- * const resolveAppConnectorInstanceConfig = yield* GCP.BeyondCorp.ResolveAppConnectorInstanceConfig(appConnector);
- * const response = yield* resolveAppConnectorInstanceConfig();
+ * const resolveAppConnectorInstanceConfig = yield* GCP.BeyondCorp.ResolveAppConnectorInstanceConfig();
+ * const response = yield* resolveAppConnectorInstanceConfig({ location: "us-central1", appConnector: "..." });
  * ```
  *
  * @binding
@@ -58,14 +60,15 @@ export const ResolveAppConnectorInstanceConfig = Binding.Service<ResolveAppConne
  */
 export const ResolveAppConnectorInstanceConfigHttp = Layer.effect(
   ResolveAppConnectorInstanceConfig,
-  makeGcpBinding<ResolveAppConnectorInstanceConfigShape>({
+  makeGcpProjectBinding<ResolveAppConnectorInstanceConfigShape>({
     tag: "GCP.BeyondCorp.ResolveAppConnectorInstanceConfig",
     variants: [
       {
-        resource: "GCP.BeyondCorp.AppConnector",
         operation: beyondcorp.resolveInstanceConfigProjectsLocationsAppConnectors,
         param: "appConnector",
-        iam: { role: "roles/beyondcorp.editor" },
+        location: true,
+        children: [["appConnectors", "appConnector"]],
+        role: "roles/beyondcorp.editor",
       },
     ],
   }),

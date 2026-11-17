@@ -1,114 +1,81 @@
 ---
-title: "Part 5: CI/CD"
-description: Deploy from GitHub Actions with a remote state store, a stage per pull request, and your Archil key as a repository secret.
+title: "Part 5: Testing"
+description: Deploy the Stack in a test, fork the set-up sandbox, and check what the fork contains.
 sidebar:
   order: 5
 ---
 
-Hand the stack to GitHub Actions: pushes to `main` deploy to `prod`, pull
-requests get their own stage, and closing a pull request destroys it.
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Move state somewhere CI can read
+## Install the test harness
 
-A runner can't see your `.alchemy/` directory, and Archil has no state
-store of its own. Use a remote one, such as a
-[Postgres](/state-store#postgres-state-store) database you already run
-(install `@alchemy.run/sql` and `@effect/sql-pg`):
+<PackageManagers dev="@alchemy.run/test" />
 
-```diff lang="typescript"
-// alchemy.run.ts
-+import { postgresState } from "@alchemy.run/sql/PostgresState";
-+import * as Config from "effect/Config";
+## Deploy once per test file
 
-export default Alchemy.Stack(
-  "MyApp",
--  { providers: Archil.providers(), state: Alchemy.localState() },
-+  {
-+    providers: Archil.providers(),
-+    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
-+  },
+`Test.make` takes the same providers and state as your Stack:
+
+```typescript title="test/integ.test.ts"
+import { expect } from "bun:test";
+import * as Archil from "@alchemy.run/archil";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Archil.providers(),
+  state: Alchemy.localState(),
+  profile: process.env.ALCHEMY_PROFILE,
+});
+
+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 180_000 });
 ```
 
-`Cloudflare.state()`, `AWS.state()` and `GCP.state()` work too if you
-already use that cloud. See [State stores](/state-store).
+The test deploys the Stack to a stage of its own, `Golden` included, and destroys it afterwards.
 
-## Store your key in GitHub
+## Retry while the program starts
 
-Archil creates API keys only in the console, so CI uses one you create
-there. Create a key for CI under **API Keys**, then store it and the state
-database URL as repository secrets:
+A new program sandbox can take a few seconds to answer:
 
-```sh
-gh secret set ARCHIL_API_KEY
-gh secret set STATE_DATABASE_URL
+```typescript title="test/integ.test.ts"
+const run = (url: string, command: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.execute(HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText(command))).pipe(
+      Effect.flatMap((res) => (res.status >= 500 ? Effect.fail(new Error(`HTTP ${res.status}`)) : Effect.succeed(res))),
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
+    );
+    return (yield* res.json) as { stdout: string; exitCode: number };
+  });
 ```
 
-`Archil.providers()` reads `ARCHIL_API_KEY` (and `ARCHIL_REGION`, if
-set) from the environment when no profile is selected.
+## Check a fork starts from Golden
 
-## Create the workflow
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
-
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  STAGE: >-
-    ${{ github.event_name == 'pull_request'
-      && format('pr-{0}', github.event.number)
-      || 'prod' }}
-  ARCHIL_API_KEY: ${{ secrets.ARCHIL_API_KEY }}
-  STATE_DATABASE_URL: ${{ secrets.STATE_DATABASE_URL }}
-
-jobs:
-  deploy:
-    if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
-
-  cleanup:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - name: Refuse to destroy prod
-        run: test "${{ env.STAGE }}" != "prod"
-      - run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
+```typescript title="test/integ.test.ts"
+test(
+  "forks Golden for each request",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const both = yield* run(url, "ls ..");
+    expect(both.stdout).toContain("slugify");
+  }),
+  { timeout: 300_000 },
+);
 ```
 
-Pull requests deploy to `pr-<number>`, and `main` deploys to `prod`. The
-cleanup job refuses to destroy `prod`.
+`slugify` is only there if the fork came from the new `Golden`. The program deletes the fork when the request ends, so none is left behind.
 
-## Rotate the key
+## Run it
 
-Archil can't scope or expire API keys. To rotate one, create a new key
-in the console, run `gh secret set ARCHIL_API_KEY` again, redeploy, then
-delete the old key. Hosts that call Archil's control plane pick up the
-new key on that deploy; hosts that only use disks hold their own disk
-users and aren't affected.
+<PackageManagers script={`bun test`} />
 
-## Recap
+Set `NO_DESTROY=1` to keep the deployment between runs while you iterate.
 
-- A remote state store lets every runner see the same deploys.
-- Each pull request gets its own stage, destroyed when it closes.
-- The Archil key lives in a repository secret.
+## Next
 
-## What's next
-
-- [Programs](/archil/compute/programs) and [Websites](/archil/frontend/websites)
-- [Disks](/archil/storage/disks) and [Sandboxes](/archil/compute/sandboxes)
+[Part 6](/archil/tutorial/part-6) deploys more copies, from CI.

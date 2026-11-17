@@ -67,51 +67,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "androidpublisher.appstorecatalog.recentupdateevents.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstorecatalog.recentappviews.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.apprecovery.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.apprecovery.deploy: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.apprecovery.create: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.apprecovery.cancel: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.apprecovery.addTargeting: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "androidpublisher.monetization.convertRegionPrices: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.batchUpdate: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.batchDelete: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.delete: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -119,11 +75,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.get: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.onetimeproducts.delete: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.batchUpdate: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "androidpublisher.monetization.onetimeproducts.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.batchDelete: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.patch: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.get: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -135,11 +107,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.activate: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchUpdateStates: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -147,11 +115,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchUpdateStates: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchDelete: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchGet: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -159,27 +123,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.activate: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchDelete: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchUpdate: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.onetimeproducts.purchaseOptions.offers.batchGet: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.archive: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -191,11 +147,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "androidpublisher.monetization.subscriptions.patch: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "androidpublisher.monetization.subscriptions.batchUpdate: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.batchUpdateStates: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.subscriptions.archive: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.subscriptions.list: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -203,11 +171,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.delete: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.batchMigratePrices: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.deactivate: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.batchUpdateStates: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.subscriptions.basePlans.delete: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -215,7 +187,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.batchMigratePrices: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.deactivate: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.monetization.subscriptions.basePlans.offers.deactivate: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -223,11 +199,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.offers.delete: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.offers.activate: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.offers.patch: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -235,15 +207,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.offers.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.offers.batchGet: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.monetization.subscriptions.basePlans.offers.deactivate: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.offers.delete: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -255,35 +219,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.inappproducts.update: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.offers.batchGet: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.inappproducts.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.inappproducts.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.inappproducts.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.inappproducts.delete: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.inappproducts.batchDelete: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.inappproducts.batchUpdate: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.inappproducts.batchGet: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.monetization.subscriptions.basePlans.offers.activate: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -295,19 +235,71 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.reviews.list: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.purchases.products.acknowledge: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.reviews.reply: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.purchases.products.consume: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.reviews.get: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.purchases.products.get: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.validate: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.purchases.productsv2.getproductpurchasev2: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.voidedpurchases.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptions.acknowledge: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptions.cancel: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptions.defer: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptionsv2.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptionsv2.defer: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptionsv2.revoke: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.purchases.subscriptionsv2.cancel: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.appstorecatalog.recentupdateevents.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.appstorecatalog.recentappviews.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.grants.delete: addressed under `developers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.grants.create: addressed under `developers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.grants.patch: addressed under `developers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -319,31 +311,35 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "androidpublisher.edits.validate: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "androidpublisher.edits.commit: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.countryavailability.get: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.edits.deobfuscationfiles.upload: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.testers.get: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.edits.expansionfiles.update: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.testers.patch: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.edits.expansionfiles.patch: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.testers.update: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.edits.expansionfiles.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.expansionfiles.upload: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "androidpublisher.edits.tracks.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.tracks.patch: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -355,7 +351,75 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "androidpublisher.edits.tracks.patch: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "androidpublisher.edits.tracks.create: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.listings.patch: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.listings.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.listings.deleteall: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.listings.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.listings.update: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.listings.delete: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.testers.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.testers.update: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.testers.patch: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.images.upload: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.images.deleteall: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.images.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.images.delete: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.details.update: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.details.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.edits.details.patch: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -371,55 +435,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.deobfuscationfiles.upload: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.details.update: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.details.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.details.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.images.deleteall: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.images.upload: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.images.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.images.delete: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.expansionfiles.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.expansionfiles.update: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.expansionfiles.upload: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.expansionfiles.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.bundles.list: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.edits.countryavailability.get: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -427,59 +443,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.edits.listings.patch: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.listings.deleteall: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.listings.delete: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.listings.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.listings.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.edits.listings.update: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.internalappsharingartifacts.uploadbundle: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.internalappsharingartifacts.uploadapk: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.users.delete: addressed under `developers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.users.create: addressed under `developers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.users.patch: addressed under `developers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.users.list: addressed under `developers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.generatedapks.list: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.generatedapks.download: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.edits.bundles.list: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -495,107 +459,71 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.grants.create: addressed under `developers/`, not a project",
+        "androidpublisher.inappproducts.batchGet: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.grants.patch: addressed under `developers/`, not a project",
+        "androidpublisher.inappproducts.batchUpdate: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.grants.delete: addressed under `developers/`, not a project",
+        "androidpublisher.inappproducts.list: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptionsv2.get: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.inappproducts.batchDelete: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptionsv2.revoke: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.inappproducts.update: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptionsv2.defer: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.inappproducts.delete: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptionsv2.cancel: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.inappproducts.patch: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptions.cancel: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.inappproducts.get: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptions.defer: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.apprecovery.addTargeting: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.subscriptions.acknowledge: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.apprecovery.cancel: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.voidedpurchases.list: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.apprecovery.deploy: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.productsv2.getproductpurchasev2: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.apprecovery.list: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.products.get: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.apprecovery.create: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.products.acknowledge: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.internalappsharingartifacts.uploadapk: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.purchases.products.consume: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstoreappsreview.updateappstorehostedapppublishstatus: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstoreappsreview.uploadappstoreapppolicydeclarationfile: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstoreappsreview.updateappstorehostedapp: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstoreappsreview.createappstorehostedapp: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstoreappsreview.uploadimage: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.appstoreappsreview.uploadapk: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.orders.refund: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.orders.batchget: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.orders.get: addressed under `androidpublisher/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androidpublisher.orders.reviewrefund: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.internalappsharingartifacts.uploadbundle: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "androidpublisher.applications.dataSafety: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.applications.tracks.releases.list: addressed under `applications/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -611,15 +539,79 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.applications.tracks.releases.list: addressed under `applications/`, not a project",
+        "androidpublisher.appstoreappsreview.updateappstorehostedapppublishstatus: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.systemapks.variants.download: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.appstoreappsreview.uploadapk: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androidpublisher.systemapks.variants.list: addressed under `androidpublisher/`, not a project",
+        "androidpublisher.appstoreappsreview.uploadimage: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.appstoreappsreview.uploadappstoreapppolicydeclarationfile: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.appstoreappsreview.updateappstorehostedapp: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.appstoreappsreview.createappstorehostedapp: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.reviews.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.reviews.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.reviews.reply: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.users.list: addressed under `developers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.users.create: addressed under `developers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.users.delete: addressed under `developers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.users.patch: addressed under `developers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.orders.refund: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.orders.reviewrefund: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.orders.batchget: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.orders.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.generatedapks.download: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.generatedapks.list: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -628,6 +620,14 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "androidpublisher.systemapks.variants.get: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.systemapks.variants.list: addressed under `androidpublisher/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidpublisher.systemapks.variants.download: addressed under `androidpublisher/`, not a project",
         () => Effect.void,
       );
     });

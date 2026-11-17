@@ -7,14 +7,9 @@ import * as Stream from "effect/Stream";
 import { isTransientGcpError } from "../Errors.ts";
 import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 
-export const MAX_TEMPLATE_ID_LENGTH = 64;
 export const MAX_DISPLAY_NAME_LENGTH = 200;
 export const MAX_DESCRIPTION_LENGTH = 2000;
-export const OWNERSHIP_FIELD_ID = "alchemy_ownership";
 
-export type FieldType = datacatalog.GoogleCloudDatacatalogV1FieldType;
-export type TagTemplateField = datacatalog.GoogleCloudDatacatalogV1TagTemplateField;
-export type TagTemplateFieldMap = datacatalog.GoogleCloudDatacatalogV1TagTemplateFieldMap;
 export type TaxonomyActivatedPolicyType =
   | datacatalog.GoogleCloudDatacatalogV1TaxonomyActivatedPolicyTypesItemEnum
   | (string & {});
@@ -63,34 +58,6 @@ export const expandParent = (
   if (value.includes("/")) return value.replace(/\/+$/, "");
   return `projects/${project}/locations/${location}/${collection}/${value}`;
 };
-
-const sanitizeTemplateId = (name: string) => {
-  let next = name
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, "_")
-    .replace(/_+/g, "_");
-  if (!/^[a-z_]/.test(next)) next = `t${next}`;
-  next = next.slice(0, MAX_TEMPLATE_ID_LENGTH).replace(/_+$/g, "");
-  return next.length > 0 ? next : "template";
-};
-
-export const toTagTemplateId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
-  Effect.gen(function* () {
-    if (explicit !== undefined) return sanitizeTemplateId(explicit);
-    if (existing !== undefined) return existing;
-    return sanitizeTemplateId(
-      yield* createPhysicalName({
-        id,
-        maxLength: MAX_TEMPLATE_ID_LENGTH,
-        lowercase: true,
-        delimiter: "_",
-      }),
-    );
-  });
 
 export const toDisplayName = (
   id: string,
@@ -307,71 +274,3 @@ export const findOwned = <A>(
     }
     return undefined;
   });
-
-export const ownershipField = (labels: Record<string, string>): TagTemplateField => ({
-  displayName: "Alchemy ownership",
-  type: { primitiveType: "STRING" },
-  isRequired: false,
-  description: encodeOwnership(labels, undefined),
-  order: 0,
-});
-
-export const userFields = (fields: TagTemplateFieldMap | undefined): TagTemplateFieldMap => {
-  const next: TagTemplateFieldMap = {};
-  for (const [key, field] of Object.entries(fields ?? {})) {
-    if (key === OWNERSHIP_FIELD_ID || field === undefined) continue;
-    next[key] = {
-      displayName: field.displayName,
-      type: field.type,
-      isRequired: field.isRequired,
-      description: field.description,
-      order: field.order,
-    };
-  }
-  return next;
-};
-
-export const desiredFields = (
-  labels: Record<string, string>,
-  fields: TagTemplateFieldMap | undefined,
-): TagTemplateFieldMap => ({
-  ...userFields(fields),
-  [OWNERSHIP_FIELD_ID]: ownershipField(labels),
-});
-
-export const fieldBody = (field: TagTemplateField): TagTemplateField => ({
-  displayName: field.displayName,
-  type: field.type,
-  isRequired: field.isRequired === true ? true : undefined,
-  description: field.description,
-  order: field.order,
-});
-
-export const primitiveOf = (type: FieldType | undefined) => type?.primitiveType ?? "";
-
-export const enumValuesOf = (type: FieldType | undefined) =>
-  (type?.enumType?.allowedValues ?? [])
-    .map((value) => value.displayName ?? "")
-    .filter((value) => value.length > 0);
-
-export const fieldNeedsReplace = (
-  observed: TagTemplateField | undefined,
-  desired: TagTemplateField,
-) => {
-  if (observed === undefined) return false;
-  const observedPrimitive = primitiveOf(observed.type);
-  const desiredPrimitive = primitiveOf(desired.type);
-  if (observedPrimitive !== desiredPrimitive) return true;
-  const observedHasEnum = (observed.type?.enumType?.allowedValues ?? []).length > 0;
-  const desiredHasEnum = (desired.type?.enumType?.allowedValues ?? []).length > 0;
-  if (observedHasEnum !== desiredHasEnum) return true;
-  if (desiredHasEnum) {
-    const observedValues = new Set(enumValuesOf(observed.type));
-    const desiredValues = enumValuesOf(desired.type);
-    if (desiredValues.some((value) => !observedValues.has(value))) {
-      return false;
-    }
-    if (observedValues.size > desiredValues.length) return true;
-  }
-  return false;
-};

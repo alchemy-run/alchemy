@@ -6,12 +6,12 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
-export interface CreateSinkRequest extends Omit<logging.CreateProjectsSinksRequest, "parent"> {}
+export interface CreateSinkRequest extends Omit<logging.CreateSinksRequest, "parent"> {}
 
 export type CreateSinkShape = () => Effect.Effect<
   (
     request?: CreateSinkRequest,
-  ) => Effect.Effect<logging.LogSink, logging.CreateProjectsSinksError, RuntimeContext>
+  ) => Effect.Effect<logging.LogSink, logging.CreateSinksError, RuntimeContext>
 >;
 
 /**
@@ -50,7 +50,7 @@ export const CreateSinkHttp = Layer.effect(
     tag: "GCP.Logging.CreateSink",
     variants: [
       {
-        operation: logging.createProjectsSinks,
+        operation: logging.createSinks,
         param: "parent",
         role: "roles/logging.configWriter",
       },

@@ -11,21 +11,21 @@ import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
 export interface GetBucketRequest extends Omit<
-  logging.GetProjectsLocationsBucketsRequest,
+  logging.GetBillingAccountsLocationsBucketsRequest,
   "name"
 > {}
 
 export type GetBucketShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
+  resource: BillingBucket | OrganizationLogBucket | LogBucket | FolderBucket,
 ) => Effect.Effect<
   (
     request?: GetBucketRequest,
   ) => Effect.Effect<
     logging.LogBucket,
-    | logging.GetProjectsLocationsBucketsError
     | logging.GetBillingAccountsLocationsBucketsError
-    | logging.GetFoldersLocationsBucketsError
-    | logging.GetOrganizationsLocationsBucketsError,
+    | logging.GetOrganizationsLocationsBucketsError
+    | logging.GetProjectsLocationsBucketsError
+    | logging.GetFoldersLocationsBucketsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type GetBucketShape = (
 /**
  * Gets a log bucket.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link GetBucketHttp}. The
+ * Bind it to a {@link BillingBucket} or {@link OrganizationLogBucket} or {@link LogBucket} or {@link FolderBucket} and provide {@link GetBucketHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `buckets.get`
  * ```typescript
- * const getBucket = yield* GCP.Logging.GetBucket(logBucket);
+ * const getBucket = yield* GCP.Logging.GetBucket(billingBucket);
  * const response = yield* getBucket();
  * ```
  *
@@ -66,26 +66,26 @@ export const GetBucketHttp = Layer.effect(
     tag: "GCP.Logging.GetBucket",
     variants: [
       {
-        resource: "GCP.Logging.LogBucket",
-        operation: logging.getProjectsLocationsBuckets,
-        param: "name",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingBucket",
         operation: logging.getBillingAccountsLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.FolderBucket",
-        operation: logging.getFoldersLocationsBuckets,
+        resource: "GCP.Logging.OrganizationLogBucket",
+        operation: logging.getOrganizationsLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationLogBucket",
-        operation: logging.getOrganizationsLocationsBuckets,
+        resource: "GCP.Logging.LogBucket",
+        operation: logging.getProjectsLocationsBuckets,
+        param: "name",
+        iam: { role: "roles/logging.privateLogViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucket",
+        operation: logging.getFoldersLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },

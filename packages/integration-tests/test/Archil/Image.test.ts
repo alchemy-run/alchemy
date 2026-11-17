@@ -13,7 +13,10 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const image = yield* stack.deploy(Archil.Image("Base", { image: "alpine:3.20" }));
+      // Archil keys images by source and re-pulling one puts it back in
+      // `building` for a moment, so this suite uses a source the other
+      // Archil suites (which pull alpine:3.20) never touch.
+      const image = yield* stack.deploy(Archil.Image("Base", { image: "alpine:3.19" }));
       yield* expectFound(Archil.Image.lookup({ imageId: image.imageId }), image, {
         // The hash, and the source as written, are this stack's record:
         // Archil reports the reference it normalized.
@@ -24,7 +27,7 @@ test.provider(
       expect((yield* archil.getImage({ image_id: image.imageId })).data.status).toBe("ready");
 
       // Unchanged props keep the image.
-      const same = yield* stack.deploy(Archil.Image("Base", { image: "alpine:3.20" }));
+      const same = yield* stack.deploy(Archil.Image("Base", { image: "alpine:3.19" }));
       expect(same.imageId).toBe(image.imageId);
 
       const next = yield* stack.deploy(Archil.Image("Base", { image: "alpine:3.21" }));

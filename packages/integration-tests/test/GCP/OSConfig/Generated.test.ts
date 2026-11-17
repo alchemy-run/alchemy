@@ -116,11 +116,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "osconfig.organizations.locations.global.policyOrchestrators.list: addressed under `organizations/`, not a project",
+        "osconfig.folders.locations.global.policyOrchestrators.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "osconfig.folders.locations.global.policyOrchestrators.list: addressed under `folders/`, not a project",
+        "osconfig.organizations.locations.global.policyOrchestrators.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
     });

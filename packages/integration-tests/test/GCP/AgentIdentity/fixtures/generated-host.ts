@@ -27,8 +27,9 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
     const p8 = yield* GCP.AgentIdentity.ListAuthProviders();
     const p9 = yield* GCP.AgentIdentity.QueryAuthProvider();
     const p10 = yield* GCP.AgentIdentity.QueryAuthProviderWorkloads(ProbeAuthProvider);
-    const p11 = yield* GCP.AgentIdentity.RevokeAuthProviderAuthorization(ProbeAuthProvider);
-    const p12 = yield* GCP.AgentIdentity.UndeleteAuthProvider(ProbeAuthProvider);
+    const p11 = yield* GCP.AgentIdentity.ResolveAuthProviderAuthorization(ProbeAuthProvider);
+    const p12 = yield* GCP.AgentIdentity.RevokeAuthProviderAuthorization(ProbeAuthProvider);
+    const p13 = yield* GCP.AgentIdentity.UndeleteAuthProvider(ProbeAuthProvider);
     return {
       fetch: serveProbes({
         DeleteAuthProviderAuthorization: probeOutcome(
@@ -52,11 +53,14 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
         ListAuthProviders: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         QueryAuthProvider: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
         QueryAuthProviderWorkloads: probeOutcome(Retry.none(p10({} as never))),
-        RevokeAuthProviderAuthorization: probeOutcome(
+        ResolveAuthProviderAuthorization: probeOutcome(
           Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        UndeleteAuthProvider: probeOutcome(
+        RevokeAuthProviderAuthorization: probeOutcome(
           Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UndeleteAuthProvider: probeOutcome(
+          Retry.none(p13({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
       }),
     };
@@ -75,6 +79,7 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
           GCP.AgentIdentity.ListAuthProvidersHttp,
           GCP.AgentIdentity.QueryAuthProviderHttp,
           GCP.AgentIdentity.QueryAuthProviderWorkloadsHttp,
+          GCP.AgentIdentity.ResolveAuthProviderAuthorizationHttp,
           GCP.AgentIdentity.RevokeAuthProviderAuthorizationHttp,
           GCP.AgentIdentity.UndeleteAuthProviderHttp,
         ),

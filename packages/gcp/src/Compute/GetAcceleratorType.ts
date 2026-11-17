@@ -27,7 +27,7 @@ export type GetAcceleratorTypeShape = () => Effect.Effect<
  * **Example:** Call `acceleratorTypes.get`
  * ```typescript
  * const getAcceleratorType = yield* GCP.Compute.GetAcceleratorType();
- * const response = yield* getAcceleratorType({ acceleratorType: "...", zone: "..." });
+ * const response = yield* getAcceleratorType({ zone: "...", acceleratorType: "..." });
  * ```
  *
  * @binding

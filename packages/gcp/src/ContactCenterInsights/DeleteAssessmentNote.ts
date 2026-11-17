@@ -9,7 +9,7 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface DeleteAssessmentNoteRequest extends Omit<
-  contactcenterinsights.DeleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesRequest,
+  contactcenterinsights.DeleteProjectsLocationsConversationsAssessmentsNotesRequest,
   "name"
 > {
   /** Id of the note under the bound resource (`notes/{note}`). */
@@ -17,14 +17,14 @@ export interface DeleteAssessmentNoteRequest extends Omit<
 }
 
 export type DeleteAssessmentNoteShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request: DeleteAssessmentNoteRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleProtobufEmpty,
-    | contactcenterinsights.DeleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesError
-    | contactcenterinsights.DeleteProjectsLocationsConversationsAssessmentsNotesError,
+    | contactcenterinsights.DeleteProjectsLocationsConversationsAssessmentsNotesError
+    | contactcenterinsights.DeleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesError,
     RuntimeContext
   >
 >;
@@ -32,13 +32,13 @@ export type DeleteAssessmentNoteShape = (
 /**
  * Deletes a Note.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link DeleteAssessmentNoteHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link DeleteAssessmentNoteHttp}. The
  * host gets `roles/contactcenterinsights.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `notes.delete`
  * ```typescript
- * const deleteAssessmentNote = yield* GCP.ContactCenterInsights.DeleteAssessmentNote(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const deleteAssessmentNote = yield* GCP.ContactCenterInsights.DeleteAssessmentNote(conversationsAssessment);
  * const response = yield* deleteAssessmentNote({ note: "..." });
  * ```
  *
@@ -67,17 +67,17 @@ export const DeleteAssessmentNoteHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.DeleteAssessmentNote",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.deleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotes,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.deleteProjectsLocationsConversationsAssessmentsNotes,
         param: "name",
         children: [["notes", "note"]],
         iam: { role: "roles/contactcenterinsights.editor" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.deleteProjectsLocationsConversationsAssessmentsNotes,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.deleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotes,
         param: "name",
         children: [["notes", "note"]],
         iam: { role: "roles/contactcenterinsights.editor" },

@@ -22,7 +22,7 @@ export type GetChangeShape = () => Effect.Effect<
  * **Example:** Call `changes.get`
  * ```typescript
  * const getChange = yield* GCP.DNS.GetChange();
- * const response = yield* getChange({ changeId: "...", managedZone: "..." });
+ * const response = yield* getChange({ managedZone: "...", changeId: "..." });
  * ```
  *
  * @binding

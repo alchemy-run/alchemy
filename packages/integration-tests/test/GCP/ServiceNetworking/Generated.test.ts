@@ -67,15 +67,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
+        "servicenetworking.services.validate: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "servicenetworking.services.enableVpcServiceControls: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicenetworking.services.disableVpcServiceControls: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicenetworking.services.addSubnetwork: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -83,43 +79,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.validate: addressed under `services/`, not a project",
+        "servicenetworking.services.addSubnetwork: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.dnsZones.add: addressed under `services/`, not a project",
+        "servicenetworking.services.disableVpcServiceControls: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.dnsZones.remove: addressed under `services/`, not a project",
+        "servicenetworking.services.connections.create: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.dnsRecordSets.get: addressed under `services/`, not a project",
+        "servicenetworking.services.connections.list: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.dnsRecordSets.update: addressed under `services/`, not a project",
+        "servicenetworking.services.connections.patch: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.dnsRecordSets.list: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicenetworking.services.dnsRecordSets.add: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicenetworking.services.dnsRecordSets.remove: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicenetworking.services.projects.global.networks.updateConsumerConfig: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicenetworking.services.projects.global.networks.get: addressed under `services/`, not a project",
+        "servicenetworking.services.connections.deleteConnection: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -127,11 +107,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.projects.global.networks.dnsZones.get: addressed under `services/`, not a project",
+        "servicenetworking.services.projects.global.networks.get: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.projects.global.networks.dnsZones.list: addressed under `services/`, not a project",
+        "servicenetworking.services.projects.global.networks.updateConsumerConfig: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -147,23 +127,43 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.connections.deleteConnection: addressed under `services/`, not a project",
+        "servicenetworking.services.projects.global.networks.dnsZones.get: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.connections.list: addressed under `services/`, not a project",
+        "servicenetworking.services.projects.global.networks.dnsZones.list: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.connections.patch: addressed under `services/`, not a project",
+        "servicenetworking.services.dnsZones.add: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicenetworking.services.connections.create: addressed under `services/`, not a project",
+        "servicenetworking.services.dnsZones.remove: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "servicenetworking.services.roles.add: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicenetworking.services.dnsRecordSets.update: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicenetworking.services.dnsRecordSets.get: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicenetworking.services.dnsRecordSets.list: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicenetworking.services.dnsRecordSets.remove: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicenetworking.services.dnsRecordSets.add: addressed under `services/`, not a project",
         () => Effect.void,
       );
     });

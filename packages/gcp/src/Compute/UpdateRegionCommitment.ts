@@ -27,7 +27,7 @@ export type UpdateRegionCommitmentShape = () => Effect.Effect<
  * **Example:** Call `regionCommitments.update`
  * ```typescript
  * const updateRegionCommitment = yield* GCP.Compute.UpdateRegionCommitment();
- * const response = yield* updateRegionCommitment({ commitment: "...", region: "..." });
+ * const response = yield* updateRegionCommitment({ region: "...", commitment: "..." });
  * ```
  *
  * @binding

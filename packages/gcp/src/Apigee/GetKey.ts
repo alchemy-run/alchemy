@@ -9,32 +9,32 @@ import type { AppgroupsAppsKey } from "./AppgroupsAppsKey.ts";
 import type { DevelopersAppsKey } from "./DevelopersAppsKey.ts";
 
 export interface GetKeyRequest extends Omit<
-  apigee.GetOrganizationsAppgroupsAppsKeysRequest,
+  apigee.GetOrganizationsDevelopersAppsKeysRequest,
   "name"
 > {}
 
 export type GetKeyShape = (
-  resource: AppgroupsAppsKey | DevelopersAppsKey,
+  resource: DevelopersAppsKey | AppgroupsAppsKey,
 ) => Effect.Effect<
   (
     request?: GetKeyRequest,
   ) => Effect.Effect<
-    apigee.GoogleCloudApigeeV1AppGroupAppKey | apigee.GoogleCloudApigeeV1DeveloperAppKey,
-    apigee.GetOrganizationsAppgroupsAppsKeysError | apigee.GetOrganizationsDevelopersAppsKeysError,
+    apigee.GoogleCloudApigeeV1DeveloperAppKey | apigee.GoogleCloudApigeeV1AppGroupAppKey,
+    apigee.GetOrganizationsDevelopersAppsKeysError | apigee.GetOrganizationsAppgroupsAppsKeysError,
     RuntimeContext
   >
 >;
 
 /**
- * Gets details for a consumer key for a AppGroup app, including the key and secret value, associated API products, and other information.
+ * Gets details for a consumer key for a developer app, including the key and secret value, associated API products, and other information.
  *
- * Bind it to a {@link AppgroupsAppsKey} or {@link DevelopersAppsKey} and provide {@link GetKeyHttp}. The
+ * Bind it to a {@link DevelopersAppsKey} or {@link AppgroupsAppsKey} and provide {@link GetKeyHttp}. The
  * host gets `roles/apigee.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `keys.get`
  * ```typescript
- * const getKey = yield* GCP.Apigee.GetKey(appgroupsAppsKey);
+ * const getKey = yield* GCP.Apigee.GetKey(developersAppsKey);
  * const response = yield* getKey();
  * ```
  *
@@ -57,14 +57,14 @@ export const GetKeyHttp = Layer.effect(
     tag: "GCP.Apigee.GetKey",
     variants: [
       {
-        resource: "GCP.Apigee.AppgroupsAppsKey",
-        operation: apigee.getOrganizationsAppgroupsAppsKeys,
+        resource: "GCP.Apigee.DevelopersAppsKey",
+        operation: apigee.getOrganizationsDevelopersAppsKeys,
         param: "name",
         iam: { role: "roles/apigee.viewer" },
       },
       {
-        resource: "GCP.Apigee.DevelopersAppsKey",
-        operation: apigee.getOrganizationsDevelopersAppsKeys,
+        resource: "GCP.Apigee.AppgroupsAppsKey",
+        operation: apigee.getOrganizationsAppgroupsAppsKeys,
         param: "name",
         iam: { role: "roles/apigee.viewer" },
       },

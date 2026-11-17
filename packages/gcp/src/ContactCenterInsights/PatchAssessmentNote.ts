@@ -9,7 +9,7 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface PatchAssessmentNoteRequest extends Omit<
-  contactcenterinsights.PatchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesRequest,
+  contactcenterinsights.PatchProjectsLocationsConversationsAssessmentsNotesRequest,
   "name"
 > {
   /** Id of the note under the bound resource (`notes/{note}`). */
@@ -17,14 +17,14 @@ export interface PatchAssessmentNoteRequest extends Omit<
 }
 
 export type PatchAssessmentNoteShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request: PatchAssessmentNoteRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1Note,
-    | contactcenterinsights.PatchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesError
-    | contactcenterinsights.PatchProjectsLocationsConversationsAssessmentsNotesError,
+    | contactcenterinsights.PatchProjectsLocationsConversationsAssessmentsNotesError
+    | contactcenterinsights.PatchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesError,
     RuntimeContext
   >
 >;
@@ -32,13 +32,13 @@ export type PatchAssessmentNoteShape = (
 /**
  * Update Note.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link PatchAssessmentNoteHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link PatchAssessmentNoteHttp}. The
  * host gets `roles/contactcenterinsights.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `notes.patch`
  * ```typescript
- * const patchAssessmentNote = yield* GCP.ContactCenterInsights.PatchAssessmentNote(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const patchAssessmentNote = yield* GCP.ContactCenterInsights.PatchAssessmentNote(conversationsAssessment);
  * const response = yield* patchAssessmentNote({ note: "..." });
  * ```
  *
@@ -67,17 +67,17 @@ export const PatchAssessmentNoteHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.PatchAssessmentNote",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.patchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotes,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.patchProjectsLocationsConversationsAssessmentsNotes,
         param: "name",
         children: [["notes", "note"]],
         iam: { role: "roles/contactcenterinsights.editor" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.patchProjectsLocationsConversationsAssessmentsNotes,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.patchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotes,
         param: "name",
         children: [["notes", "note"]],
         iam: { role: "roles/contactcenterinsights.editor" },

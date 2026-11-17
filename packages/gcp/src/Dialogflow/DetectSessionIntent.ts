@@ -9,7 +9,7 @@ import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface DetectSessionIntentRequest extends Omit<
-  dialogflow.DetectIntentProjectsLocationsAgentsEnvironmentsSessionsRequest,
+  dialogflow.DetectIntentProjectsLocationsAgentsSessionsRequest,
   "session"
 > {
   /** Id of the session under the bound resource (`sessions/{session}`). */
@@ -17,28 +17,28 @@ export interface DetectSessionIntentRequest extends Omit<
 }
 
 export type DetectSessionIntentShape = (
-  resource: AgentsEnvironment | Agent,
+  resource: Agent | AgentsEnvironment,
 ) => Effect.Effect<
   (
     request: DetectSessionIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3DetectIntentResponse,
-    | dialogflow.DetectIntentProjectsLocationsAgentsEnvironmentsSessionsError
-    | dialogflow.DetectIntentProjectsLocationsAgentsSessionsError,
+    | dialogflow.DetectIntentProjectsLocationsAgentsSessionsError
+    | dialogflow.DetectIntentProjectsLocationsAgentsEnvironmentsSessionsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.detectIntent`.
+ * Runtime binding for `dialogflow.projects.locations.agents.sessions.detectIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link DetectSessionIntentHttp}. The
+ * Bind it to a {@link Agent} or {@link AgentsEnvironment} and provide {@link DetectSessionIntentHttp}. The
  * host gets `roles/dialogflow.client` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.detectIntent`
  * ```typescript
- * const detectSessionIntent = yield* GCP.Dialogflow.DetectSessionIntent(agentsEnvironment);
+ * const detectSessionIntent = yield* GCP.Dialogflow.DetectSessionIntent(agent);
  * const response = yield* detectSessionIntent({ session: "..." });
  * ```
  *
@@ -67,15 +67,15 @@ export const DetectSessionIntentHttp = Layer.effect(
     tag: "GCP.Dialogflow.DetectSessionIntent",
     variants: [
       {
-        resource: "GCP.Dialogflow.AgentsEnvironment",
-        operation: dialogflow.detectIntentProjectsLocationsAgentsEnvironmentsSessions,
+        resource: "GCP.Dialogflow.Agent",
+        operation: dialogflow.detectIntentProjectsLocationsAgentsSessions,
         param: "session",
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.client" },
       },
       {
-        resource: "GCP.Dialogflow.Agent",
-        operation: dialogflow.detectIntentProjectsLocationsAgentsSessions,
+        resource: "GCP.Dialogflow.AgentsEnvironment",
+        operation: dialogflow.detectIntentProjectsLocationsAgentsEnvironmentsSessions,
         param: "session",
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.client" },

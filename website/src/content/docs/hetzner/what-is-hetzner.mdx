@@ -3,32 +3,33 @@ title: What is Hetzner?
 description: The concepts behind Hetzner Cloud — projects, locations, Servers, images, SSH keys, Volumes, private networks, firewalls, load balancers, IPs and DNS — and how @alchemy.run/hetzner models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Hetzner Cloud rents you virtual machines, called **Servers**, by the hour, at a fraction of what the large clouds charge. Around them it offers just what servers need: disks, private networks, firewalls, load balancers, IP addresses and DNS. There are no managed queues or functions. You run your own programs on your own machines.
 
 Take one small app: an API running on a Server, keeping its data on a Volume, behind a firewall and a domain. Your API token reaches one project. Inside it, a Server runs your Service, a Volume holds its data, a firewall guards it, and DNS points your domain at it.
 
-<DAG
+<Tree
   nodes={[
-    { id: "token", label: "API token", type: "one project", col: 0, row: 1 },
-    { id: "fw", label: "Web", type: "Firewall", col: 1, row: 0 },
-    { id: "server", label: "Box", type: "Server · cx22", tone: "accent", col: 1, row: 1 },
-    { id: "vol", label: "Data", type: "Volume", col: 2, row: 1 },
-    { id: "record", label: "api", type: "DNS record · A", col: 2, row: 2 },
+    {
+      id: "project", label: "my-app", type: "project", icon: "brand:hetzner", colGap: 4,
+      areas: ["fw location zone"],
+      phoneAreas: ["fw zone", "location location"],
+    },
+    { id: "fw", label: "Web", type: "firewall", parent: "project", icon: "shield" },
+    { id: "location", label: "nbg1", type: "location · Nuremberg", parent: "project", dashed: true, icon: "map-pin", areas: ["server", "vol"] },
+    { id: "server", label: "Box", type: "server · cx22", parent: "location", tone: "accent", icon: "server" },
+    { id: "vol", label: "Data", type: "volume", parent: "location", icon: "hard-drive" },
+    { id: "zone", label: "example.com", type: "DNS zone", parent: "project", dashed: true, icon: "globe" },
+    { id: "record", label: "api", type: "A record", parent: "zone", icon: "link" },
   ]}
-  groups={[
-    { id: "project", label: "Project my-app", nodes: ["fw"] },
-    { id: "location", label: "nbg1 · Nuremberg", parent: "project", nodes: ["server", "vol"], dashed: true },
-    { id: "zone", label: "Zone example.com", parent: "project", nodes: ["record"], dashed: true },
+  links={[
+    { from: "fw", to: "server", label: "applies" },
+    { from: "record", to: "server", label: "points at" },
+    { from: "vol", to: "server", label: "attached" },
   ]}
-  edges={[
-    { from: "token", to: "project", label: "deploy" },
-    { from: "fw", to: "server", label: "applies to" },
-    { from: "server", to: "vol", label: "attached" },
-    { from: "record", to: "server", label: "points at", exit: "side" },
-  ]}
-  caption="An API token reaches one project. A Server and its Volumes sit in one location. Firewalls and DNS zones belong to the project and apply anywhere in it."
+  caption="An API token reaches one project. A server and its volumes sit in one location. Firewalls and DNS zones belong to the project and apply anywhere in it."
 />
 
 ## Projects and API tokens

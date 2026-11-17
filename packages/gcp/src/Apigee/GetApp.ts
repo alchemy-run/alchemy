@@ -9,38 +9,35 @@ import type { AppgroupsApp } from "./AppgroupsApp.ts";
 import type { DevelopersApp } from "./DevelopersApp.ts";
 import type { Organization } from "./Organization.ts";
 
-export interface GetAppRequest extends Omit<apigee.GetOrganizationsAppsRequest, "name"> {
-  /** Id of the app under the bound resource (`apps/{app}`). */
-  app: string;
-}
+export interface GetAppRequest extends Omit<apigee.GetOrganizationsDevelopersAppsRequest, "name"> {}
 
 export type GetAppShape = (
-  resource: Organization | AppgroupsApp | DevelopersApp,
+  resource: DevelopersApp | Organization | AppgroupsApp,
 ) => Effect.Effect<
   (
-    request: GetAppRequest,
+    request?: GetAppRequest,
   ) => Effect.Effect<
+    | apigee.GoogleCloudApigeeV1DeveloperApp
     | apigee.GoogleCloudApigeeV1App
-    | apigee.GoogleCloudApigeeV1AppGroupApp
-    | apigee.GoogleCloudApigeeV1DeveloperApp,
+    | apigee.GoogleCloudApigeeV1AppGroupApp,
+    | apigee.GetOrganizationsDevelopersAppsError
     | apigee.GetOrganizationsAppsError
-    | apigee.GetOrganizationsAppgroupsAppsError
-    | apigee.GetOrganizationsDevelopersAppsError,
+    | apigee.GetOrganizationsAppgroupsAppsError,
     RuntimeContext
   >
 >;
 
 /**
- * Gets the app profile for the specified app ID.
+ * Returns the details for a developer app.
  *
- * Bind it to a {@link Organization} or {@link AppgroupsApp} or {@link DevelopersApp} and provide {@link GetAppHttp}. The
+ * Bind it to a {@link DevelopersApp} or {@link Organization} or {@link AppgroupsApp} and provide {@link GetAppHttp}. The
  * host gets `roles/apigee.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `apps.get`
  * ```typescript
- * const getApp = yield* GCP.Apigee.GetApp(organization);
- * const response = yield* getApp({ app: "..." });
+ * const getApp = yield* GCP.Apigee.GetApp(developersApp);
+ * const response = yield* getApp();
  * ```
  *
  * @binding
@@ -62,6 +59,12 @@ export const GetAppHttp = Layer.effect(
     tag: "GCP.Apigee.GetApp",
     variants: [
       {
+        resource: "GCP.Apigee.DevelopersApp",
+        operation: apigee.getOrganizationsDevelopersApps,
+        param: "name",
+        iam: { role: "roles/apigee.viewer" },
+      },
+      {
         resource: "GCP.Apigee.Organization",
         operation: apigee.getOrganizationsApps,
         param: "name",
@@ -71,12 +74,6 @@ export const GetAppHttp = Layer.effect(
       {
         resource: "GCP.Apigee.AppgroupsApp",
         operation: apigee.getOrganizationsAppgroupsApps,
-        param: "name",
-        iam: { role: "roles/apigee.viewer" },
-      },
-      {
-        resource: "GCP.Apigee.DevelopersApp",
-        operation: apigee.getOrganizationsDevelopersApps,
         param: "name",
         iam: { role: "roles/apigee.viewer" },
       },

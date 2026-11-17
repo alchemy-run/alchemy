@@ -9,19 +9,19 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface AppealAssessmentRequest extends Omit<
-  contactcenterinsights.AppealProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsRequest,
+  contactcenterinsights.AppealProjectsLocationsConversationsAssessmentsRequest,
   "name"
 > {}
 
 export type AppealAssessmentShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request?: AppealAssessmentRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1Assessment,
-    | contactcenterinsights.AppealProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError
-    | contactcenterinsights.AppealProjectsLocationsConversationsAssessmentsError,
+    | contactcenterinsights.AppealProjectsLocationsConversationsAssessmentsError
+    | contactcenterinsights.AppealProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type AppealAssessmentShape = (
 /**
  * Appeal an Assessment.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link AppealAssessmentHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link AppealAssessmentHttp}. The
  * host gets `roles/contactcenterinsights.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `assessments.appeal`
  * ```typescript
- * const appealAssessment = yield* GCP.ContactCenterInsights.AppealAssessment(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const appealAssessment = yield* GCP.ContactCenterInsights.AppealAssessment(conversationsAssessment);
  * const response = yield* appealAssessment();
  * ```
  *
@@ -64,16 +64,16 @@ export const AppealAssessmentHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.AppealAssessment",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.appealProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.appealProjectsLocationsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.editor" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.appealProjectsLocationsConversationsAssessments,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.appealProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.editor" },
       },

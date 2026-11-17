@@ -6,6 +6,7 @@ import * as file from "@distilled.cloud/gcp/file_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { CAPACITY_ZONE } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -109,6 +110,41 @@ test.provider.skipIf(!runLifecycle)(
       expect(refetched.description).toEqual("alchemy-prod-nfs");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("nfs");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Filestore.Instance("Nfs", {
+            instanceId: created.instanceId,
+            location: CAPACITY_ZONE,
+            tier: "BASIC_HDD",
+            fileShares: [{ name: "share1", capacityGb: 1024 }],
+            networks: [{ network: "default", modes: ["MODE_IPV4"] }],
+            description: "alchemy-prod-nfs",
+            labels: { env: "prod", role: "nfs" },
+            deletionProtectionEnabled: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Nfs",
+        tag: "GCP.Filestore.InstanceDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Filestore.Instance("Nfs", {
+            instanceId: created.instanceId,
+            location: CAPACITY_ZONE,
+            tier: "BASIC_HDD",
+            fileShares: [{ name: "share1", capacityGb: 1024 }],
+            networks: [{ network: "default", modes: ["MODE_IPV4"] }],
+            description: "alchemy-prod-nfs",
+            labels: { env: "prod", role: "nfs" },
+            deletionProtectionEnabled: false,
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

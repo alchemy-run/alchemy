@@ -39,10 +39,12 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Ref from "effect/Ref";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
+import { RunnerHost } from "../Host.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
@@ -216,15 +218,37 @@ export const bootstrap = (
   );
 
   const program = Effect.gen(function* () {
-    const hosted: Array<HostedEntity | HostedWorkflow | HostedSingleton | HostedCron> = [];
+    type Hosted = HostedEntity | HostedWorkflow | HostedSingleton | HostedCron;
+    // Every class this runner hosts, and the Layers to launch beside them:
+    // its exported classes, and the entities Layers host themselves.
+    const hostedRef = yield* Ref.make<ReadonlyArray<Hosted>>([]);
+    const launchedRef = yield* Ref.make<ReadonlyArray<Layer.Layer<never, never, any>>>([]);
+    const add = (built: Hosted) =>
+      Ref.update(hostedRef, (all) =>
+        built.kind === "entity" &&
+        all.some((other) => other.kind === "entity" && other.entity.type === built.entity.type)
+          ? all
+          : [...all, built],
+      );
+    const runner = RunnerHost.of({
+      host: (entity, layer) =>
+        Effect.andThen(
+          add(entity),
+          Ref.update(launchedRef, (all) => [...all, layer]),
+        ),
+    });
     for (const entrypoint of entrypoints) {
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
-      const context = yield* Layer.build(entrypointLayer(declaration));
-      const runtime = Context.get(context, entrypointTag).RuntimeContext as HostedRuntimeContext<
-        HostedEntity | HostedWorkflow | HostedSingleton | HostedCron
-      >;
+      const context = yield* Layer.build(entrypointLayer(declaration)).pipe(
+        Effect.provideService(RunnerHost, runner),
+      );
+      // A Layer that hosts its entities itself (a Domain model's) provides
+      // none: it handed them to `RunnerHost`.
+      const self = Context.getOption(context, entrypointTag);
+      if (Option.isNone(self)) continue;
+      const runtime = self.value.RuntimeContext as HostedRuntimeContext<Hosted>;
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
@@ -233,8 +257,10 @@ export const bootstrap = (
           }),
         );
       }
-      hosted.push(built);
+      yield* add(built);
     }
+    const hosted = yield* Ref.get(hostedRef);
+    const launched = yield* Ref.get(launchedRef);
 
     const host = yield* runnerHost;
     const group = env("CLUSTER_SHARD_GROUPS") ?? "default";
@@ -265,6 +291,8 @@ export const bootstrap = (
           {
             maxIdleTime: entry.options.maxIdleTime,
             concurrency: entry.options.concurrency,
+            mailboxCapacity: entry.options.mailboxCapacity,
+            disableFatalDefects: entry.options.disableFatalDefects,
           },
         )
         // So does the entity itself: its RPCs' middleware is provided to its Layer.
@@ -325,6 +353,8 @@ export const bootstrap = (
         ...(entityLayers as [Layer.Layer<never>]),
         ...(workflowLayers as Layer.Layer<never, never, any>[]),
         ...(scheduled as Layer.Layer<never, never, any>[]),
+        // What the classes' Construction phases handed the runner.
+        ...launched,
         gateway,
       ).pipe(
         // Workflows run on Effect Cluster's own engine, over the cluster.

@@ -149,7 +149,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "accessapproval.folders.getAccessApprovalSettings: addressed under `folders/`, not a project",
+        "accessapproval.folders.updateAccessApprovalSettings: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -157,15 +157,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "accessapproval.folders.updateAccessApprovalSettings: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "accessapproval.folders.getServiceAccount: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "accessapproval.folders.approvalRequests.approve: addressed under `folders/`, not a project",
+        "accessapproval.folders.getAccessApprovalSettings: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accessapproval.folders.approvalRequests.dismiss: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -173,7 +173,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "accessapproval.folders.approvalRequests.dismiss: addressed under `folders/`, not a project",
+        "accessapproval.folders.approvalRequests.approve: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -189,15 +189,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "accessapproval.organizations.deleteAccessApprovalSettings: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "accessapproval.organizations.updateAccessApprovalSettings: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "accessapproval.organizations.getAccessApprovalSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accessapproval.organizations.deleteAccessApprovalSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accessapproval.organizations.approvalRequests.dismiss: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -209,15 +213,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "accessapproval.organizations.approvalRequests.invalidate: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "accessapproval.organizations.approvalRequests.dismiss: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "accessapproval.organizations.approvalRequests.approve: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accessapproval.organizations.approvalRequests.invalidate: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
     });

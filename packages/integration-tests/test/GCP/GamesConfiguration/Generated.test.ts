@@ -75,6 +75,10 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "gamesConfiguration.achievementConfigurations.get: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "gamesConfiguration.achievementConfigurations.delete: addressed under `games/`, not a project",
         () => Effect.void,
       );
@@ -83,15 +87,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "gamesConfiguration.achievementConfigurations.get: addressed under `games/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "gamesConfiguration.leaderboardConfigurations.update: addressed under `games/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "gamesConfiguration.leaderboardConfigurations.list: addressed under `games/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -99,11 +95,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "gamesConfiguration.leaderboardConfigurations.insert: addressed under `games/`, not a project",
+        "gamesConfiguration.leaderboardConfigurations.get: addressed under `games/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "gamesConfiguration.leaderboardConfigurations.get: addressed under `games/`, not a project",
+        "gamesConfiguration.leaderboardConfigurations.list: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.leaderboardConfigurations.insert: addressed under `games/`, not a project",
         () => Effect.void,
       );
     });

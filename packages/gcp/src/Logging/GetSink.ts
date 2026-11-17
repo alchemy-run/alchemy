@@ -6,15 +6,13 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
-export interface GetSinkRequest extends Omit<logging.GetProjectsSinksRequest, "sinkName"> {
+export interface GetSinkRequest extends Omit<logging.GetSinksRequest, "sinkName"> {
   /** Id of the sink (`sinks/{sink}`). */
   sink: string;
 }
 
 export type GetSinkShape = () => Effect.Effect<
-  (
-    request: GetSinkRequest,
-  ) => Effect.Effect<logging.LogSink, logging.GetProjectsSinksError, RuntimeContext>
+  (request: GetSinkRequest) => Effect.Effect<logging.LogSink, logging.GetSinksError, RuntimeContext>
 >;
 
 /**
@@ -49,7 +47,7 @@ export const GetSinkHttp = Layer.effect(
     tag: "GCP.Logging.GetSink",
     variants: [
       {
-        operation: logging.getProjectsSinks,
+        operation: logging.getSinks,
         param: "sinkName",
         children: [["sinks", "sink"]],
         role: "roles/logging.privateLogViewer",

@@ -58,8 +58,8 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
     const p25 = yield* GCP.Dialogflow.GetPlaybook(ProbePlaybook);
     const p26 = yield* GCP.Dialogflow.GetSecuritySetting(ProbeSecuritySetting);
     const p27 = yield* GCP.Dialogflow.GetTool(ProbeTool);
-    const p28 = yield* GCP.Dialogflow.GetTransitionRouteGroup(ProbeFlowRouteGroup);
-    const p29 = yield* GCP.Dialogflow.GetTransitionRouteGroup(ProbeRouteGroup);
+    const p28 = yield* GCP.Dialogflow.GetTransitionRouteGroup(ProbeRouteGroup);
+    const p29 = yield* GCP.Dialogflow.GetTransitionRouteGroup(ProbeFlowRouteGroup);
     const p30 = yield* GCP.Dialogflow.GetVersion(ProbeFlowVersion);
     const p31 = yield* GCP.Dialogflow.GetWebhook(ProbeWebhook);
     const p32 = yield* GCP.Dialogflow.ImportAgentEntityType(ProbeAgent);
@@ -167,10 +167,10 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
         GetPlaybook: probeOutcome(Retry.none(p25({} as never))),
         GetSecuritySetting: probeOutcome(Retry.none(p26({} as never))),
         GetTool: probeOutcome(Retry.none(p27({} as never))),
-        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup": probeOutcome(
+        "GetTransitionRouteGroup@AgentsTransitionRouteGroup": probeOutcome(
           Retry.none(p28({} as never)),
         ),
-        "GetTransitionRouteGroup@AgentsTransitionRouteGroup": probeOutcome(
+        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup": probeOutcome(
           Retry.none(p29({} as never)),
         ),
         "GetVersion@AgentsFlowsVersion": probeOutcome(Retry.none(p30({} as never))),

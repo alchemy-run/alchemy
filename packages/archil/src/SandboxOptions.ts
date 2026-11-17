@@ -15,7 +15,14 @@ export interface SandboxEgressTarget {
   target: string;
   /** HTTP headers to set on matching HTTPS requests. */
   headers?: Record<string, string | Redacted.Redacted<string>>;
-  /** Forward matching requests to this URL instead. */
+  /**
+   * Forward matching requests to this public HTTPS URL instead of their
+   * destination, such as a Worker that adds a credential. Archil appends
+   * the original path and query, applies `headers` first, and names the
+   * destination and the sandbox in `archil-forwarded-host`,
+   * `archil-forwarded-scheme`, `archil-forwarded-port`,
+   * `archil-forwarded-path` and `archil-sandbox-id` headers.
+   */
   forwardUrl?: string;
 }
 

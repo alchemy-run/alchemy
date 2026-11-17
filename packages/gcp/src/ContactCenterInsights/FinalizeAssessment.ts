@@ -9,19 +9,19 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface FinalizeAssessmentRequest extends Omit<
-  contactcenterinsights.FinalizeProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsRequest,
+  contactcenterinsights.FinalizeProjectsLocationsConversationsAssessmentsRequest,
   "name"
 > {}
 
 export type FinalizeAssessmentShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request?: FinalizeAssessmentRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1Assessment,
-    | contactcenterinsights.FinalizeProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError
-    | contactcenterinsights.FinalizeProjectsLocationsConversationsAssessmentsError,
+    | contactcenterinsights.FinalizeProjectsLocationsConversationsAssessmentsError
+    | contactcenterinsights.FinalizeProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type FinalizeAssessmentShape = (
 /**
  * Finalize an Assessment.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link FinalizeAssessmentHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link FinalizeAssessmentHttp}. The
  * host gets `roles/contactcenterinsights.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `assessments.finalize`
  * ```typescript
- * const finalizeAssessment = yield* GCP.ContactCenterInsights.FinalizeAssessment(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const finalizeAssessment = yield* GCP.ContactCenterInsights.FinalizeAssessment(conversationsAssessment);
  * const response = yield* finalizeAssessment();
  * ```
  *
@@ -64,16 +64,16 @@ export const FinalizeAssessmentHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.FinalizeAssessment",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.finalizeProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.finalizeProjectsLocationsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.editor" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.finalizeProjectsLocationsConversationsAssessments,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.finalizeProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments,
         param: "name",
         iam: { role: "roles/contactcenterinsights.editor" },
       },

@@ -78,15 +78,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "gmailpostmastertools.domains.getVerificationToken: addressed under `domains/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "gmailpostmastertools.domains.verify: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "gmailpostmastertools.domains.getComplianceStatus: addressed under `domains/`, not a project",
+        "gmailpostmastertools.domains.getVerificationToken: addressed under `domains/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -94,7 +90,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "gmailpostmastertools.domains.domainStats.query: no predefined role grants its permission",
+        "gmailpostmastertools.domains.getComplianceStatus: addressed under `domains/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.users.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -102,7 +102,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "gmailpostmastertools.domains.users.list: no predefined role grants its permission",
+        "gmailpostmastertools.domains.domainStats.query: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

@@ -9,19 +9,19 @@ import type { AuthConfig } from "./AuthConfig.ts";
 import type { ProductsAuthConfig } from "./ProductsAuthConfig.ts";
 
 export interface GetAuthConfigRequest extends Omit<
-  integrations.GetProjectsLocationsProductsAuthConfigsRequest,
+  integrations.GetProjectsLocationsAuthConfigsRequest,
   "name"
 > {}
 
 export type GetAuthConfigShape = (
-  resource: ProductsAuthConfig | AuthConfig,
+  resource: AuthConfig | ProductsAuthConfig,
 ) => Effect.Effect<
   (
     request?: GetAuthConfigRequest,
   ) => Effect.Effect<
     integrations.GoogleCloudIntegrationsV1alphaAuthConfig,
-    | integrations.GetProjectsLocationsProductsAuthConfigsError
-    | integrations.GetProjectsLocationsAuthConfigsError,
+    | integrations.GetProjectsLocationsAuthConfigsError
+    | integrations.GetProjectsLocationsProductsAuthConfigsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type GetAuthConfigShape = (
 /**
  * Gets a complete auth config.
  *
- * Bind it to a {@link ProductsAuthConfig} or {@link AuthConfig} and provide {@link GetAuthConfigHttp}. The
+ * Bind it to a {@link AuthConfig} or {@link ProductsAuthConfig} and provide {@link GetAuthConfigHttp}. The
  * host gets `roles/integrations.apigeeIntegrationsViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `authConfigs.get`
  * ```typescript
- * const getAuthConfig = yield* GCP.Integrations.GetAuthConfig(productsAuthConfig);
+ * const getAuthConfig = yield* GCP.Integrations.GetAuthConfig(authConfig);
  * const response = yield* getAuthConfig();
  * ```
  *
@@ -62,14 +62,14 @@ export const GetAuthConfigHttp = Layer.effect(
     tag: "GCP.Integrations.GetAuthConfig",
     variants: [
       {
-        resource: "GCP.Integrations.ProductsAuthConfig",
-        operation: integrations.getProjectsLocationsProductsAuthConfigs,
+        resource: "GCP.Integrations.AuthConfig",
+        operation: integrations.getProjectsLocationsAuthConfigs,
         param: "name",
         iam: { role: "roles/integrations.apigeeIntegrationsViewer" },
       },
       {
-        resource: "GCP.Integrations.AuthConfig",
-        operation: integrations.getProjectsLocationsAuthConfigs,
+        resource: "GCP.Integrations.ProductsAuthConfig",
+        operation: integrations.getProjectsLocationsProductsAuthConfigs,
         param: "name",
         iam: { role: "roles/integrations.apigeeIntegrationsViewer" },
       },

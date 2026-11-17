@@ -11,23 +11,26 @@ E2B runs sandboxes: Linux microVMs that start in well under a second from a temp
 
 ## A quick example
 
-A template is the image every sandbox boots from:
+A template and a snapshot of it are built once, at deploy: the image with the tools, then a sandbox from it with a repository cloned:
 
 ```typescript title="src/Sandbox.ts"
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as E2B from "@alchemy.run/e2b";
 
-export const Agent = E2B.Template("Agent", {
+export const MyTemplate = E2B.Template("MyTemplate", {
   dockerfile: Dockerfile.inline`
     FROM node:22-bookworm
-    RUN apt-get update && apt-get install -y git ripgrep
+    RUN apt-get update && apt-get install -y git
   `,
-  cpuCount: 2,
-  memoryMB: 2048,
+});
+
+export const Warm = E2B.Snapshot("Warm", {
+  template: MyTemplate,
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is repo"],
 });
 ```
 
-A Worker creates a sandbox from it on each request, runs the code it was sent, and kills the sandbox when the request ends:
+A Worker starts a sandbox from `Warm` on each request, with the repository already there, runs the command it was sent, and kills the sandbox when the request ends:
 
 ```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -35,22 +38,20 @@ import * as E2B from "@alchemy.run/e2b";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Agent } from "./Sandbox.ts";
+import { Warm } from "./Sandbox.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const sandboxes = yield* E2B.CreateSandbox(Agent);
+    const sandboxes = yield* E2B.CreateSandbox(Warm);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const sandbox = yield* Effect.acquireRelease(
-          sandboxes.create({ timeout: 120, network: { allowOut: [] } }),
-          (sandbox) => Effect.ignore(sandbox.kill()),
+        const sandbox = yield* Effect.acquireRelease(sandboxes.create({ timeout: 120 }), (sandbox) =>
+          Effect.ignore(sandbox.kill()),
         );
-        yield* sandbox.files.write("main.mjs", yield* request.text);
-        const result = yield* sandbox.exec("node main.mjs");
+        const result = yield* sandbox.exec(yield* request.text, { cwd: "/home/user/repo" });
         return yield* HttpServerResponse.json(result);
       }).pipe(Effect.scoped, Effect.orDie),
     };
@@ -58,7 +59,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-And the Stack deploys both:
+And the Stack deploys them:
 
 ```typescript title="alchemy.run.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -67,7 +68,7 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";
-import { Agent } from "./src/Sandbox.ts";
+import { Warm } from "./src/Sandbox.ts";
 
 export default Alchemy.Stack(
   "MyApp",
@@ -76,9 +77,9 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const agent = yield* Agent;
+    const warm = yield* Warm;
     const api = yield* Api;
-    return { url: api.url.as<string>(), templateId: agent.templateId };
+    return { snapshot: warm.templateId, url: api.url.as<string>() };
   }),
 );
 ```

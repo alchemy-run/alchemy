@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SummarizeSparkApplicationExecutorsRequest extends Omit<
-  dataproc.SummarizeExecutorsProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SummarizeExecutorsProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SummarizeSparkApplicationExecutorsRequest extends Omit<
 }
 
 export type SummarizeSparkApplicationExecutorsShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SummarizeSparkApplicationExecutorsRequest,
   ) => Effect.Effect<
-    | dataproc.SummarizeSparkApplicationExecutorsResponse
-    | dataproc.SummarizeSessionSparkApplicationExecutorsResponse,
-    | dataproc.SummarizeExecutorsProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SummarizeExecutorsProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SummarizeSessionSparkApplicationExecutorsResponse
+    | dataproc.SummarizeSparkApplicationExecutorsResponse,
+    | dataproc.SummarizeExecutorsProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SummarizeExecutorsProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SummarizeSparkApplicationExecutorsShape = (
 /**
  * Obtain summary of Executor Summary for a Spark Application
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SummarizeSparkApplicationExecutorsHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SummarizeSparkApplicationExecutorsHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.summarizeExecutors`
  * ```typescript
- * const summarizeSparkApplicationExecutors = yield* GCP.Dataproc.SummarizeSparkApplicationExecutors(batch);
+ * const summarizeSparkApplicationExecutors = yield* GCP.Dataproc.SummarizeSparkApplicationExecutors(session);
  * const response = yield* summarizeSparkApplicationExecutors({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const SummarizeSparkApplicationExecutorsHttp = Layer.effect(
     tag: "GCP.Dataproc.SummarizeSparkApplicationExecutors",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.summarizeExecutorsProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.summarizeExecutorsProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.summarizeExecutorsProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.summarizeExecutorsProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

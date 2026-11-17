@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationEnvironmentInfoRequest extends Omit<
-  dataproc.AccessEnvironmentInfoProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessEnvironmentInfoProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface AccessSparkApplicationEnvironmentInfoRequest extends Omit<
 }
 
 export type AccessSparkApplicationEnvironmentInfoShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationEnvironmentInfoRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationEnvironmentInfoResponse
-    | dataproc.AccessSessionSparkApplicationEnvironmentInfoResponse,
-    | dataproc.AccessEnvironmentInfoProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessEnvironmentInfoProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationEnvironmentInfoResponse
+    | dataproc.AccessSparkApplicationEnvironmentInfoResponse,
+    | dataproc.AccessEnvironmentInfoProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessEnvironmentInfoProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type AccessSparkApplicationEnvironmentInfoShape = (
 /**
  * Obtain environment details for a Spark Application
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationEnvironmentInfoHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationEnvironmentInfoHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessEnvironmentInfo`
  * ```typescript
- * const accessSparkApplicationEnvironmentInfo = yield* GCP.Dataproc.AccessSparkApplicationEnvironmentInfo(batch);
+ * const accessSparkApplicationEnvironmentInfo = yield* GCP.Dataproc.AccessSparkApplicationEnvironmentInfo(session);
  * const response = yield* accessSparkApplicationEnvironmentInfo({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const AccessSparkApplicationEnvironmentInfoHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationEnvironmentInfo",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessEnvironmentInfoProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessEnvironmentInfoProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessEnvironmentInfoProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessEnvironmentInfoProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

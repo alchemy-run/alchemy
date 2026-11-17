@@ -67,11 +67,59 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "androiddeviceprovisioning.customers.configurations.list: addressed under `customers/`, not a project",
+        "androiddeviceprovisioning.partners.vendors.list: addressed under `partners/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androiddeviceprovisioning.customers.configurations.get: no predefined role grants its permission",
+        "androiddeviceprovisioning.partners.vendors.customers.list: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.unclaimAsync: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.claim: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.metadata: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.unclaim: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.findByOwner: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.claimAsync: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.getSimLockState: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.updateMetadataAsync: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.get: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.devices.findByIdentifier: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.customers.create: addressed under `partners/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androiddeviceprovisioning.partners.customers.list: addressed under `partners/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -79,11 +127,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androiddeviceprovisioning.customers.devices.removeConfiguration: addressed under `customers/`, not a project",
+        "androiddeviceprovisioning.customers.configurations.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "androiddeviceprovisioning.customers.devices.applyConfiguration: addressed under `customers/`, not a project",
+        "androiddeviceprovisioning.customers.configurations.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -99,59 +147,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "androiddeviceprovisioning.partners.vendors.list: addressed under `partners/`, not a project",
+        "androiddeviceprovisioning.customers.devices.removeConfiguration: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "androiddeviceprovisioning.partners.vendors.customers.list: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.claim: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.metadata: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.get: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.updateMetadataAsync: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.getSimLockState: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.claimAsync: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.unclaim: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.findByOwner: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.unclaimAsync: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.devices.findByIdentifier: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.customers.create: addressed under `partners/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "androiddeviceprovisioning.partners.customers.list: addressed under `partners/`, not a project",
+        "androiddeviceprovisioning.customers.devices.applyConfiguration: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

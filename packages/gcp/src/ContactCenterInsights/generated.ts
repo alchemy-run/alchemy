@@ -92,7 +92,6 @@ export * from "./ConversationsAnalysesAuditLogs.ts";
 export * from "./ConversationsAssessmentAuditLogs.ts";
 export * from "./ConversationsFeedbackLabelAuditLogs.ts";
 export * from "./DashboardAuditLogs.ts";
-export * from "./DashboardsChartAuditLogs.ts";
 export * from "./DatasetsConversationsFeedbackLabelAuditLogs.ts";
 export * from "./IssueModelAuditLogs.ts";
 export * from "./IssueModelsIssueAuditLogs.ts";

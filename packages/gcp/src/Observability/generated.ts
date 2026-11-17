@@ -13,5 +13,6 @@ export * from "./ListBuckets.ts";
 export * from "./ListTraceScopes.ts";
 export * from "./PatchBucket.ts";
 export * from "./PatchScope.ts";
+export * from "./ReprovisionBucket.ts";
 export * from "./BucketsDatasetsLinkAuditLogs.ts";
 export * from "./TraceScopeAuditLogs.ts";

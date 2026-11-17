@@ -32,7 +32,7 @@ information about the named ports.
  * **Example:** Call `regionInstanceGroups.listInstances`
  * ```typescript
  * const listRegionInstanceGroupInstances = yield* GCP.Compute.ListRegionInstanceGroupInstances();
- * const response = yield* listRegionInstanceGroupInstances({ region: "...", instanceGroup: "..." });
+ * const response = yield* listRegionInstanceGroupInstances({ instanceGroup: "...", region: "..." });
  * ```
  *
  * @binding

@@ -11,21 +11,21 @@ import type { FolderBucketsView } from "./FolderBucketsView.ts";
 import type { OrganizationBucketsView } from "./OrganizationBucketsView.ts";
 
 export interface GetViewRequest extends Omit<
-  logging.GetProjectsLocationsBucketsViewsRequest,
+  logging.GetBillingAccountsLocationsBucketsViewsRequest,
   "name"
 > {}
 
 export type GetViewShape = (
-  resource: BucketsView | BillingBucketsView | FolderBucketsView | OrganizationBucketsView,
+  resource: BillingBucketsView | OrganizationBucketsView | BucketsView | FolderBucketsView,
 ) => Effect.Effect<
   (
     request?: GetViewRequest,
   ) => Effect.Effect<
     logging.LogView,
-    | logging.GetProjectsLocationsBucketsViewsError
     | logging.GetBillingAccountsLocationsBucketsViewsError
-    | logging.GetFoldersLocationsBucketsViewsError
-    | logging.GetOrganizationsLocationsBucketsViewsError,
+    | logging.GetOrganizationsLocationsBucketsViewsError
+    | logging.GetProjectsLocationsBucketsViewsError
+    | logging.GetFoldersLocationsBucketsViewsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type GetViewShape = (
 /**
  * Gets a view on a log bucket.
  *
- * Bind it to a {@link BucketsView} or {@link BillingBucketsView} or {@link FolderBucketsView} or {@link OrganizationBucketsView} and provide {@link GetViewHttp}. The
+ * Bind it to a {@link BillingBucketsView} or {@link OrganizationBucketsView} or {@link BucketsView} or {@link FolderBucketsView} and provide {@link GetViewHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `views.get`
  * ```typescript
- * const getView = yield* GCP.Logging.GetView(bucketsView);
+ * const getView = yield* GCP.Logging.GetView(billingBucketsView);
  * const response = yield* getView();
  * ```
  *
@@ -62,26 +62,26 @@ export const GetViewHttp = Layer.effect(
     tag: "GCP.Logging.GetView",
     variants: [
       {
-        resource: "GCP.Logging.BucketsView",
-        operation: logging.getProjectsLocationsBucketsViews,
-        param: "name",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingBucketsView",
         operation: logging.getBillingAccountsLocationsBucketsViews,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.FolderBucketsView",
-        operation: logging.getFoldersLocationsBucketsViews,
+        resource: "GCP.Logging.OrganizationBucketsView",
+        operation: logging.getOrganizationsLocationsBucketsViews,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationBucketsView",
-        operation: logging.getOrganizationsLocationsBucketsViews,
+        resource: "GCP.Logging.BucketsView",
+        operation: logging.getProjectsLocationsBucketsViews,
+        param: "name",
+        iam: { role: "roles/logging.privateLogViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucketsView",
+        operation: logging.getFoldersLocationsBucketsViews,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },

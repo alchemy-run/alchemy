@@ -4,19 +4,21 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpBinding } from "../HttpBinding.ts";
-import type { AppGateway } from "./AppGateway.ts";
+import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface GetAppGatewayRequest extends Omit<
   beyondcorp.GetProjectsLocationsAppGatewaysRequest,
   "name"
-> {}
+> {
+  /** Location to call in (`projects/{project}/locations/{location}`). */
+  location: string;
+  /** Id of the appGateway (`appGateways/{appGateway}`). */
+  appGateway: string;
+}
 
-export type GetAppGatewayShape = (
-  resource: AppGateway,
-) => Effect.Effect<
+export type GetAppGatewayShape = () => Effect.Effect<
   (
-    request?: GetAppGatewayRequest,
+    request: GetAppGatewayRequest,
   ) => Effect.Effect<
     beyondcorp.AppGateway,
     beyondcorp.GetProjectsLocationsAppGatewaysError,
@@ -27,14 +29,14 @@ export type GetAppGatewayShape = (
 /**
  * Gets details of a single AppGateway.
  *
- * Bind it to a {@link AppGateway} and provide {@link GetAppGatewayHttp}. The
- * host gets `roles/beyondcorp.viewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project or one of its locations, so it takes no resource.
+ * Provide {@link GetAppGatewayHttp}. The host gets `roles/beyondcorp.viewer` on the project.
  *
  * ### Usage
  * **Example:** Call `appGateways.get`
  * ```typescript
- * const getAppGateway = yield* GCP.BeyondCorp.GetAppGateway(appGateway);
- * const response = yield* getAppGateway();
+ * const getAppGateway = yield* GCP.BeyondCorp.GetAppGateway();
+ * const response = yield* getAppGateway({ location: "us-central1", appGateway: "..." });
  * ```
  *
  * @binding
@@ -56,14 +58,15 @@ export const GetAppGateway = Binding.Service<GetAppGateway>("GCP.BeyondCorp.GetA
  */
 export const GetAppGatewayHttp = Layer.effect(
   GetAppGateway,
-  makeGcpBinding<GetAppGatewayShape>({
+  makeGcpProjectBinding<GetAppGatewayShape>({
     tag: "GCP.BeyondCorp.GetAppGateway",
     variants: [
       {
-        resource: "GCP.BeyondCorp.AppGateway",
         operation: beyondcorp.getProjectsLocationsAppGateways,
         param: "name",
-        iam: { role: "roles/beyondcorp.viewer" },
+        location: true,
+        children: [["appGateways", "appGateway"]],
+        role: "roles/beyondcorp.viewer",
       },
     ],
   }),

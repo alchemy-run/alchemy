@@ -320,6 +320,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "CreateCompilationResultLongRunning (dataform.projects.locations.repositories.compilationResults.createLongRunning)",
+        () => probe("CreateCompilationResultLongRunning", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "CreateRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.create)",
         () => probe("CreateRepositoryCompilationResult", false),
         {

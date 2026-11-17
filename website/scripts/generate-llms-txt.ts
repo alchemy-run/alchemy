@@ -485,6 +485,51 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "DigitalOcean",
+    intro:
+      "DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.",
+    pages: {
+      slugs: [
+        "digitalocean/index",
+        "digitalocean/what-is-digitalocean",
+        "digitalocean/setup",
+        "digitalocean/teams-projects-and-tokens",
+      ],
+    },
+  },
+  {
+    heading: "DigitalOcean — Tutorial",
+    pages: { directory: "digitalocean/tutorial" },
+  },
+  {
+    heading: "DigitalOcean — Security",
+    pages: { directory: "digitalocean/security" },
+  },
+  {
+    heading: "DigitalOcean — Compute",
+    pages: { directory: "digitalocean/compute" },
+  },
+  {
+    heading: "DigitalOcean — Data",
+    pages: { directory: "digitalocean/data" },
+  },
+  {
+    heading: "DigitalOcean — Networking",
+    pages: { directory: "digitalocean/networking" },
+  },
+  {
+    heading: "DigitalOcean — Observability",
+    pages: { directory: "digitalocean/observability" },
+  },
+  {
+    heading: "DigitalOcean — AI",
+    pages: { directory: "digitalocean/ai" },
+  },
+  {
+    heading: "DigitalOcean — Frontend",
+    pages: { directory: "digitalocean/frontend" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
@@ -577,6 +622,7 @@ const SECTIONS: Section[] = [
         "e2b/tutorial/part-3",
         "e2b/tutorial/part-4",
         "e2b/tutorial/part-5",
+        "e2b/tutorial/part-6",
         "e2b/api-keys",
         "e2b/network-and-secrets",
         "e2b/templates",
@@ -613,12 +659,36 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/compute" },
   },
   {
-    heading: "Archil — Frontend",
-    pages: { directory: "archil/frontend" },
-  },
-  {
     heading: "Archil — Storage",
     pages: { directory: "archil/storage" },
+  },
+  {
+    heading: "Boat",
+    intro:
+      "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",
+    pages: {
+      slugs: [
+        "boat/index",
+        "boat/what-is-boat",
+        "boat/setup",
+        "boat/tutorial/part-1",
+        "boat/tutorial/part-2",
+        "boat/tutorial/part-3",
+        "boat/tutorial/part-4",
+        "boat/tutorial/part-5",
+        "boat/tutorial/part-6",
+        "boat/account-and-keys",
+        "boat/security/credentials",
+        "boat/security/environments",
+        "boat/security/credential-profiles",
+        "boat/sandboxes/choosing-a-runtime",
+        "boat/sandboxes/sandboxes",
+        "boat/sandboxes/programs",
+        "boat/sandboxes/snapshots",
+        "boat/sandboxes/ports",
+        "boat/sandboxes/lifecycle-events",
+      ],
+    },
   },
   {
     heading: "Rivet",
@@ -727,16 +797,27 @@ const SECTIONS: Section[] = [
   {
     heading: "Modal",
     intro:
-      "Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.",
+      "Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.",
     pages: {
-      slugs: ["modal/index", "modal/setup", "modal/concepts"],
+      slugs: ["modal/index", "modal/what-is-modal", "modal/setup"],
     },
   },
   { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  {
+    heading: "Modal — Accounts & access",
+    pages: {
+      slugs: [
+        "modal/workspaces-and-tokens",
+        "modal/security/access-control",
+        "modal/security/secrets",
+      ],
+    },
+  },
+  { heading: "Modal — Compute", pages: { directory: "modal/compute" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
   { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
   { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
-  { heading: "Modal — Security", pages: { directory: "modal/security" } },
-  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  { heading: "Modal — Networking", pages: { directory: "modal/networking" } },
   {
     heading: "Better Auth",
     intro:
@@ -847,7 +928,9 @@ const SECTIONS: Section[] = [
         "stripe/setup",
         "stripe/guides/subscriptions",
         "stripe/guides/connect",
+        "stripe/guides/pricing",
         "stripe/guides/webhooks",
+        "stripe/guides/tax-and-payouts",
       ],
     },
   },
@@ -860,9 +943,20 @@ const SECTIONS: Section[] = [
         "docker/index",
         "docker/what-is-docker",
         "docker/setup",
-        "docker/local-services",
-        "docker/build-and-push",
+        "docker/engines-and-contexts",
+        "docker/registries",
+        "docker/build-images",
+        "docker/build-caches",
+        "docker/remote-images",
+        "docker/cloud-runtimes",
+        "docker/containers",
+        "docker/networks",
+        "docker/volumes",
+        "docker/limits-and-security",
         "docker/swarm",
+        "docker/services",
+        "docker/effectful-services",
+        "docker/local-services",
       ],
     },
   },
@@ -955,7 +1049,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Domain",
     intro:
-      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Durable Objects or in memory.",
+      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Cloudflare, Rivet, Effect Cluster or in memory.",
     pages: {
       slugs: [
         "domain/index",
@@ -973,6 +1067,7 @@ const SECTIONS: Section[] = [
         "domain/command",
         "domain/event",
         "domain/aggregate",
+        "domain/decision",
         "domain/view",
         "domain/projection",
         "domain/stream",
@@ -982,23 +1077,25 @@ const SECTIONS: Section[] = [
         "domain/external-system",
         "domain/api",
         "domain/annotations",
+        "domain/cloudflare",
+        "domain/rivet",
+        "domain/effect-cluster",
+        "domain/in-memory",
         "domain/story",
         "domain/testing-models",
         "domain/testing-apis",
+        "domain/http-api",
+        "domain/cli",
+        "domain/mcp",
         "domain/foldkit",
         "domain/optimistic-updates",
         "domain/local-first",
-        "domain/mcp",
         "domain/sessions",
         "domain/better-auth",
         "domain/view-security",
         "domain/unique-values",
         "domain/deadlines",
-        "domain/cloudflare",
         "domain/backfill",
-        "domain/in-memory",
-        "domain/http-api",
-        "domain/cli",
         "domain/observability",
       ],
     },

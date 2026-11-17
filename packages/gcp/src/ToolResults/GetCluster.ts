@@ -31,7 +31,7 @@ export type GetClusterShape = () => Effect.Effect<
  * **Example:** Call `clusters.get`
  * ```typescript
  * const getCluster = yield* GCP.ToolResults.GetCluster();
- * const response = yield* getCluster({ clusterId: "...", historyId: "...", executionId: "..." });
+ * const response = yield* getCluster({ historyId: "...", clusterId: "...", executionId: "..." });
  * ```
  *
  * @binding

@@ -4,19 +4,21 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpBinding } from "../HttpBinding.ts";
-import type { AppConnector } from "./AppConnector.ts";
+import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface GetAppConnectorRequest extends Omit<
   beyondcorp.GetProjectsLocationsAppConnectorsRequest,
   "name"
-> {}
+> {
+  /** Location to call in (`projects/{project}/locations/{location}`). */
+  location: string;
+  /** Id of the appConnector (`appConnectors/{appConnector}`). */
+  appConnector: string;
+}
 
-export type GetAppConnectorShape = (
-  resource: AppConnector,
-) => Effect.Effect<
+export type GetAppConnectorShape = () => Effect.Effect<
   (
-    request?: GetAppConnectorRequest,
+    request: GetAppConnectorRequest,
   ) => Effect.Effect<
     beyondcorp.GoogleCloudBeyondcorpAppconnectorsV1AppConnector,
     beyondcorp.GetProjectsLocationsAppConnectorsError,
@@ -27,14 +29,14 @@ export type GetAppConnectorShape = (
 /**
  * Gets details of a single AppConnector.
  *
- * Bind it to a {@link AppConnector} and provide {@link GetAppConnectorHttp}. The
- * host gets `roles/beyondcorp.viewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project or one of its locations, so it takes no resource.
+ * Provide {@link GetAppConnectorHttp}. The host gets `roles/beyondcorp.viewer` on the project.
  *
  * ### Usage
  * **Example:** Call `appConnectors.get`
  * ```typescript
- * const getAppConnector = yield* GCP.BeyondCorp.GetAppConnector(appConnector);
- * const response = yield* getAppConnector();
+ * const getAppConnector = yield* GCP.BeyondCorp.GetAppConnector();
+ * const response = yield* getAppConnector({ location: "us-central1", appConnector: "..." });
  * ```
  *
  * @binding
@@ -56,14 +58,15 @@ export const GetAppConnector = Binding.Service<GetAppConnector>("GCP.BeyondCorp.
  */
 export const GetAppConnectorHttp = Layer.effect(
   GetAppConnector,
-  makeGcpBinding<GetAppConnectorShape>({
+  makeGcpProjectBinding<GetAppConnectorShape>({
     tag: "GCP.BeyondCorp.GetAppConnector",
     variants: [
       {
-        resource: "GCP.BeyondCorp.AppConnector",
         operation: beyondcorp.getProjectsLocationsAppConnectors,
         param: "name",
-        iam: { role: "roles/beyondcorp.viewer" },
+        location: true,
+        children: [["appConnectors", "appConnector"]],
+        role: "roles/beyondcorp.viewer",
       },
     ],
   }),

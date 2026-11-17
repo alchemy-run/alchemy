@@ -31,7 +31,7 @@ export type GetTestCaseShape = () => Effect.Effect<
  * **Example:** Call `testCases.get`
  * ```typescript
  * const getTestCase = yield* GCP.ToolResults.GetTestCase();
- * const response = yield* getTestCase({ executionId: "...", stepId: "...", testCaseId: "...", historyId: "..." });
+ * const response = yield* getTestCase({ executionId: "...", testCaseId: "...", stepId: "...", historyId: "..." });
  * ```
  *
  * @binding

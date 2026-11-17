@@ -27,7 +27,7 @@ export type GetReservationSlotHealthShape = () => Effect.Effect<
  * **Example:** Call `reservationSlots.getHealth`
  * ```typescript
  * const getReservationSlotHealth = yield* GCP.Compute.GetReservationSlotHealth();
- * const response = yield* getReservationSlotHealth({ zone: "...", reservationSlot: "...", parentName: "..." });
+ * const response = yield* getReservationSlotHealth({ parentName: "...", zone: "...", reservationSlot: "..." });
  * ```
  *
  * @binding

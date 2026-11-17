@@ -76,12 +76,14 @@ export const bundleSource = (spec: {
     ),
   hash: (ctx) => spec.build(ctx).pipe(Effect.map((bundle) => ({ bundle: bundle.hash }))),
   dev: (ctx) =>
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- watch requirements beyond `SourceDevServices` (Rolldown's `WorkerBundle`) are provided by the source module's `make` layers
     spec.watch(ctx).pipe(Effect.map((bundles) => ({ mode: "bundle", bundles }) as SourceDevHandle)),
 });
 
 /**
  * Watch the directory containing a Worker's entry module and re-read the
- * bundle on change (debounced), emitting the
+ * bundle on change (debounced) — re-serving it only when its hash differs
+ * from the bundle last served — emitting the
  * {@link Bundle.BundleWatchEvent} protocol the rolldown watcher speaks so
  * local dev consumes either stream interchangeably.
  *
@@ -111,6 +113,7 @@ export const watchBundleDirectory = <R>(options: {
         })),
         Effect.catch((error) => Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error })),
       );
+      let served: string | undefined;
       const rebuilds = fs.watch(root).pipe(
         Stream.filter(
           (event) =>
@@ -119,13 +122,23 @@ export const watchBundleDirectory = <R>(options: {
         ),
         options.ignore ? Stream.filter((event) => !options.ignore!(event.path)) : (self) => self,
         Stream.debounce("200 millis"),
-        Stream.flatMap(() =>
-          Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent).pipe(
-            Stream.concat(Stream.fromEffect(read)),
-          ),
-        ),
+        // A watch event is not a change: macOS reports late events for a
+        // directory created just before the watch began. Re-read first and
+        // only re-serve a bundle whose hash differs from the one served.
+        Stream.mapEffect(() => read),
+        Stream.filter((event) => event._tag !== "Success" || event.output.hash !== served),
+        Stream.flatMap((event) => Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent, event)),
         Stream.catchCause(() => Stream.empty),
       );
-      return Stream.fromEffect(read).pipe(Stream.concat(rebuilds));
+      return Stream.fromEffect(read).pipe(
+        Stream.concat(rebuilds),
+        Stream.tap((event) =>
+          Effect.sync(() => {
+            if (event._tag !== "Start") {
+              served = event._tag === "Success" ? event.output.hash : undefined;
+            }
+          }),
+        ),
+      );
     }),
   );

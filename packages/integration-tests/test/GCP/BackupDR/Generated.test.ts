@@ -238,6 +238,30 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
+        "CreateAutoProtectionPolicy (backupdr.projects.locations.autoProtectionPolicies.create)",
+        () => probe("CreateAutoProtectionPolicy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "CreateAutoProtectionPolicyBinding (backupdr.projects.locations.autoProtectionPolicies.bindings.create)",
+        () => probe("CreateAutoProtectionPolicyBinding", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteAutoProtectionPolicy (backupdr.projects.locations.autoProtectionPolicies.delete)",
+        () => probe("DeleteAutoProtectionPolicy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "EndTrial (backupdr.projects.locations.trial.end)",
         () => probe("EndTrial", false),
         {
@@ -278,6 +302,30 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetAutoProtectionPolicy (backupdr.projects.locations.autoProtectionPolicies.get)",
+        () => probe("GetAutoProtectionPolicy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAutoProtectionPolicyBinding (backupdr.projects.locations.autoProtectionPolicies.bindings.get)",
+        () => probe("GetAutoProtectionPolicyBinding", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAutoProtectionPolicyBindingMatchingResource (backupdr.projects.locations.autoProtectionPolicies.bindings.matchingResources.get)",
+        () => probe("GetAutoProtectionPolicyBindingMatchingResource", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetDataSourceReference (backupdr.projects.locations.dataSourceReferences.get)",
         () => probe("GetDataSourceReference", false),
         {
@@ -288,6 +336,46 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "InitializeServiceConfig (backupdr.projects.locations.serviceConfig.initialize)",
         () => probe("InitializeServiceConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "InitiateBindingDelete (backupdr.projects.locations.autoProtectionPolicies.bindings.initiateDelete)",
+        () => probe("InitiateBindingDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAppliedAutoProtectionPolicies (backupdr.projects.locations.appliedAutoProtectionPolicies.list)",
+        () => probe("ListAppliedAutoProtectionPolicies", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAutoProtectionPolicies (backupdr.projects.locations.autoProtectionPolicies.list)",
+        () => probe("ListAutoProtectionPolicies", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAutoProtectionPolicyBindingMatchingResources (backupdr.projects.locations.autoProtectionPolicies.bindings.matchingResources.list)",
+        () => probe("ListAutoProtectionPolicyBindingMatchingResources", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAutoProtectionPolicyBindings (backupdr.projects.locations.autoProtectionPolicies.bindings.list)",
+        () => probe("ListAutoProtectionPolicyBindings", false),
         {
           tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
           timeout: 600_000,
@@ -342,6 +430,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "PatchAutoProtectionPolicy (backupdr.projects.locations.autoProtectionPolicies.patch)",
+        () => probe("PatchAutoProtectionPolicy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "SubscribeTrial (backupdr.projects.locations.trial.subscribe)",
         () => probe("SubscribeTrial", false),
         {
@@ -354,15 +450,87 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
+        "backupdr.folders.locations.resourceBackupConfigs.fetch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.run: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.executions.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.executions.triggerRestoreCleanup: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreTemplates.executions.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "backupdr.projects.locations.managementServers.msComplianceMetadata: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "backupdr.projects.locations.backupPlanAssociations.triggerBackup: no predefined role grants its permission",
+        "backupdr.projects.locations.restoreVerificationPlans.delete: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "backupdr.folders.locations.resourceBackupConfigs.fetch: addressed under `folders/`, not a project",
+        "backupdr.projects.locations.restoreVerificationPlans.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.associations.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.associations.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.associations.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.associations.triggerRestoreVerification: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.restoreVerificationPlans.associations.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.backupPlanAssociations.triggerBackup: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

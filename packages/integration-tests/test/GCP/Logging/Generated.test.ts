@@ -374,15 +374,11 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "CreateSink (logging.projects.sinks.create)",
-        () => probe("CreateSink", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider("DeleteLog (logging.projects.logs.delete)", () => probe("DeleteLog", false), {
+      test.provider("CreateSink (logging.sinks.create)", () => probe("CreateSink", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
+      test.provider("DeleteLog (logging.logs.delete)", () => probe("DeleteLog", false), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });
@@ -394,14 +390,10 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "DeleteSink (logging.projects.sinks.delete)",
-        () => probe("DeleteSink", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
+      test.provider("DeleteSink (logging.sinks.delete)", () => probe("DeleteSink", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
       test.provider(
         "GetCmekSettings (logging.getCmekSettings)",
         () => probe("GetCmekSettings", false),
@@ -434,7 +426,7 @@ describe.skipIf(!!process.env.FAST)(
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });
-      test.provider("GetSink (logging.projects.sinks.get)", () => probe("GetSink", false), {
+      test.provider("GetSink (logging.sinks.get)", () => probe("GetSink", false), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });
@@ -458,7 +450,7 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("ListLogs (logging.projects.logs.list)", () => probe("ListLogs", true), {
+      test.provider("ListLogs (logging.logs.list)", () => probe("ListLogs", true), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });
@@ -502,7 +494,7 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("ListSinks (logging.projects.sinks.list)", () => probe("ListSinks", true), {
+      test.provider("ListSinks (logging.sinks.list)", () => probe("ListSinks", true), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });
@@ -538,14 +530,10 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "UpdateSink (logging.projects.sinks.update)",
-        () => probe("UpdateSink", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
+      test.provider("UpdateSink (logging.sinks.update)", () => probe("UpdateSink", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
       test.provider("WriteEntry (logging.entries.write)", () => probe("WriteEntry", false), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
@@ -574,31 +562,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.billingAccounts.sinks.update: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.billingAccounts.sinks.create: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.billingAccounts.sinks.patch: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.billingAccounts.sinks.delete: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.billingAccounts.sinks.list: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.billingAccounts.sinks.get: addressed under `billingAccounts/`, not a project",
+        "logging.billingAccounts.exclusions.list: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "logging.billingAccounts.locations.recentQueries.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.savedQueries.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.savedQueries.list: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -610,15 +586,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.billingAccounts.locations.savedQueries.list: addressed under `billingAccounts/`, not a project",
+        "logging.billingAccounts.sinks.update: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.billingAccounts.locations.savedQueries.get: no predefined role grants its permission",
+        "logging.billingAccounts.sinks.create: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.billingAccounts.exclusions.list: addressed under `billingAccounts/`, not a project",
+        "logging.billingAccounts.sinks.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.delete: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.patch: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.get: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -630,79 +618,119 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.updateSettings: addressed under `folders/`, not a project",
+        "logging.organizations.getSettings: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.getCmekSettings: addressed under `folders/`, not a project",
+        "logging.organizations.updateCmekSettings: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.getSettings: addressed under `folders/`, not a project",
+        "logging.organizations.getCmekSettings: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.sinks.delete: addressed under `folders/`, not a project",
+        "logging.organizations.updateSettings: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.sinks.list: addressed under `folders/`, not a project",
+        "logging.organizations.sinks.delete: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.sinks.patch: addressed under `folders/`, not a project",
+        "logging.organizations.sinks.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.sinks.update: addressed under `folders/`, not a project",
+        "logging.organizations.sinks.patch: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.sinks.create: addressed under `folders/`, not a project",
+        "logging.organizations.sinks.update: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.sinks.get: addressed under `folders/`, not a project",
+        "logging.organizations.sinks.create: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.logs.delete: addressed under `folders/`, not a project",
+        "logging.organizations.sinks.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.logs.list: addressed under `folders/`, not a project",
+        "logging.organizations.exclusions.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.locations.savedQueries.list: addressed under `folders/`, not a project",
+        "logging.organizations.locations.savedQueries.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.locations.savedQueries.get: no predefined role grants its permission",
+        "logging.organizations.locations.savedQueries.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.locations.buckets.list: addressed under `folders/`, not a project",
+        "logging.organizations.locations.buckets.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.locations.buckets.createAsync: addressed under `folders/`, not a project",
+        "logging.organizations.locations.buckets.createAsync: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.locations.recentQueries.list: addressed under `folders/`, not a project",
+        "logging.organizations.locations.recentQueries.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.locations.logScopes.list: addressed under `folders/`, not a project",
+        "logging.organizations.locations.logScopes.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.folders.exclusions.list: addressed under `folders/`, not a project",
+        "logging.organizations.logs.delete: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.locations.buckets.undelete: name collision on UndeleteBucket",
+        "logging.organizations.logs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.logs.delete: name collision on DeleteLog",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.logs.list: name collision on ListLogs",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.sinks.get: name collision on GetSink",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.sinks.list: name collision on ListSinks",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.sinks.update: name collision on UpdateSink",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.sinks.create: name collision on CreateSink",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.sinks.delete: name collision on DeleteSink",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.list: name collision on ListExclusions",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.get: name collision on GetExclusion",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.locations.buckets.get: name collision on GetBucket",
         () => Effect.void,
       );
       test.provider.skip(
@@ -714,7 +742,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.locations.buckets.get: name collision on GetBucket",
+        "logging.locations.buckets.undelete: name collision on UndeleteBucket",
         () => Effect.void,
       );
       test.provider.skip(
@@ -738,96 +766,77 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.exclusions.list: name collision on ListExclusions",
+        "logging.folders.getCmekSettings: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.exclusions.get: name collision on GetExclusion",
+        "logging.folders.getSettings: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.updateCmekSettings: addressed under `organizations/`, not a project",
+        "logging.folders.updateSettings: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.updateSettings: addressed under `organizations/`, not a project",
+        "logging.folders.sinks.delete: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.getCmekSettings: addressed under `organizations/`, not a project",
+        "logging.folders.sinks.patch: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.getSettings: addressed under `organizations/`, not a project",
+        "logging.folders.sinks.get: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.locations.savedQueries.list: addressed under `organizations/`, not a project",
+        "logging.folders.sinks.create: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.locations.savedQueries.get: no predefined role grants its permission",
+        "logging.folders.sinks.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.locations.logScopes.list: addressed under `organizations/`, not a project",
+        "logging.folders.sinks.update: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.locations.recentQueries.list: addressed under `organizations/`, not a project",
+        "logging.folders.locations.savedQueries.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.locations.buckets.createAsync: addressed under `organizations/`, not a project",
+        "logging.folders.locations.savedQueries.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.locations.buckets.list: addressed under `organizations/`, not a project",
+        "logging.folders.locations.buckets.createAsync: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.exclusions.list: addressed under `organizations/`, not a project",
+        "logging.folders.locations.buckets.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.sinks.patch: addressed under `organizations/`, not a project",
+        "logging.folders.locations.recentQueries.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.sinks.delete: addressed under `organizations/`, not a project",
+        "logging.folders.locations.logScopes.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.sinks.get: addressed under `organizations/`, not a project",
+        "logging.folders.exclusions.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.sinks.list: addressed under `organizations/`, not a project",
+        "logging.folders.logs.delete: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.organizations.sinks.update: addressed under `organizations/`, not a project",
+        "logging.folders.logs.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
-      test.provider.skip(
-        "logging.organizations.sinks.create: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.organizations.logs.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.organizations.logs.delete: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip("logging.sinks.update: name collision on UpdateSink", () => Effect.void);
-      test.provider.skip("logging.sinks.create: name collision on CreateSink", () => Effect.void);
-      test.provider.skip("logging.sinks.get: name collision on GetSink", () => Effect.void);
-      test.provider.skip("logging.sinks.delete: name collision on DeleteSink", () => Effect.void);
-      test.provider.skip("logging.sinks.list: name collision on ListSinks", () => Effect.void);
-      test.provider.skip("logging.logs.delete: name collision on DeleteLog", () => Effect.void);
-      test.provider.skip("logging.logs.list: name collision on ListLogs", () => Effect.void);
     });
   },
 );

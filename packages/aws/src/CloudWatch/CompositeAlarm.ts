@@ -21,6 +21,9 @@ export class CompositeAlarmUnexpectedResponse extends Data.TaggedError(
 
 export type CompositeAlarmName = string;
 
+/** A composite alarm as `describeAlarms` lists it. */
+type ListedCompositeAlarm = NonNullable<cloudwatch.DescribeAlarmsOutput["CompositeAlarms"]>[number];
+
 export interface CompositeAlarmProps extends Omit<
   cloudwatch.PutCompositeAlarmInput,
   "AlarmName" | "Tags"
@@ -235,7 +238,7 @@ export const CompositeAlarmProvider = () =>
                     (page.CompositeAlarms ?? []).filter(
                       (
                         candidate,
-                      ): candidate is cloudwatch.CompositeAlarm & {
+                      ): candidate is ListedCompositeAlarm & {
                         AlarmName: string;
                         AlarmArn: string;
                       } => candidate.AlarmName != null && candidate.AlarmArn != null,

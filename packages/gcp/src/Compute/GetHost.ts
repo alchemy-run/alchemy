@@ -22,7 +22,7 @@ export type GetHostShape = () => Effect.Effect<
  * **Example:** Call `hosts.get`
  * ```typescript
  * const getHost = yield* GCP.Compute.GetHost();
- * const response = yield* getHost({ host: "...", zone: "...", association: "..." });
+ * const response = yield* getHost({ zone: "...", association: "...", host: "..." });
  * ```
  *
  * @binding

@@ -126,14 +126,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "accesscontextmanager.projects.lookupConfiguredServicePerimeter: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "accesscontextmanager.folders.lookupConfiguredServicePerimeter: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "accesscontextmanager.organizations.gcpUserAccessBindings.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
@@ -142,7 +134,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "accesscontextmanager.permissions.list: no predefined role grants its permission",
+        "accesscontextmanager.projects.lookupConfiguredServicePerimeter: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.folders.lookupConfiguredServicePerimeter: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -151,6 +147,10 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "accesscontextmanager.accessPolicies.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.permissions.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

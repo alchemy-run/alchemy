@@ -28,7 +28,7 @@ export type StreamAssistantSessionChatAiAssistantShape = (
 >;
 
 /**
- * Runs the Chat AI assistant agent for the specified assistant session in a streaming fashion.
+ * Runs Arc, the AI assistant, for the specified assistant session in a streaming fashion.
  *
  * Bind it to a {@link App} and provide {@link StreamAssistantSessionChatAiAssistantHttp}. The
  * host gets `roles/ces.appEditor` on the project (the service has no per-resource IAM policy).

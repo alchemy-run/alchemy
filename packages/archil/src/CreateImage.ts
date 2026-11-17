@@ -64,7 +64,7 @@ export const CreateImageHttp = Layer.effect(
           authorize(
             archil.getImage({ image_id: imageId }).pipe(
               Effect.map(({ data }) => toImageAttributes(data, data.source)),
-              Effect.catchTag("ImageNotFound", () => Effect.undefined),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             ),
           ),
       } satisfies CreateImageClient;

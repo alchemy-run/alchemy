@@ -154,11 +154,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudsupport.organizations.supportEventSubscriptions.list: addressed under `organizations/`, not a project",
+        "cloudsupport.organizations.supportEventSubscriptions.undelete: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsupport.organizations.supportEventSubscriptions.undelete: no predefined role grants its permission",
+        "cloudsupport.organizations.supportEventSubscriptions.expunge: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -166,7 +166,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsupport.organizations.supportEventSubscriptions.expunge: no predefined role grants its permission",
+        "cloudsupport.organizations.supportEventSubscriptions.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

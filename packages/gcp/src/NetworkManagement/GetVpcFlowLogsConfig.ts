@@ -9,19 +9,19 @@ import type { OrganizationsVpcFlowLogsConfig } from "./OrganizationsVpcFlowLogsC
 import type { VpcFlowLogsConfig } from "./VpcFlowLogsConfig.ts";
 
 export interface GetVpcFlowLogsConfigRequest extends Omit<
-  networkmanagement.GetProjectsLocationsVpcFlowLogsConfigsRequest,
+  networkmanagement.GetOrganizationsLocationsVpcFlowLogsConfigsRequest,
   "name"
 > {}
 
 export type GetVpcFlowLogsConfigShape = (
-  resource: VpcFlowLogsConfig | OrganizationsVpcFlowLogsConfig,
+  resource: OrganizationsVpcFlowLogsConfig | VpcFlowLogsConfig,
 ) => Effect.Effect<
   (
     request?: GetVpcFlowLogsConfigRequest,
   ) => Effect.Effect<
     networkmanagement.VpcFlowLogsConfig,
-    | networkmanagement.GetProjectsLocationsVpcFlowLogsConfigsError
-    | networkmanagement.GetOrganizationsLocationsVpcFlowLogsConfigsError,
+    | networkmanagement.GetOrganizationsLocationsVpcFlowLogsConfigsError
+    | networkmanagement.GetProjectsLocationsVpcFlowLogsConfigsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type GetVpcFlowLogsConfigShape = (
 /**
  * Gets the details of a specific `VpcFlowLogsConfig`.
  *
- * Bind it to a {@link VpcFlowLogsConfig} or {@link OrganizationsVpcFlowLogsConfig} and provide {@link GetVpcFlowLogsConfigHttp}. The
+ * Bind it to a {@link OrganizationsVpcFlowLogsConfig} or {@link VpcFlowLogsConfig} and provide {@link GetVpcFlowLogsConfigHttp}. The
  * host gets `roles/networkmanagement.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `vpcFlowLogsConfigs.get`
  * ```typescript
- * const getVpcFlowLogsConfig = yield* GCP.NetworkManagement.GetVpcFlowLogsConfig(vpcFlowLogsConfig);
+ * const getVpcFlowLogsConfig = yield* GCP.NetworkManagement.GetVpcFlowLogsConfig(organizationsVpcFlowLogsConfig);
  * const response = yield* getVpcFlowLogsConfig();
  * ```
  *
@@ -64,14 +64,14 @@ export const GetVpcFlowLogsConfigHttp = Layer.effect(
     tag: "GCP.NetworkManagement.GetVpcFlowLogsConfig",
     variants: [
       {
-        resource: "GCP.NetworkManagement.VpcFlowLogsConfig",
-        operation: networkmanagement.getProjectsLocationsVpcFlowLogsConfigs,
+        resource: "GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig",
+        operation: networkmanagement.getOrganizationsLocationsVpcFlowLogsConfigs,
         param: "name",
         iam: { role: "roles/networkmanagement.viewer" },
       },
       {
-        resource: "GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig",
-        operation: networkmanagement.getOrganizationsLocationsVpcFlowLogsConfigs,
+        resource: "GCP.NetworkManagement.VpcFlowLogsConfig",
+        operation: networkmanagement.getProjectsLocationsVpcFlowLogsConfigs,
         param: "name",
         iam: { role: "roles/networkmanagement.viewer" },
       },

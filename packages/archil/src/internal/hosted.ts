@@ -281,11 +281,11 @@ export const ensureRunning = Effect.fn(function* (sid: string) {
   if (sandbox.status === "paused") {
     yield* archil
       .resumeSandbox({ sid })
-      .pipe(Effect.catchTag("SandboxStateConflict", () => Effect.void));
+      .pipe(Effect.catchTag("SandboxStartConflict", () => Effect.void));
   } else if (sandbox.status === "stopped" || sandbox.status === "exited") {
     yield* archil
       .startSandbox({ sid })
-      .pipe(Effect.catchTag("SandboxStateConflict", () => Effect.void));
+      .pipe(Effect.catchTag("SandboxStartConflict", () => Effect.void));
   }
   const ready = yield* waitForSandbox(sid);
   if (ready.status !== "running") {
@@ -391,7 +391,7 @@ export const deployProgram = Effect.fn(function* (input: {
 /** Stop the program and remove its files. Removing a missing one succeeds. */
 export const removeProgram = Effect.fn(function* (sid: string, name: string) {
   const sandbox = yield* waitForSandbox(sid).pipe(
-    Effect.catchTag("SandboxNotFound", () => Effect.undefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (sandbox === undefined || sandbox.status === "deleted") return;
   yield* ensureRunning(sid);

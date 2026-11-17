@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationNativeSqlQueryRequest extends Omit<
-  dataproc.AccessNativeSqlQueryProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessNativeSqlQueryProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface AccessSparkApplicationNativeSqlQueryRequest extends Omit<
 }
 
 export type AccessSparkApplicationNativeSqlQueryShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationNativeSqlQueryRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationNativeSqlQueryResponse
-    | dataproc.AccessSessionSparkApplicationNativeSqlQueryResponse,
-    | dataproc.AccessNativeSqlQueryProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessNativeSqlQueryProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationNativeSqlQueryResponse
+    | dataproc.AccessSparkApplicationNativeSqlQueryResponse,
+    | dataproc.AccessNativeSqlQueryProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessNativeSqlQueryProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type AccessSparkApplicationNativeSqlQueryShape = (
 /**
  * Obtain data corresponding to a particular Native SQL Query for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationNativeSqlQueryHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationNativeSqlQueryHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessNativeSqlQuery`
  * ```typescript
- * const accessSparkApplicationNativeSqlQuery = yield* GCP.Dataproc.AccessSparkApplicationNativeSqlQuery(batch);
+ * const accessSparkApplicationNativeSqlQuery = yield* GCP.Dataproc.AccessSparkApplicationNativeSqlQuery(session);
  * const response = yield* accessSparkApplicationNativeSqlQuery({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const AccessSparkApplicationNativeSqlQueryHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationNativeSqlQuery",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessNativeSqlQueryProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessNativeSqlQueryProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessNativeSqlQueryProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessNativeSqlQueryProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

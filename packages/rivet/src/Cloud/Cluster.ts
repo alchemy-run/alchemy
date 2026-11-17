@@ -61,7 +61,7 @@ export const ClusterProvider = () =>
       const observe = Effect.fn(function* (cluster: string | undefined) {
         const resolved = yield* credentials;
         const name = cluster ?? resolved.cluster;
-        const info = yield* getCluster(resolved.token, name);
+        const info = yield* getCluster(resolved, name);
         if (info.admin_token === null) {
           return yield* new ClusterAdminTokenUnavailable({
             message: `Rivet Cloud cluster '${name}' gave this credential no admin token.`,

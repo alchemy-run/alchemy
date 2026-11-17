@@ -4,6 +4,7 @@ import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import type * as rolldown from "rolldown";
 
 /**
@@ -188,7 +189,7 @@ export const readContextDirectory = Effect.fn(function* (dir: string) {
 
   const walk = (
     current: string,
-  ): Effect.Effect<{ path: string; content: Uint8Array }[], any, never> =>
+  ): Effect.Effect<{ path: string; content: Uint8Array }[], PlatformError> =>
     Effect.gen(function* () {
       const entries = yield* fs.readDirectory(current);
       const out: { path: string; content: Uint8Array }[] = [];

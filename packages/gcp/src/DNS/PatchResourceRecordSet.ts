@@ -27,7 +27,7 @@ export type PatchResourceRecordSetShape = () => Effect.Effect<
  * **Example:** Call `resourceRecordSets.patch`
  * ```typescript
  * const patchResourceRecordSet = yield* GCP.DNS.PatchResourceRecordSet();
- * const response = yield* patchResourceRecordSet({ managedZone: "...", type: "...", name: "..." });
+ * const response = yield* patchResourceRecordSet({ name: "...", managedZone: "...", type: "..." });
  * ```
  *
  * @binding

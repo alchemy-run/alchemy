@@ -124,6 +124,62 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "PostgrestDelete (firebasedataconnect.projects.locations.services.postgrest.postgrestDelete)",
+        () => probe("PostgrestDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PostgrestInsert (firebasedataconnect.projects.locations.services.postgrest.postgrestInsert)",
+        () => probe("PostgrestInsert", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PostgrestRpcCallFunction (firebasedataconnect.projects.locations.services.postgrest.rpc.postgrestCallFunction)",
+        () => probe("PostgrestRpcCallFunction", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PostgrestRpcQueryFunction (firebasedataconnect.projects.locations.services.postgrest.rpc.postgrestQueryFunction)",
+        () => probe("PostgrestRpcQueryFunction", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PostgrestSelect (firebasedataconnect.projects.locations.services.postgrest.postgrestSelect)",
+        () => probe("PostgrestSelect", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PostgrestUpdate (firebasedataconnect.projects.locations.services.postgrest.postgrestUpdate)",
+        () => probe("PostgrestUpdate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PostgrestUpsert (firebasedataconnect.projects.locations.services.postgrest.postgrestUpsert)",
+        () => probe("PostgrestUpsert", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "live"],
+          timeout: 600_000,
+        },
+      );
     });
 
     describe("ServicesConnector", { concurrent: true }, () => {

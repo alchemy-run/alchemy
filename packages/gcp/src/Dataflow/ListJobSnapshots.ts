@@ -31,7 +31,7 @@ export type ListJobSnapshotsShape = () => Effect.Effect<
  * **Example:** Call `snapshots.list`
  * ```typescript
  * const listJobSnapshots = yield* GCP.Dataflow.ListJobSnapshots();
- * const response = yield* listJobSnapshots({ location: "...", jobId: "..." });
+ * const response = yield* listJobSnapshots({ jobId: "...", location: "..." });
  * ```
  *
  * @binding

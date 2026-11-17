@@ -7,16 +7,16 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface ListSnapshotsRequest extends Omit<
-  dataflow.ListProjectsSnapshotsRequest,
+  dataflow.ListProjectsLocationsSnapshotsRequest,
   "projectId"
 > {}
 
 export type ListSnapshotsShape = () => Effect.Effect<
   (
-    request?: ListSnapshotsRequest,
+    request: ListSnapshotsRequest,
   ) => Effect.Effect<
     dataflow.ListSnapshotsResponse,
-    dataflow.ListProjectsSnapshotsError,
+    dataflow.ListProjectsLocationsSnapshotsError,
     RuntimeContext
   >
 >;
@@ -31,7 +31,7 @@ export type ListSnapshotsShape = () => Effect.Effect<
  * **Example:** Call `snapshots.list`
  * ```typescript
  * const listSnapshots = yield* GCP.Dataflow.ListSnapshots();
- * const response = yield* listSnapshots();
+ * const response = yield* listSnapshots({ location: "..." });
  * ```
  *
  * @binding
@@ -57,7 +57,7 @@ export const ListSnapshotsHttp = Layer.effect(
     tag: "GCP.Dataflow.ListSnapshots",
     variants: [
       {
-        operation: dataflow.listProjectsSnapshots,
+        operation: dataflow.listProjectsLocationsSnapshots,
         projectField: "projectId",
         role: "roles/dataflow.viewer",
       },

@@ -189,15 +189,15 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization: no distilled operation showUtilizationProjectsLocationsDiscoveredRanges",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudnumberregistry.projects.locations.customRanges.showUtilization: no distilled operation showUtilizationProjectsLocationsCustomRanges",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudnumberregistry.organizations.locations.orgNumberRegistries.list: addressed under `organizations/`, not a project",
+        "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization: no distilled operation showUtilizationProjectsLocationsDiscoveredRanges",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.organizations.locations.orgNumberRegistries.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -205,7 +205,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudnumberregistry.organizations.locations.orgNumberRegistries.get: addressed under `organizations/`, not a project",
+        "cloudnumberregistry.organizations.locations.orgNumberRegistries.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

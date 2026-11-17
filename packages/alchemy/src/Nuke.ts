@@ -100,7 +100,13 @@ const failure = (
  * sweep: credential layers die on a rejected token, so collect both.
  */
 const settle = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.result(effect.pipe(Effect.catchDefect((defect) => Effect.fail(defect))));
+  Effect.result(
+    effect.pipe(
+      Effect.catchDefect((defect) =>
+        Effect.fail(typeof defect === "string" ? defect : Formatter.format(defect)),
+      ),
+    ),
+  );
 
 /** Deletions here run out-of-band, so nothing reports through an apply session. */
 const silent = {

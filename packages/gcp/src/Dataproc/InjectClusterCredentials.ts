@@ -31,7 +31,7 @@ export type InjectClusterCredentialsShape = () => Effect.Effect<
  * **Example:** Call `clusters.injectCredentials`
  * ```typescript
  * const injectClusterCredentials = yield* GCP.Dataproc.InjectClusterCredentials();
- * const response = yield* injectClusterCredentials({ cluster: "...", region: "..." });
+ * const response = yield* injectClusterCredentials({ region: "...", cluster: "..." });
  * ```
  *
  * @binding

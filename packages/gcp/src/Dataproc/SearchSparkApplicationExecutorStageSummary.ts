@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SearchSparkApplicationExecutorStageSummaryRequest extends Omit<
-  dataproc.SearchExecutorStageSummaryProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SearchExecutorStageSummaryProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SearchSparkApplicationExecutorStageSummaryRequest extends Omit<
 }
 
 export type SearchSparkApplicationExecutorStageSummaryShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SearchSparkApplicationExecutorStageSummaryRequest,
   ) => Effect.Effect<
-    | dataproc.SearchSparkApplicationExecutorStageSummaryResponse
-    | dataproc.SearchSessionSparkApplicationExecutorStageSummaryResponse,
-    | dataproc.SearchExecutorStageSummaryProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SearchExecutorStageSummaryProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SearchSessionSparkApplicationExecutorStageSummaryResponse
+    | dataproc.SearchSparkApplicationExecutorStageSummaryResponse,
+    | dataproc.SearchExecutorStageSummaryProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SearchExecutorStageSummaryProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SearchSparkApplicationExecutorStageSummaryShape = (
 /**
  * Obtain executor summary with respect to a spark stage attempt.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SearchSparkApplicationExecutorStageSummaryHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SearchSparkApplicationExecutorStageSummaryHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.searchExecutorStageSummary`
  * ```typescript
- * const searchSparkApplicationExecutorStageSummary = yield* GCP.Dataproc.SearchSparkApplicationExecutorStageSummary(batch);
+ * const searchSparkApplicationExecutorStageSummary = yield* GCP.Dataproc.SearchSparkApplicationExecutorStageSummary(session);
  * const response = yield* searchSparkApplicationExecutorStageSummary({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const SearchSparkApplicationExecutorStageSummaryHttp = Layer.effect(
     tag: "GCP.Dataproc.SearchSparkApplicationExecutorStageSummary",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.searchExecutorStageSummaryProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.searchExecutorStageSummaryProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.searchExecutorStageSummaryProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.searchExecutorStageSummaryProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

@@ -4,26 +4,22 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpProjectBinding } from "../HttpBinding.ts";
+import { makeGcpBinding } from "../HttpBinding.ts";
+import type { DatasetsDatasetVersion } from "./DatasetsDatasetVersion.ts";
 
 export interface RestoreDatasetVersionRequest extends Omit<
-  aiplatform.RestoreProjectsLocationsDatasetsDatasetVersionsRequest,
+  aiplatform.RestoreDatasetsDatasetVersionsRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the dataset (`datasets/{dataset}`). */
-  dataset: string;
-  /** Id of the datasetVersion (`datasetVersions/{datasetVersion}`). */
-  datasetVersion: string;
-}
+> {}
 
-export type RestoreDatasetVersionShape = () => Effect.Effect<
+export type RestoreDatasetVersionShape = (
+  resource: DatasetsDatasetVersion,
+) => Effect.Effect<
   (
-    request: RestoreDatasetVersionRequest,
+    request?: RestoreDatasetVersionRequest,
   ) => Effect.Effect<
     aiplatform.GoogleLongrunningOperation,
-    aiplatform.RestoreProjectsLocationsDatasetsDatasetVersionsError,
+    aiplatform.RestoreDatasetsDatasetVersionsError,
     RuntimeContext
   >
 >;
@@ -31,14 +27,14 @@ export type RestoreDatasetVersionShape = () => Effect.Effect<
 /**
  * Restores a dataset version.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link RestoreDatasetVersionHttp}. The host gets `roles/aiplatform.expressUser` on the project.
+ * Bind it to a {@link DatasetsDatasetVersion} and provide {@link RestoreDatasetVersionHttp}. The
+ * host gets `roles/aiplatform.expressUser` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `datasetVersions.restore`
  * ```typescript
- * const restoreDatasetVersion = yield* GCP.AIPlatform.RestoreDatasetVersion();
- * const response = yield* restoreDatasetVersion({ location: "us-central1", dataset: "...", datasetVersion: "..." });
+ * const restoreDatasetVersion = yield* GCP.AIPlatform.RestoreDatasetVersion(datasetsDatasetVersion);
+ * const response = yield* restoreDatasetVersion();
  * ```
  *
  * @binding
@@ -62,18 +58,14 @@ export const RestoreDatasetVersion = Binding.Service<RestoreDatasetVersion>(
  */
 export const RestoreDatasetVersionHttp = Layer.effect(
   RestoreDatasetVersion,
-  makeGcpProjectBinding<RestoreDatasetVersionShape>({
+  makeGcpBinding<RestoreDatasetVersionShape>({
     tag: "GCP.AIPlatform.RestoreDatasetVersion",
     variants: [
       {
-        operation: aiplatform.restoreProjectsLocationsDatasetsDatasetVersions,
+        resource: "GCP.AIPlatform.DatasetsDatasetVersion",
+        operation: aiplatform.restoreDatasetsDatasetVersions,
         param: "name",
-        location: true,
-        children: [
-          ["datasets", "dataset"],
-          ["datasetVersions", "datasetVersion"],
-        ],
-        role: "roles/aiplatform.expressUser",
+        iam: { role: "roles/aiplatform.expressUser" },
       },
     ],
   }),

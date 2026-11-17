@@ -31,7 +31,7 @@ export type GetEnvironmentShape = () => Effect.Effect<
  * **Example:** Call `environments.get`
  * ```typescript
  * const getEnvironment = yield* GCP.ToolResults.GetEnvironment();
- * const response = yield* getEnvironment({ environmentId: "...", executionId: "...", historyId: "..." });
+ * const response = yield* getEnvironment({ environmentId: "...", historyId: "...", executionId: "..." });
  * ```
  *
  * @binding

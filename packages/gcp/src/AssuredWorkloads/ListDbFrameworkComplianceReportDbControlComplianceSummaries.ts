@@ -27,7 +27,7 @@ export type ListDbFrameworkComplianceReportDbControlComplianceSummariesShape = (
 >;
 
 /**
- * Lists the control compliance summary for a given scope.
+ * Lists the compliance summaries of the controls in a framework compliance report.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
  * Provide {@link ListDbFrameworkComplianceReportDbControlComplianceSummariesHttp}. The host gets `roles/assuredworkloads.reader` on the project.

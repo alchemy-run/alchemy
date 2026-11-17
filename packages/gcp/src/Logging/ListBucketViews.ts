@@ -11,21 +11,21 @@ import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
 export interface ListBucketViewsRequest extends Omit<
-  logging.ListProjectsLocationsBucketsViewsRequest,
+  logging.ListBillingAccountsLocationsBucketsViewsRequest,
   "parent"
 > {}
 
 export type ListBucketViewsShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
+  resource: BillingBucket | OrganizationLogBucket | LogBucket | FolderBucket,
 ) => Effect.Effect<
   (
     request?: ListBucketViewsRequest,
   ) => Effect.Effect<
     logging.ListViewsResponse,
-    | logging.ListProjectsLocationsBucketsViewsError
     | logging.ListBillingAccountsLocationsBucketsViewsError
-    | logging.ListFoldersLocationsBucketsViewsError
-    | logging.ListOrganizationsLocationsBucketsViewsError,
+    | logging.ListOrganizationsLocationsBucketsViewsError
+    | logging.ListProjectsLocationsBucketsViewsError
+    | logging.ListFoldersLocationsBucketsViewsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type ListBucketViewsShape = (
 /**
  * Lists views on a log bucket.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link ListBucketViewsHttp}. The
+ * Bind it to a {@link BillingBucket} or {@link OrganizationLogBucket} or {@link LogBucket} or {@link FolderBucket} and provide {@link ListBucketViewsHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `views.list`
  * ```typescript
- * const listBucketViews = yield* GCP.Logging.ListBucketViews(logBucket);
+ * const listBucketViews = yield* GCP.Logging.ListBucketViews(billingBucket);
  * const response = yield* listBucketViews();
  * ```
  *
@@ -66,26 +66,26 @@ export const ListBucketViewsHttp = Layer.effect(
     tag: "GCP.Logging.ListBucketViews",
     variants: [
       {
-        resource: "GCP.Logging.LogBucket",
-        operation: logging.listProjectsLocationsBucketsViews,
-        param: "parent",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingBucket",
         operation: logging.listBillingAccountsLocationsBucketsViews,
         param: "parent",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.FolderBucket",
-        operation: logging.listFoldersLocationsBucketsViews,
+        resource: "GCP.Logging.OrganizationLogBucket",
+        operation: logging.listOrganizationsLocationsBucketsViews,
         param: "parent",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationLogBucket",
-        operation: logging.listOrganizationsLocationsBucketsViews,
+        resource: "GCP.Logging.LogBucket",
+        operation: logging.listProjectsLocationsBucketsViews,
+        param: "parent",
+        iam: { role: "roles/logging.privateLogViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucket",
+        operation: logging.listFoldersLocationsBucketsViews,
         param: "parent",
         iam: { role: "roles/logging.privateLogViewer" },
       },

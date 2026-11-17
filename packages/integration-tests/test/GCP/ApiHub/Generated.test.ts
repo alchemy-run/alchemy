@@ -212,6 +212,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetGeneratedSpecApi (apihub.projects.locations.generatedSpecApis.get)",
+        () => probe("GetGeneratedSpecApi", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apihub", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetHostProjectRegistration (apihub.projects.locations.hostProjectRegistrations.get)",
         () => probe("GetHostProjectRegistration", false),
         {
@@ -308,6 +316,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListGeneratedSpecApis (apihub.projects.locations.generatedSpecApis.list)",
+        () => probe("ListGeneratedSpecApis", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apihub", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListHostProjectRegistrations (apihub.projects.locations.hostProjectRegistrations.list)",
         () => probe("ListHostProjectRegistrations", true),
         {
@@ -367,6 +383,14 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
+        "apihub.projects.locations.generatedSpecApis.generateSpec: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.servers.configureAndDeployServer: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "apihub.projects.locations.plugins.instances.executeAction: no predefined role grants its permission",
         () => Effect.void,
       );
@@ -375,15 +399,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "apihub.projects.locations.plugins.instances.disableAction: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "apihub.projects.locations.plugins.instances.manageSourceData: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "apihub.projects.locations.servers.configureAndDeployServer: no predefined role grants its permission",
+        "apihub.projects.locations.plugins.instances.disableAction: no predefined role grants its permission",
         () => Effect.void,
       );
     });

@@ -179,8 +179,8 @@ export const WorkerBundle = Shared.makeWorkerBundle<WorkerBundleOptions, Additio
 });
 
 /**
- * Export a bridge class under `name`. A name that isn't an identifier, like a
- * Domain model's `Billing.AccountAggregate`, is exported by alias.
+ * Export a bridge class under `name`. A name that isn't an identifier, like
+ * `Billing.Account`, is exported by alias.
  */
 const exportClass = (name: string, base: string, local: string) =>
   /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)

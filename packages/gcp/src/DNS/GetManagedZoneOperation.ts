@@ -27,7 +27,7 @@ export type GetManagedZoneOperationShape = () => Effect.Effect<
  * **Example:** Call `managedZoneOperations.get`
  * ```typescript
  * const getManagedZoneOperation = yield* GCP.DNS.GetManagedZoneOperation();
- * const response = yield* getManagedZoneOperation({ operation: "...", managedZone: "..." });
+ * const response = yield* getManagedZoneOperation({ managedZone: "...", operation: "..." });
  * ```
  *
  * @binding

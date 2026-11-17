@@ -250,15 +250,21 @@ const attrsFrom = (
   updatedAt: variable.updatedAt,
 });
 
+export class PrismaEnvironmentVariableSystemManaged extends Data.TaggedError(
+  "PrismaEnvironmentVariableSystemManaged",
+)<{
+  readonly message: string;
+}> {}
+
 const systemManagedVariableError = (key: string) =>
-  new Error(
-    `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
-  );
+  new PrismaEnvironmentVariableSystemManaged({
+    message: `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
+  });
 
 const ensureUserManagedVariable = (variable: ObservedEnvironmentVariable) =>
   Effect.gen(function* () {
     if (variable.isManagedBySystem) {
-      return yield* Effect.fail(systemManagedVariableError(variable.key));
+      return yield* systemManagedVariableError(variable.key);
     }
   });
 

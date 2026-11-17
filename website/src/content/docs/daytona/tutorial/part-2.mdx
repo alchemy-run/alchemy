@@ -1,66 +1,84 @@
 ---
-title: "Part 2: Run Code in a Sandbox"
-description: Add a Worker that creates a sandbox per request, runs a command, and deletes it.
+title: "Part 2: Start Sandboxes from It"
+description: A Cloudflare Worker that starts a fresh Daytona sandbox from the warm snapshot for each request.
 sidebar:
   order: 2
 ---
 
-## Bind sandboxes to a Worker
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-```typescript
-// src/Api.ts
+## Bind CreateSandbox to the snapshot
+
+```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Schema from "effect/Schema";
-import { Base } from "./Images.ts";
-
-const RunRequest = Schema.Struct({ command: Schema.String });
+import { Warm } from "./Images.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const sandboxes = yield* Daytona.CreateSandbox(Base);
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const { command } = yield* Schema.decodeUnknownEffect(RunRequest)(yield* request.json);
-        const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
-          sandboxes.delete(s.sandboxId).pipe(Effect.ignore),
-        );
-        const result = yield* sandbox.exec(command);
-        return yield* HttpServerResponse.json(result);
-      }).pipe(Effect.scoped, Effect.orDie),
-    };
+    const sandboxes = yield* Daytona.CreateSandbox(Warm);
+    return {};
   }).pipe(Effect.provide(Daytona.CreateSandboxHttp)),
 ) {}
 ```
 
-`Daytona.CreateSandbox(Base)` gives the Worker its own API key with `write:sandboxes` and `delete:sandboxes`, and creates every sandbox from `Base`. `sandboxes.create()` waits until the sandbox has started. `Effect.acquireRelease` deletes it when the request ends.
+Every sandbox this client creates boots from `Warm`. The Worker gets its own API key, with `write:sandboxes` and `delete:sandboxes`.
 
-## Deploy the Worker
+## Run a command in a fresh sandbox
+
+```diff lang="typescript"
+// src/Api.ts
+    const sandboxes = yield* Daytona.CreateSandbox(Warm);
++
++    const run = Effect.fn("run")(function* (command: string) {
++      const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
++        sandboxes.delete(s.sandboxId).pipe(Effect.ignore),
++      );
++      return yield* sandbox.exec(command, { cwd: "/home/daytona/repo" });
++    });
+```
+
+The repository is already there: the sandbox boots from the snapshot, so nothing clones at request time. `create` waits until the sandbox has started, and `acquireRelease` deletes it when the request ends. `exec` returns `exitCode` and `result`.
+
+## Serve it
+
+```diff lang="typescript"
+// src/Api.ts
+-    return {};
++    return {
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://api");
++        if (request.method === "POST" && url.pathname === "/run") {
++          return yield* HttpServerResponse.json(yield* run(yield* request.text));
++        }
++        return HttpServerResponse.text("not found", { status: 404 });
++      }).pipe(Effect.scoped, Effect.orDie),
++    };
+```
+
+## Deploy it
 
 ```diff lang="typescript"
 // alchemy.run.ts
-+import Api from "./src/Api.ts";
-import { Base } from "./src/Images.ts";
-
   Effect.gen(function* () {
-    const base = yield* Base;
--    return { snapshot: base.name };
+    const warm = yield* Warm;
+-    return { snapshot: warm.name };
 +    const api = yield* Api;
-+    return { url: api.url.as<string>(), snapshot: base.name };
++    return { url: api.url.as<string>(), snapshot: warm.name };
   }),
 ```
 
-## Call it
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X POST "$URL/run" -d 'git log -1 --format=%s'`}
+/>
 
-```sh
-alchemy deploy
-curl -X POST "$URL/run" -d '{"command":"node --version"}'
-```
+The snapshots are unchanged, so this deploy only adds the Worker.
 
-You get `{"exitCode":0,"result":"v22..."}`.
+## Next
+
+[Part 3](/daytona/tutorial/part-3) gives each user a sandbox of their own.

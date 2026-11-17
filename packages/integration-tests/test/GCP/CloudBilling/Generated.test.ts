@@ -101,7 +101,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudbilling.services.skus.list: addressed under `services/`, not a project",
+        "cloudbilling.organizations.billingAccounts.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -109,39 +109,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudbilling.organizations.billingAccounts.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudbilling.organizations.billingAccounts.create: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.cancel: addressed under `tasks/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.get: addressed under `tasks/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.subscribe: addressed under `tasks/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.pushNotificationConfigs.delete: addressed under `tasks/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.pushNotificationConfigs.get: addressed under `tasks/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.pushNotificationConfigs.list: addressed under `tasks/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.tasks.pushNotificationConfigs.create: addressed under `tasks/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -157,7 +125,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudbilling.billingAccounts.projects.list: addressed under `billingAccounts/`, not a project",
+        "cloudbilling.billingAccounts.subAccounts.create: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -165,7 +133,47 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudbilling.billingAccounts.subAccounts.create: addressed under `billingAccounts/`, not a project",
+        "cloudbilling.billingAccounts.projects.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.get: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.cancel: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.subscribe: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.pushNotificationConfigs.create: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.pushNotificationConfigs.delete: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.pushNotificationConfigs.list: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.tasks.pushNotificationConfigs.get: addressed under `tasks/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.services.skus.list: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.message.stream: the Gemini billing assistant's chat, not an API for user code",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudbilling.message.send: the Gemini billing assistant's chat, not an API for user code",
         () => Effect.void,
       );
       test.provider.skip(
@@ -178,14 +186,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudbilling.getCard: the Gemini billing assistant's UI card, not an API for user code",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.message.send: the Gemini billing assistant's chat, not an API for user code",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudbilling.message.stream: the Gemini billing assistant's chat, not an API for user code",
         () => Effect.void,
       );
     });

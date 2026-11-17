@@ -105,11 +105,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "databasecenter.organizations.aggregateQueryStats: addressed under `organizations/`, not a project",
+        "databasecenter.folders.aggregateQueryStats: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "databasecenter.folders.aggregateQueryStats: addressed under `folders/`, not a project",
+        "databasecenter.organizations.aggregateQueryStats: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
     });

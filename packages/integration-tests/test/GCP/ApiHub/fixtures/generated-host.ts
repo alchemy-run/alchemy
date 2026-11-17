@@ -19,24 +19,26 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
     const p1 = yield* GCP.ApiHub.GetAddon();
     const p2 = yield* GCP.ApiHub.GetDiscoveredApiObservation();
     const p3 = yield* GCP.ApiHub.GetDiscoveredApiObservationDiscoveredApiOperation();
-    const p4 = yield* GCP.ApiHub.GetHostProjectRegistration();
-    const p5 = yield* GCP.ApiHub.GetPluginStyleGuide();
-    const p6 = yield* GCP.ApiHub.GetStyleGuideContents();
-    const p7 = yield* GCP.ApiHub.ListAddons();
-    const p8 = yield* GCP.ApiHub.ListApis();
-    const p9 = yield* GCP.ApiHub.ListAttributes();
-    const p10 = yield* GCP.ApiHub.ListCurations();
-    const p11 = yield* GCP.ApiHub.ListDependencies();
-    const p12 = yield* GCP.ApiHub.ListDeployments();
-    const p13 = yield* GCP.ApiHub.ListDiscoveredApiObservationDiscoveredApiOperations();
-    const p14 = yield* GCP.ApiHub.ListDiscoveredApiObservations();
-    const p15 = yield* GCP.ApiHub.ListExternalApis();
-    const p16 = yield* GCP.ApiHub.ListHostProjectRegistrations();
-    const p17 = yield* GCP.ApiHub.ListPlugins();
-    const p18 = yield* GCP.ApiHub.ListRuntimeProjectAttachments();
-    const p19 = yield* GCP.ApiHub.LookupApiHubInstance();
-    const p20 = yield* GCP.ApiHub.ManageAddonConfig();
-    const p21 = yield* GCP.ApiHub.UpdatePluginStyleGuide();
+    const p4 = yield* GCP.ApiHub.GetGeneratedSpecApi();
+    const p5 = yield* GCP.ApiHub.GetHostProjectRegistration();
+    const p6 = yield* GCP.ApiHub.GetPluginStyleGuide();
+    const p7 = yield* GCP.ApiHub.GetStyleGuideContents();
+    const p8 = yield* GCP.ApiHub.ListAddons();
+    const p9 = yield* GCP.ApiHub.ListApis();
+    const p10 = yield* GCP.ApiHub.ListAttributes();
+    const p11 = yield* GCP.ApiHub.ListCurations();
+    const p12 = yield* GCP.ApiHub.ListDependencies();
+    const p13 = yield* GCP.ApiHub.ListDeployments();
+    const p14 = yield* GCP.ApiHub.ListDiscoveredApiObservationDiscoveredApiOperations();
+    const p15 = yield* GCP.ApiHub.ListDiscoveredApiObservations();
+    const p16 = yield* GCP.ApiHub.ListExternalApis();
+    const p17 = yield* GCP.ApiHub.ListGeneratedSpecApis();
+    const p18 = yield* GCP.ApiHub.ListHostProjectRegistrations();
+    const p19 = yield* GCP.ApiHub.ListPlugins();
+    const p20 = yield* GCP.ApiHub.ListRuntimeProjectAttachments();
+    const p21 = yield* GCP.ApiHub.LookupApiHubInstance();
+    const p22 = yield* GCP.ApiHub.ManageAddonConfig();
+    const p23 = yield* GCP.ApiHub.UpdatePluginStyleGuide();
     return {
       fetch: serveProbes({
         CreateHostProjectRegistration: probeOutcome(
@@ -61,43 +63,47 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
             } as never),
           ),
         ),
+        GetGeneratedSpecApi: probeOutcome(
+          Retry.none(p4({ generatedSpecApi: "alchemy-missing", location: "us-central1" } as never)),
+        ),
         GetHostProjectRegistration: probeOutcome(
           Retry.none(
-            p4({ hostProjectRegistration: "alchemy-missing", location: "us-central1" } as never),
+            p5({ hostProjectRegistration: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         GetPluginStyleGuide: probeOutcome(
-          Retry.none(p5({ plugin: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetStyleGuideContents: probeOutcome(
           Retry.none(p6({ plugin: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAddons: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListApis: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListAttributes: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListCurations: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListDependencies: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
-        ListDeployments: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        GetStyleGuideContents: probeOutcome(
+          Retry.none(p7({ plugin: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListAddons: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListApis: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListAttributes: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListCurations: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListDependencies: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListDeployments: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
         ListDiscoveredApiObservationDiscoveredApiOperations: probeOutcome(
           Retry.none(
-            p13({ discoveredApiObservation: "alchemy-missing", location: "us-central1" } as never),
+            p14({ discoveredApiObservation: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         ListDiscoveredApiObservations: probeOutcome(
-          Retry.none(p14({ location: "us-central1" } as never)),
+          Retry.none(p15({ location: "us-central1" } as never)),
         ),
-        ListExternalApis: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListExternalApis: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListGeneratedSpecApis: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
         ListHostProjectRegistrations: probeOutcome(
-          Retry.none(p16({ location: "us-central1" } as never)),
-        ),
-        ListPlugins: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListRuntimeProjectAttachments: probeOutcome(
           Retry.none(p18({ location: "us-central1" } as never)),
         ),
-        LookupApiHubInstance: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListPlugins: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListRuntimeProjectAttachments: probeOutcome(
+          Retry.none(p20({ location: "us-central1" } as never)),
+        ),
+        LookupApiHubInstance: probeOutcome(Retry.none(p21({ location: "us-central1" } as never))),
         ManageAddonConfig: probeOutcome(
           Retry.none(
-            p20({
+            p22({
               addon: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
@@ -106,7 +112,7 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
         ),
         UpdatePluginStyleGuide: probeOutcome(
           Retry.none(
-            p21({
+            p23({
               plugin: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
@@ -123,6 +129,7 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
           GCP.ApiHub.GetAddonHttp,
           GCP.ApiHub.GetDiscoveredApiObservationHttp,
           GCP.ApiHub.GetDiscoveredApiObservationDiscoveredApiOperationHttp,
+          GCP.ApiHub.GetGeneratedSpecApiHttp,
           GCP.ApiHub.GetHostProjectRegistrationHttp,
           GCP.ApiHub.GetPluginStyleGuideHttp,
           GCP.ApiHub.GetStyleGuideContentsHttp,
@@ -135,6 +142,7 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
           GCP.ApiHub.ListDiscoveredApiObservationDiscoveredApiOperationsHttp,
           GCP.ApiHub.ListDiscoveredApiObservationsHttp,
           GCP.ApiHub.ListExternalApisHttp,
+          GCP.ApiHub.ListGeneratedSpecApisHttp,
           GCP.ApiHub.ListHostProjectRegistrationsHttp,
           GCP.ApiHub.ListPluginsHttp,
           GCP.ApiHub.ListRuntimeProjectAttachmentsHttp,

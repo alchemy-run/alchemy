@@ -31,7 +31,7 @@ export type PublishStepXunitXmlFilesShape = () => Effect.Effect<
  * **Example:** Call `steps.publishXunitXmlFiles`
  * ```typescript
  * const publishStepXunitXmlFiles = yield* GCP.ToolResults.PublishStepXunitXmlFiles();
- * const response = yield* publishStepXunitXmlFiles({ executionId: "...", historyId: "...", stepId: "..." });
+ * const response = yield* publishStepXunitXmlFiles({ stepId: "...", historyId: "...", executionId: "..." });
  * ```
  *
  * @binding
