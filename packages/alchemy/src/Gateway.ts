@@ -37,6 +37,7 @@ import {
 import {
   CurrentRuntimeContext,
   RuntimeContext,
+  unpackEnvValue,
   type BaseRuntimeContext,
   type GatewayContext,
 } from "./RuntimeContext.ts";
@@ -119,7 +120,13 @@ export interface Deployed {
 export const programOf = (sandbox: unknown) => {
   const props = (sandbox as { Props?: { main?: string; handler?: string } }).Props ?? {};
   return {
-    main: props.main?.startsWith("file:") ? new URL(props.main).pathname : (props.main ?? ""),
+    // A URL (`import.meta.url`), an absolute path, or a path relative to the
+    // project (a Worker's `main` is stored that way).
+    main: props.main?.startsWith("file:")
+      ? new URL(props.main).pathname
+      : props.main === undefined || props.main.startsWith("/")
+        ? (props.main ?? "")
+        : `${process.cwd()}/${props.main}`,
     handler: props.handler ?? "default",
   };
 };
@@ -148,7 +155,17 @@ const literal = <A>(value: A) => Output.literal(value) as unknown as Output.Outp
  * The body of a gateway host Layer. `deploy` runs at deploy only and
  * declares the gateway; in the gateway and in a sandbox it is skipped.
  */
-export const make = <R>(deploy: Effect.Effect<Deployed, never, R>) =>
+export const make = <R>(
+  deploy: Effect.Effect<Deployed, never, R>,
+  options?: {
+    /**
+     * How this sandbox reaches the gateway, when not over the public
+     * internet (a Worker calls a Worker through a service binding). Read on
+     * each call; `undefined` uses the ambient `HttpClient`.
+     */
+    readonly client?: Effect.Effect<HttpClient.HttpClient | undefined>;
+  },
+) =>
   Effect.gen(function* () {
     // Every platform provides its Construction a RuntimeContext.
     const sandbox = yield* RuntimeContext as unknown as Effect.Effect<BaseRuntimeContext>;
@@ -184,6 +201,12 @@ export const make = <R>(deploy: Effect.Effect<Deployed, never, R>) =>
         }),
       };
     } else if (globalThis.__ALCHEMY_GATEWAY__) {
+      // The program is the sandbox's, so its context reads the sandbox
+      // platform's environment (a Worker's bindings, …). Here the values are
+      // the gateway's, which its entry put in the process environment.
+      sandbox.get = <T>(key: string) =>
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- bound values are read raw, never through Config (see unpackEnvValue)
+        Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T);
       sandbox.gateway = {
         phase: "gateway",
         register: (key, built) => Effect.sync(() => void clients.set(key, built)),
@@ -202,7 +225,7 @@ export const make = <R>(deploy: Effect.Effect<Deployed, never, R>) =>
                   encode({ path, ...(args === undefined ? {} : { args }) }),
                   "application/json",
                 ),
-                client.execute,
+                ((yield* options?.client ?? Effect.succeed(undefined)) ?? client).execute,
                 // A gateway's hostname can take a few seconds to answer after
                 // a deploy. A transport failure never reached the binding,
                 // so sending the call again cannot run it twice.

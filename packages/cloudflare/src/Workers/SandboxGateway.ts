@@ -5,9 +5,34 @@ import { Random } from "alchemy/Random";
 import { packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
-import { Worker } from "./Worker.ts";
+import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
+
+/** The service binding a Worker sandbox reaches its gateway through. */
+const SERVICE = "ALCHEMY_GATEWAY";
+
+/** An `HttpClient` over the sandbox Worker's service binding, when it has one. */
+const serviceClient = Effect.gen(function* () {
+  const env = yield* Effect.serviceOption(WorkerEnvironment);
+  const service = Option.getOrUndefined(env)?.[SERVICE] as
+    | { fetch: typeof globalThis.fetch }
+    | undefined;
+  if (service === undefined) return undefined;
+  return yield* HttpClient.HttpClient.pipe(
+    Effect.provide(
+      FetchHttpClient.layer.pipe(
+        Layer.provide(
+          Layer.succeed(FetchHttpClient.Fetch, ((input, init) =>
+            service.fetch(input, init)) as typeof globalThis.fetch),
+        ),
+      ),
+    ),
+  );
+});
 
 const entry = new URL(
   import.meta.url.endsWith(".ts") ? "./SandboxGatewayEntry.ts" : "./SandboxGatewayEntry.js",
@@ -47,6 +72,13 @@ export const SandboxGateway = Layer.effect(
             build: { input: { plugins: [Gateway.programPlugin(sandbox)] } },
           }),
         )) as Worker;
+        // A Worker cannot fetch a workers.dev url of its own account, so a
+        // Worker sandbox calls its gateway through a service binding.
+        if (isWorker(sandbox)) {
+          yield* sandbox.bind("Gateway", {
+            bindings: [{ type: "service", name: SERVICE, service: worker.workerName }],
+          });
+        }
         return {
           self: worker,
           url: worker.url as unknown as Output.Output<string, never>,
@@ -57,6 +89,7 @@ export const SandboxGateway = Layer.effect(
             }),
         } satisfies Gateway.Deployed;
       }),
+      { client: serviceClient },
     ),
   ),
 );
