@@ -25,6 +25,8 @@ export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecret
   readonly operation: OnePasswordOperation;
   /** For `InvalidEnvironment`: the variable name that is empty or repeated. */
   readonly variableName?: string;
+  /** For `InvalidOptions`: the constructor whose options were invalid. */
+  readonly entry?: "Environment" | "SecretReferences";
   /** For `AccountNotFound`: the desktop account selector that matched nothing. */
   readonly account?: string;
   readonly reason:
@@ -51,7 +53,9 @@ export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecret
       case "InvalidEnvironment":
         return `${prefix} Variable name '${this.variableName ?? ""}' is empty or repeated, or its value is not a string.`;
       case "InvalidOptions":
-        return "1Password: specify exactly one of a non-empty environmentId or a non-empty references map. References must be op://vault/item/[section/]field strings with supported SDK syntax and non-empty config keys. Optional queries are ?attribute=otp, ?attribute=totp or ?ssh-format=openssh.";
+        return this.entry === "SecretReferences"
+          ? "1Password: SecretReferences needs a non-empty `references` map with non-empty config keys, and a non-empty `account` when one is given."
+          : "1Password: Environment needs a non-empty `environmentId`, and a non-empty `account` when one is given.";
       default:
         return `${prefix} Check the Environment ID or secret references and read permissions, OP_SERVICE_ACCOUNT_TOKEN or desktop account selection, and the 1Password SDK installation. For desktop access, unlock the app and enable Settings > Developer > Integrate with other apps.`;
     }

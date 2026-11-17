@@ -8,7 +8,6 @@ import {
   OnePasswordSecretsError,
   type OnePasswordOperation,
 } from "../Errors.ts";
-import type { OnePasswordOptions } from "../SecretsProvider.ts";
 
 /**
  * The SDK reports an unknown desktop account as a plain Error. Its message
@@ -17,8 +16,24 @@ import type { OnePasswordOptions } from "../SecretsProvider.ts";
 const accountNotFound = (cause: unknown) =>
   cause instanceof Error && cause.message.includes("Account not found");
 
-export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
-  options: OnePasswordOptions,
+type Source =
+  | { readonly environmentId: string; readonly references?: undefined }
+  | { readonly references: Readonly<Record<string, string>>; readonly environmentId?: undefined };
+
+/** Read every variable of an Environment. */
+export const loadEnvironment = (
+  environmentId: string,
+  credentials: OnePasswordResolvedCredentials,
+) => loadSecrets({ environmentId }, credentials);
+
+/** Resolve vault references, keyed by their config keys. */
+export const loadSecretReferences = (
+  references: Readonly<Record<string, string>>,
+  credentials: OnePasswordResolvedCredentials,
+) => loadSecrets({ references }, credentials);
+
+const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
+  options: Source,
   credentials: OnePasswordResolvedCredentials,
 ) {
   const { environmentId, references } = options;

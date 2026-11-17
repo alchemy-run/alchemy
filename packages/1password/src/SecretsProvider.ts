@@ -1,3 +1,4 @@
+import type { AlchemyContext } from "alchemy/AlchemyContext";
 import { SuppressMissingProviderConfig } from "alchemy/Auth/Profile";
 import { logLoadedKeys } from "alchemy/Secrets/Log";
 import {
@@ -5,13 +6,19 @@ import {
   type SecretsLayer,
   type SecretsOption,
 } from "alchemy/Secrets/Provider";
+import type { Stack } from "alchemy/Stack";
+import type { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { resolveCredentials } from "./AuthProvider.ts";
-import { OnePasswordReferenceError, OnePasswordSecretsError } from "./Errors.ts";
-import { loadSecrets } from "./internal/sdk.ts";
+import { resolveCredentials, type OnePasswordResolvedCredentials } from "./AuthProvider.ts";
+import {
+  OnePasswordRateLimitError,
+  OnePasswordReferenceError,
+  OnePasswordSecretsError,
+} from "./Errors.ts";
+import { loadEnvironment, loadSecretReferences } from "./internal/sdk.ts";
 import { SecretReference } from "./SecretReference.ts";
 
 interface OnePasswordAuthOptions {
@@ -26,43 +33,38 @@ interface OnePasswordAuthOptions {
   account?: string;
 }
 
-/** Load either an entire Environment or explicitly named vault references. */
-export type OnePasswordOptions = OnePasswordAuthOptions &
-  (
-    | {
-        /** The Environment ID copied from 1Password's Developer > View Environments. */
-        environmentId: string;
-        references?: never;
-      }
-    | {
-        /** Map Effect config keys to op://vault/item/[section/]field references. */
-        references: Readonly<Record<string, string>>;
-        environmentId?: never;
-      }
-  );
+/** Options for {@link Environment}: load every variable of one 1Password Environment. */
+export interface EnvironmentOptions extends OnePasswordAuthOptions {
+  /** The Environment ID copied from 1Password's Developer > View Environments. */
+  environmentId: string;
+}
+
+/** Options for {@link SecretReferences}: load chosen vault fields under config keys. */
+export interface SecretReferencesOptions extends OnePasswordAuthOptions {
+  /** Map Effect config keys to op://vault/item/[section/]field references. */
+  references: Readonly<Record<string, string>>;
+}
 
 const isSecretReference = Schema.is(SecretReference);
 
 const NonBlankString = Schema.String.check(Schema.makeFilter((value) => value.trim().length > 0));
 
-/** Runtime validation for both static and stage-dependent Secrets options. */
-export const OnePasswordOptionsSchema = Schema.Union([
-  Schema.Struct({
-    environmentId: NonBlankString,
-    references: Schema.optional(Schema.Never),
-    account: Schema.optional(NonBlankString),
-  }),
-  Schema.Struct({
-    references: Schema.Record(Schema.String, SecretReference).check(
-      Schema.makeFilter((value) => {
-        const keys = Object.keys(value);
-        return keys.length > 0 && keys.every((key) => key.trim().length > 0);
-      }),
-    ),
-    environmentId: Schema.optional(Schema.Never),
-    account: Schema.optional(NonBlankString),
-  }),
-]);
+/** Runtime validation for static and stage-dependent {@link Environment} options. */
+export const EnvironmentOptionsSchema = Schema.Struct({
+  environmentId: NonBlankString,
+  account: Schema.optional(NonBlankString),
+});
+
+/** Runtime validation for static and stage-dependent {@link SecretReferences} options. */
+export const SecretReferencesOptionsSchema = Schema.Struct({
+  references: Schema.Record(Schema.String, SecretReference).check(
+    Schema.makeFilter((value) => {
+      const keys = Object.keys(value);
+      return keys.length > 0 && keys.every((key) => key.trim().length > 0);
+    }),
+  ),
+  account: Schema.optional(NonBlankString),
+});
 
 /** A stack secrets entry backed by a 1Password Environment or vault references. */
 export class OnePasswordSecretsProvider extends Data.TaggedClass(
@@ -71,105 +73,155 @@ export class OnePasswordSecretsProvider extends Data.TaggedClass(
   readonly layer: SecretsLayer;
 }> {}
 
+const secretsLayer = <A extends { readonly account?: string }, E>(
+  entry: "Environment" | "SecretReferences",
+  resolveOptions: Effect.Effect<unknown, E, Stage | Stack | AlchemyContext>,
+  schema: Schema.Codec<A, unknown>,
+  load: (
+    options: A,
+    credentials: OnePasswordResolvedCredentials,
+  ) => Effect.Effect<
+    Record<string, string>,
+    OnePasswordSecretsError | OnePasswordRateLimitError | OnePasswordReferenceError
+  >,
+  label: (options: A) => string,
+) =>
+  new OnePasswordSecretsProvider({
+    layer: ConfigProvider.layerAdd(
+      Effect.gen(function* () {
+        if (yield* SuppressMissingProviderConfig) return ConfigProvider.fromEnv({ env: {} });
+        const supplied = yield* resolveOptions;
+        const resolved = yield* Schema.decodeUnknownEffect(schema)(supplied).pipe(
+          // Schema issues retain their input; never expose malformed references or values.
+          Effect.mapError(
+            () =>
+              new OnePasswordSecretsError({
+                operation: "initialize",
+                reason: "InvalidOptions",
+                entry,
+              }),
+          ),
+        );
+        const credentials = yield* resolveCredentials(resolved.account);
+        const env = yield* load(resolved, credentials);
+        yield* logLoadedKeys(label(resolved), Object.keys(env));
+        return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });
+      }),
+      { asPrimary: true },
+    ),
+  });
+
 /**
- * Load a 1Password Environment or vault references into Effect Config without modifying process.env.
- * All values, including empty and unmasked values, are included. Consume secrets
- * with Config.Redacted. Later providers override earlier ones; the stack's
- * implicit process-environment provider retains its usual precedence.
+ * Load every variable of a 1Password Environment into Effect Config, under its
+ * own name, without modifying process.env. Empty values are kept. Consume
+ * secrets with Config.Redacted. Later `secrets` entries override earlier ones,
+ * and the shell stays on top unless listed or disabled.
  *
  * ### Selecting an Environment
  * **Example:** Different Environments for production and development
  * ```ts
  * import * as OnePassword from "@alchemy.run/1password";
  *
- * const secrets = [OnePassword.Secrets(({ stage }) => ({
- *   environmentId: stage === "prod" ? "production-id" : "development-id",
- * }))];
+ * const secrets = [
+ *   OnePassword.Environment(({ stage }) => ({
+ *     environmentId: stage === "prod" ? "production-id" : "development-id",
+ *   })),
+ * ];
  * ```
  *
- * ### Resolving vault references
- * **Example:** Map config keys to item fields
+ * **Example:** An Environment plus individual vault fields
  * ```ts
- * const secrets = [OnePassword.Secrets({
- *   references: {
- *     DATABASE_URL: "op://Production/Database/url",
- *     API_KEY: "op://Production/API/credentials/key",
- *   },
- * })];
+ * const secrets = [
+ *   OnePassword.Environment({ environmentId: "production-id" }),
+ *   OnePassword.SecretReferences({
+ *     references: { STRIPE_KEY: "op://Billing/Stripe/credential" },
+ *   }),
+ * ];
  * ```
- * Choose exactly one of `environmentId` or `references` per entry. The exported
- * `SecretReference` schema validates URI syntax before authentication. Unique
- * references are resolved in one SDK `resolveAll` call per initialization;
- * any individual failure rejects the whole load without exposing partial values.
- * Environment values containing `op://` are literal, not recursively resolved.
- * OTP and SSH queries supported by the SDK are allowed; OTP values are snapshots
- * at initialization, not refreshed on each config read.
+ * Values containing `op://` are literal, not resolved.
  *
  * ### Authorizing locally
  * **Example:** Use the 1Password desktop app
  * ```ts
- * const secrets = [OnePassword.Secrets({
- *   environmentId: "development-id",
- *   account: "Family",
- * })];
+ * const secrets = [
+ *   OnePassword.Environment({ environmentId: "development-id", account: "Family" }),
+ * ];
  * ```
- * Enable SDK integration in the desktop app's Developer settings. You can also
- * configure an account with `alchemy profile edit --add 1Password`. In CI,
- * set OP_SERVICE_ACCOUNT_TOKEN with read access to the Environment.
- * Authentication never falls back after a rejected token.
+ * Enable "Integrate with other apps" in the desktop app's Developer settings.
+ * The app asks you to authorize Alchemy once per run. You can also store the
+ * account with `alchemy profile edit --add 1Password`. In CI, set
+ * OP_SERVICE_ACCOUNT_TOKEN with read access to the Environment; it wins over
+ * `account` and the profile, and a rejected token never falls back to the app.
  *
  * ### Storing a service account token
  * **Example:** Profile without the desktop app
  * ```sh
  * alchemy profile edit --add 1Password --method service-account --set token=-
  * ```
- * `OP_SERVICE_ACCOUNT_TOKEN` still wins over an explicit `account` and the profile.
  *
  * ### Rate limits <!-- api-prose -->
- * The Environment or reference batch is fetched once per layer initialization, not per config key.
- * Rate limits fail with OnePasswordRateLimitError without automatic retries.
- * Check `op service-account ratelimit`, wait for the quota window to reset, and
- * reduce concurrent CI jobs. No secrets are cached on disk or logged.
- *
+ * The Environment is fetched once per stack load, not per config key. Rate
+ * limits fail with OnePasswordRateLimitError and are not retried; check
+ * `op service-account ratelimit` and wait for the quota to reset.
  */
-export const Secrets = (options: SecretsOption<OnePasswordOptions>) =>
-  new OnePasswordSecretsProvider({
-    layer: ConfigProvider.layerAdd(
-      Effect.gen(function* () {
-        if (yield* SuppressMissingProviderConfig) return ConfigProvider.fromEnv({ env: {} });
-        const supplied = yield* resolveSecretsOption(options);
-        // Name the config key of a malformed reference; config keys aren't secret.
-        const references: unknown =
-          typeof supplied === "object" && supplied !== null
-            ? (supplied as { references?: unknown }).references
-            : undefined;
-        if (typeof references === "object" && references !== null) {
-          for (const [configKey, reference] of Object.entries(references)) {
-            if (!isSecretReference(reference)) {
-              return yield* new OnePasswordReferenceError({
-                configKey,
-                reason: "InvalidReference",
-              });
-            }
+export const Environment = (options: SecretsOption<EnvironmentOptions>) =>
+  secretsLayer(
+    "Environment",
+    resolveSecretsOption(options),
+    EnvironmentOptionsSchema,
+    (resolved, credentials) => loadEnvironment(resolved.environmentId, credentials),
+    (resolved) => `1Password (Environment '${resolved.environmentId}')`,
+  );
+
+/**
+ * Load chosen 1Password vault fields into Effect Config, each under the config
+ * key you map it to, without modifying process.env. Consume secrets with
+ * Config.Redacted.
+ *
+ * ### Resolving vault references
+ * **Example:** Map config keys to item fields
+ * ```ts
+ * import * as OnePassword from "@alchemy.run/1password";
+ *
+ * const secrets = [
+ *   OnePassword.SecretReferences({
+ *     references: {
+ *       DATABASE_URL: "op://Production/Database/url",
+ *       API_KEY: "op://Production/API/credentials/key",
+ *     },
+ *   }),
+ * ];
+ * ```
+ * References use `op://vault/item/[section/]field`, optionally with
+ * `?attribute=otp` (or `totp`) or `?ssh-format=openssh`. A malformed reference
+ * fails before authentication and names its config key. All references resolve
+ * in one batch; if any fails, nothing is loaded. OTP values are read once per
+ * stack load.
+ *
+ * Authorization works as for {@link Environment}: `OP_SERVICE_ACCOUNT_TOKEN`,
+ * then `account`, then the selected profile.
+ */
+export const SecretReferences = (options: SecretsOption<SecretReferencesOptions>) =>
+  secretsLayer(
+    "SecretReferences",
+    // Name the config key of a malformed reference; config keys aren't secret.
+    Effect.flatMap(resolveSecretsOption(options), (supplied) => {
+      const references: unknown =
+        typeof supplied === "object" && supplied !== null
+          ? (supplied as { references?: unknown }).references
+          : undefined;
+      if (typeof references === "object" && references !== null) {
+        for (const [configKey, reference] of Object.entries(references)) {
+          if (!isSecretReference(reference)) {
+            return Effect.fail(
+              new OnePasswordReferenceError({ configKey, reason: "InvalidReference" }),
+            );
           }
         }
-        const resolved = yield* Schema.decodeEffect(OnePasswordOptionsSchema)(supplied).pipe(
-          // Schema issues retain their input; never expose malformed references or values.
-          Effect.mapError(
-            () =>
-              new OnePasswordSecretsError({ operation: "initialize", reason: "InvalidOptions" }),
-          ),
-        );
-        const credentials = yield* resolveCredentials(resolved.account);
-        const env = yield* loadSecrets(resolved, credentials);
-        yield* logLoadedKeys(
-          resolved.environmentId === undefined
-            ? "1Password (references)"
-            : `1Password (Environment '${resolved.environmentId}')`,
-          Object.keys(env),
-        );
-        return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });
-      }),
-      { asPrimary: true },
-    ),
-  });
+      }
+      return Effect.succeed(supplied);
+    }),
+    SecretReferencesOptionsSchema,
+    (resolved, credentials) => loadSecretReferences(resolved.references, credentials),
+    () => "1Password (secret references)",
+  );

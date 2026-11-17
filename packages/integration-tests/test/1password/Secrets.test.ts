@@ -107,7 +107,7 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
         { references: { SECRET: 123 } },
       ]) {
         const result = yield* runStack(
-          [OnePassword.Secrets(supplied as OnePassword.OnePasswordOptions)],
+          [OnePassword.SecretReferences(supplied as OnePassword.SecretReferencesOptions)],
           Effect.void,
         ).pipe(Effect.result);
         expect(Result.isFailure(result)).toBe(true);
@@ -116,31 +116,46 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
           expect(String(result.failure)).not.toContain("private-invalid-reference");
         }
       }
-      for (const supplied of [
-        { references: { SECRET: "op://v/i/f" }, environmentId: "env" },
-        { references: {} },
-        { references: { "": "op://v/i/f" } },
-        { references: { " ": "op://v/i/f" } },
-        { references: { GOOD: "op://v/i/f", "": "op://v/i/f" } },
-        { references: "op://v/i/f" },
-        {},
-        undefined,
-        { environmentId: " " },
-        { environmentId: "env", account: " " },
-      ]) {
-        expect(
-          Result.isFailure(
-            Schema.decodeUnknownResult(OnePassword.OnePasswordOptionsSchema)(supplied),
-          ),
-        ).toBe(true);
-        const result = yield* runStack(
-          [OnePassword.Secrets(supplied as OnePassword.OnePasswordOptions)],
-          Effect.void,
-        ).pipe(Effect.result);
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(String(result.failure)).toContain("specify exactly one");
-          expect(String(result.failure)).not.toContain("private-invalid-reference");
+      const invalid = [
+        {
+          schema: OnePassword.SecretReferencesOptionsSchema,
+          provider: (options: unknown) =>
+            OnePassword.SecretReferences(options as OnePassword.SecretReferencesOptions),
+          message: "SecretReferences needs a non-empty `references` map",
+          cases: [
+            { references: {} },
+            { references: { "": "op://v/i/f" } },
+            { references: { " ": "op://v/i/f" } },
+            { references: { GOOD: "op://v/i/f", "": "op://v/i/f" } },
+            { references: "op://v/i/f" },
+            { references: { GOOD: "op://v/i/f" }, account: " " },
+            {},
+            undefined,
+            null,
+          ],
+        },
+        {
+          schema: OnePassword.EnvironmentOptionsSchema,
+          provider: (options: unknown) =>
+            OnePassword.Environment(options as OnePassword.EnvironmentOptions),
+          message: "Environment needs a non-empty `environmentId`",
+          cases: [
+            { environmentId: " " },
+            { environmentId: "env", account: " " },
+            {},
+            undefined,
+            null,
+          ],
+        },
+      ];
+      for (const { schema, provider, message, cases } of invalid) {
+        for (const supplied of cases) {
+          expect(Result.isFailure(Schema.decodeUnknownResult(schema)(supplied))).toBe(true);
+          const result = yield* runStack([provider(supplied)], Effect.void).pipe(Effect.result);
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(String(result.failure)).toContain(message);
+          }
         }
       }
     }),
@@ -149,7 +164,10 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
   it.effect("auth discovery does not evaluate options or authenticate", () =>
     runStack(
       [
-        OnePassword.Secrets(() => {
+        OnePassword.Environment(() => {
+          throw new Error("options must not be evaluated");
+        }),
+        OnePassword.SecretReferences(() => {
           throw new Error("options must not be evaluated");
         }),
       ],
@@ -227,7 +245,7 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
         { OP_SERVICE_ACCOUNT_TOKEN: "invalid-audit-token" },
         Effect.gen(function* () {
           const result = yield* runStack(
-            [OnePassword.Secrets({ environmentId: "unused", account: "Must Not Prompt" })],
+            [OnePassword.Environment({ environmentId: "unused", account: "Must Not Prompt" })],
             Effect.void,
           ).pipe(Effect.result);
           expect(Result.isFailure(result)).toBe(true);
@@ -256,20 +274,27 @@ const fixtureValue = Config.Redacted("ALCHEMY_ONEPASSWORD_TEST").pipe(
 
 describe("1Password live secrets", { tags: ["live"] }, () => {
   it.live.skipIf(!serviceAccount)(
-    "loads an Environment through a stage-dependent stack provider",
+    "loads an Environment and vault references side by side",
     () =>
       Effect.gen(function* () {
         yield* Config.Redacted("OP_SERVICE_ACCOUNT_TOKEN");
         const environmentId = yield* Config.String("ONEPASSWORD_TEST_ENVIRONMENT_ID");
+        const reference = yield* Config.String("ONEPASSWORD_TEST_REFERENCE");
+        // An Environment and vault references, side by side in one list.
         yield* runStack(
           [
-            OnePassword.Secrets(({ stage }) => {
+            OnePassword.Environment(({ stage }) => {
               expect(stage).toBe("audit");
               return { environmentId, account: "Service Token Takes Precedence" };
             }),
+            OnePassword.SecretReferences({ references: { FROM_REFERENCE: reference } }),
             Secrets.ProcessEnv({ disabled: true }),
           ],
-          fixtureValue,
+          Effect.gen(function* () {
+            yield* fixtureValue;
+            const fromReference = yield* Config.Redacted("FROM_REFERENCE");
+            expect(Redacted.value(fromReference) === "ready").toBe(true);
+          }),
           "audit",
         );
       }),
@@ -282,7 +307,7 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
       Effect.gen(function* () {
         yield* Config.Redacted("OP_SERVICE_ACCOUNT_TOKEN");
         const reference = yield* Config.String("ONEPASSWORD_TEST_REFERENCE");
-        const provider = OnePassword.Secrets({
+        const provider = OnePassword.SecretReferences({
           references: {
             ALCHEMY_ONEPASSWORD_TEST: reference,
             ALIAS: reference,
@@ -342,7 +367,7 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
         let ran = false;
         const result = yield* runStack(
           [
-            OnePassword.Secrets({
+            OnePassword.SecretReferences({
               references: {
                 GOOD: reference,
                 MISSING: missing,
@@ -377,18 +402,21 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
         // asks the user to authorize Alchemy once for the whole process.
         yield* runStack(
           [
-            OnePassword.Secrets({ environmentId, account }),
-            OnePassword.Secrets({ environmentId, account }),
+            OnePassword.Environment({ environmentId, account }),
+            OnePassword.Environment({ environmentId, account }),
             Secrets.ProcessEnv({ disabled: true }),
           ],
           fixtureValue,
         );
         yield* runStack(
-          [OnePassword.Secrets({ environmentId, account }), Secrets.ProcessEnv({ disabled: true })],
+          [
+            OnePassword.Environment({ environmentId, account }),
+            Secrets.ProcessEnv({ disabled: true }),
+          ],
           fixtureValue,
         );
         const unknown = yield* runStack(
-          [OnePassword.Secrets({ environmentId, account: "alchemy-audit-no-such-account" })],
+          [OnePassword.Environment({ environmentId, account: "alchemy-audit-no-such-account" })],
           Effect.void,
         ).pipe(Effect.result);
         expect(Result.isFailure(unknown)).toBe(true);

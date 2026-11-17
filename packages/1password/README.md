@@ -12,17 +12,17 @@ pnpm add alchemy @alchemy.run/1password effect
 import * as OnePassword from "@alchemy.run/1password";
 
 const secrets = [
-  OnePassword.Secrets(({ stage }) => ({
+  OnePassword.Environment(({ stage }) => ({
     environmentId: stage === "prod" ? "production-id" : "development-id",
   })),
 ];
 // Pass secrets to Alchemy.Stack and read values with Config.Redacted.
 ```
 
-Alternatively, map config keys to vault item fields:
+Or map config keys to vault item fields, alone or next to an Environment:
 
 ```typescript
-OnePassword.Secrets({
+OnePassword.SecretReferences({
   references: {
     DATABASE_URL: "op://Production/Database/url",
     API_KEY: "op://Production/API/credentials/key",
@@ -30,13 +30,14 @@ OnePassword.Secrets({
 });
 ```
 
-Choose exactly one of `environmentId` or `references` per entry. The exported
+The exported
 Effect `SecretReference` schema validates `op://vault/item/[section/]field`
 syntax before authentication. Duplicate references are resolved once in a
 single SDK batch; any failed reference rejects the whole config load.
 
 Locally, run `alchemy profile edit --add 1Password`, or pass `account`
-alongside `environmentId`. Use your desktop account's name or UUID. Enable SDK
+to either entry: the name in the app's account switcher (e.g. `Family`), the
+sign-in address (`my.1password.com`) or the account UUID. Enable SDK
 integration in 1Password's Developer settings.
 
 The provider never writes downloaded values to `process.env` or disk. It fetches

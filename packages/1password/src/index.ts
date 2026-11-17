@@ -13,8 +13,11 @@ export {
 } from "./Errors.ts";
 export { SecretReference } from "./SecretReference.ts";
 export {
-  Secrets,
+  Environment,
+  SecretReferences,
   OnePasswordSecretsProvider,
-  OnePasswordOptionsSchema,
-  type OnePasswordOptions,
+  EnvironmentOptionsSchema,
+  SecretReferencesOptionsSchema,
+  type EnvironmentOptions,
+  type SecretReferencesOptions,
 } from "./SecretsProvider.ts";
