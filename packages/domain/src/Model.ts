@@ -87,6 +87,12 @@ export class Internals extends Context.Service<
     readonly queries: ReadonlyMap<string, Query.Host>;
     /** Each guarded view's and stream's `validate`, from its Layer, by name. */
     readonly validators: ReadonlyMap<string, Read.AnyValidate>;
+    /**
+     * Wait until a view or stream, by name, has applied a command's events on
+     * the keys they reach: every one, or `key` alone for a view. A command
+     * none of whose events reach it is not waited for.
+     */
+    readonly caughtUp: ReadonlyMap<string, Query.CaughtUp>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -829,27 +835,30 @@ const build = <A, E, R>(
     const queryHosts = new Map<string, Query.Host>();
     const progressOf = (projection: Projection.Any) =>
       Context.getUnsafe(hosts, projection.Progress as Context.Key<unknown, Projection.Progress>);
+    const caughtUpOf = (read: Query.Waitable): Query.CaughtUp => {
+      if (read.kind === "Projection") return progressOf(read).caughtUp;
+      if (read.kind === "View") return viewCaughtUp(route, read);
+      // A stream is caught up once every projection that writes it is.
+      const writers = definitions.projections.filter((projection) =>
+        (projection.definition.writes ?? []).includes(read),
+      );
+      return (receipt, options) =>
+        Effect.forEach(writers, (writer) => progressOf(writer).caughtUp(receipt, options), {
+          discard: true,
+        });
+    };
     // The kernel has refused duplicate names and unknown projections.
     for (const query of queries) {
       const implementation = Context.getUnsafe(
         implementations as Context.Context<unknown>,
         query as Context.Key<unknown, Query.Implementation>,
       );
-      queryHosts.set(
-        query.queryName,
-        Query.host(query, implementation, hosts, (read) => {
-          if (read.kind === "Projection") return progressOf(read).caughtUp;
-          if (read.kind === "View") return viewCaughtUp(route, read);
-          // A stream is caught up once every projection that writes it is.
-          const writers = definitions.projections.filter((projection) =>
-            (projection.definition.writes ?? []).includes(read),
-          );
-          return (receipt, options) =>
-            Effect.forEach(writers, (writer) => progressOf(writer).caughtUp(receipt, options), {
-              discard: true,
-            });
-        }),
-      );
+      queryHosts.set(query.queryName, Query.host(query, implementation, hosts, caughtUpOf));
+    }
+    const caughtUp = new Map<string, Query.CaughtUp>();
+    for (const view of definitions.views) caughtUp.set(view.viewName, caughtUpOf(view));
+    for (const stream of definitions.streams ?? []) {
+      caughtUp.set(stream.streamName, caughtUpOf(stream));
     }
 
     return Context.add(hosts, Internals, {
@@ -862,6 +871,7 @@ const build = <A, E, R>(
       streamHosts,
       queries: queryHosts,
       validators,
+      caughtUp,
     });
   });
 
@@ -1476,14 +1486,14 @@ const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input 
      * source, its snapshot once it had, and its cursor before them
      * (`undefined` when it had applied them before we looked).
      */
-    const applied = (view: View.Any, reached: ReadonlyArray<Reached>) =>
+    const applied = (view: View.Any, reached: ReadonlyArray<Reached>, only?: string) =>
       Effect.gen(function* () {
         const viewStore = route.views.get(view.viewName)!;
         const waits = positions(reached, (r) =>
           kernel.viewKeys(view, r.source, r.id, r.event, r.seq, r.state),
         );
         return yield* Effect.forEach(
-          waits,
+          only === undefined ? waits : [...waits].filter(([key]) => key === only),
           ([key, streams]) =>
             Effect.gen(function* () {
               const missing = (snapshot: ViewSnapshot) =>
@@ -1599,16 +1609,16 @@ const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input 
   });
 
 /**
- * Wait until a view has applied a command's events on every key they reach,
- * through any views between it and the command's aggregate, so a query that
- * reads it sees the caller's write.
+ * Wait until a view has applied a command's events on every key they reach
+ * (or on `key` alone, for a read of one key), through any views between it
+ * and the command's aggregate, so a read sees the caller's write.
  */
 const viewCaughtUp =
   (route: Route, view: View.Any): Query.CaughtUp =>
   (receipt, options) =>
     Effect.gen(function* () {
       const chain = yield* follow(route, receipt, options?.timeout);
-      yield* chain.applied(view, yield* chain.upstream(view));
+      yield* chain.applied(view, yield* chain.upstream(view), options?.key);
     });
 
 /**

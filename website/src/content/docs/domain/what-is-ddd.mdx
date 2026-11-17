@@ -272,7 +272,7 @@ const summary = yield* bank.AccountSummary.get(accountId); // once
 const changes = bank.AccountSummary.watch(accountId); // a stream of every change
 ```
 
-Views are updated after events are recorded, not in the same step. A view is always correct, but it may be a moment behind the aggregate. That delay is called **eventual consistency**. A screen that has just sent a command and wants to show its effect waits until the view has caught up with it.
+Views are updated after events are recorded, not in the same step. A view is always correct, but it may be a moment behind the aggregate. That delay is called **eventual consistency**. It never hides a client's own change: a read by the client that sent a command waits until the view has caught up with it.
 
 Not every read model belongs in the model's own storage. A search index, a reporting database or a data warehouse is built the same way, by consuming events, but lives in a store you choose. That's a **projection**: a read model the model feeds and you own. The bank's ledger copies every money movement into a database table:
 
@@ -308,7 +308,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
 }) {}
 ```
 
-A client calls a query like a command, and usually gets what the store holds now. Like a view, the store may be a moment behind. A screen that has just sent a command passes the command's receipt, and the query waits until the projections it `waitsFor` have written that change before it reads.
+A client calls a query like a command, and usually gets what the store holds now. Like a view, the store may be a moment behind. A query asked by the client that just sent a command waits until the projections it `waitsFor` have written that change before it reads.
 
 ```typescript
 const page = yield* bank.AccountLedger({ account: accountId }); // what the store holds now

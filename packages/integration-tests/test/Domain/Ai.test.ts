@@ -1,12 +1,14 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import { McpProtocol, McpServer, Tool } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
@@ -116,10 +118,11 @@ class Wallets extends Domain.Model("Wallets", {
 
 class WalletApi extends Domain.Api("WalletApi", { model: Wallets }) {}
 
-const WalletsLive = Layer.mergeAll(
-  Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
-  SessionLive,
-).pipe(Layer.provide(InMemory));
+const walletsOn = (platform: typeof InMemory) =>
+  Layer.mergeAll(Wallets.layer(Layer.merge(RatesLive, BalanceLive)), SessionLive).pipe(
+    Layer.provide(platform),
+  );
+const WalletsLive = walletsOn(InMemory);
 
 /** Who the agent acts for, in this test: the owner its calls carry. */
 const ActingFor = Context.Reference<string | undefined>("Test/ActingFor", {
@@ -273,6 +276,40 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       });
     }).pipe(Effect.provide(ToolsLive)),
   );
+
+  it.live("a read tool sees the command the agent just sent", () => {
+    // Nothing reaches the view until the platform drains.
+    const hosted = InMemoryPlatform.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      yield* call(
+        "WalletApi_Deposit_send",
+        { input: { walletId: "sam-wallet", amount: 30 } },
+        "sam",
+      );
+      // The agent passes no receipt: the read waits for its deposit all the same.
+      const read = yield* call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam").pipe(
+        Effect.forkChild,
+      );
+      yield* Effect.sleep("100 millis");
+      expect(read.pollUnsafe()).toBeUndefined();
+      // Asked for what is there, it answers before the view has the deposit.
+      expect(
+        yield* call("WalletApi_Balance_get", { key: "sam-wallet", atLeast: [] }, "sam"),
+      ).toEqual({ isFailure: false, encoded: { value: null } });
+      yield* settle;
+      expect(yield* Fiber.join(read)).toEqual({
+        isFailure: false,
+        encoded: { value: { balance: 30 } },
+      });
+    }).pipe(Effect.provide(walletTools.layer.pipe(Layer.provideMerge(walletsOn(hosted.layer)))));
+  });
 
   it.live("a rejection comes back as the tool's typed failure", () =>
     Effect.gen(function* () {
@@ -516,6 +553,58 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
       });
     }).pipe(Effect.scoped),
   );
+
+  it.live("an MCP session's reads wait for the commands that session sent", () => {
+    // Nothing reaches the view until the platform drains.
+    const hosted = InMemoryPlatform.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      const { handler, dispose } = HttpRouter.toWebHandler(
+        DomainAi.toMcp(WalletApi, { expose }).pipe(
+          Layer.provide(
+            McpServer.layerHttp({
+              name: "wallet",
+              version: "1.0.0",
+              path: "/mcp",
+              protocols: [McpProtocol.v2025_11_25],
+            }),
+          ),
+          Layer.provide(walletsOn(hosted.layer)),
+        ),
+        { disableLogger: true },
+      );
+      yield* Effect.addFinalizer(() => Effect.promise(dispose));
+      const sam = { "x-owner": "sam" };
+      const [writer, reader] = [mcpClient(handler), mcpClient(handler)];
+      yield* writer.connect;
+      yield* reader.connect;
+      const balance = { name: "WalletApi_Balance_get", arguments: { key: "sam-wallet" } };
+      yield* writer.request(
+        "tools/call",
+        {
+          name: "WalletApi_Deposit_send",
+          arguments: { input: { walletId: "sam-wallet", amount: 30 } },
+        },
+        sam,
+      );
+      // The session that deposited waits for it; another session reads what is there.
+      const own = yield* writer.request("tools/call", balance, sam).pipe(Effect.forkChild);
+      const other = yield* reader.request("tools/call", balance, sam);
+      expect(other!.result.structuredContent).toEqual({ value: null });
+      yield* Effect.sleep("100 millis");
+      expect(own.pollUnsafe()).toBeUndefined();
+      yield* settle;
+      expect((yield* Fiber.join(own))!.result.structuredContent).toEqual({
+        value: { balance: 30 },
+      });
+    }).pipe(Effect.scoped);
+  });
 
   it.live("serves a request-scoped MCP endpoint, as on a Worker", () =>
     Effect.gen(function* () {

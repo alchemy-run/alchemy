@@ -125,7 +125,7 @@ decide: {
 
 After the commit, the deliveries are sent. Every view, projection and policy receives every event it consumes, at least once, and in the order its source instance recorded them, even if something restarts in between. Views and projections drop events they've already accepted; policies make repeats harmless (see [Policy](/domain/policy#make-it-safe-to-run-twice)).
 
-Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version.
+Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version. A client of an [Api](/domain/api#a-client-reads-its-own-writes) does this on its own.
 
 In the bank, one `MoneyDeposited` reaches both views that read accounts:
 

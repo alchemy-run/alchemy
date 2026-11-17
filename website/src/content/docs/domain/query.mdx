@@ -247,17 +247,23 @@ For its history, or to follow it live, read a [view](/domain/view) of it instead
 
 ## Read your own write
 
-A projection writes its store after the command commits, so a plain read can be a moment behind. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
+A projection writes its store after the command commits, so the store can be a moment behind. An Api client remembers the commands it sent, and a query it asks waits until those writes are in the store before it reads:
+
+```typescript
+yield* bank.WithdrawMoney({ accountId, amount: 30 }, mfa);
+const page = yield* bank.AccountLedger({ account: accountId });
+```
+
+The client sends the receipts of its own commands with the query, as `atLeast`. Pass `atLeast` yourself to wait for another client's command instead, or `atLeast: []` to read what the store holds now:
 
 ```typescript
 const receipt = yield* bank.WithdrawMoney({ accountId, amount: 30 }, mfa);
 // receipt: { stream: "Account/a-1", version: 7 }
-const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
+const page = yield* teller.AccountLedger({ account: accountId }, { atLeast: receipt });
+const now = yield* bank.AccountLedger({ account: accountId }, { atLeast: [] });
 ```
 
-`atLeast` is optional, and only for this moment. A read with no write behind it, a screen loading or the next page, leaves it out.
-
-`waitsFor` tells the query which projections to wait on. The caller never names them, nor any key: it passes the receipt. The server reads that command's events back from its aggregate and routes each through every projection in `waitsFor`, the same way the projection routes them when it handles them, to find the keys to wait on. Here, `WithdrawMoney` on `a-1` recorded `MoneyWithdrawn` at seq 7, and `Ledger` is keyed by account, so the query waits until `Ledger` has handled seq 7 for `a-1`.
+`waitsFor` tells the query which projections to wait on. The caller never names them, nor any key: the receipt is enough. The server reads that command's events back from its aggregate and routes each through every projection in `waitsFor`, the same way the projection routes them when it handles them, to find the keys to wait on. Here, `WithdrawMoney` on `a-1` recorded `MoneyWithdrawn` at seq 7, and `Ledger` is keyed by account, so the query waits until `Ledger` has handled seq 7 for `a-1`.
 
 The projections can be keyed differently. Each finds its own keys in the same events:
 
@@ -296,17 +302,17 @@ export class AccountOverview extends Domain.Query("AccountOverview", {
 
 The handler then reads `summaries.get(ref)` and `cards.peek(ref)` plainly: the engine already waited. Each read is waited on through the views between it and the command's aggregate: a view over a view waits for the first view to apply the command, then for what it emitted.
 
-After commands to two aggregate instances, pass both receipts. The query waits for each, through every projection in `waitsFor`:
+After commands to two aggregate instances, the query waits for both, through every projection in `waitsFor`:
 
 ```typescript
-const out = yield* bank.WithdrawMoney({ accountId: checking, amount: 30 }, mfa);
-const into = yield* bank.DepositMoney({ accountId: savings, amount: 30 });
-const total = yield* bank.CombinedBalance({ accounts: [checking, savings] }, { atLeast: [out, into] });
+yield* bank.WithdrawMoney({ accountId: checking, amount: 30 }, mfa);
+yield* bank.DepositMoney({ accountId: savings, amount: 30 });
+const total = yield* bank.CombinedBalance({ accounts: [checking, savings] });
 ```
 
 A wait longer than 10 seconds fails with `ConsistencyTimeout`, typed, so the client can retry or show that the data is behind.
 
-Only the stores of the projections in `waitsFor` are covered. Without `waitsFor`, `atLeast` waits for nothing, and data the handler reads from anywhere else may still be behind. After two commands to the same aggregate instance, the later receipt is enough. A command a saga or a policy sends (here, the debit of a transfer) is not the client's own write, so it has no receipt to pass: poll for it, or watch a view.
+Only the stores of the projections in `waitsFor` are covered. Without `waitsFor`, the query waits for nothing, and data the handler reads from anywhere else may still be behind. A command a saga or a policy sends (here, the debit of a transfer) is not the client's own write, so the client has no receipt for it: poll for it, or watch a view.
 
 ## Test it
 

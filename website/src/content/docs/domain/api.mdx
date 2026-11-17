@@ -74,7 +74,7 @@ const { reply } = yield* bank.DepositMoney({ accountId, amount: 500 });
 
 ### Views
 
-A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and its Layer's `validate` decide who may read which key, on every read and on every change while a client watches.
+A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` wait for the commands this client sent (see [A client reads its own writes](#a-client-reads-its-own-writes)), and fail with `ConsistencyTimeout` if the view hasn't applied them within 10 seconds. Its middleware and its Layer's `validate` decide who may read which key, on every read and on every change while a client watches.
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const summary = yield* bank.AccountSummary.get(accountId);
@@ -93,12 +93,31 @@ const cards = bank.AccountCard.watch(accountId);
 
 ### Queries
 
-A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). A paged query's method also streams it: `entries` yields every entry and `pages` every page, following the cursors for you. Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
+A query becomes a method that takes its input, and options to page (`take`, `after`) and to name the writes it waits for (`atLeast`). A paged query's method also streams it: `entries` yields every entry and `pages` every page, following the cursors for you. Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
 
 ```typescript title="packages/server/test/CustomerApi.test.ts"
 const first = yield* sam.AccountLedger({ account: accountId }, { atLeast: receipt, take: 1 });
 const rest = yield* sam.AccountLedger({ account: accountId }, { after: first.cursor! });
 ```
+
+## A client reads its own writes
+
+A client remembers the commands it sent. Each later `get`, `list`, `snapshot`, `peek` and query carries their receipts, and the server answers once the view, stream or projection has applied them.
+
+```typescript title="packages/server/test/apiEntries.ts"
+yield* bank.DepositMoney({ accountId, amount: 500 });
+const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
+```
+
+The memory belongs to one client object. It holds that client's latest commands, and stops sending a receipt to a read that has already answered with it applied.
+
+`atLeast` names the writes to wait for instead: a receipt another client was handed, or `[]` for none.
+
+```typescript title="packages/server/test/apiEntries.ts"
+const now = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
+```
+
+`watch` and `events` don't wait: they send every change as it happens.
 
 ## List what a client may reach
 
