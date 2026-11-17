@@ -17,12 +17,13 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+import { convexNetworks } from "./limit.ts";
 import { BACKEND_IMAGE, databaseServerGone } from "./support.ts";
 
 // A production backend's behaviour, on real AWS. A platform is built by hand
 // with an HTTP listener, so this needs no public domain or certificate, and
 // hosts are proved through the Host header.
-const { test } = Test.make({ providers: Convex.providers() });
+const { test } = Test.make({ limit: convexNetworks, providers: Convex.providers() });
 
 const DOMAIN = "convex-prod-path.alchemy";
 const USERNAME = "convex_admin";

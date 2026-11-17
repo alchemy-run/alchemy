@@ -8,6 +8,7 @@ import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import { convexNetworks } from "./limit.ts";
 import {
   assertRuntime,
   BACKEND_IMAGE,
@@ -23,6 +24,7 @@ import {
 /** One backend on a database this stack creates, from deploy to destroy. */
 export const databaseSuite = (engine: "postgres" | "mysql") => {
   const { test } = Test.make({
+    limit: convexNetworks,
     providers: Layer.mergeAll(Convex.providers(), Cloudflare.providers()),
   });
 

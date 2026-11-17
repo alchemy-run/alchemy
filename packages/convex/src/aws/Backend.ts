@@ -546,7 +546,7 @@ export const Backend = (id: string, props: BackendProps) =>
       const priority =
         (props.platform !== undefined ? props.listenerPriority : undefined) ??
         listenerPriority(instanceName);
-      yield* ELBv2.ListenerRule("CloudRule", {
+      const cloudRule = yield* ELBv2.ListenerRule("CloudRule", {
         listenerArn: platform.listenerArn,
         priority,
         conditions: [{ hostHeader: { values: [hosts.cloud] } }],
@@ -554,7 +554,7 @@ export const Backend = (id: string, props: BackendProps) =>
           { type: "forward", targetGroups: [{ targetGroupArn: cloudTarget.targetGroupArn }] },
         ],
       });
-      yield* ELBv2.ListenerRule("SiteRule", {
+      const siteRule = yield* ELBv2.ListenerRule("SiteRule", {
         listenerArn: platform.listenerArn,
         priority: priority + 1,
         conditions: [{ hostHeader: { values: [hosts.site] } }],
@@ -626,6 +626,13 @@ export const Backend = (id: string, props: BackendProps) =>
         },
       });
 
+      // ECS refuses a target group no load balancer uses yet, and the rule is
+      // what attaches it, so the service waits for each rule.
+      const attached = <A extends string>(
+        targetGroupArn: Output.Output<A>,
+        ruleArn: Output.Output<string>,
+      ) => Output.map(Output.all(targetGroupArn, ruleArn), ([arn]) => arn);
+
       const service = yield* ECS.Service("Service", {
         cluster: { clusterArn: platform.clusterArn },
         image: props.image,
@@ -641,12 +648,12 @@ export const Backend = (id: string, props: BackendProps) =>
         assignPublicIp: false,
         loadBalancers: [
           {
-            targetGroupArn: cloudTarget.targetGroupArn,
+            targetGroupArn: attached(cloudTarget.targetGroupArn, cloudRule.ruleArn),
             containerName: CONTAINER,
             containerPort: CLOUD_PORT,
           },
           {
-            targetGroupArn: siteTarget.targetGroupArn,
+            targetGroupArn: attached(siteTarget.targetGroupArn, siteRule.ruleArn),
             containerName: CONTAINER,
             containerPort: SITE_PORT,
           },

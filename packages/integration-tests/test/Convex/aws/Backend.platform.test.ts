@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { convexNetworks } from "./limit.ts";
 import {
   assertRuntime,
   DelegatedZone,
@@ -25,6 +26,7 @@ import {
 } from "./support.ts";
 
 const { test } = Test.make({
+  limit: convexNetworks,
   providers: Layer.mergeAll(Convex.providers(), Cloudflare.providers()),
 });
 
