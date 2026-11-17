@@ -7,7 +7,7 @@ import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
-import { Function } from "./Function.ts";
+import * as Lambda from "./Function.ts";
 
 /**
  * Env vars naming the bridge an emulated Function's real-cloud event
@@ -39,9 +39,9 @@ export type EventOrigin = ResourceLike | "aws" | undefined;
  * A deployed host whose events come from an emulated resource is rejected.
  */
 export const wireEventSource = <A, E, R>(
-  host: Function,
+  host: Lambda.Function,
   origin: EventOrigin,
-  wire: (target: Function) => Effect.Effect<A, E, R>,
+  wire: (target: Lambda.Function) => Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
     const hostEmulated = yield* isEmulated(host);
@@ -72,7 +72,7 @@ export const wireEventSource = <A, E, R>(
  * bucket it forwards invocations through. Declared under the host, once
  * per host: every event source of the host shares them.
  */
-const devStub = (host: Function) =>
+const devStub = (host: Lambda.Function) =>
   Namespace.push(
     host.LogicalId,
     Effect.gen(function* () {
@@ -85,7 +85,7 @@ const devStub = (host: Function) =>
       const main = yield* Effect.sync(() =>
         fileURLToPath(new URL("./dev-stub/index.mjs", import.meta.url)),
       );
-      const stub = yield* Function("DevStub", {
+      const stub = yield* Lambda.Function("DevStub", {
         main,
         bundle: false,
         handler: "handler",

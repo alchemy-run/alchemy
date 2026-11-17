@@ -77,8 +77,8 @@ export const relayDevBridge = (options: {
 }) =>
   Effect.gen(function* () {
     const cloud = yield* Layer.build(developerCloud);
-    const inCloud = <A, E>(effect: Effect.Effect<A, E, any>) =>
-      effect.pipe(Effect.provideContext(cloud)) as Effect.Effect<A, E>;
+    const inCloud = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(Effect.provideContext(cloud));
 
     const forward = Effect.fn(function* (message: sqs.Message) {
       const request = yield* Schema.decodeUnknownEffect(BridgeRequest)(message.Body);
