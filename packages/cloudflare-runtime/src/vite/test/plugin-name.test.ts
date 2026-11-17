@@ -238,8 +238,9 @@ describe("alchemy Cloudflare Vite plugin name", () => {
     },
   );
 
-  // A CommonJS config, or anything else that loads the official entry
-  // synchronously, goes through the same redirect.
+  // Anything that requires the official entry by path goes through the same
+  // redirect. (The entry is already loaded here, so this pins that the
+  // redirect doesn't break `require()`, not the wrapper's fresh load.)
   it("keeps the official entry loadable with require() once the redirect is registered", () => {
     cloudflareVitePlugin({ main: "./worker-entry.ts" });
     const entry = fileURLToPath(import.meta.resolve("@cloudflare/vite-plugin"));

@@ -18,12 +18,16 @@ type Neutralize = (plugins: unknown) => unknown;
 /**
  * The official package with `cloudflare()` wrapped: while Alchemy injects
  * its plugin, the plugins it returns are disabled as soon as they exist. It
- * has no top-level await, so Node can also `require()` it.
+ * has no top-level await, so Node can also `require()` it. (Under Bun, a
+ * `require()` by path after the entry was imported throws; the package only
+ * exports an `import` condition, so nothing requires it by name.)
  *
  * `real` is the entry's URL with a `?real` query. The anchored `ENTRY` test
  * doesn't match it, so both runtimes load the real file there instead of the
  * wrapper again. (Matching on the importer would not do: `require()` drops
- * the wrapper's own query from its URL.)
+ * the wrapper's own query from its URL.) It is its own module, so a process
+ * that loaded the entry before registering evaluates the package a second
+ * time; Alchemy registers first.
  */
 const wrapper = (real: string) => `
 import * as real from ${JSON.stringify(real)};
@@ -51,9 +55,9 @@ const registered = Symbol.for("@alchemy.run/cloudflare-runtime/official-vite-plu
  *
  * Imports are matched by the file they resolve to, since Vite's config
  * bundler rewrites the package name into an absolute file URL. Node redirects
- * an import whenever it is resolved. Bun only lets a runtime plugin replace a
- * file it hasn't loaded yet, so this must run before the
- * project's config is first evaluated; Alchemy's plugin factory, which every
+ * every later `import`, and a `require()` unless the entry was already
+ * required. Bun only lets a runtime plugin replace a file it hasn't loaded
+ * yet, so this must run before the project's config is first evaluated; Alchemy's plugin factory, which every
  * Alchemy-driven Vite run calls first, does that.
  */
 export const redirectOfficialCloudflareVitePlugin = (neutralize: Neutralize): void => {
