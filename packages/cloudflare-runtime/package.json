@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.86",
+  "version": "2.0.0-beta.87",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "keywords": [
     "alchemy",
@@ -758,7 +758,7 @@
     "yauzl": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "catalog:",
+    "@cloudflare/vite-plugin": "catalog:cloudflare-vite-plugin-v2",
     "@cloudflare/vitest-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",

@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteProductFeature,
   GetProducts,
@@ -255,10 +254,8 @@ export const ProductFeatureProvider = () =>
         current = yield* CreateProductFeature({
           product: news.product,
           entitlement_feature: news.entitlementFeature,
+          idempotencyKey: `alchemy-product-feature-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-product-feature-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

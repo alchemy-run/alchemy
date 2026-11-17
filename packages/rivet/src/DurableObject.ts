@@ -36,6 +36,7 @@ import { fromNativeFetcher } from "./internal/Fetcher.ts";
 import { gatewayFetcher, type GatewayTarget } from "./internal/Gateway.ts";
 import type { CargoBuild } from "./internal/RustProgram.ts";
 import type { Providers } from "./Providers.ts";
+import type { WebSocket } from "./WebSocket.ts";
 
 export const DurableObjectTypeId = "Rivet.DurableObject";
 export type DurableObjectTypeId = typeof DurableObjectTypeId;
@@ -107,6 +108,23 @@ export interface DurableObject extends Resource<
 export interface DurableObjectShape {
   fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /** A message on a WebSocket this instance accepted with `Rivet.upgrade()`. */
+  webSocketMessage?: (
+    socket: WebSocket,
+    message: string | Uint8Array,
+  ) => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /** A WebSocket this instance accepted closed. */
+  webSocketClose?: (
+    socket: WebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ) => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /** A WebSocket this instance accepted failed. */
+  webSocketError?: (
+    socket: WebSocket,
+    error: unknown,
+  ) => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
 }
 
 /** What an instance's constructor runs with: once per actor. */

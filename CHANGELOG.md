@@ -1,3 +1,37 @@
+## v2.0.0-beta.87
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **docker**:
+  - **container**: Configure network endpoints and runtime creation options &nbsp;-&nbsp; by **Yuzu** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3262 [<samp>(b221b)</samp>](https://github.com/alchemy-run/alchemy/commit/b221b57c6)
+- **rivet**:
+  - Actor WebSockets; Domain live reads pushed on every platform &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3294 [<samp>(97106)</samp>](https://github.com/alchemy-run/alchemy/commit/97106685d)
+- **stripe**:
+  - Product tax code and tiered, tax-behavior Prices &nbsp;-&nbsp; by **Maximilian Schwarzmüller** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3298 [<samp>(21c60)</samp>](https://github.com/alchemy-run/alchemy/commit/21c601276)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**:
+  - **eventbridge**: Match event patterns against array fields &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3299 [<samp>(23b68)</samp>](https://github.com/alchemy-run/alchemy/commit/23b6813dc)
+- **boat**:
+  - Wait out in-progress snapshot saves &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3292 [<samp>(6737d)</samp>](https://github.com/alchemy-run/alchemy/commit/6737d8fe6)
+- **cli**:
+  - Stop Bun TUI text inputs from swallowing all keypresses &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/3296 [<samp>(3f5f7)</samp>](https://github.com/alchemy-run/alchemy/commit/3f5f71b4b)
+- **cloudflare**:
+  - Delete a Durable Object container application's snapshot images on destroy &nbsp;-&nbsp; by **Dallen Pyrah**, **Sam Goodwin** and **Michael K (Pear)** in https://github.com/alchemy-run/alchemy/issues/3179 [<samp>(034b0)</samp>](https://github.com/alchemy-run/alchemy/commit/034b02f1b)
+  - Delete a Durable Object class its Worker still binds without the namespace listing &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3301 [<samp>(c48c8)</samp>](https://github.com/alchemy-run/alchemy/commit/c48c827e7)
+- **cloudflare-runtime**:
+  - Re-register reaped registry entries &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3280 [<samp>(6bea4)</samp>](https://github.com/alchemy-run/alchemy/commit/6bea4c5f5)
+  - **vite**: Stop 502s under load by proxying to workerd over a Unix socket &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/3226 [<samp>(58807)</samp>](https://github.com/alchemy-run/alchemy/commit/58807222a)
+- **docker**:
+  - **volume**: Guard ownership and destructive replacement &nbsp;-&nbsp; by **Yuzu** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/3271 [<samp>(86132)</samp>](https://github.com/alchemy-run/alchemy/commit/86132971b)
+- **domain**:
+  - Type an empty command or query input as a JSON object &nbsp;-&nbsp; by **Jeremie Dayan** in https://github.com/alchemy-run/alchemy/issues/3291 [<samp>(21a33)</samp>](https://github.com/alchemy-run/alchemy/commit/21a33a2c2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.86...HEAD)
+
+---
+
 ## v2.0.0-beta.86
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

@@ -86,7 +86,6 @@ export type Step =
     }
   | {
       readonly _tag: "When";
-      readonly ref: Aggregate.Ref;
       readonly command: { readonly _tag: string };
       readonly commandId?: string;
     }
@@ -172,11 +171,11 @@ export type Step =
 export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
 
 /**
- * A `when` step. Its type carries the command's class, so the steps after it
- * are checked against what the command declares.
+ * A `when` step. Its type carries the command, so the steps after it are
+ * checked against what the model's command of that tag declares.
  */
-export interface WhenStep<C = unknown> extends StepOf<"When"> {
-  readonly "~command"?: C;
+export interface WhenStep<Cmd = unknown> extends StepOf<"When"> {
+  readonly "~command"?: Cmd;
 }
 
 /** A `rejected` step; its type carries the rejection. */
@@ -194,10 +193,14 @@ export interface ProvideStep<I = unknown> extends StepOf<"Provide"> {
   readonly "~provides"?: I;
 }
 
-type CommandClassOf<A extends Aggregate.Any, Cmd> = Extract<
-  A["definition"]["commands"][number],
-  { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }
->;
+/** The model's command class for a command instance; `unknown` when the model has none. */
+type CommandClassOf<Cmds, Cmd> = [
+  Extract<Cmds, { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }>,
+] extends [infer K]
+  ? [K] extends [never]
+    ? unknown
+    : K
+  : unknown;
 type RejectionOf<C extends Command.Any> = Aggregate.InstanceOf<C["rejects"][number]>;
 type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
 type NameOf<X, Key extends string, Fallback extends string> = X extends {
@@ -238,23 +241,27 @@ type CheckReplied<H, A, C> = C extends Command.Any
  */
 export type Checked<
   S extends ReadonlyArray<Step>,
+  /** The model's command classes: a `when`'s command is looked up among them by tag. */
+  Cmds = never,
   C = unknown,
   P = never,
   Out extends ReadonlyArray<unknown> = [],
 > = S extends readonly [infer H extends Step, ...infer T extends ReadonlyArray<Step>]
-  ? [H] extends [WhenStep<infer K>]
-    ? K extends Command.Any
-      ? Checked<T, K, P, [...Out, CheckWhen<H, K, P>]>
-      : Checked<T, unknown, P, [...Out, H]>
+  ? [H] extends [WhenStep<infer Cmd>]
+    ? CommandClassOf<Cmds, Cmd> extends infer K
+      ? K extends Command.Any
+        ? Checked<T, Cmds, K, P, [...Out, CheckWhen<H, K, P>]>
+        : Checked<T, Cmds, unknown, P, [...Out, H]>
+      : never
     : [H] extends [ProvideStep<infer I>]
-      ? Checked<T, C, P | I, [...Out, H]>
+      ? Checked<T, Cmds, C, P | I, [...Out, H]>
       : [H] extends [RejectedStep<infer R>]
-        ? Checked<T, C, P, [...Out, CheckRejected<H, R, C>]>
+        ? Checked<T, Cmds, C, P, [...Out, CheckRejected<H, R, C>]>
         : [H] extends [RepliedStep<infer A>]
-          ? Checked<T, C, P, [...Out, CheckReplied<H, A, C>]>
+          ? Checked<T, Cmds, C, P, [...Out, CheckReplied<H, A, C>]>
           : [Step] extends [H]
-            ? Checked<T, unknown, any, [...Out, H]>
-            : Checked<T, C, P, [...Out, H]>
+            ? Checked<T, Cmds, unknown, any, [...Out, H]>
+            : Checked<T, Cmds, C, P, [...Out, H]>
   : [...Out, ...S];
 
 /** History: events already committed on a stream before the story starts. */
@@ -267,15 +274,17 @@ const given = <A extends Aggregate.Any>(
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
-/** Send a command. Its policies run until they finish or suspend on an external system call. */
-const when = <A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
-  ref: Aggregate.Ref<A>,
+/**
+ * Send a command. Whatever implements it in the model handles it: the
+ * aggregate instance its input names, or a decision across several. Its
+ * policies run until they finish or suspend on an external system call.
+ */
+const when = <Cmd extends { readonly _tag: string }>(
   command: Cmd,
   options?: { readonly commandId?: string },
-): WhenStep<CommandClassOf<A, Cmd>> => ({
+): WhenStep<Cmd> => ({
   _tag: "When",
-  ref,
-  command: command as { readonly _tag: string },
+  command,
   commandId: options?.commandId,
 });
 
@@ -714,7 +723,7 @@ const describeStep = (s: Step): string => {
     case "Then":
       return `${refName(s.ref)}: ${s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80)}`;
     case "When":
-      return `${refName(s.ref)}: ${summarize(s.command)}`;
+      return summarize(s.command);
     case "Rejected":
       return summarize(s.rejection);
     case "Replied":
@@ -900,7 +909,7 @@ interface StoryOptions<Policies, LE, LR, Systems> {
  *   story(
  *     Story.given(a1, new AccountOpened({ ... }), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
  *     Story.provide(CurrentActor, sam),
- *     Story.when(a1, new WithdrawMoney({ amount: 30 })),
+ *     Story.when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
  *     Story.then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
  *     Story.replied({ balance: 70 }),
  *   ),
@@ -1019,6 +1028,23 @@ const explore = <E, R>(
     }
   });
 
+/** The aggregate instances a command is for, in a model: none when nothing implements it. */
+const instancesOf = (
+  definitions: Model.Any["definitions"],
+  command: { readonly _tag: string },
+): ReadonlyArray<Aggregate.Ref> => {
+  for (const aggregate of definitions.aggregates) {
+    const id = Aggregate.targetOf(aggregate, command);
+    if (id !== undefined) return [Aggregate.makeRef(aggregate, id)];
+  }
+  const decision = definitions.decisions?.find((d) => d.decisionName === command._tag);
+  if (decision === undefined) return [];
+  const ids = decision.definition.keyOf(command);
+  return Object.entries(decision.reads).flatMap(([name, aggregate]) =>
+    [ids[name]!].flat().map((id) => Aggregate.makeRef(aggregate, id)),
+  );
+};
+
 const isStoryFailure = (error: unknown): error is StoryFailure =>
   error !== null &&
   typeof error === "object" &&
@@ -1032,14 +1058,18 @@ const make =
     LE = never,
     LR = never,
     Systems extends ExternalSystem.Any = never,
+    Cmds extends Command.Any = never,
   >(
-    domain: Model.ModelClass<Name, Provided, Policies>,
+    // The model's command classes: each `when` is checked against the one with its tag.
+    domain: Model.ModelClass<Name, Provided, Policies> & {
+      readonly commands: ReadonlyArray<Cmds>;
+    },
     ...[options = {}]: [Policies] extends [never]
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
       : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
   <const S extends ReadonlyArray<Step>>(
-    ...steps: S & Checked<S>
+    ...steps: S & Checked<S, Cmds>
   ): Effect.Effect<
     void,
     StoryFailure | LE,
@@ -1202,6 +1232,13 @@ const make =
               return yield* rejectionNotAsserted(unassertedRejection);
             }
             if ("ref" in s) touched.set(refName(s.ref), s.ref);
+            // A command touches the instances it is for: the one its aggregate
+            // routes it to, or each one its decision reads.
+            if (s._tag === "When") {
+              for (const ref of instancesOf(domain.definitions, s.command)) {
+                touched.set(refName(ref), ref);
+              }
+            }
             switch (s._tag) {
               case "Clock": {
                 const at = clockMillis(s.at);
@@ -1250,12 +1287,13 @@ const make =
                 break;
               }
               case "When": {
-                const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
-                  never,
-                  Aggregate.ClientImpl
-                >;
+                // Whatever implements the command in the model, as an Api sends it.
+                const client = internals.commands.get(s.command._tag);
+                if (client === undefined) {
+                  return yield* fail(`the model has no command ${s.command._tag}`);
+                }
                 const result = yield* client
-                  .send(s.ref, s.command, { commandId: s.commandId ?? `story:${step}` })
+                  .send(s.command, { commandId: s.commandId ?? `story:${step}` })
                   .pipe(Effect.provide(provided), Effect.result);
                 if (result._tag === "Success") {
                   last = { _tag: "Accepted", receipt: result.success };
@@ -1830,10 +1868,10 @@ const make =
  * it.effect("withdraws within the balance, and refuses beyond it", () =>
  *   story(
  *     Story.given(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
- *     Story.when(account, new WithdrawMoney({ amount: 30 })),
+ *     Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
  *     Story.then(account, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
  *     Story.replied({ balance: 70 }),
- *     Story.when(account, new WithdrawMoney({ amount: 100 })),
+ *     Story.when(new WithdrawMoney({ accountId: account.id, amount: 100 })),
  *     Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
  *   ),
  * );
@@ -1886,7 +1924,7 @@ const make =
  * const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });
  *
  * story(
- *   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+ *   Story.when(new RecordSettlement({ accountId: account.id, settlementId: "st_1", amount: 500 })),
  *   Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
  *   Story.returned(Payments.refund, { refundId: "re_st_1" }),
  * ).pipe(Effect.provide(StripePayments));

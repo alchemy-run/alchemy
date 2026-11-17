@@ -3,8 +3,9 @@ import type { RateLimitProps } from "./RateLimitProps.shared.ts";
 
 // options for Ratelimit
 //   (should be kept in sync with https://bitbucket.cfdata.org/projects/EW/repos/edgeworker/browse/src/edgeworker/internal-api/ratelimit.capnp)
-const RATE_LIMIT_OPTION_KEYS = ["key", "limit", "period"];
+const RATE_LIMIT_OPTION_KEYS = ["key", "limit", "period", "delta"];
 const RATE_LIMIT_PERIOD_VALUES = [10, 60];
+const MAX_UINT32 = 0xffffffff;
 
 // create a new Ratelimit
 export default function makeBinding(env: { PROPS: RateLimitProps }) {
@@ -40,11 +41,13 @@ class RateLimitBinding implements RateLimit {
       key = "",
       limit = this.config.simple.limit,
       period = this.config.simple.period,
-    } = options as RateLimitOptions & Partial<RateLimitProps["simple"]>;
+      delta = 1,
+    } = options as RateLimitOptions & Partial<RateLimitProps["simple"]> & { delta?: unknown };
     validate(typeof key === "string", `invalid key: ${key}`);
     validate(typeof limit === "number", `limit must be a number: ${limit}`);
     validate(typeof period === "number", `period must be a number: ${period}`);
     validate(RATE_LIMIT_PERIOD_VALUES.includes(period), `unsupported period: ${period}`);
+    const weight = toDelta(delta);
 
     const now = Date.now();
     let bucket = this.buckets.get(key);
@@ -58,16 +61,49 @@ class RateLimitBinding implements RateLimit {
       bucket = { count: 0, resetAt: now + period * 1000 };
       this.buckets.set(key, bucket);
     }
+    // Like production, the decision is made on the count *before* this call,
+    // so a weighted call is allowed whenever any headroom remains (even if it
+    // overshoots the limit), and a rejected call adds nothing.
     if (bucket.count >= limit) {
       return {
         success: false,
       };
     }
-    bucket.count += 1;
+    bucket.count += weight;
     return {
       success: true,
     };
   }
+}
+
+/**
+ * Converts `delta` to a non-zero `uint32`, truncating fractions. Values
+ * outside the `uint32` range throw `TypeError` and zero throws `RangeError`,
+ * matching the deployed binding's errors.
+ *
+ * @param delta The `delta` option passed to `limit()`.
+ * @returns The weight to add to the counter.
+ */
+function toDelta(delta: unknown): number {
+  // Unary `+` applies `ToNumber`, so a BigInt throws `TypeError` (whereas
+  // `Number(2n)` would silently convert it)
+  const value = +(delta as number);
+  if (!Number.isFinite(value)) {
+    throw new TypeError("The value cannot be converted because it is not an integer.");
+  }
+  if (value < 0) {
+    throw new TypeError(
+      "The value cannot be converted because it is negative and this API expects a positive number.",
+    );
+  }
+  if (value > MAX_UINT32) {
+    throw new TypeError(`Value out of range. Must be less than or equal to ${MAX_UINT32}.`);
+  }
+  const truncated = Math.trunc(value);
+  if (truncated === 0) {
+    throw new RangeError("delta must be non-zero");
+  }
+  return truncated;
 }
 
 function validate(test: boolean, message: string): asserts test {

@@ -300,16 +300,22 @@ export const LiveContainerProvider = () =>
         constraints: props.constraints ?? {},
       });
 
-      const applicationConfigurationHash = Effect.fn("applicationConfigurationHash")(function* (
+      const applicationHashes = Effect.fn("applicationHashes")(function* (
         scaling: ReturnType<typeof scalingDefaults>,
         affinities: ContainerApplication.Affinities | undefined,
         configuration: ContainerApplication.Configuration,
       ) {
-        return yield* sha256Object({
-          scaling,
-          affinities: normalizeNulls(affinities),
-          configuration,
-        });
+        return {
+          // Everything update sends: a change here updates the application.
+          configuration: yield* sha256Object({
+            scaling,
+            affinities: normalizeNulls(affinities),
+            configuration,
+          }),
+          // What the instances run: only a change here needs a rollout.
+          // Scaling and placement changes apply without replacing instances.
+          rollout: yield* sha256Object({ configuration }),
+        };
       });
 
       const registryCredentials = Effect.fn("registryCredentials")(function* (
@@ -1189,14 +1195,11 @@ export const LiveContainerProvider = () =>
         });
         const configuration = desiredConfiguration(news, env, deploymentImageRef);
         const scaling = scalingDefaults(news);
-        const configurationHash = yield* applicationConfigurationHash(
-          scaling,
-          news.affinities,
-          configuration,
-        );
+        const hashes = yield* applicationHashes(scaling, news.affinities, configuration);
         if (
-          existing.hash?.configuration === configurationHash &&
-          existing.configuration.image === deploymentImageRef
+          existing.hash?.configuration === hashes.configuration &&
+          existing.configuration.image === deploymentImageRef &&
+          (news.instances === undefined || existing.instances === news.instances)
         ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
@@ -1209,7 +1212,7 @@ export const LiveContainerProvider = () =>
             hash: {
               image: imageHash,
               digest: imageDigest,
-              configuration: configurationHash,
+              ...hashes,
             },
             dev,
           };
@@ -1222,7 +1225,11 @@ export const LiveContainerProvider = () =>
           Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
-            ...scaling,
+            maxInstances: scaling.maxInstances,
+            schedulingPolicy: scaling.schedulingPolicy,
+            constraints: scaling.constraints,
+            // Live capacity belongs to the runtime unless a count is declared.
+            ...(news.instances === undefined ? {} : { instances: news.instances }),
             affinities: news.affinities,
             configuration,
           }),
@@ -1256,7 +1263,13 @@ export const LiveContainerProvider = () =>
           ),
         );
         const updated = toAttributes(application);
-        if (!deepEqual(existing.configuration, configuration)) {
+        if (
+          // Out-of-band image drift leaves the saved hashes current, so the
+          // observed image is compared too.
+          (existing.hash?.rollout !== hashes.rollout ||
+            existing.configuration.image !== deploymentImageRef) &&
+          !deepEqual(existing.configuration, configuration)
+        ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
           );
@@ -1294,7 +1307,7 @@ export const LiveContainerProvider = () =>
           hash: {
             image: imageHash,
             digest: imageDigest,
-            configuration: configurationHash,
+            ...hashes,
           },
           dev,
         };
@@ -1410,6 +1423,14 @@ export const LiveContainerProvider = () =>
             return { action: "update", stables: ["accountId"] } as const;
           }
 
+          if (
+            application &&
+            news.instances !== undefined &&
+            toAttributes(application).instances !== news.instances
+          ) {
+            return { action: "update" } as const;
+          }
+
           const { imageHash, dev } = yield* computeImage(
             id,
             news,
@@ -1471,7 +1492,7 @@ export const LiveContainerProvider = () =>
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
           const published = yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
           const configuration = desiredConfiguration(news, env, published.imageRef);
-          const configurationHash = yield* applicationConfigurationHash(
+          const hashes = yield* applicationHashes(
             scalingDefaults(news),
             news.affinities,
             configuration,
@@ -1499,7 +1520,7 @@ export const LiveContainerProvider = () =>
             hash: {
               image: imageHash,
               digest: published.digest,
-              configuration: configurationHash,
+              ...hashes,
             },
             dev,
           };
@@ -1619,7 +1640,7 @@ export const LiveContainerProvider = () =>
               session,
             });
             const configuration = desiredConfiguration(news, env, deploymentImageRef);
-            const configurationHash = yield* applicationConfigurationHash(
+            const hashes = yield* applicationHashes(
               scalingDefaults(news),
               news.affinities,
               configuration,
@@ -1652,7 +1673,7 @@ export const LiveContainerProvider = () =>
               hash: {
                 image: imageHash,
                 digest: imageDigest,
-                configuration: configurationHash,
+                ...hashes,
               },
               dev,
             };
@@ -1682,7 +1703,7 @@ export const LiveContainerProvider = () =>
           // name or namespace.
           const published = yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
           const configuration = desiredConfiguration(news, env, published.imageRef);
-          const configurationHash = yield* applicationConfigurationHash(
+          const hashes = yield* applicationHashes(
             scalingDefaults(news),
             news.affinities,
             configuration,
@@ -1701,7 +1722,7 @@ export const LiveContainerProvider = () =>
             hash: {
               image: imageHash,
               digest: published.digest,
-              configuration: configurationHash,
+              ...hashes,
             },
             dev,
           };

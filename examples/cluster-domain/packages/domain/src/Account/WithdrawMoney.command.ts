@@ -13,9 +13,8 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 /** Take money out of one of your accounts. */
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
   middleware: [Session],
-  input: { amount: Cents },
+  input: { accountId: AccountId, amount: Cents },
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, InsufficientFunds],
   reply: { balance: Cents },

@@ -253,6 +253,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
           return HttpServerResponse.jsonUnsafe(result);
         }),
       }),
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- `startServer` runs this with `Effect.runPromise` and provides only RuntimeServices, so user hooks' requirements are erased by `BindingHooks` (`BindingHook<any>`)
       ...(options.worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [

@@ -3289,12 +3289,18 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
         const row = (yield* state.get({ stack: stk.name, stage: stk.stage, fqn })) as
           | ResourceState
           | undefined;
-        if (row?.removalPolicy === "protect") {
+        const old =
+          row?.status === "updating" ? (row.old as { removalPolicy?: string }) : undefined;
+        if (row?.removalPolicy === "protect" || old?.removalPolicy === "protect") {
           yield* state.set({
             stack: stk.name,
             stage: stk.stage,
             fqn,
-            value: { ...row, removalPolicy: "destroy" },
+            value: {
+              ...row,
+              removalPolicy: "destroy",
+              ...(old ? { old: { ...old, removalPolicy: "destroy" } } : {}),
+            } as ResourceState,
           });
         }
       }
@@ -3378,6 +3384,55 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
 
       yield* Effect.gen(function* () {
         yield* TestResource("A", { replaceString: "v2" });
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v2" });
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("a failed unprotect update keeps the resource protected", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1", string: "a" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy);
+
+      // Drop protect() in an update that fails, twice. The row is left
+      // `updating` with the newly declared policy on top.
+      const unprotect = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1", string: "b" });
+      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        yield* unprotect.pipe(stack.deploy, hook(failOn("A", "update")));
+        const row = yield* getState("A");
+        expect(row?.status).toEqual("updating");
+        expect(row?.removalPolicy).toEqual("destroy");
+      }
+
+      // The last successful deploy still protects it.
+      const replaced = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2", string: "b" });
+        }).pipe(stack.deploy),
+      );
+      expect(replaced).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "replace" }],
+      });
+      const orphaned = yield* refusal(Effect.void.pipe(stack.deploy));
+      expect(orphaned).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+      expect(yield* getState("A")).toBeDefined();
+
+      // Once the unprotect update succeeds, the replacement is allowed.
+      yield* unprotect.pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2", string: "b" });
       }).pipe(stack.deploy);
       expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v2" });
       yield* stack.destroy();

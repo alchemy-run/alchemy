@@ -9,7 +9,6 @@ export class TransferFailed extends Domain.Event("TransferFailed", {
 
 /** Reports an outcome, so it never rejects. */
 export class FailTransfer extends Domain.Command("FailTransfer", {
-  target: TransferId,
-  input: { reason: Schema.String },
+  input: { transferId: TransferId, reason: Schema.String },
   events: [TransferFailed],
 }) {}

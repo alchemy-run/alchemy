@@ -17,6 +17,7 @@
     },
     {
       "path": "../../submodules/distilled/packages/e2b/tsconfig.json"
-    }
+    },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

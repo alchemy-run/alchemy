@@ -1,0 +1,113 @@
+---
+title: Collect tax and pay out
+description: Stripe Tax settings, your business's tax ids, customers' tax status, and the payout schedule, declared in your Stack and restored when you destroy it.
+---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+Tax and payouts are settings on your Stripe account, not things you create
+per sale. Your account has exactly one set of tax settings and one payout
+schedule. Declaring them in your Stack keeps every stage's account
+configured the same way.
+
+## Turn on Stripe Tax defaults
+
+`TaxSettings` holds where your business is and how prices treat tax when
+they don't say:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Stripe from "@alchemy.run/stripe";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Billing",
+  { providers: Stripe.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    yield* Stripe.TaxSettings("Tax", {
+      headOffice: { address: { country: "US", state: "CA" } },
+      defaults: { taxBehavior: "exclusive", taxCode: "txcd_10103001" },
+    });
+  }),
+);
+```
+
+Stripe never unsets these once they're set. A price or product that sets
+its own `taxBehavior` or `taxCode` overrides the default; see
+[Price your product](/stripe/guides/pricing#include-tax-or-add-it-on-top).
+
+## Show your tax id on invoices
+
+A tax id is your business's VAT, GST or EIN number. Stripe prints it on
+invoices and receipts:
+
+```typescript
+yield* Stripe.TaxId("Vat", { type: "eu_vat", value: "DE123456789" });
+```
+
+Changing the value creates a new tax id and deletes the old one. A
+customer's own tax id is a `CustomerTaxId` instead.
+
+## Exempt a customer
+
+A customer's billing address decides which tax applies, and `taxExempt`
+can switch tax off for them or move it to the buyer with a reverse charge:
+
+```typescript
+yield* Stripe.Customer("Acme", {
+  email: "billing@acme.example",
+  businessName: "Acme GmbH",
+  address: { line1: "Hauptstraße 1", city: "Berlin", postalCode: "10115", country: "DE" },
+  taxExempt: "reverse",
+});
+```
+
+Customers your app signs up while it runs are created with
+`Stripe.CreateCustomer()`, which takes Stripe's own field names
+(`address`, `tax_exempt`).
+
+## Set the payout schedule
+
+`BalanceSettings` decides when Stripe pays your balance out to your bank,
+what the bank statement says, and how much to hold back:
+
+```typescript
+yield* Stripe.BalanceSettings("Payouts", {
+  payments: {
+    payouts: {
+      schedule: { interval: "weekly", weeklyPayoutDays: ["friday"] },
+      statementDescriptor: "ACME PAYOUT",
+      minimumBalanceByCurrency: { usd: 10_000 },
+    },
+  },
+});
+```
+
+## Destroy puts it back
+
+These settings belong to the account, so destroying the Stack doesn't
+delete them. It writes back the values they had before the first deploy.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "schedule", label: "schedule", type: "BalanceSettings" }]}
+  bars={[
+    { lane: "schedule", start: 0, end: 3, label: "manual" },
+    { lane: "schedule", start: 3, end: 7, label: "weekly · friday", tone: "accent" },
+    { lane: "schedule", start: 7, end: 10, label: "manual" },
+  ]}
+  marks={[
+    { at: 3, label: "deploy" },
+    { at: 7, label: "destroy" },
+  ]}
+  caption="The first deploy records the schedule it found (manual) and sets weekly payouts. Later deploys change it again but keep that first record, and destroy restores it."
+/>
+
+Only the fields you set are recorded and restored. A field that was empty
+before is cleared again where Stripe allows it, like the statement
+descriptor.
+
+:::note
+See the [TaxSettings](/providers/stripe/reference/tax#taxsettings),
+[TaxId](/providers/stripe/reference/tax#taxid) and
+[BalanceSettings](/providers/stripe/reference/payouts#balancesettings) reference pages.
+:::

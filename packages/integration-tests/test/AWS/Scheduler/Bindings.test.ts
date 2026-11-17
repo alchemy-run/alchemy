@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as SQS from "@distilled.cloud/aws/sqs";
@@ -28,7 +29,12 @@ const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recu
 
 let baseUrl: string;
 let sinkQueueUrl: string;
+let sinkQueueArn: string;
 let cronQueueUrl: string;
+let executionRoleArn: string;
+let deadLetterQueueArn: string;
+let inputKeyArn: string;
+let functionName: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -155,11 +161,12 @@ describe(
         yield* purgeTestSchedules;
 
         yield* Effect.logInfo("Scheduler test setup: deploying fixture");
-        const { functionUrl } = yield* sharedStack.deploy(
+        const { functionUrl, functionName: deployedName } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* SchedulerTestFunction;
           }).pipe(Effect.provide(SchedulerTestFunctionLive)),
         );
+        functionName = deployedName;
 
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
@@ -169,12 +176,28 @@ describe(
         const info = yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
-              ? (response.json as Effect.Effect<{ sinkQueueUrl?: string; cronQueueUrl?: string }>)
+              ? (response.json as Effect.Effect<{
+                  sinkQueueUrl?: string;
+                  sinkQueueArn?: string;
+                  cronQueueUrl?: string;
+                  executionRoleArn?: string;
+                  deadLetterQueueArn?: string;
+                  inputKeyArn?: string;
+                }>)
               : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
-            body.sinkQueueUrl && body.cronQueueUrl
-              ? Effect.succeed(body as { sinkQueueUrl: string; cronQueueUrl: string })
+            body.sinkQueueUrl && body.sinkQueueArn && body.cronQueueUrl && body.executionRoleArn
+              ? Effect.succeed(
+                  body as {
+                    sinkQueueUrl: string;
+                    sinkQueueArn: string;
+                    cronQueueUrl: string;
+                    executionRoleArn: string;
+                    deadLetterQueueArn: string;
+                    inputKeyArn: string;
+                  },
+                )
               : Effect.fail(new Error("Function returned empty queue urls")),
           ),
           Effect.tapError((error) =>
@@ -183,7 +206,11 @@ describe(
           Effect.retry({ schedule: readinessPolicy }),
         );
         sinkQueueUrl = info.sinkQueueUrl;
+        sinkQueueArn = info.sinkQueueArn;
         cronQueueUrl = info.cronQueueUrl;
+        executionRoleArn = info.executionRoleArn;
+        deadLetterQueueArn = info.deadLetterQueueArn;
+        inputKeyArn = info.inputKeyArn;
       }),
       { timeout: 240_000 },
     );
@@ -202,7 +229,7 @@ describe(
 
     describe("CreateSchedule", () => {
       test.provider(
-        "mints a one-shot at() schedule whose target fires (iam:PassRole end-to-end)",
+        "at() targets the bound queue through a role the binding declared",
         (_stack) =>
           Effect.gen(function* () {
             const name = `${SCHEDULE_PREFIX}oneshot`;
@@ -214,12 +241,16 @@ describe(
             expect(created.scheduleArn).toContain(`:schedule/default/${name}`);
             expect(created.expression).toMatch(/^at\(/);
 
-            // Out-of-band: the schedule exists with the one-shot config the
-            // fixture requested.
+            // Out-of-band: `at` defaulted to a self-deleting one-shot that
+            // targets the bound queue, through the role the binding declared
+            // (not the fixture's own role).
             const observed = yield* scheduler.getSchedule({ Name: name });
             expect(observed.Name).toBe(name);
             expect(observed.ActionAfterCompletion).toBe("DELETE");
-            expect(observed.Target?.RoleArn).toBeTruthy();
+            expect(observed.FlexibleTimeWindow?.Mode).toBe("OFF");
+            expect(observed.Target?.Arn).toBe(sinkQueueArn);
+            expect(observed.Target?.RoleArn).toMatch(/^arn:aws:iam::\d+:role\//);
+            expect(observed.Target?.RoleArn).not.toBe(executionRoleArn);
 
             // The schedule fires ~15s after creation; the execution role (which
             // the binding contributed iam:PassRole for) delivers the marker into
@@ -232,6 +263,104 @@ describe(
             yield* waitUntilScheduleGone(name);
           }),
         { timeout: 150_000 },
+      );
+
+      test.provider(
+        "a raw request with { role } defaults the target and uses that role",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}raw`;
+
+            const created = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/raw-schedules/${name}?delaySeconds=15`),
+            ).pipe(Effect.flatMap((r) => r.json))) as { error?: string; message?: string };
+            expect(created.message).toBeUndefined();
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.Target?.Arn).toBe(sinkQueueArn);
+            expect(observed.Target?.RoleArn).toBe(executionRoleArn);
+
+            // The passed role delivers too (iam:PassRole on it end-to-end).
+            const message = yield* receiveMatching(sinkQueueUrl, (body) => body.marker === name);
+            expect(message.marker).toBe(name);
+            yield* waitUntilScheduleGone(name);
+          }),
+        { timeout: 150_000 },
+      );
+
+      test.provider(
+        "{ deadLetterQueue } is the default and the generated role may send to it",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}dlq`;
+            yield* send(HttpClientRequest.post(`${baseUrl}/dlq-schedules/${name}`));
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.Target?.Arn).toBe(sinkQueueArn);
+            expect(observed.Target?.DeadLetterConfig?.Arn).toBe(deadLetterQueueArn);
+
+            // Out of band: the role the binding generated allows the queue.
+            const roleName = observed.Target!.RoleArn!.split("/").pop()!;
+            const policy = yield* iam.getRolePolicy({
+              RoleName: roleName,
+              PolicyName: "ScheduleTarget",
+            });
+            const document = decodeURIComponent(policy.PolicyDocument);
+            expect(document).toContain(deadLetterQueueArn);
+            expect(document).toContain("sqs:SendMessage");
+
+            const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
+            expect(deleted.status).toBe(200);
+          }),
+      );
+
+      test.provider(
+        "{ kmsKey } encrypts the input and the generated role can decrypt it to deliver",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}kms`;
+            const created = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/kms-schedules/${name}`),
+            ).pipe(Effect.flatMap((r) => r.json))) as { error?: string; message?: string };
+            expect(created.message).toBeUndefined();
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.KmsKeyArn).toBe(inputKeyArn);
+
+            // Out of band: the role the binding generated may decrypt.
+            const roleName = observed.Target!.RoleArn!.split("/").pop()!;
+            const policy = yield* iam.getRolePolicy({
+              RoleName: roleName,
+              PolicyName: "ScheduleTarget",
+            });
+            const document = decodeURIComponent(policy.PolicyDocument);
+            expect(document).toContain(inputKeyArn);
+            expect(document).toContain("kms:Decrypt");
+
+            // Scheduler decrypted the input as that role and delivered it.
+            const message = yield* receiveMatching(sinkQueueUrl, (body) => body.marker === name, {
+              times: 30,
+            });
+            expect(message.marker).toBe(name);
+            yield* waitUntilScheduleGone(name);
+          }),
+        { timeout: 150_000 },
+      );
+
+      test.provider("every() creates a recurring rate schedule", (_stack) =>
+        Effect.gen(function* () {
+          const name = `${SCHEDULE_PREFIX}every`;
+
+          yield* send(HttpClientRequest.post(`${baseUrl}/recurring-schedules/${name}`));
+
+          const observed = yield* scheduler.getSchedule({ Name: name });
+          expect(observed.ScheduleExpression).toBe("rate(1 day)");
+          expect(observed.Target?.Arn).toBe(sinkQueueArn);
+          expect(observed.Target?.Input).toBe(JSON.stringify({ marker: name }));
+
+          const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
+          expect(deleted.status).toBe(200);
+        }),
       );
     });
 
@@ -364,6 +493,108 @@ describe(
             expect(second.status).toBe(404);
           }),
         { timeout: 120_000 },
+      );
+    });
+
+    describe("makeCallback", () => {
+      type StatusBody = {
+        status: { scheduledAt: number; progress?: number } | null;
+        error?: string;
+        message?: string;
+      };
+      const call = (request: HttpClientRequest.HttpClientRequest) =>
+        send(request).pipe(Effect.flatMap((r) => r.json as Effect.Effect<StatusBody, any>));
+
+      test.provider(
+        "routes a scheduled job to its handler and removes it",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}remind`;
+            const scheduled = yield* call(
+              HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=0`),
+            );
+            expect(scheduled.message).toBeUndefined();
+            expect(scheduled.status?.scheduledAt).toBeGreaterThan(0);
+
+            const delivered = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-callback" && body.id === id,
+              { times: 30 },
+            );
+
+            // A successful delivery deletes its job.
+            yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`)).pipe(
+              Effect.flatMap((body) =>
+                body.status === null ? Effect.void : Effect.fail(new ScheduleStillExists()),
+              ),
+              Effect.retry({
+                while: (error) => error._tag === "ScheduleStillExists",
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
+              }),
+            );
+          }),
+        { timeout: 150_000 },
+      );
+
+      test.provider("replaces and cancels a pending job", (_stack) =>
+        Effect.gen(function* () {
+          const id = `${SCHEDULE_PREFIX}pending`;
+          const first = yield* call(
+            HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=3600`),
+          );
+          expect(first.message).toBeUndefined();
+          const replaced = yield* call(
+            HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=7200`),
+          );
+          expect(replaced.status!.scheduledAt - first.status!.scheduledAt).toBeGreaterThan(
+            3_000_000,
+          );
+
+          // Out of band: the pending job carries the dead-letter queue and
+          // key, and the Function sends handlers that keep dying there too.
+          // Job names start with the callback name and ID, in any group.
+          const listed = yield* scheduler.listSchedules({ NamePrefix: `remind-${id}` });
+          const summary = listed.Schedules![0]!;
+          const job = yield* scheduler.getSchedule({
+            GroupName: summary.GroupName!,
+            Name: summary.Name!,
+          });
+          expect(job.KmsKeyArn).toBe(inputKeyArn);
+          expect(job.Target?.DeadLetterConfig?.Arn).toBe(deadLetterQueueArn);
+          const invokeConfig = yield* lambda.getFunctionEventInvokeConfig({
+            FunctionName: functionName,
+          });
+          expect(invokeConfig.DestinationConfig?.OnFailure?.Destination).toBe(deadLetterQueueArn);
+
+          const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
+          expect(cancelled.message).toBeUndefined();
+          const read = yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`));
+          expect(read.status).toBeNull();
+
+          // Cancelling an absent job succeeds.
+          const again = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
+          expect(again.message).toBeUndefined();
+        }),
+      );
+
+      test.provider(
+        "redelivers a handler that dies",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}flaky`;
+            const scheduled = yield* call(HttpClientRequest.post(`${baseUrl}/flaky/${id}?after=0`));
+            expect(scheduled.message).toBeUndefined();
+
+            // The first delivery dies; Lambda retries the invocation about a
+            // minute later, and the retry forwards.
+            const delivered = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-callback" && body.id === id,
+              { times: 90 },
+            );
+            expect(delivered.retried).toBe(true);
+          }),
+        { timeout: 180_000 },
       );
     });
 
