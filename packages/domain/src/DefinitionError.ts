@@ -162,6 +162,46 @@ export class UnroutedCommand extends Data.TaggedError("UnroutedCommand")<{
   }
 }
 
+/** Two aggregates or decisions of one model implement the same command. */
+export class ImplementedTwice extends Data.TaggedError("ImplementedTwice")<{
+  readonly command: string;
+  readonly first: string;
+  readonly second: string;
+}> {
+  override get message() {
+    return `${this.command} is implemented by ${this.first} and by ${this.second}`;
+  }
+}
+
+/** A decision reads an aggregate its model does not host. */
+export class UnknownRead extends Data.TaggedError("UnknownRead")<{
+  readonly decision: string;
+  readonly aggregate: string;
+}> {
+  override get message() {
+    return `${this.decision} reads ${this.aggregate}, which is not in the Domain`;
+  }
+}
+
+/** A decision records an event on an instance it did not read. */
+export class UnreadRecord extends Data.TaggedError("UnreadRecord")<{
+  readonly decision: string;
+  readonly returned: string;
+}> {
+  override get message() {
+    return `${this.decision} returned ${this.returned}, which is not an event recorded with a read instance's \`record\``;
+  }
+}
+
+/** The platform a model is hosted on can't commit decisions. */
+export class DecisionsUnsupported extends Data.TaggedError("DecisionsUnsupported")<{
+  readonly decisions: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return `the platform does not host decisions (${this.decisions.join(", ")})`;
+  }
+}
+
 /** `decide` returns an event or rejection its command does not declare. */
 export class UndeclaredDecision extends Data.TaggedError("UndeclaredDecision")<{
   readonly aggregate: string;
@@ -389,6 +429,10 @@ export type Reason =
   | WriterKeyMismatch
   | UnhandledCommand
   | UnroutedCommand
+  | ImplementedTwice
+  | UnknownRead
+  | UnreadRecord
+  | DecisionsUnsupported
   | UndeclaredDecision
   | UndeclaredEvent
   | UndeclaredEmit

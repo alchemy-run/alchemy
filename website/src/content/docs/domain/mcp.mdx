@@ -59,7 +59,7 @@ That generated description is all an agent knows about a command it hasn't seen.
 ```typescript title="src/DepositMoney.command.ts"
 export class DepositMoney extends Domain.Command(
   "DepositMoney",
-  { target: AccountId, input: { amount: Schema.Int }, events: [MoneyDeposited] },
+  { input: { accountId: AccountId, amount: Schema.Int }, events: [MoneyDeposited] },
   { description: "Put money into an account. The amount is in cents." },
 ) {}
 ```
