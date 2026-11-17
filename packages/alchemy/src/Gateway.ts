@@ -25,7 +25,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import type * as Layer from "effect/Layer";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -287,6 +287,7 @@ export const make = <R>(
         if (key.startsWith("ALCHEMY_GATEWAY_")) continue;
         // The platform already packed the value for its environment.
         const value = (packed as Output.Output).pipe(Output.map(unpackBound));
+        (sandbox.adopted ??= new Map()).set(key, packed as Output.Output);
         yield* deployed.set(key, value);
         yield* setOnSandbox(key, withoutSecrets(value));
       }
@@ -437,17 +438,19 @@ export const bind = <A, E, R>(
   local: boolean,
 ): Effect.Effect<A, E, R> =>
   Effect.flatMap(CurrentRuntimeContext, (ctx) => {
-    const gateway = ctx?.gateway;
-    if (ctx === undefined || gateway === undefined) return build(...args);
-    if (local) {
-      return Effect.provideService(build(...args), RuntimeContext, derive(ctx, undefined));
-    }
+    if (ctx === undefined) return build(...args);
+    const gateway = ctx.gateway;
+    // Built on the host itself: what it binds stays there.
+    const onHost = () =>
+      Effect.provideService(build(...args), RuntimeContext, derive(ctx, undefined, id, local));
+    if (gateway === undefined || local) return onHost();
+    if (ctx.gatewayScope !== undefined && !ctx.gatewayScope.has(id)) return onHost();
     if (gateway.phase === "plan") {
       // Everything the binding binds, `Config` included, is the gateway's.
       return Effect.provideService(
         build(...args),
         RuntimeContext,
-        derive(ctx, { ...gateway, set: (key, output) => gateway.set(key, output) }),
+        derive(ctx, { ...gateway, set: (key, output) => gateway.set(key, output) }, id, true),
       );
     }
     const key = keyOf(id, args);
@@ -500,9 +503,91 @@ export const wrapClientInvocations = (
   return client;
 };
 
-/** The same context with another view of the gateway. */
-const derive = (ctx: BaseRuntimeContext, gateway: GatewayContext | undefined): BaseRuntimeContext =>
-  Object.create(ctx, { gateway: { value: gateway, enumerable: true } });
+/** A secret a binding tried to put in a sandbox that has no gateway. */
+export class SecretInSandbox extends Data.TaggedError("SecretInSandbox")<{
+  readonly message: string;
+}> {}
+
+/**
+ * Lets a sandbox's bindings keep their credentials in the sandbox, where
+ * the code it runs can read them. Without it, and without a gateway, a
+ * binding that binds a secret into a sandbox fails the deploy.
+ *
+ * Provide it only for a sandbox that runs your own code.
+ */
+export const Unprotected: Layer.Layer<never> = Layer.effectDiscard(
+  Effect.map(CurrentRuntimeContext, (ctx) => {
+    if (ctx !== undefined) ctx.unprotected = true;
+  }),
+);
+
+/**
+ * Limits a host's gateway to the bindings named: every other binding of
+ * the host is built on the host, as without a gateway. Use it on a trusted
+ * host that hands the gateway to sandboxes it creates: the named bindings
+ * are what those sandboxes may use, and the host keeps its own.
+ */
+export const only = (
+  ...bindings: ReadonlyArray<{ readonly key: string }>
+): Layer.Layer<never, never, Gateway> =>
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      // The gateway is installed on the host before this Layer is built.
+      yield* Gateway;
+      const ctx = yield* CurrentRuntimeContext;
+      if (ctx === undefined) return;
+      const scope = new Set(bindings.map((binding) => binding.key));
+      ctx.gatewayScope = scope;
+      // What the gateway took over from a binding that stays on the host
+      // goes back as it was bound.
+      for (const [key, packed] of ctx.adopted ?? []) {
+        const owner = ctx.boundBy?.get(key);
+        if (owner !== undefined && !scope.has(owner)) ctx.env[key] = packed;
+      }
+    }),
+  );
+
+/**
+ * The same context with another view of the gateway, for one binding's
+ * Construction. It records which binding bound each value, and on a sandbox
+ * refuses a secret that would stay there.
+ */
+const derive = (
+  ctx: BaseRuntimeContext,
+  gateway: GatewayContext | undefined,
+  id: string,
+  trusted: boolean,
+): BaseRuntimeContext =>
+  Object.create(ctx, {
+    gateway: { value: gateway, enumerable: true },
+    set: {
+      value: (key: string, output: Output.Output) => {
+        (ctx.boundBy ??= new Map()).set(key, id);
+        return ctx.set(
+          key,
+          trusted || ctx.sandbox !== true
+            ? output
+            : output.pipe(
+                // Checked when the value resolves, after every Layer is built.
+                Output.mapEffect((value) =>
+                  Redacted.isRedacted(value) &&
+                  ctx.gateway === undefined &&
+                  ctx.unprotected !== true
+                    ? Effect.die(
+                        new SecretInSandbox({
+                          message:
+                            `${id} would put a credential (${key}) in the sandbox ${ctx.id}, where the code it runs can read it. ` +
+                            "Provide a gateway Layer to the sandbox's binding Layers (Cloudflare.Workers.SandboxGateway, AWS.Lambda.SandboxGateway, …), " +
+                            "or Gateway.Unprotected if the sandbox only runs your own code.",
+                        }),
+                      )
+                    : Effect.succeed(value),
+                ),
+              ),
+        );
+      },
+    },
+  });
 
 type Call = (
   key: string,

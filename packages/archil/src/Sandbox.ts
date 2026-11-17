@@ -537,7 +537,10 @@ export const Sandbox: Platform<Sandbox, ServerHost, SandboxShape, HostRuntimeCon
   // Archil sets headers on requests leaving a sandbox, so a gateway's token
   // is added there and never enters it.
   createRuntimeContext: (id) =>
-    Object.assign(createHostRuntimeContext("Archil.Sandbox")(id), { gatewayEgress: true }),
+    Object.assign(createHostRuntimeContext("Archil.Sandbox")(id), {
+      gatewayEgress: true,
+      sandbox: true,
+    }),
   // `{ disk: Workspace }` at module scope is an Effect: yield it here so
   // the disk is registered and `news.mounts[i].disk` resolves to its
   // attributes.

@@ -70,6 +70,21 @@ export interface BaseRuntimeContext {
    */
   gatewayEgress?: boolean;
   /**
+   * Set by a platform whose host runs code that is not trusted (an agent's
+   * sandbox). A binding may not put a secret in such a host: its deploy
+   * fails unless the host has a gateway, or opts in with
+   * `Gateway.Unprotected`.
+   */
+  sandbox?: boolean;
+  /** Set by `Gateway.Unprotected`: bindings may keep their secrets in this sandbox. */
+  unprotected?: boolean;
+  /** Set by `Gateway.only`: the bindings (by id) that run in the gateway. */
+  gatewayScope?: ReadonlySet<string>;
+  /** Which binding bound each value (by key), kept during Construction. */
+  boundBy?: Map<string, string>;
+  /** What a gateway took over from this host (by key), as it was bound. */
+  adopted?: Map<string, Output>;
+  /**
    * Mint an OIDC ID token for `audience`, signed by the host's platform
    * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform
    * issues them. Bindings exchange it with a cloud's STS instead of

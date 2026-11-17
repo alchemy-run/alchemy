@@ -246,7 +246,8 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  */
 export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> =
   Platform("Modal.Sandbox", {
-    createRuntimeContext: createHostRuntimeContext("Modal.Sandbox"),
+    createRuntimeContext: (id) =>
+      Object.assign(createHostRuntimeContext("Modal.Sandbox")(id), { sandbox: true }),
     // `{ app: Coder }` at module scope is an Effect: yield it so the App is
     // registered and `news.app` is resolved attributes at reconcile.
     transformProps: (_id, props) =>
