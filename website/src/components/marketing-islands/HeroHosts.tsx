@@ -11,10 +11,10 @@ import {
 import "./HeroHosts.css";
 
 /*
- * The hero: one model cycling through the platforms that can host it. Each
- * turn rolls the Layer that changes the way the talk deck's Roll does, then
- * runs the tests and deploys it, showing the resources that platform needs.
- * Clicking a platform in the reel jumps to it.
+ * The hero: one model cycling through eight providers. Each turn rolls the
+ * Layer that hosts it the way the talk deck's Roll does, then runs the tests
+ * and deploys it, showing the resources that provider needs.
+ * Clicking a provider in the reel jumps to it.
  */
 
 type Status = "ready" | "creating" | "created";
@@ -166,7 +166,7 @@ export default function HeroHosts() {
 
   return (
     <>
-      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Platforms">
+      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Providers">
         {HOSTS.map((x, i) => (
           <li key={x.label}>
             <button
