@@ -27,17 +27,26 @@ export const skipSlow = !!process.env.FAST;
 
 /**
  * A suite's public domain for this stage. Kept short, because ACM refuses a
- * certificate whose domain is over 64 characters: a long stage is cut and
- * suffixed with its hash, so it still differs per stage.
+ * certificate whose first name is over 64 characters: a long stage is
+ * replaced by its hash, so it still differs per stage.
  */
 export const domainFor = Effect.fn(function* (suite: string, stage: string) {
   const label = `cx-${suite}-${hostLabelOf(stage)}`;
-  if (label.length <= 30) return `${label}.${TEST_ZONE}`;
-  const hash = yield* Effect.sync(() =>
-    NodeCrypto.createHash("sha256").update(label).digest("hex").slice(0, 8),
-  );
-  return `${label.slice(0, 21).replace(/-+$/, "")}-${hash}.${TEST_ZONE}`;
+  if (label.length <= 20) return `${label}.${TEST_ZONE}`;
+  return `cx-${suite}-${yield* shortHash(label)}.${TEST_ZONE}`;
 });
+
+/**
+ * A stage as a short hostname label. Hosts are named `<stage>.<domain>`, and
+ * the pair has to fit in ACM's 64 characters, so a long stage is hashed.
+ */
+export const shortStageLabel = Effect.fn(function* (stage: string) {
+  const label = hostLabelOf(stage);
+  return label.length <= 16 ? label : `s-${yield* shortHash(label)}`;
+});
+
+const shortHash = (value: string) =>
+  Effect.sync(() => NodeCrypto.createHash("sha256").update(value).digest("hex").slice(0, 8));
 
 export class TestZoneNotFound extends Data.TaggedError("TestZoneNotFound")<{
   readonly zone: string;

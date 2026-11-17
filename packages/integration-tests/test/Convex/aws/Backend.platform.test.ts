@@ -1,7 +1,7 @@
 import * as NodePath from "node:path";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex/aws";
-import { hostLabelOf, instanceNameOf } from "@alchemy.run/convex/internal/selfhosted";
+import { instanceNameOf } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
@@ -21,6 +21,7 @@ import {
   DelegatedZone,
   domainFor,
   listMessages,
+  shortStageLabel,
   skipSlow,
   testZoneId,
 } from "./support.ts";
@@ -93,7 +94,7 @@ test.provider.skipIf(skipSlow)(
   (stack) =>
     Effect.gen(function* () {
       // Stages and the platform are this run's own, never the example's `dev`.
-      const base = hostLabelOf(stack.stage);
+      const base = yield* shortStageLabel(stack.stage);
       const platform = `${base}-platform`;
       const one = base;
       const two = `${base}-2`;
