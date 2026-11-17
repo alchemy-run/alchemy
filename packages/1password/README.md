@@ -30,8 +30,7 @@ OnePassword.SecretReferences({
 });
 ```
 
-The exported
-Effect `SecretReference` schema validates `op://vault/item/[section/]field`
+The exported Effect `SecretReferenceSchema` validates `op://vault/item/[section/]field`
 syntax before authentication. Duplicate references are resolved once in a
 single SDK batch; any failed reference rejects the whole config load.
 

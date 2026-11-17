@@ -11,7 +11,7 @@ export {
   OnePasswordSecretsError,
   type OnePasswordOperation,
 } from "./Errors.ts";
-export { SecretReference } from "./SecretReference.ts";
+export { SecretReferenceSchema } from "./SecretReference.ts";
 export {
   Environment,
   SecretReferences,

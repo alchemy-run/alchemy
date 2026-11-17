@@ -19,7 +19,7 @@ import {
   OnePasswordSecretsError,
 } from "./Errors.ts";
 import { loadEnvironment, loadSecretReferences } from "./internal/sdk.ts";
-import { SecretReference } from "./SecretReference.ts";
+import { SecretReferenceSchema } from "./SecretReference.ts";
 
 interface OnePasswordAuthOptions {
   /**
@@ -45,7 +45,7 @@ export interface SecretReferencesOptions extends OnePasswordAuthOptions {
   references: Readonly<Record<string, string>>;
 }
 
-const isSecretReference = Schema.is(SecretReference);
+const isSecretReference = Schema.is(SecretReferenceSchema);
 
 const NonBlankString = Schema.String.check(Schema.makeFilter((value) => value.trim().length > 0));
 
@@ -57,7 +57,7 @@ export const EnvironmentOptionsSchema = Schema.Struct({
 
 /** Runtime validation for static and stage-dependent {@link SecretReferences} options. */
 export const SecretReferencesOptionsSchema = Schema.Struct({
-  references: Schema.Record(Schema.String, SecretReference).check(
+  references: Schema.Record(Schema.String, SecretReferenceSchema).check(
     Schema.makeFilter((value) => {
       const keys = Object.keys(value);
       return keys.length > 0 && keys.every((key) => key.trim().length > 0);
@@ -199,7 +199,8 @@ export const Environment = (options: SecretsOption<EnvironmentOptions>) =>
  * stack load.
  *
  * Authorization works as for {@link Environment}: `OP_SERVICE_ACCOUNT_TOKEN`,
- * then `account`, then the selected profile.
+ * then `account`, then the selected profile. Rate limits fail with
+ * OnePasswordRateLimitError and are not retried, as for {@link Environment}.
  */
 export const SecretReferences = (options: SecretsOption<SecretReferencesOptions>) =>
   secretsLayer(

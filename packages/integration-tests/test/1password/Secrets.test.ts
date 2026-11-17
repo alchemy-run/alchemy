@@ -66,7 +66,9 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
       "op://vault/item/field?attribute=totp",
       "op://vault/item/field?ssh-format=openssh",
     ]) {
-      expect(Schema.decodeUnknownSync(OnePassword.SecretReference)(reference)).toBe(reference);
+      expect(Schema.decodeUnknownSync(OnePassword.SecretReferenceSchema)(reference)).toBe(
+        reference,
+      );
       expect(() => SDK.Secrets.validateSecretReference(reference)).not.toThrow();
     }
     for (const reference of [
@@ -94,7 +96,7 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
       "op://vault/item/field?",
     ]) {
       expect(
-        Result.isFailure(Schema.decodeUnknownResult(OnePassword.SecretReference)(reference)),
+        Result.isFailure(Schema.decodeUnknownResult(OnePassword.SecretReferenceSchema)(reference)),
       ).toBe(true);
     }
   });
