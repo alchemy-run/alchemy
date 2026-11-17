@@ -8,11 +8,9 @@
  */
 import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
-import type { CallbackFactory } from "../../Callback.ts";
 import {
   isRpcRequest,
   RPC_REQUEST_METHOD,
@@ -42,11 +40,6 @@ export interface DurableObjectBridgeOptions {
 }
 
 export interface WorkerdDurableObjectBridgeOptions {
-  /** The instance's durable callback factory. */
-  readonly makeCallback: (
-    state: cf.DurableObjectState,
-    random: SecureRandom.SecureRandom["Service"],
-  ) => CallbackFactory;
   /** Resolve a class export against the engine's shared build. */
   readonly getExport: (className: string) => {
     readonly build: (pin: Pin) => Promise<WorkerBuild<DurableObjectExport, any>>;
@@ -89,13 +82,6 @@ export const makeDurableObjectBridge =
         this.#state = state;
         this.#core = makeDurableObjectInstance({
           build,
-          runtimeContext: (runtime, context) => ({
-            ...runtime,
-            makeCallback: adapter.makeCallback(
-              state,
-              Context.get(context, SecureRandom.SecureRandom),
-            ),
-          }),
           initialize: () => initializeAlarmCallbacks(state),
           services: adapter.services(state, env),
           waitUntil: (promise) => void (state as any).waitUntil?.(promise),
