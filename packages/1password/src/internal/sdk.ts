@@ -10,6 +10,20 @@ import {
 } from "../Errors.ts";
 import type { OnePasswordOptions } from "../SecretsProvider.ts";
 
+type Client = Awaited<ReturnType<typeof import("@1password/sdk").createClient>>;
+
+const desktopClientsKey = Symbol.for("alchemy.1password.desktopClients");
+const desktopClients = ((globalThis as { [desktopClientsKey]?: Map<string, Promise<Client>> })[
+  desktopClientsKey
+] ??= new Map());
+
+/**
+ * The SDK reports an unknown desktop account as a plain Error. Its message
+ * names no secret, so it is matched by text.
+ */
+const accountNotFound = (cause: unknown) =>
+  cause instanceof Error && cause.message.includes("Account not found");
+
 export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
   options: OnePasswordOptions,
   credentials: OnePasswordResolvedCredentials,
@@ -42,8 +56,12 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
     Effect.tryPromise({
       try: run,
       // Match against the classes of the module instance that threw.
-      catch: (cause) =>
-        cause instanceof sdk.RateLimitExceededError
+      catch: (cause) => {
+        // A locked or expired desktop session needs a new authorization.
+        if (cause instanceof sdk.DesktopSessionExpiredError && credentials.method === "desktop") {
+          desktopClients.delete(credentials.account);
+        }
+        return cause instanceof sdk.RateLimitExceededError
           ? new OnePasswordRateLimitError({ environmentId, operation })
           : new OnePasswordSecretsError({
               environmentId,
@@ -53,8 +71,12 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
                   ? "AuthExpired"
                   : cause instanceof sdk.DesktopSessionExpiredError
                     ? "DesktopSessionExpired"
-                    : "SdkError",
-            }),
+                    : accountNotFound(cause)
+                      ? "AccountNotFound"
+                      : "SdkError",
+              account: credentials.method === "desktop" ? credentials.account : undefined,
+            });
+      },
     }).pipe(
       Effect.timeoutOrElse({
         duration: timeout,
@@ -65,15 +87,30 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
 
   const client = yield* call(
     "authenticate",
-    () =>
-      sdk.createClient({
-        auth:
-          credentials.method === "service-account"
-            ? Redacted.value(credentials.token)
-            : new sdk.DesktopAuth(credentials.account),
+    (): Promise<Client> => {
+      if (credentials.method === "service-account") {
+        return sdk.createClient({
+          auth: Redacted.value(credentials.token),
+          integrationName: "Alchemy",
+          integrationVersion: packageJson.version,
+        });
+      }
+      // Each desktop client asks the user to authorize it, so reuse one per
+      // account for the whole process: several Secrets entries, stacks and
+      // `alchemy dev` reloads then share a single prompt. The cache lives on
+      // globalThis so it survives a reload re-importing this module.
+      const cached = desktopClients.get(credentials.account);
+      if (cached) return cached;
+      const client = sdk.createClient({
+        auth: new sdk.DesktopAuth(credentials.account),
         integrationName: "Alchemy",
         integrationVersion: packageJson.version,
-      }),
+      });
+      desktopClients.set(credentials.account, client);
+      // A failed authorization is not cached, so the next load asks again.
+      client.catch(() => desktopClients.delete(credentials.account));
+      return client;
+    },
     credentials.method === "desktop" ? "60 seconds" : "30 seconds",
   );
   // Fetch once when this layer is built. Config lookups use the in-memory map;

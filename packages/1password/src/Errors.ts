@@ -25,10 +25,13 @@ export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecret
   readonly operation: OnePasswordOperation;
   /** For `InvalidEnvironment`: the variable name that is empty or repeated. */
   readonly variableName?: string;
+  /** For `AccountNotFound`: the desktop account selector that matched nothing. */
+  readonly account?: string;
   readonly reason:
     | "SdkError"
     | "AuthExpired"
     | "DesktopSessionExpired"
+    | "AccountNotFound"
     | "Timeout"
     | "InvalidEnvironment"
     | "InvalidOptions";
@@ -41,6 +44,8 @@ export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecret
         return `${prefix} Service-account authentication expired. Check or replace OP_SERVICE_ACCOUNT_TOKEN and verify Environment or vault access.`;
       case "DesktopSessionExpired":
         return `${prefix} Unlock the 1Password desktop app and authorize Alchemy again. Enable Settings > Developer > Integrate with other apps.`;
+      case "AccountNotFound":
+        return `${prefix} The 1Password desktop app has no account '${this.account ?? ""}'. Use the account name in the app's account switcher at the top of the sidebar (e.g. Family or your team's name, not your own name; case-sensitive), the sign-in address without https:// (my.1password.com), or the account UUID.`;
       case "Timeout":
         return `${prefix} The operation timed out. Check network access and, for desktop authentication, unlock 1Password and approve the authorization prompt.`;
       case "InvalidEnvironment":

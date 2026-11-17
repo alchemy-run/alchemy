@@ -16,7 +16,9 @@ import { SecretReference } from "./SecretReference.ts";
 
 interface OnePasswordAuthOptions {
   /**
-   * Desktop account name (as displayed in the app sidebar) or UUID.
+   * Desktop account: the name in the app's account switcher (e.g. `Family`,
+   * not your own name; case-sensitive), the sign-in address without
+   * `https://` (`my.1password.com`), or the account UUID.
    * Defaults to the selected Alchemy profile, which may hold a desktop selector
    * or a service account token. Ignored when OP_SERVICE_ACCOUNT_TOKEN is set.
    * Desktop authorization is unavailable in CI.
@@ -108,7 +110,7 @@ export class OnePasswordSecretsProvider extends Data.TaggedClass(
  * ```ts
  * const secrets = [OnePassword.Secrets({
  *   environmentId: "development-id",
- *   account: "My Account",
+ *   account: "Family",
  * })];
  * ```
  * Enable SDK integration in the desktop app's Developer settings. You can also

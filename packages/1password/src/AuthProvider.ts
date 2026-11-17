@@ -41,10 +41,10 @@ export type OnePasswordResolvedCredentials =
 const desktopFields: ReadonlyArray<ConfigureField> = [
   {
     name: "account",
-    label: "1Password account name or UUID",
-    description: "Use the account name shown in the 1Password desktop app sidebar, or its UUID.",
-    validate: (value) =>
-      value.trim().length === 0 ? "An account name or UUID is required." : undefined,
+    label: "1Password account",
+    description:
+      "The account name in the app's account switcher (e.g. Family, case-sensitive), the sign-in address (my.1password.com), or the account UUID.",
+    validate: (value) => (value.trim().length === 0 ? "An account is required." : undefined),
   },
 ];
 
@@ -144,7 +144,7 @@ export const OnePasswordAuth = AuthProviderLayer<
       : Effect.fail(
           AuthError.make({
             message:
-              "1Password: use --method desktop --set account=<name-or-uuid>, or --method service-account --set token=-.",
+              "1Password: use --method desktop --set account=<name, sign-in address or UUID>, or --method service-account --set token=-.",
           }),
         ),
   login: (_, config) =>
@@ -191,7 +191,8 @@ export const resolveCredentials = (account?: string) =>
     if (account !== undefined) {
       if (!account.trim())
         return yield* AuthError.make({
-          message: "1Password: account must be a non-empty desktop account name or UUID.",
+          message:
+            "1Password: account must be a non-empty desktop account name, sign-in address or UUID.",
         });
       yield* requireLocal;
       return { method: "desktop" as const, account: account.trim() };

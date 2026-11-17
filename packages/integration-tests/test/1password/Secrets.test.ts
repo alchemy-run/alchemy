@@ -373,10 +373,30 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
       Effect.gen(function* () {
         const environmentId = yield* Config.String("ONEPASSWORD_TEST_ENVIRONMENT_ID");
         const account = yield* Config.String("ONEPASSWORD_TEST_DESKTOP_ACCOUNT");
+        // Two entries in one stack, then a second stack: the desktop app
+        // asks the user to authorize Alchemy once for the whole process.
+        yield* runStack(
+          [
+            OnePassword.Secrets({ environmentId, account }),
+            OnePassword.Secrets({ environmentId, account }),
+            Secrets.ProcessEnv({ disabled: true }),
+          ],
+          fixtureValue,
+        );
         yield* runStack(
           [OnePassword.Secrets({ environmentId, account }), Secrets.ProcessEnv({ disabled: true })],
           fixtureValue,
         );
+        const unknown = yield* runStack(
+          [OnePassword.Secrets({ environmentId, account: "alchemy-audit-no-such-account" })],
+          Effect.void,
+        ).pipe(Effect.result);
+        expect(Result.isFailure(unknown)).toBe(true);
+        if (Result.isFailure(unknown)) {
+          expect(String(unknown.failure)).toContain(
+            "has no account 'alchemy-audit-no-such-account'",
+          );
+        }
       }),
     { timeout: 120_000, retry: 0, exclusive: true },
   );
