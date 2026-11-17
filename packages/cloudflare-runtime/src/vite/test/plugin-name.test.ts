@@ -1,6 +1,8 @@
 import * as fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import * as os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
 import { describe, expect, it, vi } from "vitest";
@@ -235,6 +237,15 @@ describe("alchemy Cloudflare Vite plugin name", () => {
       }
     },
   );
+
+  // A CommonJS config, or anything else that loads the official entry
+  // synchronously, goes through the same redirect.
+  it("keeps the official entry loadable with require() once the redirect is registered", () => {
+    cloudflareVitePlugin({ main: "./worker-entry.ts" });
+    const entry = fileURLToPath(import.meta.resolve("@cloudflare/vite-plugin"));
+    const required = createRequire(import.meta.url)(entry) as { cloudflare: unknown };
+    expect(typeof required.cloudflare).toBe("function");
+  });
 
   it("disables official plugins an async plugin factory resolves to", async () => {
     const configureServer = vi.fn();

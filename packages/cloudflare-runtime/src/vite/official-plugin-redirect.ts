@@ -17,11 +17,15 @@ type Neutralize = (plugins: unknown) => unknown;
 
 /**
  * The official package with `cloudflare()` wrapped: while Alchemy injects
- * its plugin, the plugins it returns are disabled as soon as they exist.
+ * its plugin, the plugins it returns are disabled as soon as they exist. It
+ * has no top-level await, so Node can also `require()` it.
+ *
+ * `real` is the entry's URL with a `?real` query. The anchored `ENTRY` test
+ * doesn't match it, so both runtimes load the real file there instead of the
+ * wrapper again. (Matching on the importer would not do: `require()` drops
+ * the wrapper's own query from its URL.)
  */
-const MARKER = "alchemy:official-cloudflare-vite-plugin";
-
-const wrapper = (real: string) => `// ${MARKER}
+const wrapper = (real: string) => `
 import * as real from ${JSON.stringify(real)};
 export * from ${JSON.stringify(real)};
 export function cloudflare(...args) {
@@ -30,6 +34,9 @@ export function cloudflare(...args) {
   return typeof neutralize === "function" ? neutralize(plugins) : plugins;
 }
 `;
+
+/** Marks the Node URL of the wrapper: the real entry's URL with this query. */
+const WRAPPER_SUFFIX = "?alchemy-wrapper";
 
 const registered = Symbol.for("@alchemy.run/cloudflare-runtime/official-vite-plugin-redirect");
 
@@ -63,8 +70,6 @@ export const redirectOfficialCloudflareVitePlugin = (neutralize: Neutralize): vo
     bun.plugin({
       name: "alchemy-official-cloudflare-vite-plugin",
       setup(build) {
-        // The wrapper imports the real entry under a query, which the
-        // anchored filter doesn't match, so Bun loads that one as is.
         build.onLoad({ filter: ENTRY }, ({ path }) => ({
           loader: "js",
           contents: wrapper(`${path}?real`),
@@ -78,13 +83,17 @@ export const redirectOfficialCloudflareVitePlugin = (neutralize: Neutralize): vo
   NodeModule.registerHooks({
     resolve(specifier, context, nextResolve) {
       const resolved = nextResolve(specifier, context);
-      const fromWrapper = decodeURIComponent(context.parentURL ?? "").includes(MARKER);
-      if (fromWrapper || !ENTRY.test(new URL(resolved.url).pathname)) return resolved;
-      return {
-        url: `data:text/javascript,${encodeURIComponent(wrapper(resolved.url))}`,
-        format: "module",
-        shortCircuit: true,
-      };
+      // Every resolution in the process passes here, so plain string tests.
+      // The anchored entry test also lets the wrapper's own `?real` import of
+      // the entry through.
+      if (!resolved.url.startsWith("file:") || !ENTRY.test(resolved.url)) return resolved;
+      // A file URL (not `data:`), so `require()` reaches the load hook too.
+      return { url: resolved.url + WRAPPER_SUFFIX, format: "module", shortCircuit: true };
+    },
+    load(url, context, nextLoad) {
+      if (!url.startsWith("file:") || !url.endsWith(WRAPPER_SUFFIX)) return nextLoad(url, context);
+      const real = `${url.slice(0, -WRAPPER_SUFFIX.length)}?real`;
+      return { format: "module", source: wrapper(real), shortCircuit: true };
     },
   });
 };
