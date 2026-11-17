@@ -35,6 +35,20 @@ fi`;
 const MachineTypeId = "~alchemy/Pi/Machine" as const;
 
 /**
+ * The key of a conversation's sandbox: one per conversation of one harness
+ * instance. Conversation ids repeat from one instance to the next, so the
+ * key carries both.
+ *
+ * @internal
+ */
+export const sandboxKey = (instanceId: string, conversationId: number | string): string =>
+  `pi-${instanceId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(-24)}-${conversationId}`;
+
+/**
  * Tools run on this machine, in `cwd` or the conversation's own working
  * directory, in place of a sandbox. Needs Node or Bun (a Fly Machine, an
  * ECS task, a container).
@@ -42,36 +56,27 @@ const MachineTypeId = "~alchemy/Pi/Machine" as const;
  * @layer
  * @provides AI.Sandbox
  */
-export const LocalEnv = (options: { readonly cwd: string }): Layer.Layer<Sandbox> =>
-  Layer.succeed(Sandbox, {
-    open: (target) =>
-      Effect.tryPromise({
-        try: async () => {
-          const { NodeExecutionEnv } = await import("@earendil-works/pi-durable/env/node");
-          const unsupported = () =>
-            Effect.fail(
-              new EnvError({
-                operation: "exec",
-                code: "unknown",
-                message: "Pi.LocalEnv is this machine: use Pi.Env, not the sandbox handle",
-              }),
-            );
-          // Pi reads the machine's own environment off the handle; no daemon runs.
-          return {
-            [MachineTypeId]: new NodeExecutionEnv({ cwd: target.cwd ?? options.cwd }),
-            exec: unsupported,
-            start: unsupported,
-          } as SandboxHandle;
-        },
-        catch: (cause) =>
-          new EnvError({
-            operation: "open",
-            code: "unknown",
-            message: `Pi.LocalEnv needs Node or Bun: ${String(cause)}`,
-          }),
+export const LocalEnv = (options: { readonly cwd: string }): Layer.Layer<Sandbox> => {
+  const unsupported = () =>
+    Effect.fail(
+      new EnvError({
+        operation: "exec",
+        code: "unknown",
+        message: "Pi.LocalEnv is this machine: use Pi.Env, not the sandbox handle",
       }),
+    );
+  return Layer.succeed(Sandbox, {
+    // Pi reads the machine's own environment off the handle; no daemon runs.
+    open: () =>
+      Effect.succeed({
+        [MachineTypeId]: options.cwd,
+        exec: unsupported,
+        start: unsupported,
+      } as SandboxHandle),
+    suspend: () => Effect.void,
     remove: () => Effect.void,
   });
+};
 
 /**
  * Builds each tool call's Pi `ExecutionEnv` from the conversation's
@@ -83,12 +88,15 @@ export const makeEnvFor = (sandboxes: Sandbox["Service"]) => {
   const installed = new WeakSet<object>();
   return (target: EnvTarget): Effect.Effect<ExecutionEnv, EnvError, RuntimeContext> =>
     Effect.gen(function* () {
-      const sandbox = yield* sandboxes.open({
-        instanceId: target.instanceId,
-        conversationId: String(target.conversationId),
-        ...(target.cwd !== undefined ? { cwd: target.cwd } : {}),
-      });
-      if (MachineTypeId in sandbox) return sandbox[MachineTypeId] as ExecutionEnv;
+      const sandbox = yield* sandboxes.open(sandboxKey(target.instanceId, target.conversationId));
+      if (MachineTypeId in sandbox) {
+        const { NodeExecutionEnv } = yield* Effect.tryPromise(
+          () => import("@earendil-works/pi-durable/env/node"),
+        );
+        return new NodeExecutionEnv({
+          cwd: target.cwd ?? (sandbox[MachineTypeId] as string),
+        }) as ExecutionEnv;
+      }
       if (!installed.has(sandbox)) {
         const result = yield* sandbox.exec(["sh", "-c", INSTALL]);
         if (result.exitCode !== 0) {

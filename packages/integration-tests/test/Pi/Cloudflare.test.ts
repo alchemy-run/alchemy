@@ -145,7 +145,7 @@ test(
 );
 
 test(
-  "coding tools run in an E2B sandbox through Pi's own daemon",
+  "coding tools run in an E2B sandbox that suspends, resumes and is removed",
   Effect.gen(function* () {
     const name = `sbx-${Date.now()}`;
     yield* call(`/sandbox/${name}/create`, {});
@@ -158,11 +158,33 @@ test(
       isError: boolean;
     }>;
     const file = yield* call(`/sandbox/${name}/file`, { path: "/home/user/hello.txt" });
-    yield* call(`/sandbox/${name}/kill`, {});
     expect(status.status).toBe("done");
     expect(tools.some((used) => used.tool === "write" && !used.isError)).toBe(true);
     expect(tools.some((used) => used.tool === "bash" && !used.isError)).toBe(true);
     expect(file.text).toContain("pi was here");
+
+    // Suspending pauses the sandbox, and suspending it again changes nothing.
+    yield* call(`/sandbox/${name}/suspend`, {});
+    yield* call(`/sandbox/${name}/suspend`, {});
+    expect((yield* call(`/sandbox/${name}/state`)).state).toBe("paused");
+
+    // The next tool call resumes it, with the file still there.
+    const resumed = yield* call(`/sandbox/${name}/prompt`, {
+      text: "Use bash to run: cat /home/user/hello.txt",
+      requestId: "sbx-2",
+    });
+    expect(resumed.status).toBe("done");
+    expect((yield* call(`/sandbox/${name}/state`)).state).toBe("running");
+    const after = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+    }>;
+    expect(after.filter((used) => used.tool === "bash" && !used.isError).length).toBe(2);
+
+    // Removing deletes it, and removing it again changes nothing.
+    yield* call(`/sandbox/${name}/kill`, {});
+    yield* call(`/sandbox/${name}/kill`, {});
+    expect((yield* call(`/sandbox/${name}/state`)).state).toBeNull();
   }),
   { tags: [...tags, "provider:e2b"], timeout: 300_000 },
 );

@@ -2,11 +2,11 @@ import * as AI from "@alchemy.run/ai";
 import * as Archil from "@alchemy.run/archil";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { sandboxName } from "./name.ts";
 
 /**
- * One Archil sandbox per conversation. `create` returns the sandbox that
- * already has the name, and Archil pauses it while it is idle.
+ * Archil finds a sandbox by its name: `create` returns the one that already
+ * has it. `suspend` pauses a running sandbox, keeping its memory and files;
+ * Archil also pauses one that is idle, and resumes it on the next command.
  */
 export const ArchilSandbox = Layer.effect(
   AI.Sandbox,
@@ -15,8 +15,14 @@ export const ArchilSandbox = Layer.effect(
     const sandboxes = yield* Archil.CreateSandbox(base);
 
     return {
-      open: (target) => sandboxes.create({ name: sandboxName(target) }),
-      remove: (key) => sandboxes.delete(sandboxName(key)),
+      open: (key) => sandboxes.create({ name: key }),
+      suspend: Effect.fn(function* (key) {
+        const sandbox = yield* sandboxes.get(key);
+        if (sandbox === undefined) return;
+        const { status } = yield* sandbox.refresh();
+        if (status === "running") yield* sandbox.pause();
+      }),
+      remove: (key) => sandboxes.delete(key),
     };
   }),
 ).pipe(Layer.provide(Archil.CreateSandboxHttp));

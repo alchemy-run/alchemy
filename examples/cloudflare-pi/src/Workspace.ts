@@ -33,8 +33,7 @@ const workspace = <E, R>(sandbox: Layer.Layer<AI.Sandbox, E, R>) =>
           return conversation.id;
         }),
         prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
-          const conversation = yield* harness.conversationByName(name);
-          const submission = yield* conversation.submit({
+          const submission = yield* harness.submit(name, {
             type: "input",
             content: text,
             requestId,
@@ -59,11 +58,10 @@ const workspace = <E, R>(sandbox: Layer.Layer<AI.Sandbox, E, R>) =>
               : [],
           );
         }),
+        /** Stop the conversation's sandbox, keeping its files. Its next tool call resumes it. */
+        suspend: (name: string) => harness.suspendSandbox(name),
         /** Delete the conversation's sandbox. Its next tool call starts a new one. */
-        remove: Effect.fn(function* (name: string) {
-          const conversation = yield* harness.conversationByName(name);
-          yield* conversation.removeSandbox;
-        }),
+        remove: (name: string) => harness.removeSandbox(name),
       };
     });
   }).pipe(Effect.provide(Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, sandbox)));

@@ -211,6 +211,19 @@ for (const platform of platforms) {
     ]);
     expect(calls[1]!.text).toContain("11");
 
+    // Suspend it (a platform without a pause leaves it running), then use it
+    // again: the next tool call finds the file the first one wrote.
+    await code("suspend", {});
+    const resumed = await code<{ status: string }>("prompt", {
+      text: "Run `cat hello.txt` with bash and tell me what it printed.",
+      requestId: "code-2",
+    });
+    expect(resumed.status).toBe("done");
+    const after =
+      await code<ReadonlyArray<{ tool: string; isError: boolean; text: string }>>("tool-calls");
+    expect(after.at(-1)).toMatchObject({ tool: "bash", isError: false });
+    expect(after.at(-1)!.text).toContain("pi was here");
+
     await code("remove", {});
-  }, 300_000);
+  }, 420_000);
 }

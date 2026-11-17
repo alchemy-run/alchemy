@@ -28,53 +28,51 @@ export interface SandboxHandle {
   >;
 }
 
-/** Which conversation a sandbox is for. */
-export interface SandboxTarget {
-  /**
-   * Identifies the harness instance: the Durable Object's id, a SQLite
-   * file's path. Conversation ids repeat from one instance to the next, so
-   * key the sandbox on both.
-   */
-  readonly instanceId: string;
-  readonly conversationId: string;
-  /** The conversation's working directory, when it has one. */
-  readonly cwd?: string;
-}
-
 /**
- * Where a conversation's files and shell are. `open` finds or creates the
- * conversation's sandbox, and `remove` deletes it. Make `open` idempotent
- * (find by name or metadata first), so the same conversation reaches the
- * same sandbox after its host is evicted or restarted.
+ * Where a harness's tools find files and a shell. The harness chooses a
+ * `key` for each sandbox it wants (Pi uses one per conversation) and the
+ * Layer maps that key to a sandbox on its platform. A key is lowercase
+ * letters, digits and `-`, at most 48 characters, so it is usable as a
+ * name or a label on every platform.
  *
- * A harness whose tools need files or a shell requires it, so that harness
- * does not compile until a Layer is provided. The sandbox can be on any
- * platform (E2B, Daytona, Modal, Boat, Archil): changing platform is
- * providing a different Layer.
+ * All three operations are idempotent. `open` returns the key's sandbox
+ * running, whatever state it was in: it creates it, resumes it, or returns
+ * it as it is. `suspend` stops paying for compute and keeps the files where
+ * the platform can; where it cannot, it does nothing. `remove` deletes the
+ * sandbox and does nothing when it is already gone.
  *
- * **Example:** One E2B sandbox per conversation
+ * Whether files outlive an idle sandbox is the platform's: a sandbox its
+ * platform deleted is created again, empty, by the next `open`.
+ *
+ * A harness whose tools need files or a shell requires this service, so
+ * that harness does not compile until a Layer is provided. Changing
+ * platform is providing a different Layer.
+ *
+ * **Example:** E2B: found by metadata, paused on suspend
  * ```typescript
  * const E2BSandbox = Layer.effect(
  *   AI.Sandbox,
  *   Effect.gen(function* () {
  *     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
  *     const sandboxes = yield* E2B.CreateSandbox(base);
- *     const metadataOf = ({ instanceId, conversationId }: AI.SandboxTarget) => ({
- *       instance: instanceId,
- *       conversation: conversationId,
- *     });
- *     const find = (target: AI.SandboxTarget) =>
- *       sandboxes.list({ metadata: metadataOf(target), state: ["running", "paused"] });
+ *     const find = (key: string) =>
+ *       sandboxes.list({ metadata: { key }, state: ["running", "paused"] });
  *
  *     return {
- *       open: Effect.fn(function* (target) {
- *         const [existing] = yield* find(target);
+ *       open: Effect.fn(function* (key) {
+ *         const [existing] = yield* find(key);
  *         return existing
  *           ? yield* sandboxes.connect(existing.sandboxID)
- *           : yield* sandboxes.create({ metadata: metadataOf(target), timeout: 600 });
+ *           : yield* sandboxes.create({ metadata: { key }, timeout: 600, autoPause: true });
  *       }),
- *       remove: Effect.fn(function* (target) {
- *         const found = yield* find(target);
+ *       suspend: Effect.fn(function* (key) {
+ *         const [existing] = yield* find(key);
+ *         if (existing?.state !== "running") return;
+ *         const sandbox = yield* sandboxes.connect(existing.sandboxID);
+ *         yield* sandbox.pause();
+ *       }),
+ *       remove: Effect.fn(function* (key) {
+ *         const found = yield* find(key);
  *         yield* Effect.forEach(found, (sandbox) => sandboxes.kill(sandbox.sandboxID));
  *       }),
  *     };
@@ -82,37 +80,41 @@ export interface SandboxTarget {
  * ).pipe(Layer.provide(E2B.CreateSandboxHttp));
  * ```
  *
- * **Example:** The same on Daytona
+ * **Example:** Modal: found by name, nothing to suspend
  * ```typescript
- * const DaytonaSandbox = Layer.effect(
+ * const ModalSandbox = Layer.effect(
  *   AI.Sandbox,
  *   Effect.gen(function* () {
- *     const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
- *     const sandboxes = yield* Daytona.CreateSandbox(base);
- *     const nameOf = ({ instanceId, conversationId }: AI.SandboxTarget) =>
- *       `ai-${instanceId.slice(0, 16)}-${conversationId}`;
+ *     const app = yield* Modal.App("App", {});
+ *     const base = yield* Modal.Image("Base", { app, image: "node:22-bookworm" });
+ *     const sandboxes = yield* Modal.CreateSandbox(base);
  *
  *     return {
- *       open: Effect.fn(function* (target) {
- *         const existing = yield* sandboxes.get(nameOf(target));
- *         if (existing === undefined) {
- *           return yield* sandboxes.create({ name: nameOf(target), autoStopInterval: 15 });
- *         }
- *         yield* existing.startSandbox();
- *         return existing;
+ *       open: Effect.fn(function* (key) {
+ *         return (
+ *           (yield* sandboxes.fromName(key)) ??
+ *           (yield* sandboxes.create({ name: key, idleTimeout: "10 minutes" }))
+ *         );
  *       }),
- *       remove: (target) => sandboxes.delete(nameOf(target)),
+ *       // Modal has no pause: it ends the sandbox once it is idle.
+ *       suspend: () => Effect.void,
+ *       remove: Effect.fn(function* (key) {
+ *         const sandbox = yield* sandboxes.fromName(key);
+ *         if (sandbox !== undefined) yield* sandbox.terminate();
+ *       }),
  *     };
  *   }),
- * ).pipe(Layer.provide(Daytona.CreateSandboxHttp));
+ * ).pipe(Layer.provide(Modal.CreateSandboxHttp));
  * ```
  */
 export class Sandbox extends Context.Service<
   Sandbox,
   {
-    /** Find or create the conversation's sandbox. */
-    readonly open: (target: SandboxTarget) => Effect.Effect<SandboxHandle, unknown, RuntimeContext>;
-    /** Delete the conversation's sandbox, if it has one. Its next tool call opens a new one. */
-    readonly remove: (target: SandboxTarget) => Effect.Effect<unknown, unknown, RuntimeContext>;
+    /** The key's sandbox, running: created, resumed, or returned as it is. */
+    readonly open: (key: string) => Effect.Effect<SandboxHandle, unknown, RuntimeContext>;
+    /** Stop the key's sandbox and keep its files, where the platform can. */
+    readonly suspend: (key: string) => Effect.Effect<unknown, unknown, RuntimeContext>;
+    /** Delete the key's sandbox, if there is one. */
+    readonly remove: (key: string) => Effect.Effect<unknown, unknown, RuntimeContext>;
   }
 >()("AI.Sandbox") {}

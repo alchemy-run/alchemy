@@ -2,11 +2,11 @@ import * as AI from "@alchemy.run/ai";
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { sandboxName } from "./name.ts";
 
 /**
- * One Modal sandbox per conversation, found by its name. Modal ends it
- * after ten idle minutes.
+ * Modal finds a sandbox by its name. It has no pause, so `suspend` does
+ * nothing: Modal ends a sandbox idle for ten minutes, and the next `open`
+ * creates an empty one.
  */
 export const ModalSandbox = Layer.effect(
   AI.Sandbox,
@@ -16,15 +16,15 @@ export const ModalSandbox = Layer.effect(
     const sandboxes = yield* Modal.CreateSandbox(base);
 
     return {
-      open: Effect.fn(function* (target) {
-        const name = sandboxName(target);
+      open: Effect.fn(function* (key) {
         return (
-          (yield* sandboxes.fromName(name)) ??
-          (yield* sandboxes.create({ name, idleTimeout: "10 minutes" }))
+          (yield* sandboxes.fromName(key)) ??
+          (yield* sandboxes.create({ name: key, idleTimeout: "10 minutes" }))
         );
       }),
+      suspend: () => Effect.void,
       remove: Effect.fn(function* (key) {
-        const sandbox = yield* sandboxes.fromName(sandboxName(key));
+        const sandbox = yield* sandboxes.fromName(key);
         if (sandbox !== undefined) yield* sandbox.terminate();
       }),
     };

@@ -51,7 +51,7 @@ import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
-import { makeEnvFor } from "./Sandbox.ts";
+import { makeEnvFor, sandboxKey } from "./Sandbox.ts";
 import { isSkill, toExtension, type SkillExtension } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
@@ -156,6 +156,11 @@ export interface Submission {
 /** One conversation: a transcript and the agent it runs with. */
 export interface Conversation {
   readonly id: ConversationId;
+  /**
+   * The key the harness opens this conversation's sandbox with: what an
+   * `AI.Sandbox` Layer names or labels the sandbox by.
+   */
+  readonly sandboxKey: string;
   /** What the conversation runs with, resolved against the harness. */
   readonly agent: Effect.Effect<Agent, PiError, RuntimeContext>;
   /** Change what it runs with, from the next model request. */
@@ -187,6 +192,12 @@ export interface Conversation {
     window?: ConversationWindow,
   ) => Stream.Stream<ConversationView, PiError, RuntimeContext>;
   /**
+   * Stop the conversation's sandbox and keep its files, where its platform
+   * can (`AI.Sandbox`'s `suspend`). Its next tool call resumes it. Does
+   * nothing on a harness without a sandbox.
+   */
+  readonly suspendSandbox: Effect.Effect<void, PiError, RuntimeContext>;
+  /**
    * Delete the conversation's sandbox (`AI.Sandbox`'s `remove`). Its next
    * tool call opens a new one. Does nothing on a harness without a sandbox.
    */
@@ -210,6 +221,35 @@ export interface Harness {
   readonly conversation: (
     id: ConversationId,
   ) => Effect.Effect<Conversation | undefined, PiError, RuntimeContext>;
+  /**
+   * Submit to the conversation with this name: `conversationByName`, then
+   * `submit`.
+   */
+  readonly submit: (
+    name: string,
+    draft: SubmissionDraft,
+  ) => Effect.Effect<Submission, PiError | ConversationNotFound, RuntimeContext>;
+  /** Change what the named conversation runs with, from its next model request. */
+  readonly configure: (
+    name: string,
+    options: AgentOptions,
+  ) => Effect.Effect<void, PiError | ConversationNotFound | NotOnHarness, RuntimeContext>;
+  /** Stop the named conversation: withdraw queued inputs, abort running work, wait until idle. */
+  readonly abort: (
+    name: string,
+    options?: { readonly background?: boolean },
+  ) => Effect.Effect<void, PiError | ConversationNotFound, RuntimeContext>;
+  /**
+   * Stop the named conversation's sandbox and keep its files, where its
+   * platform can. Its next tool call resumes it.
+   */
+  readonly suspendSandbox: (
+    name: string,
+  ) => Effect.Effect<void, PiError | ConversationNotFound, RuntimeContext>;
+  /** Delete the named conversation's sandbox. Its next tool call opens a new one. */
+  readonly removeSandbox: (
+    name: string,
+  ) => Effect.Effect<void, PiError | ConversationNotFound, RuntimeContext>;
   /** Pi's reserved root conversation, created on first use. */
   readonly root: (
     options?: AgentOptions,
@@ -749,20 +789,26 @@ export const Harness = <
         Effect.flatMap(raw, ({ harness, conversation }) =>
           Effect.tap(call(conversation, harness), () => arm(harness)),
         );
+      const onSandbox = (
+        call: (
+          sandbox: Sandbox["Service"],
+          key: string,
+        ) => Effect.Effect<unknown, unknown, RuntimeContext>,
+      ): Effect.Effect<void, PiError, RuntimeContext> =>
+        sandbox === undefined
+          ? Effect.void
+          : Effect.suspend(() => call(sandbox, sandboxKey(storage.id, id))).pipe(
+              Effect.asVoid,
+              Effect.mapError(
+                (cause) => new PiError({ message: `Sandbox: ${messageOf(cause)}`, cause }),
+              ),
+            );
       return {
         id,
+        sandboxKey: sandboxKey(storage.id, id),
         raw: Effect.map(raw, ({ conversation }) => conversation),
-        removeSandbox:
-          sandbox === undefined
-            ? Effect.void
-            : Effect.suspend(() =>
-                sandbox.remove({ instanceId: storage.id, conversationId: String(id) }),
-              ).pipe(
-                Effect.asVoid,
-                Effect.mapError(
-                  (cause) => new PiError({ message: `Sandbox: ${messageOf(cause)}`, cause }),
-                ),
-              ),
+        suspendSandbox: onSandbox((sandbox, key) => sandbox.suspend(key)),
+        removeSandbox: onSandbox((sandbox, key) => sandbox.remove(key)),
         agent: on((conversation) => fromPi((context) => conversation.agent(context))),
         configure: (requested) =>
           on((conversation) =>
@@ -860,8 +906,30 @@ export const Harness = <
         Effect.map((doc) => doc?.names[name] as ConversationId | undefined),
       );
 
+    const conversationByName = (name: string) =>
+      Effect.flatMap(open, (harness) =>
+        Effect.flatMap(namedId(harness, name), (id) =>
+          id === undefined
+            ? Effect.fail(new ConversationNotFound({ conversationName: name }))
+            : Effect.succeed(conversationOf(id)),
+        ),
+      );
+
     return {
       raw: open,
+      conversationByName,
+      submit: (name, draft) =>
+        Effect.flatMap(conversationByName(name), (conversation) => conversation.submit(draft)),
+      configure: (name, agent) =>
+        Effect.flatMap(conversationByName(name), (conversation) => conversation.configure(agent)),
+      abort: (name, abortOptions) =>
+        Effect.flatMap(conversationByName(name), (conversation) =>
+          conversation.abort(abortOptions),
+        ),
+      suspendSandbox: (name) =>
+        Effect.flatMap(conversationByName(name), (conversation) => conversation.suspendSandbox),
+      removeSandbox: (name) =>
+        Effect.flatMap(conversationByName(name), (conversation) => conversation.removeSandbox),
       createConversation: (createOptions = {}) =>
         withHarness((harness) =>
           Effect.gen(function* () {
@@ -888,14 +956,6 @@ export const Harness = <
             );
             return conversationOf(conversation.id);
           }),
-        ),
-      conversationByName: (name) =>
-        Effect.flatMap(open, (harness) =>
-          Effect.flatMap(namedId(harness, name), (id) =>
-            id === undefined
-              ? Effect.fail(new ConversationNotFound({ conversationName: name }))
-              : Effect.succeed(conversationOf(id)),
-          ),
         ),
       conversation: (id) =>
         Effect.flatMap(open, (harness) =>

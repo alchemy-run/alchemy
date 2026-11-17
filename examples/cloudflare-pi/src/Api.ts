@@ -59,6 +59,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
               });
             case "tool-calls":
               return yield* HttpServerResponse.json(yield* workspace.toolCalls(name));
+            case "suspend":
+              yield* workspace.suspend(name);
+              return yield* ok;
             case "remove":
               yield* workspace.remove(name);
               return yield* ok;

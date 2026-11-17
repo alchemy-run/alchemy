@@ -2,11 +2,11 @@ import * as AI from "@alchemy.run/ai";
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { sandboxName } from "./name.ts";
 
 /**
- * One Daytona sandbox per conversation, found by its name. Daytona stops it
- * after fifteen idle minutes and deletes it once stopped.
+ * Daytona finds a sandbox by its name and stops it on `suspend`, keeping
+ * its disk. Daytona stops a sandbox idle for fifteen minutes and deletes
+ * one that has been stopped for a day.
  */
 export const DaytonaSandbox = Layer.effect(
   AI.Sandbox,
@@ -20,16 +20,25 @@ export const DaytonaSandbox = Layer.effect(
     const sandboxes = yield* Daytona.CreateSandbox(base);
 
     return {
-      open: Effect.fn(function* (target) {
-        const name = sandboxName(target);
-        const existing = yield* sandboxes.get(name);
+      open: Effect.fn(function* (key) {
+        const existing = yield* sandboxes.get(key);
         if (existing === undefined) {
-          return yield* sandboxes.create({ name, autoStopInterval: 15, autoDeleteInterval: 0 });
+          return yield* sandboxes.create({
+            name: key,
+            autoStopInterval: 15,
+            autoDeleteInterval: 24 * 60,
+          });
         }
         yield* existing.startSandbox();
         return existing;
       }),
-      remove: (key) => sandboxes.delete(sandboxName(key)),
+      suspend: Effect.fn(function* (key) {
+        const existing = yield* sandboxes.get(key);
+        if (existing === undefined) return;
+        const { state } = yield* existing.getSandbox();
+        if (state === "started") yield* existing.stopSandbox();
+      }),
+      remove: (key) => sandboxes.delete(key),
     };
   }),
 ).pipe(Layer.provide(Daytona.CreateSandboxHttp));

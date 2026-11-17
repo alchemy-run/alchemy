@@ -19,40 +19,31 @@ const ModelsLive = Layer.unwrap(
   ),
 );
 
-/**
- * Marks a conversation's sandbox. Conversation ids repeat from one Durable
- * Object to the next, so the object's id is part of the mark.
- */
-const markOf = (instanceId: string, conversationId: string | number) => ({
-  "pi-instance": instanceId,
-  "pi-conversation": String(conversationId),
-});
-
 /** The sandbox client, bound to the image every conversation's sandbox boots from. */
 const Sandboxes = Effect.gen(function* () {
   const base = yield* E2B.Template("PiBase", { image: "node:22-bookworm" });
   return yield* E2B.CreateSandbox(base);
 });
 
-/** One E2B sandbox per conversation, found again by its mark. */
+/** E2B finds a sandbox by its metadata and pauses it on `suspend`. */
 const SandboxLive = Layer.effect(
   AI.Sandbox,
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
-    const find = ({ instanceId, conversationId }: AI.SandboxTarget) =>
-      sandboxes.list({
-        metadata: markOf(instanceId, conversationId),
-        state: ["running", "paused"],
-      });
+    const find = (key: string) =>
+      sandboxes.list({ metadata: { key }, state: ["running", "paused"] });
     return {
-      open: Effect.fn(function* (target) {
-        const [existing] = yield* find(target);
+      open: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
         return existing
-          ? yield* sandboxes.connect(existing.sandboxID)
-          : yield* sandboxes.create({
-              metadata: markOf(target.instanceId, target.conversationId),
-              timeout: 600,
-            });
+          ? yield* sandboxes.connect(existing.sandboxID, { timeout: 600 })
+          : yield* sandboxes.create({ metadata: { key }, timeout: 600 });
+      }),
+      suspend: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
+        if (existing?.state !== "running") return;
+        const sandbox = yield* sandboxes.connect(existing.sandboxID);
+        yield* sandbox.pause();
       }),
       remove: Effect.fn(function* (key) {
         const found = yield* find(key);
@@ -73,16 +64,14 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
-      /** The id of the conversation's sandbox, if it has one. */
-      const sandboxIdOf = Effect.fn(function* (name: string) {
+      /** The conversation's sandbox as E2B lists it, if it has one. */
+      const sandboxOf = Effect.fn(function* (name: string) {
         const conversation = yield* harness.conversationByName(name);
         const [found] = yield* sandboxes.list({
-          metadata: markOf(state.id.toString(), conversation.id),
+          metadata: { key: conversation.sandboxKey },
           state: ["running", "paused"],
         });
-        return found?.sandboxID;
+        return found;
       });
 
       return {
@@ -104,7 +93,7 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
           return (yield* submission.wait).status;
         }),
         readFile: Effect.fn(function* (name: string, path: string) {
-          const sandboxId = yield* sandboxIdOf(name);
+          const sandboxId = (yield* sandboxOf(name))?.sandboxID;
           if (sandboxId === undefined) return null;
           // A sandbox killed a moment ago can still be listed.
           const sandbox = yield* sandboxes
@@ -123,10 +112,12 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
               : [],
           );
         }),
-        kill: Effect.fn(function* (name: string) {
-          const conversation = yield* harness.conversationByName(name);
-          yield* conversation.removeSandbox;
+        /** The sandbox's state on E2B: `running`, `paused`, or `null` when it has none. */
+        sandboxState: Effect.fn(function* (name: string) {
+          return (yield* sandboxOf(name))?.state ?? null;
         }),
+        suspend: (name: string) => harness.suspendSandbox(name),
+        kill: (name: string) => harness.removeSandbox(name),
       };
     });
   }).pipe(Effect.provide(HarnessLive)),
