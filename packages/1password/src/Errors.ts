@@ -19,70 +19,73 @@ export class OnePasswordRateLimitError extends Data.TaggedError("OnePasswordRate
   }
 }
 
-/** A sanitized SDK failure; raw errors may contain secret values and are not retained. */
-export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecretsError")<{
+/**
+ * The SDK failed for a reason it doesn't classify, or couldn't be loaded.
+ * The raw error may contain secret values and is not retained.
+ */
+export class OnePasswordSdkError extends Data.TaggedError("OnePasswordSdkError")<{
   readonly environmentId?: string;
   readonly operation: OnePasswordOperation;
-  /** For `InvalidEnvironment`: the variable name that is empty or repeated. */
-  readonly variableName?: string;
-  /** For `InvalidOptions`: the constructor whose options were invalid. */
-  readonly entry?: "Environment" | "SecretReferences";
-  /** For `AccountNotFound`: the desktop account selector that matched nothing. */
-  readonly account?: string;
-  readonly reason:
-    | "SdkError"
-    | "AuthExpired"
-    | "DesktopSessionExpired"
-    | "AccountNotFound"
-    | "Timeout"
-    | "InvalidEnvironment"
-    | "InvalidOptions";
 }> {
   readonly [UserFacingError] = true;
   override get message() {
-    const prefix = `1Password could not ${this.operation} ${this.environmentId === undefined ? "secret references" : `Environment '${this.environmentId}'`}.`;
-    switch (this.reason) {
-      case "AuthExpired":
-        return `${prefix} Service-account authentication expired. Check or replace OP_SERVICE_ACCOUNT_TOKEN and verify Environment or vault access.`;
-      case "DesktopSessionExpired":
-        return `${prefix} Unlock the 1Password desktop app and authorize Alchemy again. Enable Settings > Developer > Integrate with other apps.`;
-      case "AccountNotFound":
-        return `${prefix} The 1Password desktop app has no account '${this.account ?? ""}'. Use the account name in the app's account switcher at the top of the sidebar (e.g. Family or your team's name, not your own name; case-sensitive), the sign-in address without https:// (my.1password.com), or the account UUID.`;
-      case "Timeout":
-        return `${prefix} The operation timed out. Check network access and, for desktop authentication, unlock 1Password and approve the authorization prompt.`;
-      case "InvalidEnvironment":
-        return `${prefix} Variable name '${this.variableName ?? ""}' is empty or repeated, or its value is not a string.`;
-      case "InvalidOptions":
-        return this.entry === "SecretReferences"
-          ? "1Password: SecretReferences needs a non-empty `references` map with non-empty config keys, and a non-empty `account` when one is given."
-          : "1Password: Environment needs a non-empty `environmentId`, and a non-empty `account` when one is given.";
-      default:
-        return `${prefix} Check the Environment ID or secret references and read permissions, OP_SERVICE_ACCOUNT_TOKEN or desktop account selection, and the 1Password SDK installation. For desktop access, unlock the app and enable Settings > Developer > Integrate with other apps.`;
-    }
+    return `1Password could not ${this.operation} ${this.environmentId === undefined ? "secret references" : `Environment '${this.environmentId}'`}. Check the Environment ID and read access, and that @1password/sdk is installed.`;
+  }
+}
+
+/** The service account token was rejected or has expired. */
+export class OnePasswordAuthExpiredError extends Data.TaggedError(
+  "OnePasswordAuthExpiredError",
+)<{}> {
+  readonly [UserFacingError] = true;
+  override get message() {
+    return "1Password rejected the service account token. Check or replace OP_SERVICE_ACCOUNT_TOKEN.";
+  }
+}
+
+/** The desktop app's authorization ended, e.g. because 1Password locked. */
+export class OnePasswordDesktopSessionExpiredError extends Data.TaggedError(
+  "OnePasswordDesktopSessionExpiredError",
+)<{}> {
+  readonly [UserFacingError] = true;
+  override get message() {
+    return "1Password desktop authorization expired. Unlock the app and authorize Alchemy again.";
+  }
+}
+
+/** The desktop app has no account matching the `account` selector. */
+export class OnePasswordAccountNotFoundError extends Data.TaggedError(
+  "OnePasswordAccountNotFoundError",
+)<{
+  readonly account: string;
+}> {
+  readonly [UserFacingError] = true;
+  override get message() {
+    return `The 1Password desktop app has no account '${this.account}'. Use the name in the app's account switcher (e.g. Family, case-sensitive), the sign-in address (my.1password.com), or the account UUID.`;
+  }
+}
+
+/** A 1Password call didn't finish in time. */
+export class OnePasswordTimeoutError extends Data.TaggedError("OnePasswordTimeoutError")<{
+  readonly operation: OnePasswordOperation;
+}> {
+  readonly [UserFacingError] = true;
+  override get message() {
+    return `1Password timed out during ${this.operation}. Check network access; for the desktop app, unlock 1Password and approve the authorization prompt.`;
   }
 }
 
 /**
- * A reference could not be resolved. Neither its URI nor the SDK's free-text
- * message is retained; `errorType` is the SDK's fixed error kind
- * (e.g. `fieldNotFound`, `itemNotFound`, `vaultNotFound`).
+ * A reference could not be resolved, so nothing was loaded. Neither its URI nor
+ * the SDK's free-text message is retained; `errorType` is the SDK's fixed error
+ * kind (e.g. `parsing`, `fieldNotFound`, `itemNotFound`, `vaultNotFound`).
  */
 export class OnePasswordReferenceError extends Data.TaggedError("OnePasswordReferenceError")<{
   readonly configKey: string;
-  readonly reason: "InvalidReference" | "ResolutionFailed" | "MissingResponse";
   readonly errorType?: string;
 }> {
   readonly [UserFacingError] = true;
   override get message() {
-    const prefix = `1Password could not resolve the reference for config key '${this.configKey}'`;
-    const suffix = "No partial config was loaded.";
-    switch (this.reason) {
-      case "InvalidReference":
-        return `${prefix}: expected op://vault/item/[section/]field using ASCII letters, digits, spaces, hyphens, underscores and periods, optionally ?attribute=otp, ?attribute=totp or ?ssh-format=openssh. Use IDs for names with other characters. ${suffix}`;
-      case "ResolutionFailed":
-        return `${prefix}${this.errorType ? ` (${this.errorType})` : ""}. Check that the vault, item and field exist and are readable. ${suffix}`;
-      default:
-        return `${prefix}: 1Password returned no result for it. ${suffix}`;
-    }
+    return `1Password could not resolve the reference for config key '${this.configKey}'${this.errorType ? ` (${this.errorType})` : ""}. Check its op://vault/item/[section/]field syntax and that the field exists and is readable. No partial config was loaded.`;
   }
 }

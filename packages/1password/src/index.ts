@@ -8,16 +8,17 @@ export {
 export {
   OnePasswordRateLimitError,
   OnePasswordReferenceError,
-  OnePasswordSecretsError,
+  OnePasswordAccountNotFoundError,
+  OnePasswordAuthExpiredError,
+  OnePasswordDesktopSessionExpiredError,
+  OnePasswordSdkError,
+  OnePasswordTimeoutError,
   type OnePasswordOperation,
 } from "./Errors.ts";
-export { SecretReferenceSchema } from "./SecretReference.ts";
 export {
   Environment,
   SecretReferences,
   OnePasswordSecretsProvider,
-  EnvironmentOptionsSchema,
-  SecretReferencesOptionsSchema,
   type EnvironmentOptions,
   type SecretReferencesOptions,
 } from "./SecretsProvider.ts";

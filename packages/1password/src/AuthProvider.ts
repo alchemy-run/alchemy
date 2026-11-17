@@ -189,13 +189,8 @@ export const resolveCredentials = (account?: string) =>
     const token = yield* tokenFromEnvironment;
     if (token !== undefined) return token;
     if (account !== undefined) {
-      if (!account.trim())
-        return yield* AuthError.make({
-          message:
-            "1Password: account must be a non-empty desktop account name, sign-in address or UUID.",
-        });
       yield* requireLocal;
-      return { method: "desktop" as const, account: account.trim() };
+      return { method: "desktop" as const, account };
     }
     const resolved = yield* resolveProviderConfig<
       OnePasswordAuthConfig,

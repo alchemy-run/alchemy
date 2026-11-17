@@ -30,9 +30,8 @@ OnePassword.SecretReferences({
 });
 ```
 
-The exported Effect `SecretReferenceSchema` validates `op://vault/item/[section/]field`
-syntax before authentication. Duplicate references are resolved once in a
-single SDK batch; any failed reference rejects the whole config load.
+References are resolved by 1Password in one batch when the stack loads.
+A missing or malformed reference fails the whole load, naming its config key.
 
 Locally, run `alchemy profile edit --add 1Password`, or pass `account`
 to either entry: the name in the app's account switcher (e.g. `Family`), the
@@ -49,7 +48,7 @@ wait for the relevant quota window to reset before trying again.
 
 ## Development checks
 
-Run offline validation and the real SDK authentication-rejection test from the
+Run the offline tests and the real SDK authentication-rejection test from the
 repository root:
 
 ```sh
@@ -62,7 +61,7 @@ Live tests are opt-in and read-only. Create an Environment containing
 `OP_SERVICE_ACCOUNT_TOKEN` and set `ONEPASSWORD_TEST_REFERENCE` to an
 `op://vault/item/[section/]field` whose value is `ready`. The service account
 must have read access to both fixtures. These checks cover Environment reads,
-duplicate references, config precedence, and a partially failing reference batch.
+duplicate references, and missing or malformed references.
 The fixture item must not have a field named `alchemy-audit-missing-field`.
 
 For the desktop check, set `ONEPASSWORD_TEST_DESKTOP_ACCOUNT` and run locally

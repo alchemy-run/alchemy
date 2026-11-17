@@ -1,4 +1,3 @@
-import * as SDK from "@1password/sdk";
 import * as OnePassword from "@alchemy.run/1password";
 import { resolveCredentials } from "@alchemy.run/1password/AuthProvider";
 import { describe, expect, it } from "@alchemy.run/test";
@@ -14,7 +13,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 
 const options = { providers: Layer.empty, state: inMemoryState() };
 
@@ -29,6 +27,12 @@ const runStack = <A>(
     deploy({ stack: Stack("1password-secrets", { ...options, secrets }, body), stage }),
     options,
   );
+
+// The stack reports a secrets provider's failure as a ConfigError; return the provider's own error.
+const providerError = (error: unknown) =>
+  error instanceof Config.ConfigError && error.cause._tag === "SourceError"
+    ? error.cause.cause
+    : error;
 
 // Tests using this helper hold the process-wide exclusive lock. Never change CI:
 // profile storage and migration use it to choose their behavior.
@@ -56,113 +60,7 @@ const withEnv = <A, E, R>(
       }),
   ).pipe(Effect.andThen(effect), Effect.scoped);
 
-describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
-  it("validates references against the real SDK parser", () => {
-    for (const reference of [
-      "op://vault/item/field",
-      "op://My Vault/My Item/My Section/My Field",
-      "op://vault/item/a.b_c-d",
-      "op://vault/item/field?attribute=otp",
-      "op://vault/item/field?attribute=totp",
-      "op://vault/item/field?ssh-format=openssh",
-    ]) {
-      expect(Schema.decodeUnknownSync(OnePassword.SecretReferenceSchema)(reference)).toBe(
-        reference,
-      );
-      expect(() => SDK.Secrets.validateSecretReference(reference)).not.toThrow();
-    }
-    for (const reference of [
-      "",
-      "secret-value",
-      "https://vault/item/field",
-      "OP://vault/item/field",
-      "op://vault/item",
-      "op:///item/field",
-      "op://vault//field",
-      "op://vault/item/",
-      "op://vault/item//field",
-      "op://vault/item/section/field/extra",
-      "op:// /item/field",
-      "op://vault/item/ ",
-      "op://vault/item/field#fragment",
-      "op://vault/item/hello%20world",
-      "op://vault/item/field\n",
-      "op://vault/item/fi\teld",
-      "op://vault/item/中文",
-      "op://vault/item/field?bogus=1",
-      "op://vault/item/field?attribute=value",
-      "op://vault/item/field?attribute=otp&ssh-format=openssh",
-      "op://vault/item/field?attribute=otp&attribute=otp",
-      "op://vault/item/field?",
-    ]) {
-      expect(
-        Result.isFailure(Schema.decodeUnknownResult(OnePassword.SecretReferenceSchema)(reference)),
-      ).toBe(true);
-    }
-  });
-
-  it.effect("rejects invalid options before authentication without retaining their input", () =>
-    Effect.gen(function* () {
-      for (const supplied of [
-        { references: { SECRET: "private-invalid-reference" } },
-        { references: { SECRET: "op://v/i/" } },
-        { references: { SECRET: 123 } },
-      ]) {
-        const result = yield* runStack(
-          [OnePassword.SecretReferences(supplied as OnePassword.SecretReferencesOptions)],
-          Effect.void,
-        ).pipe(Effect.result);
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(String(result.failure)).toContain("config key 'SECRET'");
-          expect(String(result.failure)).not.toContain("private-invalid-reference");
-        }
-      }
-      const invalid = [
-        {
-          schema: OnePassword.SecretReferencesOptionsSchema,
-          provider: (options: unknown) =>
-            OnePassword.SecretReferences(options as OnePassword.SecretReferencesOptions),
-          message: "SecretReferences needs a non-empty `references` map",
-          cases: [
-            { references: {} },
-            { references: { "": "op://v/i/f" } },
-            { references: { " ": "op://v/i/f" } },
-            { references: { GOOD: "op://v/i/f", "": "op://v/i/f" } },
-            { references: "op://v/i/f" },
-            { references: { GOOD: "op://v/i/f" }, account: " " },
-            {},
-            undefined,
-            null,
-          ],
-        },
-        {
-          schema: OnePassword.EnvironmentOptionsSchema,
-          provider: (options: unknown) =>
-            OnePassword.Environment(options as OnePassword.EnvironmentOptions),
-          message: "Environment needs a non-empty `environmentId`",
-          cases: [
-            { environmentId: " " },
-            { environmentId: "env", account: " " },
-            {},
-            undefined,
-            null,
-          ],
-        },
-      ];
-      for (const { schema, provider, message, cases } of invalid) {
-        for (const supplied of cases) {
-          expect(Result.isFailure(Schema.decodeUnknownResult(schema)(supplied))).toBe(true);
-          const result = yield* runStack([provider(supplied)], Effect.void).pipe(Effect.result);
-          expect(Result.isFailure(result)).toBe(true);
-          if (Result.isFailure(result)) {
-            expect(String(result.failure)).toContain(message);
-          }
-        }
-      }
-    }),
-  );
-
+describe("1Password offline", { tags: ["unit", "local"] }, () => {
   it.effect("auth discovery does not evaluate options or authenticate", () =>
     runStack(
       [
@@ -252,6 +150,7 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
           ).pipe(Effect.result);
           expect(Result.isFailure(result)).toBe(true);
           if (Result.isFailure(result)) {
+            expect(providerError(result.failure)).toBeInstanceOf(OnePassword.OnePasswordSdkError);
             expect(String(result.failure)).toContain("could not authenticate");
             expect(String(result.failure)).not.toContain("invalid-audit-token");
           }
@@ -289,13 +188,16 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
               expect(stage).toBe("audit");
               return { environmentId, account: "Service Token Takes Precedence" };
             }),
-            OnePassword.SecretReferences({ references: { FROM_REFERENCE: reference } }),
+            OnePassword.SecretReferences({
+              references: { FROM_REFERENCE: reference, ALIAS: reference },
+            }),
             Secrets.ProcessEnv({ disabled: true }),
           ],
           Effect.gen(function* () {
             yield* fixtureValue;
-            const fromReference = yield* Config.Redacted("FROM_REFERENCE");
-            expect(Redacted.value(fromReference) === "ready").toBe(true);
+            for (const key of ["FROM_REFERENCE", "ALIAS"]) {
+              expect(Redacted.value(yield* Config.Redacted(key)) === "ready").toBe(true);
+            }
           }),
           "audit",
         );
@@ -304,63 +206,7 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
   );
 
   it.live.skipIf(!serviceAccount)(
-    "resolves duplicate references and preserves stack precedence",
-    () =>
-      Effect.gen(function* () {
-        yield* Config.Redacted("OP_SERVICE_ACCOUNT_TOKEN");
-        const reference = yield* Config.String("ONEPASSWORD_TEST_REFERENCE");
-        const provider = OnePassword.SecretReferences({
-          references: {
-            ALCHEMY_ONEPASSWORD_TEST: reference,
-            ALIAS: reference,
-          },
-        });
-        const fallback = ConfigProvider.layerAdd(
-          ConfigProvider.fromEnv({
-            env: {
-              ALCHEMY_ONEPASSWORD_TEST: "earlier",
-              FALLBACK: "fallback",
-            },
-          }),
-          { asPrimary: true },
-        );
-        yield* withEnv(
-          { ALCHEMY_ONEPASSWORD_TEST: "shell" },
-          Effect.gen(function* () {
-            yield* runStack(
-              [fallback, provider, Secrets.ProcessEnv({ disabled: true })],
-              Effect.gen(function* () {
-                yield* fixtureValue;
-                const alias = yield* Config.Redacted("ALIAS");
-                expect(Redacted.value(alias) === "ready").toBe(true);
-                expect(yield* Config.String("FALLBACK")).toBe("fallback");
-                expect(
-                  yield* Config.String("ALCHEMY_ONEPASSWORD_TEST").pipe(
-                    Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv())),
-                  ),
-                ).toBe("shell");
-              }),
-            );
-            yield* runStack(
-              [provider],
-              Config.Redacted("ALCHEMY_ONEPASSWORD_TEST").pipe(
-                Effect.map((value) => expect(Redacted.value(value) === "shell").toBe(true)),
-              ),
-            );
-            yield* runStack(
-              [provider, fallback, Secrets.ProcessEnv({ disabled: true })],
-              Config.Redacted("ALCHEMY_ONEPASSWORD_TEST").pipe(
-                Effect.map((value) => expect(Redacted.value(value) === "earlier").toBe(true)),
-              ),
-            );
-          }),
-        );
-      }),
-    { timeout: 120_000, retry: 0, exclusive: true },
-  );
-
-  it.live.skipIf(!serviceAccount)(
-    "rejects a real partially failing reference batch without leaking values",
+    "fails the whole load on a missing or malformed reference without leaking values",
     () =>
       Effect.gen(function* () {
         yield* Config.Redacted("OP_SERVICE_ACCOUNT_TOKEN");
@@ -383,12 +229,27 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
         expect(Result.isFailure(result)).toBe(true);
         expect(ran).toBe(false);
         if (Result.isFailure(result)) {
+          expect(providerError(result.failure)).toBeInstanceOf(
+            OnePassword.OnePasswordReferenceError,
+          );
           const message = String(result.failure);
           expect(message).toContain("config key 'MISSING'");
           expect(message).toContain("No partial config");
           expect(message.includes(reference)).toBe(false);
           expect(message.includes(missing)).toBe(false);
           expect(message.includes("ready")).toBe(false);
+        }
+        // Malformed references are not checked ahead of time; 1Password rejects them at load.
+        const malformed = yield* runStack(
+          [OnePassword.SecretReferences({ references: { MALFORMED: "not-a-reference" } })],
+          Effect.void,
+        ).pipe(Effect.result);
+        expect(Result.isFailure(malformed)).toBe(true);
+        if (Result.isFailure(malformed)) {
+          expect(providerError(malformed.failure)).toBeInstanceOf(
+            OnePassword.OnePasswordReferenceError,
+          );
+          expect(String(malformed.failure)).toContain("config key 'MALFORMED'");
         }
       }),
     { timeout: 120_000, retry: 0, exclusive: true },
@@ -423,6 +284,9 @@ describe("1Password live secrets", { tags: ["live"] }, () => {
         ).pipe(Effect.result);
         expect(Result.isFailure(unknown)).toBe(true);
         if (Result.isFailure(unknown)) {
+          expect(providerError(unknown.failure)).toBeInstanceOf(
+            OnePassword.OnePasswordAccountNotFoundError,
+          );
           expect(String(unknown.failure)).toContain(
             "has no account 'alchemy-audit-no-such-account'",
           );
