@@ -3,6 +3,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 
@@ -16,6 +17,16 @@ export const app = Effect.gen(function* () {
   const team = yield* E2B.ReadTeam();
   return {
     fetch: Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      if (new URL(request.url, "http://sandbox").pathname === "/env") {
+        // Without calling the binding: for a sandbox whose network cannot
+        // reach its gateway.
+        const env = yield* Effect.sync(() => process.env);
+        return yield* HttpServerResponse.json({
+          apiKey: env.E2B_API_KEY ?? null,
+          gateway: env.ALCHEMY_GATEWAY_URL ?? null,
+        });
+      }
       const now = Math.floor(Date.now() / 1000);
       const teamId = yield* team.teamId;
       const metrics = yield* team.metrics({ start: now - 3600, end: now });
