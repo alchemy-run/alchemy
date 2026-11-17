@@ -26,6 +26,11 @@ const AI_MOCK_CONFIG = "/tmp/alchemy-ai-mocks.json";
 /** Emulator settings the suites assume, mirroring a real AWS account. */
 export const flociTestEnv: Readonly<Record<string, string>> = {
   AI_MOCK_CONFIG,
+  // A real resource URL (an SQS QueueUrl) is the same wherever it is read. Floci
+  // rewrites loopback URLs in a Lambda's environment to localhost.floci.io so
+  // its containers can reach them; advertising that name, which public DNS
+  // resolves to 127.0.0.1, gives the host and the Lambda the same URL.
+  FLOCI_HOSTNAME: "localhost.floci.io",
   // Real S3 evaluates IAM; the denied-read suites assert that behavior.
   FLOCI_SERVICES_S3_ENFORCE_AUTH: "true",
   // Every real AWS account has a primary contact.
