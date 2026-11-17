@@ -1,11 +1,13 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as OtlpExporter from "effect/observability/OtlpExporter";
 import * as OtlpLogger from "effect/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
@@ -14,6 +16,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import { unpackEnvValue } from "./RuntimeContext.ts";
 
 /**
@@ -270,6 +273,10 @@ export const configuredDestinations: Effect.Effect<ResolvedDestination[]> = Effe
 const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
   shutdownTimeout?: Duration.Input;
+  /** Leave the metrics exporter out even when a destination configures it. */
+  withoutMetrics?: boolean;
+  /** Export early once this many records are buffered. @default 1000 */
+  maxBatchSize?: number;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -281,7 +288,7 @@ const makeExporterLayer = (options?: {
         });
       const traces = targets("traces");
       const logs = targets("logs");
-      const metrics = targets("metrics");
+      const metrics = options?.withoutMetrics ? [] : targets("metrics");
       if (traces.length === 0 && logs.length === 0 && metrics.length === 0) {
         return Layer.empty;
       }
@@ -295,6 +302,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.traces,
             resource,
             exportInterval: options?.exportInterval,
+            maxBatchSize: options?.maxBatchSize,
             shutdownTimeout: options?.shutdownTimeout,
           }),
         );
@@ -306,6 +314,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.logs,
             resource,
             exportInterval: options?.exportInterval,
+            maxBatchSize: options?.maxBatchSize,
             shutdownTimeout: options?.shutdownTimeout,
           }),
         );
@@ -370,6 +379,22 @@ export const fromBoundConfig: TelemetryLayer = makeExporterLayer({
  * flushes at shutdown.
  */
 const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
+
+/**
+ * The Durable Object instance half: the bound trace and log exporters with
+ * no export interval, so a pending export timer never keeps the object out
+ * of hibernation. Records wait in the buffer until the bridge flushes them
+ * at the end of the next event. Metrics are left out: their exporter
+ * reports cumulative values on every interval.
+ */
+const fromBoundConfigInstance: TelemetryLayer = makeExporterLayer({
+  exportInterval: Duration.infinity,
+  // Never export on a full buffer either: a record pushed between events
+  // would start an export outside any event's I/O context.
+  maxBatchSize: Number.POSITIVE_INFINITY,
+  shutdownTimeout: "10 seconds",
+  withoutMetrics: true,
+});
 
 /**
  * The per-event telemetry exporters, as a `Context.Reference` holding the
@@ -440,6 +465,11 @@ export const buildEventTelemetry = (
  * field carries the custom Layer(s) registered by {@link layer}
  * during init, composed with the bound OTLP destinations (read with the
  * standard periodic export intervals).
+ *
+ * Not for Durable Objects: the periodic exporters keep a timer pending, and
+ * workerd won't hibernate an object while one is. The Durable Object bridge
+ * gives each instance interval-free exporters of its own, flushed per event
+ * (see {@link buildInstanceTelemetry}).
  */
 export const provideProcessTelemetry =
   (runtimeContext?: { telemetry?: TelemetryLayer | undefined }) =>
@@ -455,3 +485,91 @@ export const provideProcessTelemetry =
       );
       return yield* Effect.provideContext(effect, telemetry);
     });
+
+/**
+ * Telemetry built once for a Durable Object instance: the services to
+ * provide to its initializer, and the flush the bridge runs at the end of
+ * every event.
+ *
+ * @internal
+ */
+export interface InstanceTelemetry {
+  readonly context: Context.Context<never>;
+  readonly flush: Effect.Effect<void>;
+}
+
+/**
+ * Build the bound trace and log exporters into a Durable Object instance's
+ * scope, which never closes (workerd gives an instance no shutdown hook).
+ * Fibers the initializer forks (a tick loop, a subscription) record into
+ * them. The exporters have no export interval, so nothing keeps the object
+ * awake while it is idle; `flush` delivers what they hold, and the bridge
+ * runs it at the end of every event, inside that event's I/O context.
+ *
+ * Custom {@link layer} exporters stay per event: their intervals aren't
+ * ours to turn off.
+ *
+ * @internal
+ */
+export const buildInstanceTelemetry = (
+  context: Context.Context<never>,
+  scope: Scope.Scope,
+): Effect.Effect<InstanceTelemetry> =>
+  buildEventTelemetry(context, scope, undefined, fromBoundConfigInstance).pipe(
+    Effect.map((built) => {
+      const flusher = Context.getOption(built, OtlpExporter.Flusher);
+      return {
+        context: built,
+        flush:
+          flusher._tag === "Some"
+            ? flusher.value.flush.pipe(Effect.timeoutOption("10 seconds"), Effect.asVoid)
+            : Effect.void,
+      };
+    }),
+  );
+
+/**
+ * An event's telemetry, handing off to the instance's once the event has
+ * ended. A fiber the event forked and left running (`Effect.forkDetach`)
+ * keeps the event's Tracer and loggers, whose exporters flushed and stopped
+ * when the event's scope closed. Spans it starts and logs it writes after
+ * that go to the instance's exporters instead, which the next event
+ * flushes. Only services both contexts carry are switched.
+ *
+ * @internal
+ */
+export const handOffAfterEvent = (
+  event: Context.Context<never>,
+  instance: Context.Context<never>,
+  ended: () => boolean,
+): Context.Context<never> => {
+  let context = event;
+  const tracer = Context.getOption(event, Tracer.Tracer);
+  const instanceTracer = Context.getOption(instance, Tracer.Tracer);
+  if (tracer._tag === "Some" && instanceTracer._tag === "Some") {
+    context = Context.add(
+      context,
+      Tracer.Tracer,
+      Tracer.make({
+        span: (options) => (ended() ? instanceTracer.value : tracer.value).span(options),
+        context: tracer.value.context,
+      }),
+    );
+  }
+  const loggers = Context.getOption(event, Logger.CurrentLoggers);
+  const instanceLoggers = Context.getOption(instance, Logger.CurrentLoggers);
+  if (loggers._tag === "Some" && instanceLoggers._tag === "Some") {
+    context = Context.add(
+      context,
+      Logger.CurrentLoggers,
+      new Set([
+        Logger.make((options) => {
+          for (const logger of ended() ? instanceLoggers.value : loggers.value) {
+            logger.log(options);
+          }
+        }),
+      ]),
+    );
+  }
+  return context;
+};
