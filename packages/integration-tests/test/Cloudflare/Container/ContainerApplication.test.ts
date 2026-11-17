@@ -1595,6 +1595,17 @@ describe.concurrent(
           const namespaceId = worker.durableObjectNamespaces.RemoteContainerObject;
           expect(namespaceId).toBeDefined();
           expect(app.durableObjects).toEqual({ namespaceId });
+          const named = yield* Containers.listContainerApplications({ accountId }).pipe(
+            Effect.map((apps) =>
+              apps.filter((item) => item.name === app.applicationName).map((item) => item.id),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (ids) => ids.length === 1 && ids[0] === app.applicationId,
+              times: 8,
+            }),
+          );
+          expect(named).toEqual([app.applicationId]);
           expect(
             yield* live(accountId, app.applicationId).pipe(
               Effect.retry({

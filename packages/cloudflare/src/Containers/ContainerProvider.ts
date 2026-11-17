@@ -1742,7 +1742,9 @@ export const LiveContainerProvider = () =>
           // interrupted after precreate may still have created the
           // application under its generated name. An explicit name never
           // establishes ownership, so only this generation's generated name
-          // is looked up, in the account the placeholder recorded.
+          // is looked up, in the account the placeholder recorded. An
+          // explicitly named application created just before such a crash is
+          // left behind on purpose; a redeploy adopts it instead.
           if (!isLiveId(applicationId)) {
             const generated = yield* createPhysicalName({ id, instanceId, lowercase: true });
             if (output.applicationName !== generated) return;
