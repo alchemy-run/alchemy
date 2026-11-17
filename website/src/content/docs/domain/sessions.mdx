@@ -108,9 +108,8 @@ import { NotOwner } from "./NotOwner.rejection.ts";
 export class NicknameSet extends Domain.Event("NicknameSet", { nickname: Schema.String }) {}
 
 export class SetNickname extends Domain.Command("SetNickname", {
-  target: AccountId,
   middleware: [Session],
-  input: { nickname: Schema.String },
+  input: { accountId: AccountId, nickname: Schema.String },
   events: [NicknameSet],
   rejects: [NotOwner],
 }) {}

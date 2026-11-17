@@ -12,6 +12,7 @@ import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
+import { sendPayload } from "./internal.ts";
 import {
   type ClientOf,
   exposedOf,
@@ -169,22 +170,12 @@ const toolOf = (api: string) => (op: Operation) => {
 type Client = Record<string, unknown>;
 
 /**
- * Send one call through the Api's client: a command takes its target, input
+ * Send one call through the Api's client: a command takes its input
  * and command id; a query its input and options; a read its key and options.
  */
 const invoke = (client: Client, op: Operation, payload: unknown, headers?: Headers.Input) => {
   if (op.operation === "send") {
-    const send = client[op.name] as (
-      target: unknown,
-      input: unknown,
-      options: object,
-    ) => Effect.Effect<unknown, unknown>;
-    const { target, input, commandId } = payload as {
-      readonly target: unknown;
-      readonly input: unknown;
-      readonly commandId?: string;
-    };
-    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
+    return sendPayload(client[op.name], payload, { headers });
   }
   if (op.operation === "ask") {
     const ask = client[op.name] as (input: unknown, o: object) => Effect.Effect<unknown, unknown>;

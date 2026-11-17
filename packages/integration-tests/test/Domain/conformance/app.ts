@@ -5,6 +5,8 @@
  *
  * - `/increment/:id?by=n` sends `Increment`; `{ accepted: total }` or `{ rejected: tag }`
  * - `/again/:id?by=n` sends `Increment` twice under one command id
+ * - `/give/:from?to=id&by=n&id=commandId` sends `Give`, decided across both counters;
+ *   `{ accepted: total, commits }` or `{ rejected: tag }`
  * - `/counter/:id`, `/echo/:id`, `/total/:id` read the counter, what the saga wrote, the view
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
@@ -21,6 +23,8 @@ import {
   Counter,
   CounterTotal,
   Echo,
+  Give,
+  Giving,
   HiddenTotal,
   Hold,
   Increment,
@@ -36,6 +40,7 @@ export const app = Effect.gen(function* () {
   const echoes = yield* Echo;
   const totals = yield* CounterTotal;
   const holds = yield* Hold;
+  const giving = yield* Giving;
   const hidden = yield* HiddenTotal;
   const api = yield* ConformanceApi;
   const recorded = yield* Recorded;
@@ -47,7 +52,7 @@ export const app = Effect.gen(function* () {
     const id = decodeURIComponent(raw ?? "");
     const by = Number(url.searchParams.get("by") ?? "1");
     const increment = (commandId?: string) =>
-      counters.send(id, new Increment({ by }), commandId === undefined ? {} : { commandId }).pipe(
+      counters.send(new Increment({ id, by }), commandId === undefined ? {} : { commandId }).pipe(
         Effect.map((receipt) => ({ accepted: receipt.reply.total, version: receipt.version })),
         Effect.catchTag("TooBig", (rejection) => Effect.succeed({ rejected: rejection._tag })),
       );
@@ -62,6 +67,23 @@ export const app = Effect.gen(function* () {
         const first = yield* increment(`again-${id}`);
         const second = yield* increment(`again-${id}`);
         return yield* HttpServerResponse.json({ first, second });
+      }
+      case "give": {
+        const commandId = url.searchParams.get("id");
+        return yield* HttpServerResponse.json(
+          yield* giving
+            .send(
+              new Give({ from: id, to: url.searchParams.get("to") ?? "", by }),
+              commandId === null ? {} : { commandId },
+            )
+            .pipe(
+              Effect.map((receipt) => ({
+                accepted: receipt.reply.total,
+                commits: receipt.commits,
+              })),
+              Effect.catchTag("Short", (rejection) => Effect.succeed({ rejected: rejection._tag })),
+            ),
+        );
       }
       case "counter":
         return yield* HttpServerResponse.json(yield* counters.get(id));
@@ -95,17 +117,17 @@ export const app = Effect.gen(function* () {
         return yield* HttpServerResponse.json(Option.getOrElse(total, () => ({ total: 0 })));
       }
       case "record": {
-        const receipt = yield* counters.send(id, new Increment({ by })).pipe(Effect.orDie);
+        const receipt = yield* counters.send(new Increment({ id, by })).pipe(Effect.orDie);
         // Read straight after caughtUp, without polling: the projection is fed by the view.
         yield* progress.caughtUp(receipt, { timeout: "60 seconds" }).pipe(Effect.orDie);
         const { entries } = yield* recorded.list(Counter.ref(id));
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.total));
       }
       case "place":
-        yield* holds.send(id, new PlaceHold());
+        yield* holds.send(new PlaceHold({ id }));
         return yield* HttpServerResponse.json(yield* holds.get(id));
       case "release":
-        yield* holds.send(id, new ReleaseHold());
+        yield* holds.send(new ReleaseHold({ id }));
         return yield* HttpServerResponse.json(yield* holds.get(id));
       case "hold":
         return yield* HttpServerResponse.json(yield* holds.get(id));

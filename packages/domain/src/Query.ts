@@ -272,7 +272,7 @@ export interface Definition<
  *
  * **Example:** Reading your own write
  * ```typescript
- * const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 100 });
  * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
  * ```
  *
