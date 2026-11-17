@@ -60,7 +60,7 @@ const RANK = {
  * What a proof on one path is worth: where the path gave a list only a few
  * items, it says nothing of a longer one.
  */
-const within = (verdict: Verdict, run: Value.Run): Verdict =>
+export const within = (verdict: Verdict, run: Value.Run): Verdict =>
   verdict._tag !== "Proved" || run.bounds.size === 0
     ? verdict
     : {
@@ -70,16 +70,16 @@ const within = (verdict: Verdict, run: Value.Run): Verdict =>
           .join(", "),
       };
 
-const worse = (a: Verdict, b: Verdict): Verdict => (RANK[b._tag] > RANK[a._tag] ? b : a);
+export const worse = (a: Verdict, b: Verdict): Verdict => (RANK[b._tag] > RANK[a._tag] ? b : a);
 
-const notRead = (error: Value.NotTranslated): Verdict => ({
+export const notRead = (error: Value.NotTranslated): Verdict => ({
   _tag: "NotTranslated",
   file: error.file,
   line: error.line,
   reason: error.reason,
 });
 
-const MAX_PATHS = 4096;
+export const MAX_PATHS = 4096;
 
 /**
  * Take each command from any state that satisfies every invariant, along
@@ -194,6 +194,44 @@ export interface DecisionRow extends Row {
 }
 
 /**
+ * The instances a decision reads on one path, each given any state its
+ * aggregate's rules allow the first time `keyOf` names it. Two names of one
+ * aggregate are the same instance on one path and two on another.
+ */
+export const reader = (interpreter: Interpreter, impl: DecisionImpl, run: Value.Run) => {
+  const site: Value.Site = { module: impl.definition.module, node: impl.definition.node };
+  const read: Array<{ readonly cls: Aggregate.Any; readonly slot: Paths.Slot }> = [];
+  const slotOf = Effect.fnUntraced(function* (name: string, id: Value.V) {
+    const found = impl.reads[name];
+    if (!found)
+      return yield* Value.notTranslated(site, `keyOf gives ${name}, which reads does not name`);
+    const text = Paths.addressOf(id)!;
+    for (const [index, existing] of read.entries()) {
+      if (existing.cls !== found.cls) continue;
+      const other = Paths.addressOf(existing.slot.id)!;
+      if (text === other) return { index, slot: existing.slot };
+      if (id._tag === "Str" && existing.slot.id._tag === "Str") continue;
+      // Two names of one aggregate: the same instance, or two.
+      if (run.branch(`(= ${text} ${other})`)) return { index, slot: existing.slot };
+    }
+    const at = read.length + 1;
+    // Assume: the state the decision reads satisfies every invariant of its aggregate.
+    const state = yield* Paths.assumed(interpreter, found.definition, `read${at}.state`);
+    const version = run.constant(`read${at}.version`, "Int");
+    run.assume(`(>= ${version.text} 0)`);
+    const slot: Paths.Slot = {
+      definition: found.definition,
+      id,
+      state,
+      version: { _tag: "Term", term: version },
+    };
+    read.push({ cls: found.cls, slot });
+    return { index: read.length - 1, slot };
+  });
+  return { read, slotOf };
+};
+
+/**
  * Take a decision from any states that satisfy every invariant of the
  * aggregates it reads, along every path through its code, and say whether
  * each of their rules, and each of its own, still holds. Two names that can
@@ -225,7 +263,6 @@ export const decisionRow = Effect.fn(function* (
   let accepted: boolean | undefined = false;
   let paths = 0;
   let prefix: ReadonlyArray<number> | undefined = [];
-  const site: Value.Site = { module: impl.definition.module, node: impl.definition.node };
   while (prefix) {
     if (++paths > MAX_PATHS) {
       const many: Verdict = { _tag: "Unknown", reason: `${tag} has more than ${MAX_PATHS} paths` };
@@ -236,47 +273,7 @@ export const decisionRow = Effect.fn(function* (
     }
     const run = new Value.Run(prefix);
     interpreter.current.run = run;
-    const read: Array<{ readonly cls: Aggregate.Any; readonly slot: Paths.Slot }> = [];
-    const slotOf = Effect.fnUntraced(function* (name: string, id: Value.V) {
-      const found = impl.reads[name];
-      if (!found)
-        return yield* Value.notTranslated(site, `keyOf gives ${name}, which reads does not name`);
-      const text = Paths.addressOf(id)!;
-      for (const [index, existing] of read.entries()) {
-        if (existing.cls !== found.cls) continue;
-        const other = Paths.addressOf(existing.slot.id)!;
-        if (text === other) return { index, slot: existing.slot };
-        if (id._tag === "Str" && existing.slot.id._tag === "Str") continue;
-        // Two names of one aggregate: the same instance, or two.
-        if (run.branch(`(= ${text} ${other})`)) return { index, slot: existing.slot };
-      }
-      const at = read.length + 1;
-      const ast = Symbolic.typeOf(found.definition.state);
-      if (!ast)
-        return yield* Value.notTranslated(
-          site,
-          `the state of ${found.cls.aggregateName} is not a schema`,
-        );
-      const state = Symbolic.symbolic(ast, `read${at}.state`, run);
-      // Assume: the state the decision reads satisfies every invariant of its aggregate.
-      for (const check of yield* Paths.checks(interpreter, found.definition, state).pipe(
-        Effect.catchTag("NotTranslated", () => Effect.succeed<ReadonlyArray<Paths.Check>>([])),
-      )) {
-        if (Result.isFailure(check.condition)) continue;
-        if (check.condition.success === "false") return yield* new Value.Infeasible();
-        run.assume(check.condition.success);
-      }
-      const version = run.constant(`read${at}.version`, "Int");
-      run.assume(`(>= ${version.text} 0)`);
-      const slot: Paths.Slot = {
-        definition: found.definition,
-        id,
-        state,
-        version: { _tag: "Term", term: version },
-      };
-      read.push({ cls: found.cls, slot });
-      return { index: read.length - 1, slot };
-    });
+    const { read, slotOf } = reader(interpreter, impl, run);
     const taken = yield* Effect.gen(function* () {
       const step = yield* Paths.decided(interpreter, impl.definition, impl.command, "", slotOf);
       if (step.applied._tag !== "Changed") return { step, checks: [], fits: "true", unread: [] };

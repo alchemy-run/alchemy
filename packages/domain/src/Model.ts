@@ -52,6 +52,7 @@ import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
 import * as Query from "./Query.ts";
 import * as Read from "./Read.ts";
+import type * as Relation from "./Relation.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -128,6 +129,13 @@ export interface Members<
   readonly invariants?: {
     readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
   };
+  /**
+   * Rules that relate a few instances at all times, each made with
+   * `Domain.Relation`. `Verify.model` proves one where every command and
+   * every decision that records on its aggregates keeps it, and looks for a
+   * sequence of commands that breaks one it cannot prove.
+   */
+  readonly relations?: { readonly [name: string]: Relation.Any };
   /**
    * Rules that hold once everything has run its course: nothing is left to
    * react, and every scheduled command has come due and run. Where an
@@ -206,6 +214,8 @@ export interface ModelClass<
   readonly invariants: { readonly [name: string]: (model: never) => boolean };
   /** What holds once everything has run its course, by name. */
   readonly eventually: { readonly [name: string]: (model: never) => boolean };
+  /** The model's relations, by name. */
+  readonly relations: { readonly [name: string]: Relation.Any };
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -482,6 +492,7 @@ export const make = <
     static readonly eventually = (members.eventually ?? {}) as {
       readonly [name: string]: (model: never) => boolean;
     };
+    static readonly relations = members.relations ?? {};
     static readonly aggregates = definitions.aggregates;
     static readonly decisions = decisions;
     static readonly commands = [

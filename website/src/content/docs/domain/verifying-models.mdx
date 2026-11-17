@@ -152,6 +152,32 @@ export class Bank extends Domain.Model("Bank", {
   },
 ```
 
+## Say how two instances relate
+
+A model's invariant is given every instance, so it can only be searched. A rule about a fixed few can be proved. That is a relation: it names the aggregates it is about, and says what holds of one instance of each.
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Customer, UsernameClaim, Account, Transfer],
+  decisions: [Registration],
++  relations: {
++    /** Whoever a username is claimed for is registered under it. */
++    AClaimedNameBelongsToItsCustomer: Domain.Relation({
++      over: { customer: Customer, claim: UsernameClaim },
++      holds: ({ customer, claim }) =>
++        claim.state._tag !== "Claimed" ||
++        claim.state.customerId !== customer.id ||
++        (customer.state._tag === "Registered" && customer.state.username === claim.id),
++    }),
++  },
+```
+
+It is claimed of every customer and every username, so it starts by saying which pairs it is about: a claim that names this customer. For any other pair it is true and says nothing. Two names of one aggregate always stand for two instances.
+
+The proof takes each command and each decision that records on `Customer` or `UsernameClaim`, starts from any states the rules allow, and shows the relation still holds after. `Registration` writes both sides in one step, so it keeps this one.
+
+Like a model's invariant, a relation is about the model at rest. One a policy keeps in step is broken between the event and the policy's command, so no single command keeps it and it stays **Checked**. A decision is what makes a relation provable.
+
 ## Say where everything ends up
 
 Some rules are false along the way and true in the end. A transfer waiting for approval hasn't ended, but it will: one nobody approves expires after a day. That goes under `eventually`.
@@ -225,6 +251,8 @@ Proved: for every state and every input, after any number of commands
   ✓ Account.OnlyAnAgentChangesTheOwner
   ✓ RegisterCustomer.TheNameGoesToWhoRegistered
   ✓ RegisterCustomer.OnlyAFreeNameIsClaimed
+  ✓ Bank.AClaimedNameBelongsToItsCustomer
+  ✓ Bank.ARegisteredCustomerHoldsTheirName
 
 Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait, each step of a saga run twice, every answer FraudCheck can give
 20,138 sequences, 9,725 states
@@ -251,9 +279,9 @@ Assumed
   - a decision's events commit on every instance it recorded on, or on none: how a platform commits them is not checked
 ```
 
-**Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance. A decision's transitions can too, because each is about one step. A rule of an aggregate is proved only when every command of its own and every decision that records on it keeps it.
+**Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance. A decision's transitions can too, because each is about one step. A rule of an aggregate is proved only when every command of its own and every decision that records on it keeps it. A relation is proved the same way, across every command and decision that records on any aggregate it names.
 
-**Checked** means no sequence that was run breaks the rule. A model's rules are about many instances at once, which a solver can't decide in general, so they are searched: every sequence of a few commands, with everything that follows from each.
+**Checked** means no sequence that was run breaks the rule. A model's invariants are about many instances at once, which a solver can't decide in general, so they are searched: every sequence of a few commands, with everything that follows from each.
 
 **Sampled** reaches past that. A rule that takes five commands to break is out of reach of every sequence of two, so longer ones are run too: 200 walks of up to 12 commands, each command picked at random. The seed makes them the same on every run, so a failure repeats.
 
@@ -590,7 +618,7 @@ An outcome no sequence reaches is worth a look. It's either out of reach in two 
 
 ## What a pass does not say
 
-A proof is about one aggregate, or one step of a decision. It assumes the decision commits everything it records or nothing, which is the platform's job and isn't checked here. A rule across instances is checked in every sequence of up to `depth` commands and in the walks that were sampled. A longer sequence that no walk took could still break it.
+A proof is about one aggregate, one step of a decision, or a few instances a relation names. It assumes the decision commits everything it records or nothing, which is the platform's job and isn't checked here. A rule across instances is checked in every sequence of up to `depth` commands and in the walks that were sampled. A longer sequence that no walk took could still break it.
 
 An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. This escrow reserves money before it captures it, and `Reserve` checks there is enough, so the balance never goes below zero:
 
@@ -609,6 +637,38 @@ invariants: {
   ReservedIsCovered: (escrow) => escrow.reserved >= 0 && escrow.reserved <= escrow.balance,
 },
 ```
+
+A relation meets the same thing more often, because it starts from any two states at once. This club seats members, and says a seated member's seat is taken:
+
+```text
+Checked: in every sequence of up to 2 commands through VagueApi
+  ✓ Vague.ASeatedMembersSeatIsTaken
+      not proved: LeaveClub { member: "A", seat: "" } breaks it from { member: { id: "", state: { _tag: "Seated", seat: "" } }, seat: { id: "", state: { _tag: "Taken", member: "" } } }, states the rules allow
+      No sequence that was run reaches those states. If none can, say so in another relation or an invariant, and this one is proved.
+```
+
+The proof starts with two members who both say they hold one seat. One leaves and frees it, and the other is left in a free seat. No club gets there, and nothing written down says so. The rule that does is the stronger one: the seat names the member in it, and the member names the seat.
+
+```typescript title="packages/domain/src/Club.model.ts"
+relations: {
+  AMemberIsInTheirSeat: Domain.Relation({
+    over: { member: Member, seat: Seat },
+    holds: ({ member, seat }) =>
+      member.state._tag !== "Seated" ||
+      member.state.seat !== seat.id ||
+      (seat.state._tag === "Taken" && seat.state.member === member.id),
+  }),
+  ATakenSeatHasItsMember: Domain.Relation({
+    over: { member: Member, seat: Seat },
+    holds: ({ member, seat }) =>
+      seat.state._tag !== "Taken" ||
+      seat.state.member !== member.id ||
+      (member.state._tag === "Seated" && member.state.seat === seat.id),
+  }),
+},
+```
+
+Relations are proved together: each proof takes every relation to hold before the step. One that fails is taken out and the rest are proved again without it, so a proof never rests on a rule that isn't proved itself.
 
 Arithmetic on numbers that may not be whole isn't proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Code that adds, subtracts or multiplies such numbers is reported as not read. Keep money in whole cents, which is exact.
 

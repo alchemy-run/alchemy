@@ -115,7 +115,7 @@ export class NotVerified extends Data.TaggedError("NotVerified")<{
 export interface Rule {
   /** `Account.NeverOverdrawn`, or `Bank.NoTransferLeftPending`. */
   readonly name: string;
-  readonly kind: "invariant" | "transition" | "model invariant" | "eventually";
+  readonly kind: "invariant" | "transition" | "model invariant" | "relation" | "eventually";
   /**
    * `proved`: no state and no input break it. `checked`: no sequence run
    * breaks it. `broken`: `story` breaks it. `unseen`: no sequence reached it.
@@ -124,6 +124,12 @@ export interface Rule {
   /** How many states, steps or sequences it was looked at in. */
   readonly seen: number;
   readonly story: ModelSearch.Story | undefined;
+  /**
+   * For a relation that is checked and not proved: what the proof fails on.
+   * A proof starts from any states the rules allow, so it can fail on states
+   * no sequence of commands reaches.
+   */
+  readonly unproved?: { readonly by: string; readonly verdict: Prove.Verdict } | undefined;
 }
 
 /** A sequence the explorer found, run on the real model. */
@@ -239,10 +245,17 @@ const rulesOf = (explored: Explore.ModelReport): ReadonlyArray<Rule> => [
   })),
   ...explored.rules.map((rule): Rule => ({
     name: `${explored.model}.${rule.name}`,
-    kind: "model invariant",
-    standing: rule.broken ? "broken" : rule.states > 0 ? "checked" : "unseen",
+    kind: rule.kind === "relation" ? "relation" : "model invariant",
+    standing: rule.broken
+      ? "broken"
+      : rule.proved
+        ? "proved"
+        : rule.states > 0
+          ? "checked"
+          : "unseen",
     seen: rule.states,
     story: rule.broken,
+    unproved: rule.unproved,
   })),
   ...explored.eventually.map((rule): Rule => ({
     name: `${explored.model}.${rule.name}`,
@@ -475,7 +488,7 @@ export interface AggregateReport {
   readonly aggregate: string;
   /** Its invariants and transitions, and how far each is known to hold. */
   readonly rules: ReadonlyArray<
-    Omit<Rule, "story"> & {
+    Omit<Rule, "story" | "unproved"> & {
       /**
        * For a rule that is checked and not proved: the command the proof
        * fails on. A proof starts from any state the rules allow, so it can
@@ -658,11 +671,26 @@ export const render = (report: Report | AggregateReport): string => {
         faults.length > 0 ? `, with ${faults.join(", ")}` : ""
       }`,
       `${count(explored.sequences)} sequences, ${count(explored.states)} states`,
-      ...checked.map((rule) =>
-        rule.kind === "eventually"
-          ? `  ✓ ${rule.name}  holds at the end of the ${count(rule.seen)} sequences that ran their course`
-          : `  ✓ ${rule.name}`,
-      ),
+      ...checked.flatMap((rule) => {
+        if (rule.kind === "eventually")
+          return [
+            `  ✓ ${rule.name}  holds at the end of the ${count(rule.seen)} sequences that ran their course`,
+          ];
+        const why = rule.unproved;
+        if (!why) return [`  ✓ ${rule.name}`];
+        const verdict = why.verdict;
+        return [
+          `  ✓ ${rule.name}`,
+          ...(verdict._tag === "Violated"
+            ? [
+                verdict.counterexample.command === undefined
+                  ? `      not proved: it does not hold of ${Symbolic.show(verdict.counterexample.state)}, in a model with nothing in it`
+                  : `      not proved: ${Symbolic.show(verdict.counterexample.command)} breaks it from ${Symbolic.show(verdict.counterexample.state)}, states the rules allow`,
+                "      No sequence that was run reaches those states. If none can, say so in another relation or an invariant, and this one is proved.",
+              ]
+            : [`      not proved for ${why.by}: ${"reason" in verdict ? verdict.reason : ""}`]),
+        ];
+      }),
       "",
     );
 

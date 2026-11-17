@@ -35,6 +35,9 @@ it.effect(
             "Account.OnlyAnAgentChangesTheOwner",
             // The username's rule is kept by the decision that claims it, across both instances.
             "UsernameClaim.AClaimedNameStaysWithItsHolder",
+            // What the customer and the username say of each other, kept by the one decision that writes both.
+            "Bank.AClaimedNameBelongsToItsCustomer",
+            "Bank.ARegisteredCustomerHoldsTheirName",
             "RegisterCustomer.TheNameGoesToWhoRegistered",
             "RegisterCustomer.OnlyAFreeNameIsClaimed",
           ],
@@ -57,6 +60,8 @@ it.effect(
         "Bank.NoTransferLeftPending": "checked",
         // What the Ledger projection is given, against what the accounts recorded.
         "Bank.LedgerIsGivenEveryDeposit": "checked",
+        "Bank.AClaimedNameBelongsToItsCustomer": "proved",
+        "Bank.ARegisteredCustomerHoldsTheirName": "proved",
         "Bank.EveryTransferEnds": "checked",
       });
       // Every sequence found ran on the real bank, with its policies, saga, views and

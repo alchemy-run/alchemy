@@ -53,6 +53,24 @@ export class Bank extends Domain.Model("Bank", {
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
   queries: [AccountLedger],
+  relations: {
+    /** Whoever a username is claimed for is registered under it. */
+    AClaimedNameBelongsToItsCustomer: Domain.Relation({
+      over: { customer: Customer, claim: UsernameClaim },
+      holds: ({ customer, claim }) =>
+        claim.state._tag !== "Claimed" ||
+        claim.state.customerId !== customer.id ||
+        (customer.state._tag === "Registered" && customer.state.username === claim.id),
+    }),
+    /** A registered customer holds the username they registered under. */
+    ARegisteredCustomerHoldsTheirName: Domain.Relation({
+      over: { customer: Customer, claim: UsernameClaim },
+      holds: ({ customer, claim }) =>
+        customer.state._tag !== "Registered" ||
+        customer.state.username !== claim.id ||
+        (claim.state._tag === "Claimed" && claim.state.customerId === customer.id),
+    }),
+  },
   invariants: {
     /** Every cent a transfer takes out of an account is paid into another, paid back, or recorded as stranded. */
     TransfersLoseNoMoney: (bank) => {

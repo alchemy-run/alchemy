@@ -16,6 +16,7 @@ import * as Decide from "../../Prove/internal/Decide.ts";
 import * as Induction from "../../Prove/internal/Induction.ts";
 import type { Interpreter } from "../../Prove/internal/Interpreter.ts";
 import * as Paths from "../../Prove/internal/Paths.ts";
+import * as Relations from "../../Prove/internal/Relations.ts";
 import * as Smt from "../../Prove/internal/Smt.ts";
 import type * as Source from "../../Prove/internal/Source.ts";
 import * as Symbolic from "../../Prove/internal/Symbolic.ts";
@@ -139,7 +140,13 @@ export interface Found {
    */
   readonly rules: ReadonlyArray<{
     readonly name: string;
+    /** An invariant is given every instance; a relation is about a few, so it can be proved. */
+    readonly kind: "invariant" | "relation";
     readonly broken: Story | undefined;
+    /** A relation every command and every decision keeps, from any states the rules allow. */
+    readonly proved: boolean;
+    /** For a relation that is not proved: what the proof fails on. */
+    readonly unproved: { readonly by: string; readonly verdict: Check.Verdict } | undefined;
     readonly states: number;
   }>;
   /**
@@ -266,6 +273,12 @@ export interface ModelLike {
   readonly queries?: ReadonlyArray<unknown>;
   readonly invariants?: { readonly [name: string]: (model: never) => boolean };
   readonly eventually?: { readonly [name: string]: (model: never) => boolean };
+  readonly relations?: {
+    readonly [name: string]: {
+      readonly over: Readonly<Record<string, Aggregate.Any>>;
+      readonly holds: (on: never) => boolean;
+    };
+  };
 }
 
 interface PolicyClass {
@@ -927,10 +940,57 @@ export const locate = Effect.fn(function* (
       (name) => `${model.modelName}.${name}`,
     ),
   );
+  // A relation is about one instance for each of its names, no two the same.
+  const written = declared ? Paths.relationNames(declared) : [];
+  const relations: Array<Relations.Relation & { readonly aggs: ReadonlyArray<Agg> }> = [];
+  for (const [name, relation] of Object.entries(model.relations ?? {})) {
+    const over: Record<string, Relations.Over> = {};
+    const aggs: Array<Agg> = [];
+    for (const [key, cls] of Object.entries(relation.over)) {
+      const agg = aggregates.find((agg) => agg.cls === cls);
+      if (!agg) break;
+      over[key] = { cls: agg.cls, definition: agg.definition, initial: agg.initial };
+      aggs.push(agg);
+    }
+    if (!written.includes(name) || aggs.length !== Object.keys(relation.over).length) {
+      unread.push(`${model.modelName}.${name}`);
+      continue;
+    }
+    relations.push({
+      name,
+      over,
+      aggs,
+      real: relation.holds as unknown as Relations.Relation["real"],
+    });
+  }
+  /** A relation on what a real model holds: every choice of instances, no two the same. */
+  const everywhere =
+    (relation: (typeof relations)[number]) =>
+    (world: unknown): boolean => {
+      const names = Object.keys(relation.over);
+      const lists = names.map(
+        (key) =>
+          ((world as Record<string, ReadonlyArray<Relations.Real> | undefined>)[
+            relation.over[key]!.cls.aggregateName
+          ] ?? []) as ReadonlyArray<Relations.Real>,
+      );
+      const go = (at: number, chosen: ReadonlyArray<Relations.Real>): boolean =>
+        at === names.length
+          ? relation.real(Object.fromEntries(names.map((key, index) => [key, chosen[index]!])))
+          : lists[at]!.every((one) => chosen.includes(one) || go(at + 1, [...chosen, one]));
+      return go(0, []);
+    };
   const rules = {
     definition: declared,
-    names: declared ? Paths.invariantNames(declared) : [],
-    real: (model.invariants ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
+    names: [
+      ...(declared ? Paths.invariantNames(declared) : []),
+      ...relations.map((relation) => relation.name),
+    ],
+    relations,
+    real: {
+      ...((model.invariants ?? {}) as unknown as Record<string, (model: unknown) => boolean>),
+      ...Object.fromEntries(relations.map((relation) => [relation.name, everywhere(relation)])),
+    },
     later: declared ? Paths.namesOf(declared, "eventually") : [],
     realLater: (model.eventually ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
   };
@@ -1082,6 +1142,44 @@ export const search = Effect.fn(function* (
       new Set(decision.own.filter((name) => row.verdicts.get(name)?._tag === "Proved")),
     );
   }
+  /** Whether every command and every decision that can change what a rule is about keeps it. */
+  const provedBy = (owner: string, name: string): boolean => {
+    const agg = aggs.find((agg) => agg.name === owner);
+    // A decision's own rule: its proof is the decision's.
+    if (!agg) return kept.get(owner)?.has(name) === true;
+    return (
+      agg.commands.every((command) => kept.get(`${owner}.${command.tag}`)?.has(name) === true) &&
+      readers(agg).every((decision) => kept.get(`${owner}.${decision.name}`)?.has(name) === true)
+    );
+  };
+  /**
+   * A relation's proof starts each instance from any state its aggregate's
+   * invariants allow, so it counts only where each of those is proved: for its
+   * own aggregates, and for the ones a decision on them reads.
+   */
+  const settled = (agg: Agg): boolean =>
+    closed.has(agg) &&
+    agg.invariants
+      .filter((name) => !agg.transitions.has(name))
+      .every((name) => provedBy(agg.name, name));
+  const relationRows =
+    located.rules.relations.length > 0 && located.rules.definition
+      ? yield* Relations.rows(solver, interpreter, {
+          model: located.rules.definition,
+          relations: located.rules.relations,
+          decisions,
+        })
+      : [];
+  const provedRelations = new Set(
+    relationRows.flatMap((row) => {
+      const relation = located.rules.relations.find((one) => one.name === row.name)!;
+      const touched = new Set<Agg>(relation.aggs);
+      for (const decision of decisions)
+        if (Object.values(decision.aggs).some((agg) => relation.aggs.includes(agg)))
+          for (const agg of Object.values(decision.aggs)) touched.add(agg);
+      return row.verdict._tag === "Proved" && [...touched].every(settled) ? [row.name] : [];
+    }),
+  );
 
   const pass = Effect.fn(function* (skipped: ReadonlyMap<string, Skipped>) {
     const policies = located.policies.filter((policy) => !skipped.has(policy.name));
@@ -3354,9 +3452,50 @@ export const search = Effect.fn(function* (
         // Nothing is left to react: this is where the model's invariants are looked at.
         const rules =
           changed && !played.unsettled && located.rules.definition
-            ? yield* Paths.checks(interpreter, located.rules.definition, world(played)).pipe(
-                Effect.result,
-              )
+            ? yield* Effect.gen(function* () {
+                const made = [
+                  ...(yield* Paths.checks(interpreter, located.rules.definition!, world(played))),
+                ];
+                // A relation that is not proved, on every choice of the instances there are.
+                for (const relation of located.rules.relations) {
+                  if (provedRelations.has(relation.name)) continue;
+                  const names = Object.keys(relation.over);
+                  /** Every choice of instances for its names, no two the same. */
+                  const choices: Array<ReadonlyArray<Instance>> = [];
+                  const choose = (at: number, chosen: ReadonlyArray<Instance>): void => {
+                    if (at === names.length) return void choices.push(chosen);
+                    for (const instance of played.instances)
+                      if (instance.agg === relation.aggs[at] && !chosen.includes(instance))
+                        choose(at + 1, [...chosen, instance]);
+                  };
+                  choose(0, []);
+                  const formulas: Array<string> = [];
+                  let condition: Value.NotTranslated | undefined;
+                  for (const chosen of choices) {
+                    const formula = yield* Paths.relationHolds(
+                      interpreter,
+                      located.rules.definition!,
+                      relation.name,
+                      Object.fromEntries(names.map((key, index) => [key, chosen[index]!])),
+                    ).pipe(Effect.catchTag("NotTranslated", (error) => Effect.succeed(error)));
+                    if (typeof formula === "string") formulas.push(formula);
+                    else condition = formula;
+                  }
+                  made.push({
+                    name: relation.name,
+                    condition: condition
+                      ? Result.fail(condition)
+                      : Result.succeed(
+                          formulas.length === 0
+                            ? "true"
+                            : formulas.length === 1
+                              ? formulas[0]!
+                              : `(and ${formulas.join(" ")})`,
+                        ),
+                  });
+                }
+                return made;
+              }).pipe(Effect.result)
             : Result.succeed([]);
         // Nothing is scheduled either: the sequence has run its course.
         const later =
@@ -3553,16 +3692,6 @@ export const search = Effect.fn(function* (
       walks.longest = Math.max(walks.longest, sent);
     }
 
-    /** Whether every command and every decision that can change what a rule is about keeps it. */
-    const provedBy = (owner: string, name: string): boolean => {
-      const agg = aggs.find((agg) => agg.name === owner);
-      // A decision's own rule: its proof is the decision's.
-      if (!agg) return kept.get(owner)?.has(name) === true;
-      return (
-        agg.commands.every((command) => kept.get(`${owner}.${command.tag}`)?.has(name) === true) &&
-        readers(agg).every((decision) => kept.get(`${owner}.${decision.name}`)?.has(name) === true)
-      );
-    };
     const found: Found = {
       sequences,
       states,
@@ -3581,11 +3710,30 @@ export const search = Effect.fn(function* (
       })),
       dead,
       decisions: decisions.map((decision) => decision.name),
-      rules: [...ruled].map(([name, story]) => ({
-        name,
-        broken: story,
-        states: looked.get(` ${name}`) ?? 0,
-      })),
+      rules: [...ruled].map(([name, story]) => {
+        const row = relationRows.find((row) => row.name === name);
+        const isRelation = located.rules.relations.some((relation) => relation.name === name);
+        return {
+          name,
+          kind: isRelation ? ("relation" as const) : ("invariant" as const),
+          broken: story,
+          proved: !story && provedRelations.has(name),
+          unproved:
+            row && !provedRelations.has(name)
+              ? {
+                  by: row.by ?? "a rule it starts from",
+                  verdict:
+                    row.verdict._tag === "Proved"
+                      ? ({
+                          _tag: "Unknown",
+                          reason: "an invariant of an aggregate it reads is not proved",
+                        } as const)
+                      : row.verdict,
+                }
+              : undefined,
+          states: looked.get(` ${name}`) ?? 0,
+        };
+      }),
       eventually: [...ended].map(([name, story]) => ({
         name,
         broken: story,

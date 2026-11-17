@@ -548,6 +548,97 @@ export const decisionRuleNames = (decision: DecisionDefinition): ReadonlyArray<s
     : [];
 };
 
+/** The object a model's `relations` are declared in, where its file writes one. */
+const relationsOf = (model: Definition): ReadonlyArray<Node> => {
+  const node = property(model, "relations");
+  return node?.type === "ObjectExpression"
+    ? (node.properties as ReadonlyArray<Node>).filter((p) => p.type === "Property" && !p.computed)
+    : [];
+};
+
+/** The `holds` of a relation, as its file writes it inside `Domain.Relation({ ... })`. */
+const relationNode = (model: Definition, name: string): Node | undefined => {
+  const listed = relationsOf(model).find((p) => String(p.key.name ?? p.key.value) === name)?.value;
+  // A relation declared on its own in the model's file, and listed by name.
+  const value =
+    listed?.type === "Identifier"
+      ? (model.module.program.body as ReadonlyArray<Node>)
+          .flatMap((statement) => {
+            const declaration =
+              statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+            return declaration?.type === "VariableDeclaration"
+              ? (declaration.declarations as ReadonlyArray<Node>)
+              : [];
+          })
+          .find((declared) => declared.id?.name === listed.name)?.init
+      : listed;
+  const written =
+    value?.type === "CallExpression" && value.arguments?.[0]?.type === "ObjectExpression"
+      ? (value.arguments[0] as Node)
+      : value?.type === "ObjectExpression"
+        ? value
+        : undefined;
+  return (written?.properties as ReadonlyArray<Node> | undefined)?.find(
+    (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === "holds",
+  )?.value;
+};
+
+/** The names of the relations a model's file declares where the prover can read them. */
+export const relationNames = (model: Definition): ReadonlyArray<string> =>
+  relationsOf(model)
+    .map((p) => String(p.key.name ?? p.key.value))
+    .filter((name) => relationNode(model, name) !== undefined);
+
+/** A relation on one instance for each of its names, as a formula. It may split the path. */
+export const relationHolds = (
+  interpreter: Interpreter,
+  model: Definition,
+  name: string,
+  on: Readonly<Record<string, { readonly id: V; readonly state: V }>>,
+): Eval<string> =>
+  Effect.gen(function* () {
+    const site = siteOf(model);
+    const node = relationNode(model, name);
+    if (!node) return yield* Value.notTranslated(site, `the relation ${name} is not written here`);
+    const holds = yield* interpreter.evaluate(node, interpreter.moduleEnv(model.module));
+    const args = [
+      Value.obj(
+        Object.fromEntries(
+          Object.entries(on).map(([key, one]) => [
+            key,
+            Value.obj({ id: one.id, state: one.state }),
+          ]),
+        ),
+      ),
+    ];
+    const value = yield* strict(interpreter.call(holds, args, site), site, name);
+    return formula(yield* interpreter.truth(value, site));
+  });
+
+/**
+ * Any state an aggregate's schema allows that satisfies each of its
+ * invariants the prover can read: what a proof starts an instance from.
+ */
+export const assumed = (interpreter: Interpreter, definition: Definition, name: string): Eval<V> =>
+  Effect.gen(function* () {
+    const run = interpreter.current.run;
+    const ast = Symbolic.typeOf(definition.state);
+    if (!ast)
+      return yield* Value.notTranslated(
+        siteOf(definition),
+        `the state of ${definition.name} is not a schema`,
+      );
+    const state = Symbolic.symbolic(ast, name, run);
+    for (const check of yield* checks(interpreter, definition, state).pipe(
+      Effect.catchTag("NotTranslated", () => Effect.succeed<ReadonlyArray<Check>>([])),
+    )) {
+      if (Result.isFailure(check.condition)) continue;
+      if (check.condition.success === "false") return yield* new Value.Infeasible();
+      run.assume(check.condition.success);
+    }
+    return state;
+  });
+
 /** A file and every file it imports, directly or not: the ones that load. */
 export const reach = Effect.fn(function* (loader: Source.Loader, file: string) {
   const modules: Array<Module> = [];

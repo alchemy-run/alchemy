@@ -87,6 +87,9 @@ it.effect(
         ["TransfersLoseNoMoney", undefined],
         ["NoTransferLeftPending", undefined],
         ["LedgerIsGivenEveryDeposit", undefined],
+        // The two relations are proved, so no sequence has to look at them.
+        ["AClaimedNameBelongsToItsCustomer", undefined],
+        ["ARegisteredCustomerHoldsTheirName", undefined],
       ]);
       expect(report.failures).toEqual([]);
       expect(report.unsettled).toBe(0);

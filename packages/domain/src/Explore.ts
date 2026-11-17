@@ -429,7 +429,7 @@ export const undone = (
         `${unseen.map(name).join(", ")} ${unseen.length === 1 ? "was" : "were"} not looked at in any state: no sequence changed ${unseen.length === 1 ? "its aggregate" : "their aggregates"}`,
       );
     if ("model" in report) {
-      const unruled = report.rules.filter((rule) => rule.states === 0);
+      const unruled = report.rules.filter((rule) => rule.states === 0 && !rule.proved);
       if (unruled.length > 0)
         out.push(
           `${unruled.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unruled.length === 1 ? "was" : "were"} not looked at: no sequence that changed a state came to rest`,
@@ -591,6 +591,12 @@ const renderModel = (report: ModelReport): string => {
       out.push(`    state  ${Symbolic.show(last.outcome.state)}`);
   }
   for (const rule of report.rules) {
+    if (rule.proved) {
+      out.push(
+        `✓ ${report.model}.${rule.name} is proved: every command and every decision keeps it, from any states the rules allow`,
+      );
+      continue;
+    }
     if (!rule.broken) {
       out.push(
         rule.states > 0

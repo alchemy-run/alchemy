@@ -144,7 +144,30 @@ export interface Kept {
   /** How a sentence names it: an invariant's name, or `the state's schema`. */
   readonly what: string;
   readonly holds: (moved: Moved) => boolean;
+  /** What a counterexample shows as the states before and after, in place of the instance's own. */
+  readonly shown?: (moved: Moved) => { readonly state: unknown; readonly after: unknown };
 }
+
+/** The solver's value for part of a path, as a real value: it fails when it has none. */
+export type Build = (
+  what: string,
+  value: Parameters<typeof Symbolic.concretize>[0],
+) => Effect.Effect<unknown, Verdict>;
+
+/**
+ * Something to keep, or how to make it from a counterexample: a rule about
+ * more than the step's own instances builds the others from the solver's
+ * answer, and fails when they are not ones the real code allows.
+ */
+export type Keeping<K> = K | ((build: Build) => Effect.Effect<K, Verdict>);
+
+const keeping = <K>(given: Keeping<K>, build: Build): Effect.Effect<K, Verdict> =>
+  typeof given === "function"
+    ? (given as (build: Build) => Effect.Effect<K, Verdict>)(build)
+    : Effect.succeed(given);
+
+/** A verdict that the solver's answer is not one the real code confirms. */
+export const notConfirmed = unconfirmed;
 
 /**
  * Every invariant and transition of an aggregate, by name, on a step the real
@@ -194,7 +217,7 @@ export const schema = (aggregate: Aggregate.Any): Kept => ({
 /** Build the counterexample as real values, and run the real `decide`, `evolve` and check on it. */
 const replay = Effect.fn(function* (
   aggregate: Aggregate.Any,
-  kept: Kept,
+  given: Keeping<Kept>,
   run: Run,
   inputs: Inputs,
   model: Model,
@@ -210,6 +233,7 @@ const replay = Effect.fn(function* (
     string,
     (state: unknown) => boolean
   >;
+  const kept = yield* keeping(given, build);
   const state = yield* build("state", inputs.state);
   if (!Schema.is(definition.state)(state))
     return yield* Effect.fail(
@@ -257,15 +281,14 @@ const replay = Effect.fn(function* (
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code fails on it: ${Cause.pretty(prediction.cause)}`,
     );
-  const holds = yield* attempt(`${kept.what} threw`, () =>
-    kept.holds({
-      before: state,
-      after: prediction.state,
-      command,
-      events: prediction.events,
-      context: context as Context.Context<never>,
-    }),
-  );
+  const moved: Moved = {
+    before: state,
+    after: prediction.state,
+    command,
+    events: prediction.events,
+    context: context as Context.Context<never>,
+  };
+  const holds = yield* attempt(`${kept.what} threw`, () => kept.holds(moved));
   if (holds)
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code keeps ${kept.what} on it`,
@@ -279,6 +302,7 @@ const replay = Effect.fn(function* (
       now,
       events: prediction.events,
       after: prediction.state,
+      ...kept.shown?.(moved),
     },
   };
   return verdict;
@@ -292,7 +316,7 @@ const replay = Effect.fn(function* (
 export const check = (
   solver: Smt.Solver,
   aggregate: Aggregate.Any,
-  kept: Kept,
+  kept: Keeping<Kept>,
   run: Run,
   inputs: Inputs,
   condition: string,
@@ -318,6 +342,25 @@ const judged = (
         ),
       );
 
+/**
+ * Whether `condition` can be false on a path where no command runs. `confirm`
+ * builds the solver's answer as real values and says what the real code makes of it.
+ */
+export const checkAt = (
+  solver: Smt.Solver,
+  run: Run,
+  condition: string,
+  confirm: (build: Build) => Effect.Effect<Verdict, Verdict>,
+): Effect.Effect<Verdict, Smt.SolverError> =>
+  judged(solver, run, condition, (model) =>
+    confirm((what, value) => {
+      const built = Symbolic.concretize(value, model, run.lists);
+      return "value" in built
+        ? Effect.succeed(built.value)
+        : Effect.fail(unconfirmed(`the solver found inputs, but ${built.reason} (${what})`));
+    }),
+  );
+
 /** One step the real code of a decision took: what it left of every instance it read. */
 export interface DecisionMoved {
   readonly ran: Decide.Ran & { readonly _tag: "Accepted" };
@@ -331,6 +374,8 @@ export interface DecisionMoved {
 export interface DecisionKept {
   readonly what: string;
   readonly holds: (moved: DecisionMoved) => boolean;
+  /** What a counterexample shows as the states before and after, in place of the ones the decision read. */
+  readonly shown?: (moved: DecisionMoved) => { readonly state: unknown; readonly after: unknown };
 }
 
 /** An aggregate's invariant or transition, on the instance a decision read at this place. */
@@ -388,7 +433,7 @@ const replayDecision = Effect.fn(function* (
   decision: Decision.Any,
   /** The aggregate of each instance read, in the order the step read them. */
   aggregates: ReadonlyArray<Aggregate.Any>,
-  kept: DecisionKept,
+  given: Keeping<DecisionKept>,
   run: Run,
   step: DecisionStep,
   model: Model,
@@ -399,6 +444,7 @@ const replayDecision = Effect.fn(function* (
       ? Effect.succeed(built.value)
       : Effect.fail(unconfirmed(`the solver found inputs, but ${built.reason} (${what})`));
   };
+  const kept = yield* keeping(given, build);
   const states = new Map<string, { readonly state: unknown; readonly version: number }>();
   const streams: Array<string> = [];
   for (const [index, slot] of step.slots.entries()) {
@@ -462,9 +508,13 @@ const replayDecision = Effect.fn(function* (
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${before()}, but the real code fails on it: ${Cause.pretty(ran.cause)}`,
     );
-  const holds = yield* attempt(`${kept.what} threw`, () =>
-    kept.holds({ ran, streams, command, context: context as Context.Context<never> }),
-  );
+  const moved: DecisionMoved = {
+    ran,
+    streams,
+    command,
+    context: context as Context.Context<never>,
+  };
+  const holds = yield* attempt(`${kept.what} threw`, () => kept.holds(moved));
   if (holds)
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${before()}, but the real code keeps ${kept.what} on it`,
@@ -479,6 +529,7 @@ const replayDecision = Effect.fn(function* (
       now,
       events: ran.events,
       after: Decide.byName(ran.streams, (stream) => wrote.get(stream)?.after),
+      ...kept.shown?.(moved),
     },
   };
   return verdict;
@@ -508,7 +559,7 @@ export const checkDecision = (
   solver: Smt.Solver,
   decision: Decision.Any,
   aggregates: ReadonlyArray<Aggregate.Any>,
-  kept: DecisionKept,
+  kept: Keeping<DecisionKept>,
   run: Run,
   step: DecisionStep,
   condition: string,
