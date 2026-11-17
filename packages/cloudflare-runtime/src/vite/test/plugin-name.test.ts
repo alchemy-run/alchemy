@@ -192,6 +192,50 @@ describe("alchemy Cloudflare Vite plugin name", () => {
     },
   );
 
+  // React Router's child compiler loads `vite.config.ts` again for a second
+  // Vite server, so it gets new official instances Alchemy's plugin never
+  // sees. With a leftover `wrangler.jsonc`, v2's would throw.
+  it.each([
+    { injected: true, outcome: "resolves" },
+    { injected: false, outcome: "rejects" },
+  ] as const)(
+    "an official cloudflare() from a second load of the config stands down only under Alchemy (injected: $injected)",
+    async ({ injected, outcome }) => {
+      // Inside the package, so the config's bare import resolves.
+      const project = await fs.mkdtemp(path.join(root, ".second-load-"));
+      const previous = process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED;
+      try {
+        await fs.writeFile(
+          path.join(project, "wrangler.jsonc"),
+          JSON.stringify({ name: "worker", main: "./worker-entry.ts" }),
+        );
+        await fs.writeFile(
+          path.join(project, "vite.config.mjs"),
+          `import { cloudflare } from "@cloudflare/vite-plugin";\nexport default { plugins: [cloudflare()] };\n`,
+        );
+        cloudflareVitePlugin({ main: "./worker-entry.ts" });
+        if (injected) process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED = "1";
+        else delete process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED;
+        const loaded = await vite.loadConfigFromFile(
+          { command: "serve", mode: "development" },
+          path.join(project, "vite.config.mjs"),
+          project,
+          "silent",
+        );
+        const second = vite.resolveConfig(
+          { configFile: false, root: project, logLevel: "silent", plugins: loaded!.config.plugins },
+          "serve",
+        );
+        if (outcome === "resolves") await expect(second).resolves.toBeDefined();
+        else await expect(second).rejects.toThrow(/wrangler\.jsonc/);
+      } finally {
+        if (previous === undefined) delete process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED;
+        else process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED = previous;
+        await fs.rm(project, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("disables official plugins an async plugin factory resolves to", async () => {
     const configureServer = vi.fn();
     const applyToEnvironment = vi.fn(() => true);
