@@ -90,9 +90,11 @@ export default class Program extends E2B.Template<Program>()(
         return HttpServerResponse.text(report);
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(E2B.ReadVolumeHttp)),
+  }).pipe(Effect.provide(Layer.mergeAll(E2B.ReadVolumeHttp, Gateway.Unprotected))),
 ) {}
 ```
+
+`Gateway.Unprotected` (from `alchemy/Gateway`) lets the binding's API key live in the sandbox, which is fine while the sandbox runs only this program. For a sandbox that runs code you don't trust, give it a [gateway](/infrastructure-as-effects/sandbox-gateway) instead, and the deploy fails if you provide neither.
 
 Any binding works in a template program, from E2B or another provider.
 

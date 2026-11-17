@@ -7,7 +7,7 @@ import type * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
-import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
+import { RuntimeContext, sanitizeKey, secretInSandbox } from "./RuntimeContext.ts";
 import { StackContext } from "./StackContext.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
@@ -143,7 +143,19 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
       Effect.flatMap((ctx) =>
         Effect.map(
           // A sandbox's gateway holds what its bindings bind (see `Gateway.ts`).
-          ctx.gateway?.phase === "plan" ? ctx.gateway.set(key, this) : ctx.set(key, this),
+          ctx.gateway?.phase === "plan"
+            ? ctx.gateway.set(key, this)
+            : ctx.set(
+                key,
+                // A sandbox runs code that is not trusted: a secret may not
+                // stay in one (see `secretInSandbox`).
+                ctx.sandbox === true && !globalThis.__ALCHEMY_RUNTIME__
+                  ? (new EffectExpr(this as any, (value: unknown) => {
+                      const refused = secretInSandbox(ctx, key, value);
+                      return refused === undefined ? Effect.succeed(value) : Effect.die(refused);
+                    }) as any)
+                  : this,
+              ),
           (k) => ctx.get<A>(k),
         ),
       ),

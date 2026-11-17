@@ -5,7 +5,9 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as sandboxes from "@distilled.cloud/e2b/sandboxes";
 import * as Git from "@distilled.cloud/github/git";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -14,6 +16,7 @@ import type { Served } from "./conformance/app.ts";
 import { expectGatewayed } from "./conformance/conformance.ts";
 import GitSandbox, { owner, Repo, repository } from "./fixtures/e2b-git.ts";
 import OrderSandbox from "./fixtures/e2b-order.ts";
+import UnguardedSandbox from "./fixtures/e2b-unguarded.ts";
 import GatewayedE2B from "./fixtures/e2b.ts";
 
 const { test } = Test.make({
@@ -129,5 +132,29 @@ test.provider(
   {
     tags: ["provider:e2b", "provider:github", "provider:cloudflare", "live"],
     timeout: 900_000,
+  },
+);
+
+test.provider(
+  "a binding that would put a credential in a sandbox with no gateway fails the deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const exit = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* Repo;
+            return yield* UnguardedSandbox;
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+      expect(rendered).toContain("SecretInSandbox");
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:e2b", "provider:github", "live"],
+    timeout: 300_000,
   },
 );

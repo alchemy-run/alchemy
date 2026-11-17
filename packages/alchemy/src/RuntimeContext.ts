@@ -76,6 +76,13 @@ export interface BaseRuntimeContext {
    * `Gateway.Unprotected`.
    */
   sandbox?: boolean;
+  /**
+   * Set on the context one binding is built with when what it binds is not
+   * checked: a mount, which configures the sandbox itself.
+   */
+  trusted?: boolean;
+  /** The host's own context, on a context one binding is built with. */
+  root?: BaseRuntimeContext;
   /** Set by `Gateway.Unprotected`: bindings may keep their secrets in this sandbox. */
   unprotected?: boolean;
   /** Set by `Gateway.only`: the bindings (by id) that run in the gateway. */
@@ -142,6 +149,39 @@ export type GatewayContext =
         args: ReadonlyArray<unknown> | undefined,
       ) => Effect.Effect<unknown, unknown>;
     };
+
+/** A secret a binding tried to put in a sandbox that has no gateway. */
+export class SecretInSandbox extends Data.TaggedError("SecretInSandbox")<{
+  readonly message: string;
+}> {}
+
+/**
+ * Whether a value bound under `key` may stay on this host. Checked when the
+ * value resolves, after every Layer is built, so a gateway installed later
+ * still counts.
+ */
+export const secretInSandbox = (
+  ctx: BaseRuntimeContext,
+  key: string,
+  value: unknown,
+): SecretInSandbox | undefined => {
+  const host = ctx.root ?? ctx;
+  if (
+    !Redacted.isRedacted(value) ||
+    host.sandbox !== true ||
+    ctx.trusted === true ||
+    host.gateway !== undefined ||
+    host.unprotected === true
+  ) {
+    return undefined;
+  }
+  return new SecretInSandbox({
+    message:
+      `${host.boundBy?.get(key) ?? "A binding"} would put a credential (${key}) in the sandbox ${host.id}, where the code it runs can read it. ` +
+      "Provide a gateway Layer to the sandbox's binding Layers (Cloudflare.Workers.SandboxGateway, AWS.Lambda.SandboxGateway, …), " +
+      "or Gateway.Unprotected if the sandbox only runs your own code.",
+  });
+};
 
 /** The host's platform did not issue an OIDC token. */
 export class OidcTokenError extends Data.TaggedError("OidcTokenError")<{

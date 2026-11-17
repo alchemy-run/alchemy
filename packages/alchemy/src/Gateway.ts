@@ -503,11 +503,6 @@ export const wrapClientInvocations = (
   return client;
 };
 
-/** A secret a binding tried to put in a sandbox that has no gateway. */
-export class SecretInSandbox extends Data.TaggedError("SecretInSandbox")<{
-  readonly message: string;
-}> {}
-
 /**
  * Lets a sandbox's bindings keep their credentials in the sandbox, where
  * the code it runs can read them. Without it, and without a gateway, a
@@ -549,8 +544,7 @@ export const only = (
 
 /**
  * The same context with another view of the gateway, for one binding's
- * Construction. It records which binding bound each value, and on a sandbox
- * refuses a secret that would stay there.
+ * Construction. It records which binding bound each value.
  */
 const derive = (
   ctx: BaseRuntimeContext,
@@ -560,31 +554,12 @@ const derive = (
 ): BaseRuntimeContext =>
   Object.create(ctx, {
     gateway: { value: gateway, enumerable: true },
+    trusted: { value: trusted, enumerable: true },
+    root: { value: ctx.root ?? ctx, enumerable: true },
     set: {
       value: (key: string, output: Output.Output) => {
         (ctx.boundBy ??= new Map()).set(key, id);
-        return ctx.set(
-          key,
-          trusted || ctx.sandbox !== true
-            ? output
-            : output.pipe(
-                // Checked when the value resolves, after every Layer is built.
-                Output.mapEffect((value) =>
-                  Redacted.isRedacted(value) &&
-                  ctx.gateway === undefined &&
-                  ctx.unprotected !== true
-                    ? Effect.die(
-                        new SecretInSandbox({
-                          message:
-                            `${id} would put a credential (${key}) in the sandbox ${ctx.id}, where the code it runs can read it. ` +
-                            "Provide a gateway Layer to the sandbox's binding Layers (Cloudflare.Workers.SandboxGateway, AWS.Lambda.SandboxGateway, …), " +
-                            "or Gateway.Unprotected if the sandbox only runs your own code.",
-                        }),
-                      )
-                    : Effect.succeed(value),
-                ),
-              ),
-        );
+        return ctx.set(key, output);
       },
     },
   });

@@ -1,3 +1,7 @@
+// A request's body stream and the SDK's failures are carried as the HTTP
+// client's own transport error.
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
@@ -187,7 +191,7 @@ export const InvokeSandboxGateway = Layer.effect(
           ? new TextDecoder().decode(concat(Array.from(yield* Stream.runCollect(invoked.Payload))))
           : "";
         if (invoked.FunctionError !== undefined) {
-          return yield* Effect.fail(failed(request, `the gateway failed: ${payload}`));
+          return yield* failed(request, `the gateway failed: ${payload}`);
         }
         const answer = JSON.parse(payload) as {
           status: number;

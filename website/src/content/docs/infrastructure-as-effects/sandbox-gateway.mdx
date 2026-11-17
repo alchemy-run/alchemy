@@ -81,6 +81,25 @@ Plain values (a repository name, a bucket name) are bound to both. Your own
 `Config` reads in the program still reach the sandbox, as they do without a
 gateway, so keep secrets in bindings.
 
+## A sandbox without a gateway
+
+A binding that would put a credential in a sandbox fails the deploy:
+
+```
+SecretInSandbox: GitHub.ListIssues would put a credential (GITHUB_TOKEN) in the
+sandbox MySandbox, where the code it runs can read it.
+```
+
+Give the sandbox a gateway. If the sandbox only ever runs your own program,
+say so instead, and the credential stays in it as on any other host:
+
+```typescript
+Effect.provide(Layer.mergeAll(GitHub.ListIssuesHttp, Gateway.Unprotected))
+```
+
+This applies to E2B, Daytona, Modal, Boat and Archil sandboxes. Mounts hold
+no credential and are never refused.
+
 ## Cloud identities
 
 On AWS, use a Lambda Web Function as the gateway. AWS bindings are granted on
@@ -158,6 +177,34 @@ export default class MySandbox extends Archil.Sandbox<MySandbox>()(
 
 The gateway's host is added to the allowed destinations for you.
 
+## Sandboxes a host creates at run time
+
+A Worker that starts sandboxes from a plain image has no sandbox program to
+give a gateway to. Give the Worker the gateway, limited to what its
+sandboxes may use:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(
+    E2B.CreateSandboxHttp,
+    GitHub.PushRepositoryHttp.pipe(Layer.provide(Gateway.only(GitHub.PushRepository))),
+  ).pipe(Layer.provide(Cloudflare.Workers.SandboxGateway)),
+)
+```
+
+`Gateway.only` names the bindings that run in the gateway. Every other
+binding, here `E2B.CreateSandbox`, stays on the Worker. What the named
+binding returns is then safe to hand to a sandbox:
+
+```typescript
+const { url, env } = yield* repo.remote;
+const sandbox = yield* sandboxes.create();
+yield* sandbox.exec(`git clone ${url} work`, { env });
+```
+
+`url` and `env` name the gateway and its token. The GitHub token stays in
+the gateway.
+
 ## Bindings that stay in the sandbox
 
 A mount configures the sandbox itself and holds no credential, so
@@ -217,6 +264,9 @@ AWS.ECS.SandboxGateway({
 })
 ```
 
-A sandbox must be able to reach its gateway. A Daytona sandbox below Tier 3
-can only reach an allowlist of hosts, which includes none of these, so its
-bindings can't call out until the organization's network tier allows it.
+`AWS.Lambda.InvokeSandboxGateway` is for a sandbox whose network reaches
+AWS's API endpoints and little else. A Daytona sandbox below Tier 3 is one:
+it can reach neither a Worker's nor a Web Function's URL. The sandbox calls
+the gateway through the Lambda `Invoke` API, with an access key that may
+invoke that one Function and nothing else. A payload is at most 6 MB each
+way, streams are buffered, and a CLI can't use it as an origin.
