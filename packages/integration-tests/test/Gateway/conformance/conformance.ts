@@ -19,15 +19,6 @@ export const expectGatewayed = (served: Served, options: { readonly gatewayHost:
   expect(served.apiKey ?? "").toBe("");
 };
 
-/** The half that needs no network: the sandbox knows its gateway and holds no key. */
-export const expectNoCredential = (
-  served: Pick<Served, "apiKey" | "gateway">,
-  options: { readonly gatewayHost: string },
-) => {
-  expect(served.gateway).toContain(options.gatewayHost);
-  expect(served.apiKey ?? "").toBe("");
-};
-
 /**
  * What a gatewayed sandbox on AWS must show: its S3 bindings work through
  * the gateway's role, and the sandbox itself cannot call S3.

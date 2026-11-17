@@ -283,7 +283,8 @@ export const make = <R>(
       // A Layer built before this one already bound its values onto the
       // sandbox: move them here, so Layer order never leaves a secret there.
       for (const [key, packed] of Object.entries(sandbox.env)) {
-        if (key === SANDBOX_URL_KEY || key === SANDBOX_TOKEN_KEY) continue;
+        // What a gateway host bound for the sandbox itself stays there.
+        if (key.startsWith("ALCHEMY_GATEWAY_")) continue;
         // The platform already packed the value for its environment.
         const value = (packed as Output.Output).pipe(Output.map(unpackBound));
         yield* deployed.set(key, value);

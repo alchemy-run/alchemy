@@ -38,7 +38,10 @@ export const app = Effect.gen(function* () {
         // its gateway.
         const client = yield* HttpClient.HttpClient;
         const reached = yield* client
-          .get("https://example.com/")
+          .get(
+            new URL(request.url, "http://sandbox").searchParams.get("url") ??
+              "https://example.com/",
+          )
           .pipe(
             Effect.timeout("10 seconds"),
             Effect.match({ onFailure: () => false, onSuccess: () => true }),
@@ -81,6 +84,12 @@ export const WebFunctionGateway = E2B.ReadTeamHttp.pipe(Layer.provide(AWS.Lambda
 
 /** The program's bindings, built on a Fly Service gateway. */
 export const FlyGateway = E2B.ReadTeamHttp.pipe(Layer.provide(Fly.SandboxGateway));
+
+/**
+ * The program's bindings, built on a Lambda Function the sandbox reaches
+ * through the Lambda `Invoke` API.
+ */
+export const InvokeGateway = E2B.ReadTeamHttp.pipe(Layer.provide(AWS.Lambda.InvokeSandboxGateway));
 
 /** What {@link app} answers. */
 export interface Served {

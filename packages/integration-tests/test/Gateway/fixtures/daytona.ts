@@ -1,13 +1,14 @@
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
-import { app, WebFunctionGateway } from "../conformance/app.ts";
+import { app, InvokeGateway } from "../conformance/app.ts";
 
 /**
- * The conformance program in a Daytona sandbox. Its gateway is a Lambda Web
- * Function: below Tier 3 a Daytona sandbox cannot reach workers.dev.
+ * The conformance program in a Daytona sandbox. Below Tier 3 a Daytona
+ * sandbox reaches AWS's API endpoints but neither a Worker's nor a Web
+ * Function's url, so its gateway is a Lambda Function it invokes.
  */
 export default class GatewayedDaytona extends Daytona.Sandbox<GatewayedDaytona>()(
   "GatewayedDaytona",
   { main: import.meta.url, port: 3000, public: true },
-  app.pipe(Effect.provide(WebFunctionGateway)),
+  app.pipe(Effect.provide(InvokeGateway)),
 ) {}
