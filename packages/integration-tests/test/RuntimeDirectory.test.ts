@@ -342,7 +342,7 @@ layer(PlatformServices)("runtime directory", (it) => {
         const runtime = path.join(root, "runtime");
         yield* fs.makeDirectory(runtime);
         yield* fs.writeFileString(path.join(root, "app.js"), "export default 42;");
-        const provider = yield* nextjsSource.make({ root });
+        const provider = yield* nextjsSource.make({}, { rootDir: root });
         const context = {
           id: "test",
           workerName: "test",

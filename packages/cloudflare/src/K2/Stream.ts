@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceClass } from "alchemy/Resource";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import { isEffectOf } from "alchemy/Util/effect";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
@@ -168,9 +169,8 @@ const constructStream = (id: string, props: unknown) =>
       schema = split.schema;
       return split.props;
     };
-    const persisted = Effect.isEffect(props)
-      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
-        (props as Effect.Effect<unknown>).pipe(Effect.map((p) => capture(splitSchema(p))))
+    const persisted = isEffectOf(props)
+      ? props.pipe(Effect.map((p) => capture(splitSchema(p))))
       : capture(splitSchema(props));
     const construct = StreamResource as unknown as (
       id: string,
@@ -268,6 +268,7 @@ export const Stream: StreamClass = Object.assign(
       ? Object.assign(Stream, args[0])
       : constructStream(args[0], (args as [string, unknown])[1]),
   StreamResource,
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the class is yieldable for its constructor; the Effect protocol erases its channels
   Effectable.Prototype({
     label: `Resource<${StreamTypeId}>`,
     evaluate: () => Effect.succeed((id: string, props: unknown) => constructStream(id, props)),

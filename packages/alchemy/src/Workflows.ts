@@ -157,13 +157,33 @@ export function layer(
         unknown
       >,
 ): Layer.Layer<any, any, any> {
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the overloads carry the types; this implementation is erased
   return Effect.isEffect(execute)
-    ? Layer.unwrap(Effect.map(execute, (handler) => layer(workflow, handler)))
+    ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the overloads carry the types; this implementation is erased
+      Layer.unwrap(Effect.map(execute, (handler) => layer(workflow, handler)))
     : Layer.merge(
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the overloads carry the types; this implementation is erased
         workflow.toLayer(execute as any) as Layer.Layer<never, never, any>,
         implemented([workflow._tag]),
       );
 }
+
+/**
+ * A workflow with its schemas' services erased. `Workflows.layer` provides
+ * every decoding/encoding service a workflow's schemas need where it
+ * implements the workflow, so clients and runs read the engine with none
+ * left to satisfy.
+ */
+interface ErasedCodec<T = unknown> extends Schema.Codec<T, unknown, never, never> {}
+interface ErasedPayload extends ErasedCodec {
+  readonly fields: Schema.Struct.Fields;
+}
+type ErasedWorkflow<A = unknown, E = unknown> = Workflow.Workflow<
+  string,
+  ErasedPayload,
+  ErasedCodec<A>,
+  ErasedCodec<E>
+>;
 
 type NameOf<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 type SuccessOf<W> = W extends Workflow.Workflow<any, any, infer S, any> ? S["Type"] : never;
@@ -255,9 +275,9 @@ export const RunWorkflow = <W extends Workflow.Any>(
 > =>
   Effect.gen(function* () {
     const engine = yield* WorkflowEngine.WorkflowEngine;
-    const typed = workflow as unknown as Workflow.Workflow<string, any, any, any>;
+    const typed = workflow as unknown as ErasedWorkflow;
     const run = (executionId: string) =>
-      makeRun(engine, typed, executionId) as Run<SuccessOf<W>, ErrorOf<W>>;
+      makeRun<SuccessOf<W>, ErrorOf<W>>(engine, typed, executionId);
     return {
       start: (payload) =>
         typed
@@ -275,15 +295,16 @@ export const RunWorkflow = <W extends Workflow.Any>(
  *
  * @internal
  */
-export const makeRun = (
+export const makeRun = <A = unknown, E = unknown>(
   engine: WorkflowEngine.WorkflowEngine["Service"],
   workflow: Workflow.Workflow<string, any, any, any>,
   executionId: string,
-): Run<unknown, unknown> => {
-  const poll = engine.poll(workflow, executionId);
+): Run<A, E> => {
+  const erased = workflow as unknown as ErasedWorkflow<A, E>;
+  const poll = engine.poll(erased, executionId);
   return {
     executionId,
-    status: Effect.map(poll, (result): Status<unknown, unknown> => {
+    status: Effect.map(poll, (result): Status<A, E> => {
       if (Option.isNone(result)) return { _tag: "NotStarted" };
       if (result.value._tag === "Suspended") return { _tag: "Running" };
       const exit = result.value.exit;
@@ -294,7 +315,7 @@ export const makeRun = (
       return defect?._tag === "Die"
         ? { _tag: "Died", defect: defect.defect }
         : { _tag: "Interrupted" };
-    }) as Effect.Effect<Status<unknown, unknown>>,
+    }),
     result: poll.pipe(
       Effect.flatMap((result) =>
         Option.isSome(result) && result.value._tag === "Complete"
@@ -304,14 +325,17 @@ export const makeRun = (
       Effect.retry({ schedule: POLL }),
       Effect.orDie,
       Effect.flatten,
-    ) as Effect.Effect<unknown, unknown>,
+    ),
     signal: (deferred, value) =>
-      engine.deferredDone(deferred, {
-        workflowName: workflow._tag,
-        executionId,
-        deferredName: deferred.name,
-        exit: Exit.succeed(value),
-      }) as Effect.Effect<void>,
+      engine.deferredDone(
+        deferred as unknown as DurableDeferred.DurableDeferred<ErasedCodec, ErasedCodec>,
+        {
+          workflowName: workflow._tag,
+          executionId,
+          deferredName: deferred.name,
+          exit: Exit.succeed(value),
+        },
+      ),
     interrupt: engine.interrupt(workflow, executionId),
   };
 };

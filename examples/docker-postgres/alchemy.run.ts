@@ -37,6 +37,7 @@ export default Alchemy.Stack(
         POSTGRES_USER: "alchemy",
         POSTGRES_PASSWORD: password,
       },
+      sharedMemorySize: "256m",
       ports: [{ external: POSTGRES_PORT, internal: 5432 }],
       volumes: [
         {

@@ -170,6 +170,12 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * removes.
    */
   readonly beforeServe?: Effect.Effect<void>;
+  /**
+   * Also serve the Worker on a Unix socket at this path (macOS and Linux
+   * only). The file is removed before each workerd start and when the runtime
+   * stops, so the path must belong to this runtime alone.
+   */
+  readonly entrySocketPath?: string;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 

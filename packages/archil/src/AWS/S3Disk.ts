@@ -1,6 +1,7 @@
 import type { PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import type * as S3 from "@alchemy.run/aws/S3";
 import * as Output from "alchemy/Output";
+import { yieldDeclared } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { account } from "../Credentials.ts";
@@ -97,7 +98,7 @@ export const archilBucketStatements = (input: {
 export const S3Disk = (id: string, props: S3DiskProps) =>
   Effect.gen(function* () {
     const { bucket: bucketRef, prefix, ...diskProps } = props;
-    const bucket = Effect.isEffect(bucketRef) ? yield* bucketRef : bucketRef;
+    const bucket = yield* yieldDeclared(bucketRef);
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       const { region, organization } = yield* account;
       if (!ARCHIL_S3_PRINCIPALS[region]) {

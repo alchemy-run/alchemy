@@ -43,10 +43,8 @@ Background on why the integration is shaped this way:
   from `process.cwd()` at config-load time and user plugins may mutate the
   process, so the AWS target's wholesale `build` spawns
   `core/BuildChildRunner` with `cwd = <project root>`.
-- **Dev aligns the cwd instead.** The dev server runs in the caller's process
-  (alchemy's dev sidecar), so `inProjectCwd` sets the cwd across the window in
-  which vite evaluates the config module and restores it immediately after.
-  Consequence, upstream and unavoidable while the plugin keys off the cwd: one
-  process hosts the dev server of one SolidStart project at a time.
+- **Dev runs in the project root too.** The caller starts the dev server in a
+  child process rooted at the project (`runDevChild`), and `inProjectCwd`
+  fails fast when the working directory is anything else.
 - **No Cloudflare target.** Cloudflare deploys SolidStart through its native
   Vite integration (`Cloudflare.Website.Vite`) with no nitro step at all.

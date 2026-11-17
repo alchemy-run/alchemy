@@ -57,6 +57,9 @@
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
     },
     {
@@ -169,6 +172,9 @@
       "path": "./packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "./packages/railway/tsconfig.json"
     },
     {
@@ -191,6 +197,9 @@
     },
     {
       "path": "./packages/domain/tsconfig.json"
+    },
+    {
+      "path": "./packages/domain/test/types/tsconfig.json"
     },
     {
       "path": "./packages/docker/tsconfig.json"
@@ -540,6 +549,9 @@
     },
     {
       "path": "./examples/hetzner-app/tsconfig.json"
+    },
+    {
+      "path": "./examples/digitalocean-app/tsconfig.json"
     },
     {
       "path": "./examples/hetzner-website-vite/tsconfig.json"

@@ -138,8 +138,10 @@ export const WorkflowFunction =
       {
         workflows: options.workflows,
         make: (props: unknown, workflows: Layer.Layer<any, any, any>) =>
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the user's workflow Layer is erased; WorkflowFunction.make checks it lists every hosted workflow
           make(props, makeWorkflowRunner(workflows)),
       },
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- Effectable resource class: evaluates to the untyped Lambda Function tag
       Effectable.Prototype({
         label: `AWS.Lambda.WorkflowFunction<${id}>`,
         evaluate: () => self,
@@ -340,6 +342,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
           Effect.orDie,
         );
         const instance = WorkflowEngine.WorkflowInstance.initial(workflow, invocation.executionId);
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- registrations are erased across workflows; payloads and results are decoded by schema
         const result = yield* execute(payload as object, invocation.executionId).pipe(
           Workflow.intoResult,
           Effect.provide(
@@ -806,6 +809,7 @@ const makeEngine = (options: {
               generation === 0
                 ? `${activity.name}/${attempt}`
                 : `${activity.name}/${attempt}/resumed-${generation}`,
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- effect/workflow encodes activity results as unknown
             effect: activity.executeEncoded.pipe(
               Workflow.intoResult,
               Effect.flatMap((result) =>

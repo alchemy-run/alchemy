@@ -367,8 +367,8 @@ describe.concurrent(
           );
           expect(middlewarePriority).toBe("middleware");
 
-          const overrideSite = yield* deploy(nativeBuildCommand.replace("'native'", "'resource'"));
-          expect(overrideSite.hash?.input).not.toEqual(site5.hash?.input);
+          // A changed option rebuilds through the props diff, not the input hash.
+          yield* deploy(nativeBuildCommand.replace("'native'", "'resource'"));
           expect(yield* fs.readFileString(path.join(rootDir, "native-build-marker"))).toBe(
             "resource",
           );

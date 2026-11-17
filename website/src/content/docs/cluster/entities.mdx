@@ -154,7 +154,7 @@ Set how long it waits, and how many of its messages may run at once, next to `ma
 { main: import.meta.url, maxIdleTime: "10 minutes", concurrency: 1 }
 ```
 
-`mailboxCapacity` sets how many messages an instance may hold before new ones fail with `MailboxFull`. `disableFatalDefects` sends a handler's defect to its caller instead of restarting the instance.
+`mailboxCapacity` sets how many messages an instance may hold before new ones fail with `MailboxFull`. A persisted message doesn't fail: it is stored, and runs once there is room. `disableFatalDefects` sends a handler's defect to its caller instead of restarting the instance.
 
 An instance also stops when its runner does, including on every deploy, and when its shard moves to another runner. Keep state that must outlive it in a database.
 
