@@ -34,6 +34,10 @@ export default class AliasConsumer extends Cloudflare.Worker<AliasConsumer>()(
           const other = yield* readWrite.get("alias-key");
           return HttpServerResponse.text(`${yield* object!.text()}:${yield* other!.text()}`);
         }
+        if (path === "/r2-cleanup") {
+          yield* readWrite.delete("alias-key");
+          return HttpServerResponse.text("alias object deleted");
+        }
         if (path === "/queue") {
           yield* producer.send("aliased event", { contentType: "text" });
           yield* Stream.succeed({ event: "aliased sink" }).pipe(Stream.run(sink));

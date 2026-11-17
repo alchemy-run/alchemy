@@ -26,6 +26,10 @@ export default class DefaultConsumer extends Cloudflare.Worker<DefaultConsumer>(
           const object = yield* r2.get("default-key");
           return HttpServerResponse.text(yield* object!.text());
         }
+        if (path === "/r2-cleanup") {
+          yield* r2.delete("default-key");
+          return HttpServerResponse.text("default object deleted");
+        }
         if (path === "/queue") {
           yield* producer.send({ event: "default producer" });
           return HttpServerResponse.text("default queue sent");
