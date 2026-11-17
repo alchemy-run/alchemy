@@ -37,9 +37,6 @@ const permissionPairs = (statements: readonly PolicyStatement[]) =>
     ),
   ].sort();
 
-const render = (statements: readonly PolicyStatement[], roleName = "policy-unit-test") =>
-  Effect.runPromise(renderFunctionPolicy(roleName, statements, guard));
-
 describe("compaction", { tags: ["unit", "local"] }, () => {
   it("removes exact duplicates and normalizes action and resource sets", () => {
     const statement = grant(["s3:GetObject", "s3:ListBucket"], ["bucket", "object"]);
