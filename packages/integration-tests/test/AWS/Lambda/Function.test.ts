@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import * as SQS from "@distilled.cloud/aws/sqs";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
@@ -27,6 +28,8 @@ import StreamingFunctionLive, { StreamingFunction } from "./streaming-handler.ts
 const asyncHandlerPath = fileURLToPath(new URL("./async-handler.ts", import.meta.url));
 const namedHandlerPath = fileURLToPath(new URL("./named-handler.ts", import.meta.url));
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
+const layerV1Path = fileURLToPath(new URL("./fixtures/layer-v1", import.meta.url));
+const layerV2Path = fileURLToPath(new URL("./fixtures/layer-v2", import.meta.url));
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
 );
@@ -1467,6 +1470,139 @@ test.provider(
   },
 );
 
+// The peer keeps one layer ARN unresolved during precreate. PENDING_LAYER
+// declares the dependency hidden inside flatMap, so reconcile can resolve it.
+test.provider(
+  "a cyclic precreate reconciles same-deploy, raw-ARN, and cycle-derived layers",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (selection: "all" | "resource" | "none") =>
+        Effect.gen(function* () {
+          const queue = yield* AWS.SQS.Queue("LayerCycleQueue");
+          const published = yield* AWS.Lambda.LayerVersion("CycleLayer", {
+            path: layerV1Path,
+            compatibleRuntimes: ["nodejs22.x"],
+          });
+          const byArn = yield* AWS.Lambda.LayerVersion("CycleLayerArn", {
+            path: layerV2Path,
+            compatibleRuntimes: ["nodejs22.x"],
+          });
+          const pending = yield* AWS.Lambda.LayerVersion("CycleLayerPending", {
+            path: layerV1Path,
+            compatibleRuntimes: ["nodejs22.x"],
+          });
+          const peer = yield* AWS.Lambda.Function("LayerCyclePeer", {
+            main: asyncHandlerPath,
+            functionUrl: false,
+          });
+          const fn = yield* AWS.Lambda.Function("CyclicLayered", {
+            main: asyncHandlerPath,
+            functionUrl: false,
+            runtime: "nodejs22.x",
+            architecture: "arm64",
+            memorySize: 256,
+            timeout: Duration.seconds(15),
+            tracing: "Active",
+            env: {
+              QUEUE_URL: queue.queueUrl,
+              PENDING_LAYER: pending.layerVersionArn,
+            },
+            layers:
+              selection === "none"
+                ? []
+                : selection === "resource"
+                  ? [published]
+                  : [
+                      published,
+                      byArn.layerVersionArn,
+                      peer.functionName.pipe(Output.flatMap(() => pending.layerVersionArn)),
+                    ],
+          });
+          yield* peer.bind`Back`({ env: { PEER_NAME: fn.functionName } });
+          yield* fn.bind`Self`({ env: { SELF_NAME: fn.functionName } });
+          return { fn, peer, queue, published, byArn, pending };
+        });
+
+      const created = yield* stack.deploy(program("all"));
+      const { fn, peer, queue, published, byArn, pending } = created;
+      yield* assertCyclicLayerConfiguration(fn.functionName, {
+        layers: [published.layerVersionArn, byArn.layerVersionArn, pending.layerVersionArn],
+        queueUrl: queue.queueUrl,
+        pendingLayerArn: pending.layerVersionArn,
+      });
+      yield* assertPeerBinding(peer.functionName, fn.functionName);
+
+      const resourceOnly = yield* stack.deploy(program("resource"));
+      expect(resourceOnly.fn.functionName).toBe(fn.functionName);
+      yield* assertCyclicLayerConfiguration(fn.functionName, {
+        layers: [published.layerVersionArn],
+        queueUrl: queue.queueUrl,
+        pendingLayerArn: pending.layerVersionArn,
+      });
+      yield* assertPeerBinding(peer.functionName, fn.functionName);
+
+      const detached = yield* stack.deploy(program("none"));
+      expect(detached.fn.functionName).toBe(fn.functionName);
+      yield* assertCyclicLayerConfiguration(fn.functionName, {
+        layers: [],
+        queueUrl: queue.queueUrl,
+        pendingLayerArn: pending.layerVersionArn,
+      });
+      yield* assertPeerBinding(peer.functionName, fn.functionName);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertFunctionDeleted(peer.functionName);
+      yield* assertRoleDeleted(fn.roleName);
+      yield* assertRoleDeleted(peer.roleName);
+      yield* assertLayerVersionDeleted(published.layerName, published.version);
+      yield* assertLayerVersionDeleted(byArn.layerName, byArn.version);
+      yield* assertLayerVersionDeleted(pending.layerName, pending.version);
+      yield* assertQueueDeleted(queue.queueName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 480_000,
+  },
+);
+
+const envValue = (value: string | Redacted.Redacted<string> | undefined) =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+const assertCyclicLayerConfiguration = Effect.fn(function* (
+  functionName: string,
+  expected: {
+    layers: readonly string[];
+    queueUrl: string;
+    pendingLayerArn: string;
+  },
+) {
+  const configuration = yield* Lambda.getFunctionConfiguration({ FunctionName: functionName });
+  expect(configuration.State).toBe("Active");
+  expect(configuration.LastUpdateStatus).toBe("Successful");
+  expect(configuration.MemorySize).toBe(256);
+  expect(configuration.Timeout).toBe(15);
+  expect(configuration.Runtime).toBe("nodejs22.x");
+  expect(configuration.Architectures).toEqual(["arm64"]);
+  expect(configuration.TracingConfig?.Mode).toBe("Active");
+  const variables = configuration.Environment?.Variables;
+  expect(envValue(variables?.QUEUE_URL)).toBe(expected.queueUrl);
+  expect(envValue(variables?.SELF_NAME)).toBe(functionName);
+  expect(envValue(variables?.PENDING_LAYER)).toBe(expected.pendingLayerArn);
+  expect((configuration.Layers ?? []).map((layer) => layer.Arn)).toEqual(expected.layers);
+});
+
+// The back-binding lands on the peer, not on the layered function.
+const assertPeerBinding = Effect.fn(function* (peerName: string, functionName: string) {
+  const configuration = yield* Lambda.getFunctionConfiguration({ FunctionName: peerName });
+  expect(envValue(configuration.Environment?.Variables?.PEER_NAME)).toBe(functionName);
+});
+
 // Out-of-band proof that the trailing destroy actually removed the function
 // from the cloud (bounded retry to ride out delete propagation).
 const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
@@ -1485,6 +1621,27 @@ const assertRoleDeleted = Effect.fn(function* (roleName: string) {
   yield* iam.getRole({ RoleName: roleName }).pipe(
     Effect.flatMap(() => Effect.fail(new Error(`Role ${roleName} still exists`))),
     Effect.catchTag("NoSuchEntityException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+});
+
+const assertLayerVersionDeleted = Effect.fn(function* (layerName: string, version: number) {
+  yield* Lambda.getLayerVersion({ LayerName: layerName, VersionNumber: version }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error(`Layer ${layerName}:${version} still exists`))),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
+});
+
+const assertQueueDeleted = Effect.fn(function* (queueName: string) {
+  yield* SQS.getQueueUrl({ QueueName: queueName }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error(`Queue ${queueName} still exists`))),
+    Effect.catchTag("QueueDoesNotExist", () => Effect.void),
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
       times: 8,

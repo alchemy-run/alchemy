@@ -3193,9 +3193,8 @@ export const FunctionProvider = () =>
             session,
           });
 
-          // Layers are omitted from the stub: a layer created in the same
-          // deploy is still an unresolved Output at precreate, and reconcile
-          // attaches the resolved set.
+          // A layer ARN from this dependency cycle may still be unresolved.
+          // Reconcile attaches the resolved layers after the stub exists.
           yield* createOrUpdateFunction({
             id,
             news,
