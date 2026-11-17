@@ -24,7 +24,7 @@ const alchemySpec = installSpec("alchemy");
 // The hero terminal covers the code card's empty bottom-right corner: it
 // starts below the last line that reaches TERM_COL, so no code is hidden.
 // The code changes per host, so measure every host's version.
-const TERM_COL = 44;
+const TERM_COL = 45;
 const HOST_LINES = HOSTS.map((h) => hostSource(h.values).split("\n"));
 const TERM_LINE = Math.max(
   ...HOST_LINES.map(
@@ -290,8 +290,8 @@ const PROVIDERS = [
 ---
 
 <Marketing
-  title="Alchemy · manifest verifiable software"
-  description="Declare your business and your infrastructure in one typed program. Prove it before it runs, then ground it in any platform with a Layer."
+  title="Alchemy · generate and deploy verified, production-ready software"
+  description="Model your business with domain-driven design and your infrastructure as code, in one typed program. Stories and proofs verify the business logic, the type checker verifies the infrastructure, and Layers ground it in any platform."
 >
   <!-- Hero + marquee fill the first screen so the marquee lands just above the fold. -->
   <div class="v2-fold">
@@ -311,7 +311,7 @@ const PROVIDERS = [
             id="hero-h1"
             style="font-size:clamp(38px,3.65vw,52px);"
           >
-            Manifest verifiable software
+            Generate and deploy verified, production-ready software
           </h1>
           <p
             data-copy
@@ -319,7 +319,7 @@ const PROVIDERS = [
             id="hero-sub"
             style="font-size:clamp(17px,2.2vw,22px);max-width:560px;"
           >
-            Declare your business and your infrastructure in one typed program. Prove it before it runs, then ground it in any platform with a Layer.
+            Model your business with domain-driven design and your infrastructure as code, in one typed program. Stories and proofs verify the business logic, the type checker verifies the infrastructure, and Layers ground it in any platform.
           </p>
           <div class="alc-hero__cta">
             <Button variant="primary" icon="arrow" href="/getting-started">
@@ -678,7 +678,7 @@ const PROVIDERS = [
   <AlchemicalDivider variant="circle" class="v2-divider" />
   <section class="v2-section v2-pat-5 v2-section--last">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>Manifest yours</h2>
+      <h2 class="v2-h2" data-copy>Get started.</h2>
       <ol class="v2-steps">
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Install</span>
