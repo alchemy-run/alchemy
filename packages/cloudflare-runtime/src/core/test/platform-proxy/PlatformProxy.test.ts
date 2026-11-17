@@ -25,6 +25,19 @@ export class Counter extends DurableObject {
     await this.ctx.storage.put("count", count);
     return count;
   }
+
+  read() {
+    return { ok: true, items: [1, 2] };
+  }
+
+  stream() {
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("rpc stream"));
+        controller.close();
+      },
+    });
+  }
 }
 `;
 
@@ -169,6 +182,24 @@ layer(localRuntimeLayer, { excludeTestServices: true })("PlatformProxy", (it) =>
           expect(await DO.get(materialised).increment()).toBe(4);
           // awaiting an intermediate stub fails with a descriptive error
           await expect(DO.get(DO.idFromName("proxy-test"))).rejects.toThrow(/cannot serialize/);
+        });
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "proxies object and stream RPC results from a Durable Object",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* openTestProxy;
+        yield* Effect.promise(async () => {
+          const DO = (proxy.env as Record<string, any>).DO;
+          const stub = DO.get(DO.idFromName("result-lifetime"));
+
+          expect(await stub.read()).toEqual({ ok: true, items: [1, 2] });
+          const stream = await stub.stream();
+          expect(await new Response(stream).text()).toBe("rpc stream");
+          expect(await stub.read()).toEqual({ ok: true, items: [1, 2] });
         });
       }),
     { timeout: 30_000 },
