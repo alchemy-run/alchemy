@@ -163,14 +163,16 @@ export const toRegistration = (
   run: RunTool,
 ): ToolRegistration => {
   const decode = Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>);
-  const encode = spec.success
+  // A tool that returns nothing has no value for a program to read.
+  const returns = spec.success.ast._tag !== "Void";
+  const encode = returns
     ? Schema.encodeUnknownEffect(spec.success as Schema.Codec<unknown, unknown>)
     : undefined;
   return {
     name,
     description: spec.description,
     parameters: jsonSchemaOf(spec.parameters),
-    ...(spec.success ? { structuredOutputSchema: jsonSchemaOf(spec.success) } : {}),
+    ...(returns ? { structuredOutputSchema: jsonSchemaOf(spec.success) } : {}),
     ...(spec.replay ? { replay: spec.replay } : {}),
     ...(spec.executionMode ? { executionMode: spec.executionMode } : {}),
     ...(spec.deferred ? { deferred: spec.deferred } : {}),
@@ -195,7 +197,7 @@ export const toRegistration = (
         const value = exit.value as JsonValue | undefined;
         return {
           output: [{ type: "text", text: textOf(value) }],
-          ...(spec.success ? { structuredOutput: (value ?? null) as JsonValue } : {}),
+          ...(returns ? { structuredOutput: (value ?? null) as JsonValue } : {}),
         };
       }
       const failure = exit.cause.reasons.find(Cause.isFailReason);
@@ -209,7 +211,7 @@ export const toRegistration = (
               text: `${error._tag}${error.message ? `: ${error.message}` : ""} ${JSON.stringify(errorFields(error))}`,
             },
           ],
-          ...(spec.success ? { structuredOutput: errorFields(error) } : {}),
+          ...(returns ? { structuredOutput: errorFields(error) } : {}),
         };
       }
       // A defect or interruption: Pi turns a throw into the model's error result.

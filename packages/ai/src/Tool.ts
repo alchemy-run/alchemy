@@ -25,10 +25,10 @@ export interface ToolSpec {
   readonly parameters: Schema.Top;
   /**
    * What the tool returns. Programs that call the tool (code mode, other
-   * tools) see it as a typed value; the model sees it as JSON. Leave it out
-   * for a tool that acts and returns nothing.
+   * tools) see it as a typed value; the model sees it as JSON. A tool that
+   * acts and returns nothing says so with `Schema.Void`.
    */
-  readonly success?: Schema.Top;
+  readonly success: Schema.Top;
   /**
    * The tagged error the tool fails with. It reaches the model as an error
    * result that keeps its `_tag` and fields.
@@ -43,9 +43,7 @@ export interface ToolSpec {
   readonly replay?: "safe" | "unsafe";
 }
 
-type SuccessOf<Spec extends ToolSpec> = Spec["success"] extends Schema.Top
-  ? Spec["success"]["Type"]
-  : void;
+type SuccessOf<Spec extends ToolSpec> = Spec["success"]["Type"];
 type FailureOf<Spec extends ToolSpec> = Spec["failure"] extends abstract new (
   ...args: any
 ) => infer E
@@ -198,6 +196,7 @@ export const toolConstructor = <Services = never, BaseSpec extends ToolSpec = To
  *   {
  *     description: "Save a note the user can read later.",
  *     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+ *     success: Schema.Void,
  *   },
  *   Effect.fn(function* ({ key, text }) {
  *     yield* notes.put(key, text).pipe(Effect.orDie);

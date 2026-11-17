@@ -34,6 +34,7 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
         description:
           "Save a note under a key. Use it whenever the user asks you to remember something.",
         parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+        success: Schema.Void,
       },
       Effect.fn(function* ({ key, text }) {
         yield* notes.put(key, text).pipe(Effect.orDie);

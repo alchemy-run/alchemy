@@ -39,6 +39,7 @@ type _McpServerNeedsItsLayer = Assert<
 class Count extends Pi.Tool<Count>()("count", {
   description: "Count the bytes of a file.",
   parameters: Schema.Struct({ path: Schema.String }),
+  success: Schema.Number,
 }) {}
 const own = Pi.Harness({ models: [Fast], tools: [Count] });
 type _PiToolNeedsSandbox = Assert<

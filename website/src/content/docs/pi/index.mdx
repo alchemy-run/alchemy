@@ -21,7 +21,7 @@ import * as AI from "@alchemy.run/ai";
 export class Fast extends AI.Model<Fast>()("fast") {}
 ```
 
-Declare a tool as a contract, and implement it as a Layer. Its `success` schema becomes the type programs see:
+Declare a tool as a contract, and implement it as a Layer. Every tool says what it returns: its `success` schema is the type programs see, and `Schema.Void` is a tool that returns nothing:
 
 ```typescript title="src/tools.ts"
 import * as AI from "@alchemy.run/ai";
@@ -124,6 +124,7 @@ const SaveNote = AI.Tool(
   {
     description: "Save a note the user can read later.",
     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+    success: Schema.Void,
   },
   Effect.fn(function* ({ key, text }) {
     yield* notes.put(key, text).pipe(Effect.orDie);
