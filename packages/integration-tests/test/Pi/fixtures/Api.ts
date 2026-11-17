@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -120,7 +121,12 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
           default:
             return HttpServerResponse.text("not found", { status: 404 });
         }
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Answer with the failure, so a test can say what went wrong.
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
+      ),
     };
   }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.KV.ReadWriteNamespaceBinding))),
 ) {}

@@ -1,6 +1,17 @@
+import type { Sandbox } from "@alchemy.run/ai/Sandbox";
+import {
+  toolConstructor,
+  ToolCall,
+  toolKind,
+  type AnyTool as AiTool_,
+  type InlineTool,
+  type ToolClass,
+  type ToolConstructor,
+  type ToolHandler,
+  type ToolSpec as AiToolSpec,
+} from "@alchemy.run/ai/Tool";
 import type { JsonValue } from "@earendil-works/chord";
 import type {
-  ConversationId,
   JsonObject,
   ToolExecutionApi,
   ToolExecutionResult,
@@ -12,46 +23,12 @@ import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
 import { Env, makeEnv } from "./Env.ts";
 import { messageOf } from "./internal/promise.ts";
 
-/** The call a tool handler is answering. */
-export class ToolCall extends Context.Service<
-  ToolCall,
-  {
-    readonly conversationId: ConversationId;
-    readonly callId: string;
-    /** Pi's own API for this call (`output`, `details`, `executeTool`, …). */
-    readonly api: ToolExecutionApi;
-  }
->()("Pi.ToolCall") {}
-
-/** What a tool says it takes and returns. */
-export interface ToolSpec {
-  /** Shown to the model. Say what the tool does and when to use it. */
-  readonly description: string;
-  /** The arguments, decoded before the handler runs. */
-  readonly parameters: Schema.Top;
-  /**
-   * What the tool returns. Programs that call the tool (code mode, other
-   * tools) see it as a typed value; the model sees it as JSON. Leave it out
-   * for a tool that acts and returns nothing.
-   */
-  readonly success?: Schema.Top;
-  /**
-   * The tagged error the tool fails with. It reaches the model as an error
-   * result that keeps its `_tag` and fields.
-   */
-  readonly failure?: abstract new (...args: any) => { readonly _tag: string };
-  /**
-   * Whether a call cut off by a crash may run again when the harness
-   * resumes. Otherwise the model is told the call was interrupted.
-   * @default "unsafe"
-   */
-  readonly replay?: "safe" | "unsafe";
+/** What a Pi tool says it takes and returns: an `AI.Tool`'s spec, and Pi's own options. */
+export interface ToolSpec extends AiToolSpec {
   /** Run this tool's calls one at a time, or alongside the round's others. */
   readonly executionMode?: "parallel" | "sequential";
   /** Hidden from the model until a tool search loads it. */
@@ -60,63 +37,14 @@ export interface ToolSpec {
   readonly callers?: ReadonlyArray<"model" | "tools">;
 }
 
-/** The services every tool handler may use. */
+/** The services every tool handler on a Pi harness may use. */
 export type ToolServices = Env | ToolCall | RuntimeContext;
 
-type SuccessOf<Spec extends ToolSpec> = Spec["success"] extends Schema.Top
-  ? Spec["success"]["Type"]
-  : void;
-type FailureOf<Spec extends ToolSpec> = Spec["failure"] extends abstract new (
-  ...args: any
-) => infer E
-  ? E
-  : never;
-
-/** A tool's implementation: one call's arguments in, its result out. */
-export type ToolHandler<Spec extends ToolSpec> = (
-  parameters: Spec["parameters"]["Type"],
-) => Effect.Effect<SuccessOf<Spec>, FailureOf<Spec>, ToolServices>;
-
-const ToolTypeId = "~alchemy/Pi/Tool" as const;
-
-/**
- * A tool declared as a class. Its implementation is either provided as a
- * Layer (`MyTool.make(...)`) or given inline as the class's third argument.
- */
-export interface ToolClass<
-  Self,
-  Name extends string,
-  Spec extends ToolSpec,
-  Requires,
-> extends Context.ServiceClass<Self, `Pi.Tool/${Name}`, ToolHandler<Spec>> {
-  readonly [ToolTypeId]: "class";
-  readonly toolName: Name;
-  readonly spec: Spec;
-  /** The inline implementation, when the class has one. */
-  readonly impl: Effect.Effect<ToolHandler<Spec>, never, any> | undefined;
-  /** Phantom: what yielding the harness that lists this tool requires. */
-  readonly "~requires": Requires;
-  /**
-   * The tool's implementation as a Layer. The Effect runs where the harness
-   * is yielded (a Durable Object's outer Effect), so bindings it declares
-   * are known at plan time; it returns the per-call handler.
-   */
-  make<R>(
-    impl: Effect.Effect<ToolHandler<Spec>, never, R>,
-  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope>>;
-}
-
-/** A tool declared inline, closing over whatever is in scope. */
-export interface InlineTool<Name extends string, Spec extends ToolSpec> {
-  readonly [ToolTypeId]: "inline";
-  readonly toolName: Name;
-  readonly spec: Spec;
-  readonly handler: ToolHandler<Spec>;
-}
+const PiToolTypeId = "~alchemy/Pi/Tool" as const;
 
 /** One of Pi's own tools (`read`, `bash`, …), used as is. */
 export interface BuiltinTool<Name extends string = string, Requires = never> {
-  readonly [ToolTypeId]: "builtin";
+  readonly [PiToolTypeId]: "builtin";
   readonly toolName: Name;
   readonly registration: ToolRegistration;
   /** Phantom: what yielding the harness that lists this tool requires. */
@@ -125,50 +53,49 @@ export interface BuiltinTool<Name extends string = string, Requires = never> {
 
 /** Several tools listed as one. */
 export interface ToolGroup<Tools extends ReadonlyArray<AnyTool> = ReadonlyArray<AnyTool>> {
-  readonly [ToolTypeId]: "group";
+  readonly [PiToolTypeId]: "group";
   readonly tools: Tools;
 }
 
-/** Any tool class, structurally: what a harness reads off it. */
-export interface AnyToolClass {
-  readonly [ToolTypeId]: "class";
-  readonly key: string;
-  readonly toolName: string;
-  readonly spec: ToolSpec;
-  readonly impl: Effect.Effect<any, never, any> | undefined;
-}
-export type AnyTool = AnyToolClass | InlineTool<string, any> | BuiltinTool<string, any> | ToolGroup;
+/** Anything a Pi harness lists as a tool: an `AI.Tool`, a `Pi.Tool`, one of Pi's own, or a group. */
+export type AnyTool = AiTool_ | BuiltinTool<string, any> | ToolGroup;
+
+/** A handler that may use `Pi.Env` needs somewhere for files and a shell. */
+type EnvRequirement<Services> = [Services] extends [never] ? never : Sandbox;
 
 type OwnRequirements<T> =
-  T extends ToolClass<any, any, any, infer Requires>
-    ? Requires
-    : T extends BuiltinTool<any, infer Requires>
-      ? Requires
-      : never;
+  T extends ToolClass<any, any, any, infer Requires, infer Services>
+    ? Requires | EnvRequirement<Services>
+    : T extends InlineTool<any, any, infer Services>
+      ? EnvRequirement<Services>
+      : T extends BuiltinTool<any, infer Requires>
+        ? Requires
+        : never;
 
 /** What listing `T` on a harness requires to be provided. */
 export type ToolRequirements<T> =
   T extends ToolGroup<infer Tools> ? OwnRequirements<Tools[number]> : OwnRequirements<T>;
 
 /** A tool that can be enabled on a conversation, by reference. */
-export type ToolRef = AnyToolClass | InlineTool<string, any> | BuiltinTool<string, any>;
+export type ToolRef = AiTool_ | BuiltinTool<string, any>;
 
-export const isTool = (u: unknown): u is AnyTool =>
-  (typeof u === "object" || typeof u === "function") && u !== null && ToolTypeId in u;
-
-/** The tool's name as the model sees it. */
-export const toolNameOf = (tool: ToolRef): string => tool.toolName;
+/** How a listed tool was declared. */
+export const kindOf = (tool: AnyTool): "class" | "inline" | "builtin" | "group" =>
+  PiToolTypeId in tool ? tool[PiToolTypeId] : toolKind(tool);
 
 /** Every tool a list names, groups flattened. */
 export const flattenTools = (tools: ReadonlyArray<AnyTool>): ReadonlyArray<ToolRef> =>
   tools.flatMap((tool) =>
-    tool[ToolTypeId] === "group" ? flattenTools((tool as ToolGroup).tools) : [tool as ToolRef],
+    kindOf(tool) === "group" ? flattenTools((tool as ToolGroup).tools) : [tool as ToolRef],
   );
 
 /**
- * Declare a tool.
+ * Declare a tool that uses what only Pi gives a call: the conversation's
+ * files and shell (`Pi.Env`), and Pi's own options. Listing one requires
+ * an `AI.Sandbox`, as the coding tools do. A tool that needs neither is an
+ * `AI.Tool`, which runs on any harness.
  *
- * **Example:** A contract, implemented by a Layer
+ * **Example:** A tool that runs a command in the conversation's sandbox
  * ```typescript
  * export class RunTests extends Pi.Tool<RunTests>()("run_tests", {
  *   description: "Run the test suite and report failures.",
@@ -187,69 +114,14 @@ export const flattenTools = (tools: ReadonlyArray<AnyTool>): ReadonlyArray<ToolR
  *   }),
  * );
  * ```
- *
- * **Example:** Inline, closing over the Durable Object's bindings
- * ```typescript
- * const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
- * const SaveNote = Pi.Tool(
- *   "save_note",
- *   {
- *     description: "Save a note the user can read later.",
- *     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
- *   },
- *   Effect.fn(function* ({ key, text }) {
- *     yield* notes.put(key, text);
- *   }),
- * );
- * ```
  */
-export function Tool<Self>(): {
-  <const Name extends string, const Spec extends ToolSpec>(
-    name: Name,
-    spec: Spec,
-  ): ToolClass<Self, Name, Spec, Self>;
-  <const Name extends string, const Spec extends ToolSpec, R>(
-    name: Name,
-    spec: Spec,
-    impl: Effect.Effect<ToolHandler<Spec>, never, R>,
-  ): ToolClass<Self, Name, Spec, Exclude<R, Scope.Scope>>;
-};
-export function Tool<const Name extends string, const Spec extends ToolSpec>(
-  name: Name,
-  spec: Spec,
-  handler: ToolHandler<Spec>,
-): InlineTool<Name, Spec>;
-export function Tool(...args: ReadonlyArray<unknown>): unknown {
-  if (args.length === 3 && typeof args[0] === "string" && typeof args[2] === "function") {
-    const [name, spec, handler] = args as [string, ToolSpec, ToolHandler<ToolSpec>];
-    return { [ToolTypeId]: "inline", toolName: name, spec, handler } satisfies InlineTool<
-      string,
-      ToolSpec
-    >;
-  }
-  return (
-    name: string,
-    spec: ToolSpec,
-    impl?: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>,
-  ) => {
-    const Tag = Context.Service<unknown, ToolHandler<ToolSpec>>()(`Pi.Tool/${name}`);
-    return class extends Tag {
-      static readonly [ToolTypeId] = "class";
-      static readonly toolName = name;
-      static readonly spec = spec;
-      static readonly impl = impl;
-      static make(implementation: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>) {
-        return Layer.effect(this as never, implementation);
-      }
-    };
-  };
-}
+export const Tool: ToolConstructor<Env, ToolSpec> = toolConstructor<Env, ToolSpec>();
 
 /** Group tools so one name lists them all. */
 export const group = <const Tools extends ReadonlyArray<AnyTool>>(
   ...tools: Tools
 ): ToolGroup<Tools> => ({
-  [ToolTypeId]: "group",
+  [PiToolTypeId]: "group",
   tools,
 });
 
@@ -257,7 +129,7 @@ export const group = <const Tools extends ReadonlyArray<AnyTool>>(
 export const builtin = <Name extends string, Requires = never>(
   registration: ToolRegistration & { name: Name },
 ): BuiltinTool<Name, Requires> => ({
-  [ToolTypeId]: "builtin",
+  [PiToolTypeId]: "builtin",
   toolName: registration.name,
   registration,
 });
@@ -287,7 +159,7 @@ const errorFields = (error: { readonly _tag: string }): JsonObject =>
 export const toRegistration = (
   name: string,
   spec: ToolSpec,
-  handler: ToolHandler<ToolSpec>,
+  handler: ToolHandler<ToolSpec, Env>,
   run: RunTool,
 ): ToolRegistration => {
   const decode = Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>);
@@ -305,9 +177,8 @@ export const toRegistration = (
     ...(spec.callers ? { callers: spec.callers } : {}),
     execute: async (args, api, context): Promise<ToolExecutionResult> => {
       const services = Context.make(ToolCall, {
-        conversationId: api.conversationId,
+        conversationId: String(api.conversationId),
         callId: api.callId,
-        api: api as ToolExecutionApi,
       }).pipe(Context.add(Env, makeEnv(requireEnv(api.env))));
       const exit = await run(
         decode(args).pipe(

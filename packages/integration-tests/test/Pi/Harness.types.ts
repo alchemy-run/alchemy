@@ -8,7 +8,7 @@ type Assert<T extends true> = T;
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-class Add extends Pi.Tool<Add>()("add", {
+class Add extends AI.Tool<Add>()("add", {
   description: "Add two numbers.",
   parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
   success: Schema.Number,
@@ -33,4 +33,14 @@ class Docs extends AI.McpServer<Docs>()("docs") {}
 const withServer = Pi.Harness({ models: [Fast], tools: [Add, Docs] });
 type _McpServerNeedsItsLayer = Assert<
   Equals<Effect.Services<typeof withServer>, Pi.Storage | Fast | Add | Docs>
+>;
+
+// A tool of Pi's own may use `Pi.Env`, so it requires a sandbox too.
+class Count extends Pi.Tool<Count>()("count", {
+  description: "Count the bytes of a file.",
+  parameters: Schema.Struct({ path: Schema.String }),
+}) {}
+const own = Pi.Harness({ models: [Fast], tools: [Count] });
+type _PiToolNeedsSandbox = Assert<
+  Equals<Effect.Services<typeof own>, Pi.Storage | Fast | Count | AI.Sandbox>
 >;

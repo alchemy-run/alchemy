@@ -8,3 +8,15 @@ export {
   type McpServerClass,
   type McpServerService,
 } from "./McpServer.ts";
+export {
+  isTool,
+  Tool,
+  ToolCall,
+  toolConstructor,
+  type AnyTool,
+  type InlineTool,
+  type ToolClass,
+  type ToolConstructor,
+  type ToolHandler,
+  type ToolSpec,
+} from "./Tool.ts";

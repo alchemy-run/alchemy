@@ -1,7 +1,7 @@
 {
   "name": "@alchemy.run/ai",
   "version": "2.0.0-beta.85",
-  "description": "What Alchemy's AI harnesses share: models, skills and sandboxes, declared once and run on any harness.",
+  "description": "What Alchemy's AI harnesses share: models, tools, skills, MCP servers and sandboxes, declared once and run on any harness.",
   "keywords": [
     "agents",
     "ai",

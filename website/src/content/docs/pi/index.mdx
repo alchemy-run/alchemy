@@ -9,7 +9,7 @@ description: Run Pi Durable agent harnesses with Alchemy. Conversations in a Dur
 npm install @alchemy.run/pi @alchemy.run/ai
 ```
 
-Models, skills and sandboxes come from `@alchemy.run/ai`. They are declared once and run on any Alchemy harness.
+Models, tools, skills, MCP servers and sandboxes come from `@alchemy.run/ai`. They are declared once and run on any Alchemy harness.
 
 ## A harness in a Durable Object
 
@@ -21,26 +21,24 @@ import * as AI from "@alchemy.run/ai";
 export class Fast extends AI.Model<Fast>()("fast") {}
 ```
 
-Declare a tool as a contract. Its `success` schema becomes the type programs see:
+Declare a tool as a contract, and implement it as a Layer. Its `success` schema becomes the type programs see:
 
 ```typescript title="src/tools.ts"
-import * as Pi from "@alchemy.run/pi";
+import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-export class RunTests extends Pi.Tool<RunTests>()("run_tests", {
-  description: "Run the test suite and report failures.",
-  parameters: Schema.Struct({ filter: Schema.optional(Schema.String) }),
-  success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+export class Add extends AI.Tool<Add>()("add", {
+  description: "Add two integers. Use it whenever numbers are added.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Struct({ sum: Schema.Number }),
   replay: "safe",
 }) {}
 
-export const RunTestsLive = RunTests.make(
+export const AddLive = Add.make(
   Effect.gen(function* () {
-    return Effect.fn(function* ({ filter }) {
-      const env = yield* Pi.Env;
-      const result = yield* env.exec(["npm", "test", ...(filter ? ["--", filter] : [])]);
-      return { exitCode: result.exitCode, output: result.stdout.slice(-8000) };
+    return Effect.fn(function* ({ a, b }) {
+      return { sum: a + b };
     });
   }),
 );
@@ -56,7 +54,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Gateway } from "./Gateway.ts";
 import { Fast } from "./models.ts";
-import { RunTests, RunTestsLive } from "./tools.ts";
+import { Add, AddLive } from "./tools.ts";
 
 const ModelsLive = Layer.unwrap(
   Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
@@ -66,19 +64,19 @@ const ModelsLive = Layer.unwrap(
 
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
-  RunTestsLive,
+  AddLive,
   PiCloudflare.DurableObjectStorage,
 ).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
 
 export default class Session extends Cloudflare.DurableObject<Session>()(
   "Session",
   Effect.gen(function* () {
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [RunTests] });
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add] });
 
     return Effect.gen(function* () {
       return {
         prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
-          const conversation = yield* harness.createConversation({ name, tools: [RunTests] });
+          const conversation = yield* harness.createConversation({ name, tools: [Add] });
           const submission = yield* conversation.submit({ type: "input", content: text, requestId });
           return (yield* submission.wait).status;
         }),
@@ -92,21 +90,27 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
 
 ## Conversations at runtime
 
-A conversation stores what it runs with. Change it from any call; the next model request uses it:
+A conversation stores what it runs with. Change it by name from any call; the next model request uses it:
+
+```typescript
+yield* harness.configure("pr-142", { tools: { remove: [Pi.Bash] } });
+yield* harness.configure("pr-142", { model: Fast, instructions: "Review only. Never edit files." });
+yield* harness.configure("pr-142", { extensions: { add: [Releasing] } });
+```
+
+Steer a running conversation, or stop it:
+
+```typescript
+yield* harness.submit("pr-142", { type: "input", content: "Use pnpm, not npm", whenBusy: "steer" });
+yield* harness.abort("pr-142");
+```
+
+`harness.conversationByName` returns the conversation itself, for everything else it can do:
 
 ```typescript
 const conversation = yield* harness.conversationByName("pr-142");
-yield* conversation.configure({ tools: { remove: [Pi.Bash] } });
-yield* conversation.configure({ model: Fast, instructions: "Review only. Never edit files." });
-yield* conversation.configure({ extensions: { add: [Releasing] } });
-```
-
-Steer a running conversation, stop it, or start fresh from a note:
-
-```typescript
-yield* conversation.submit({ type: "input", content: "Use pnpm, not npm", whenBusy: "steer" });
-yield* conversation.abort();
 yield* conversation.reset("We were fixing the flaky login test. Continue.");
+const { messages } = yield* conversation.context;
 ```
 
 ## Inline tools
@@ -115,14 +119,14 @@ A tool can close over what its Durable Object binds:
 
 ```typescript
 const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-const SaveNote = Pi.Tool(
+const SaveNote = AI.Tool(
   "save_note",
   {
     description: "Save a note the user can read later.",
     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
   },
   Effect.fn(function* ({ key, text }) {
-    yield* notes.put(key, text);
+    yield* notes.put(key, text).pipe(Effect.orDie);
   }),
 );
 const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
@@ -130,30 +134,37 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 
 ## Tools in a sandbox
 
-A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `AI.Sandbox` opens a conversation's sandbox and removes it:
+A Durable Object can't run processes, so Pi's coding tools run in a sandbox. An `AI.Sandbox` Layer says how to open, suspend and remove one on its platform:
 
-```typescript
-const E2BSandbox = Layer.effect(
+```typescript title="src/sandboxes/E2B.ts"
+import * as AI from "@alchemy.run/ai";
+import * as E2B from "@alchemy.run/e2b";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const E2BSandbox = Layer.effect(
   AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* E2B.CreateSandbox(base);
-    const metadataOf = ({ instanceId, conversationId }: AI.SandboxTarget) => ({
-      instance: instanceId,
-      conversation: conversationId,
-    });
-    const find = (target: AI.SandboxTarget) =>
-      sandboxes.list({ metadata: metadataOf(target), state: ["running", "paused"] });
+    const find = (key: string) =>
+      sandboxes.list({ metadata: { key }, state: ["running", "paused"] });
 
     return {
-      open: Effect.fn(function* (target) {
-        const [existing] = yield* find(target);
+      open: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
         return existing
-          ? yield* sandboxes.connect(existing.sandboxID)
-          : yield* sandboxes.create({ metadata: metadataOf(target), timeout: 600 });
+          ? yield* sandboxes.connect(existing.sandboxID, { timeout: 600 })
+          : yield* sandboxes.create({ metadata: { key }, timeout: 600 });
       }),
-      remove: Effect.fn(function* (target) {
-        const found = yield* find(target);
+      suspend: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
+        if (existing?.state !== "running") return;
+        const sandbox = yield* sandboxes.connect(existing.sandboxID);
+        yield* sandbox.pause();
+      }),
+      remove: Effect.fn(function* (key) {
+        const found = yield* find(key);
         yield* Effect.forEach(found, (sandbox) => sandboxes.kill(sandbox.sandboxID));
       }),
     };
@@ -161,7 +172,9 @@ const E2BSandbox = Layer.effect(
 ).pipe(Layer.provide(E2B.CreateSandboxHttp));
 ```
 
-The template is the image every sandbox boots from; the deploy builds it. Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
+The harness chooses the `key`: one for each conversation. The Layer only maps a key to a sandbox, here by metadata, so the same conversation reaches the same sandbox after its Durable Object is evicted. The template is the image every sandbox boots from; the deploy builds it.
+
+All three operations are safe to repeat. `open` returns the sandbox running, whatever state it was in. `suspend` stops paying for compute and keeps the files where the platform can. `remove` deletes the sandbox.
 
 `Pi.CodingTools` require an `AI.Sandbox`, so a harness that lists them compiles only once the Layer is provided:
 
@@ -175,36 +188,81 @@ const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, 
 
 Pi's own `pi-env` daemon runs in the sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they do locally.
 
-A conversation deletes its own sandbox. Its next tool call opens a new one:
+A tool of your own reaches the same files and shell through `Pi.Env`. Declare it with `Pi.Tool`, which requires the sandbox as the coding tools do:
+
+```typescript title="src/RunTests.ts"
+import * as Pi from "@alchemy.run/pi";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class RunTests extends Pi.Tool<RunTests>()("run_tests", {
+  description: "Run the test suite and report failures.",
+  parameters: Schema.Struct({ filter: Schema.optional(Schema.String) }),
+  success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+  replay: "safe",
+}) {}
+
+export const RunTestsLive = RunTests.make(
+  Effect.gen(function* () {
+    return Effect.fn(function* ({ filter }) {
+      const env = yield* Pi.Env;
+      const result = yield* env
+        .exec(["npm", "test", ...(filter ? ["--", filter] : [])])
+        .pipe(Effect.orDie);
+      return { exitCode: result.exitCode, output: result.stdout.slice(-8000) };
+    });
+  }),
+);
+```
+
+Suspend a conversation's sandbox when it goes quiet. Its next tool call resumes it:
 
 ```typescript
-const conversation = yield* harness.conversationByName(name);
-yield* conversation.removeSandbox;
+yield* harness.suspendSandbox(name);
+```
+
+Remove it when the conversation is over. A later tool call opens a new, empty one:
+
+```typescript
+yield* harness.removeSandbox(name);
 ```
 
 ### Another sandbox platform
 
-The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `AI.Sandbox` Layer:
+The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `AI.Sandbox` Layer. Daytona finds a sandbox by name and stops it on `suspend`:
 
-```typescript
-const DaytonaSandbox = Layer.effect(
+```typescript title="src/sandboxes/Daytona.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Daytona from "@alchemy.run/daytona";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const DaytonaSandbox = Layer.effect(
   AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* Daytona.CreateSandbox(base);
-    const nameOf = ({ instanceId, conversationId }: AI.SandboxTarget) =>
-      `pi-${instanceId.slice(0, 16)}-${conversationId}`;
 
     return {
-      open: Effect.fn(function* (target) {
-        const existing = yield* sandboxes.get(nameOf(target));
+      open: Effect.fn(function* (key) {
+        const existing = yield* sandboxes.get(key);
         if (existing === undefined) {
-          return yield* sandboxes.create({ name: nameOf(target), autoStopInterval: 15 });
+          return yield* sandboxes.create({
+            name: key,
+            autoStopInterval: 15,
+            autoDeleteInterval: 24 * 60,
+          });
         }
         yield* existing.startSandbox();
         return existing;
       }),
-      remove: (target) => sandboxes.delete(nameOf(target)),
+      suspend: Effect.fn(function* (key) {
+        const existing = yield* sandboxes.get(key);
+        if (existing === undefined) return;
+        const { state } = yield* existing.getSandbox();
+        if (state === "started") yield* existing.stopSandbox();
+      }),
+      remove: (key) => sandboxes.delete(key),
     };
   }),
 ).pipe(Layer.provide(Daytona.CreateSandboxHttp));
@@ -221,9 +279,45 @@ const HarnessLive = Layer.mergeAll(
 );
 ```
 
+A platform without a pause, such as Modal, does nothing on `suspend`. Whether files outlive an idle sandbox is the platform's: one that its platform deleted is opened again empty.
+
 The [cloudflare-pi example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-pi) has the Layer for each of the five platforms.
 
 The image needs `sh`, `curl`, `tar`, `sha512sum`, `base64`, `dd` and `mkfifo`, and the sandbox needs to reach `registry.npmjs.org` once, to install the daemon. `node:22-bookworm` has them all.
+
+## MCP servers
+
+Name an MCP server once. How it is reached is an Effect AI `McpClient` Layer:
+
+```typescript title="src/mcp.ts"
+import * as AI from "@alchemy.run/ai";
+import { McpClient, McpProtocol } from "effect/ai";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+export class Docs extends AI.McpServer<Docs>()("docs") {}
+
+export const DocsLive = Docs.layer(
+  McpClient.layerHttp({
+    name: "my-agent",
+    version: "1.0.0",
+    protocol: McpProtocol.v2025_11_25,
+    url: "https://docs.example.com/mcp",
+  }).pipe(Layer.provide(FetchHttpClient.layer)),
+);
+```
+
+List the server beside the harness's other tools. Each instance asks it for its tools when it opens, and offers them to the model as `mcp__docs__<tool>`:
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Docs] });
+```
+
+In a conversation's tools, the server stands for all of its tools:
+
+```typescript
+yield* harness.configure(name, { tools: { remove: [Docs] } });
+```
 
 ## Extensions and skills
 
@@ -262,7 +356,7 @@ In code mode the model writes a program that calls the conversation's tools, and
 
 ```typescript
 const CodeModeLive = Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline()));
-const harness = yield* Pi.Harness({ models: [Fast], tools: [RunTests], extensions: [Pi.CodeMode] });
+const harness = yield* Pi.Harness({ models: [Fast], tools: [Add], extensions: [Pi.CodeMode] });
 ```
 
 Scripts run deterministically, so a script cut off by a crash replays its finished tool calls and continues.
@@ -278,7 +372,7 @@ On a long-lived machine (a Fly Machine, an ECS task, a container) swap the stora
 ```typescript
 const BoxLive = Layer.mergeAll(
   ModelsLive,
-  RunTestsLive,
+  AddLive,
   Pi.SqliteFile("/data/pi.sqlite"),
   Pi.LocalEnv({ cwd: "/workspace" }),
 );

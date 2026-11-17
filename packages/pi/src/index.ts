@@ -27,16 +27,7 @@ export {
   type ExtensionSpec,
 } from "./Extension.ts";
 export { MemoryStorage, SqliteFile, Storage, type InstanceStorage } from "./Storage.ts";
-export {
-  Tool,
-  ToolCall,
-  type AnyTool,
-  type InlineTool,
-  type ToolClass,
-  type ToolHandler,
-  type ToolRef,
-  type ToolSpec,
-} from "./Tool.ts";
+export { Tool, type AnyTool, type ToolRef, type ToolSpec } from "./Tool.ts";
 export type {
   Agent,
   ConversationId,

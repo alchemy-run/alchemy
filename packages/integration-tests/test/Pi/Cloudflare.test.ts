@@ -32,14 +32,24 @@ const tags = ["provider:cloudflare", "provider:pi", "live"];
 const call = (path: string, body?: unknown) =>
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    const client = yield* HttpClient.HttpClient;
     const request =
       body === undefined
         ? HttpClientRequest.get(`${url}${path}`)
         : HttpClientRequest.post(`${url}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body));
-    const response = yield* client
+    const response = yield* HttpClient.filterStatusOk(client)
       .execute(request)
-      .pipe(Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }));
+      .pipe(
+        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
+        // Say what the fixture answered: a bare status hides the cause.
+        Effect.catch(() =>
+          Effect.flatMap(client.execute(request), (failed) =>
+            Effect.flatMap(failed.text, (text) =>
+              Effect.die(new Error(`${path} returned ${failed.status}: ${text.slice(0, 2000)}`)),
+            ),
+          ),
+        ),
+      );
     return (yield* response.json) as any;
   });
 
@@ -172,6 +182,17 @@ test(
       expect(tools.some((used) => used.tool === "write" && !used.isError)).toBe(true);
       expect(tools.some((used) => used.tool === "bash" && !used.isError)).toBe(true);
       expect(file.text).toContain("pi was here");
+
+      // A tool of our own reads the same sandbox through `Pi.Env`.
+      yield* call(`/sandbox/${name}/prompt`, {
+        text: "Use the count_bytes tool on /home/user/hello.txt and tell me the number.",
+        requestId: "sbx-count",
+      });
+      const counted = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
+        tool: string;
+        isError: boolean;
+      }>;
+      expect(counted.some((used) => used.tool === "count_bytes" && !used.isError)).toBe(true);
 
       // Suspending pauses the sandbox, and suspending it again changes nothing.
       yield* call(`/sandbox/${name}/suspend`, {});

@@ -5,6 +5,7 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
 
@@ -53,6 +54,25 @@ const SandboxLive = Layer.effect(
   }),
 );
 
+/** A tool of our own that works in the conversation's sandbox, through `Pi.Env`. */
+class CountBytes extends Pi.Tool<CountBytes>()(
+  "count_bytes",
+  {
+    description:
+      "Count the bytes of a file in the sandbox. Use it whenever asked for a file's size.",
+    parameters: Schema.Struct({ path: Schema.String }),
+    success: Schema.Struct({ bytes: Schema.Number }),
+    replay: "safe",
+  },
+  Effect.gen(function* () {
+    return Effect.fn(function* ({ path }) {
+      const env = yield* Pi.Env;
+      const text = yield* env.readTextFile(path).pipe(Effect.orDie);
+      return { bytes: new TextEncoder().encode(text).length };
+    });
+  }),
+) {}
+
 const HarnessLive = Layer.mergeAll(ModelsLive, PiCloudflare.DurableObjectStorage, SandboxLive).pipe(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, E2B.CreateSandboxHttp)),
 );
@@ -61,7 +81,7 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
   "PiSandboxSession",
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools, CountBytes] });
 
     return Effect.gen(function* () {
       /** The conversation's sandbox as E2B lists it, if it has one. */
@@ -78,7 +98,7 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
         create: Effect.fn(function* (name: string) {
           const conversation = yield* harness.createConversation({
             name,
-            tools: [Pi.Read, Pi.Write, Pi.Bash],
+            tools: [Pi.Read, Pi.Write, Pi.Bash, CountBytes],
             instructions: "You work in a Linux sandbox. Use your tools to do what the user asks.",
           });
           return conversation.id;

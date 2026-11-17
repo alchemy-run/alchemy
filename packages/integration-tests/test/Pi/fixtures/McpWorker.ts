@@ -1,7 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
@@ -14,7 +16,7 @@ const Lookup = Tool.make("lookup_code", {
 
 const Refuse = Tool.make("always_fails", {
   description: "A tool that always reports an error.",
-  parameters: Schema.Struct({}),
+  parameters: Tool.EmptyParams,
   success: Schema.String,
   failure: Schema.String,
 });
@@ -43,7 +45,18 @@ export default class PiMcpWorker extends Cloudflare.Worker<PiMcpWorker>()(
           }),
         ),
         HttpRouter.toHttpEffect,
-        Effect.orDie,
+        Effect.map(
+          Effect.catchCause((cause) =>
+            Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+          ),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            Effect.succeed(
+              HttpServerResponse.text(`init: ${Cause.pretty(cause)}`, { status: 500 }),
+            ),
+          ),
+        ),
       ),
     };
   }),

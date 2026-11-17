@@ -1,9 +1,9 @@
-import * as Pi from "@alchemy.run/pi";
+import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 /** A tagged tool: the contract here, the implementation as a Layer. */
-export class Add extends Pi.Tool<Add>()("add", {
+export class Add extends AI.Tool<Add>()("add", {
   description: "Add two integers. Always use this tool to add numbers; never add them yourself.",
   parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
   success: Schema.Struct({ sum: Schema.Number }),

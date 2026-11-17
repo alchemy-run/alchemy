@@ -63,6 +63,7 @@ import { isSkill, toExtension, type SkillExtension } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
   flattenTools,
+  kindOf,
   toRegistration,
   type AnyTool,
   type RunTool,
@@ -398,7 +399,7 @@ export const Harness = <
     );
     const resolveTools = (list: ReadonlyArray<AnyTool>) =>
       Effect.forEach(flattenTools(list), (tool) => {
-        switch (tool["~alchemy/Pi/Tool" as keyof typeof tool] as string) {
+        switch (kindOf(tool)) {
           case "builtin":
             return Effect.succeed({ tool, handler: undefined as any });
           case "inline":

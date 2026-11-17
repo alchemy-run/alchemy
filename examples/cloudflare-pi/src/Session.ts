@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -27,7 +28,7 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
     const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
 
     // An inline tool, closing over a binding resolved in this scope.
-    const SaveNote = Pi.Tool(
+    const SaveNote = AI.Tool(
       "save_note",
       {
         description:
