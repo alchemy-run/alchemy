@@ -1,36 +1,44 @@
-import { Platform } from "@/Platform.ts";
-import * as Provider from "@/Provider.ts";
-import type { Resource } from "@/Resource.ts";
-import { inMemoryState } from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
+import * as Provider from "@/Provider.ts";
+import type { Resource } from "@/Resource.ts";
+import type { BaseRuntimeContext } from "@/RuntimeContext.ts";
+import { inMemoryState } from "@/State/index.ts";
+
+interface ConfigHostProps extends PlatformProps {
+  env?: Record<string, unknown>;
+}
 
 interface ConfigHost extends Resource<
   "Test.ConfigHost",
-  { env?: Record<string, unknown> },
+  ConfigHostProps,
   { ready: true },
   { env?: Record<string, unknown> }
 > {}
 
 const boundKeys: string[] = [];
 
-const ConfigHost: any = Platform<ConfigHost>("Test.ConfigHost", {
-  createRuntimeContext: (id) => ({
-    Type: "Test.ConfigHost",
-    id,
-    env: {},
-    set: (key) =>
-      Effect.sync(() => {
-        boundKeys.push(key);
-        return key;
-      }),
-    get: () => Effect.succeed(undefined),
-  }),
-});
+const ConfigHost: Platform<ConfigHost, never, Main, BaseRuntimeContext> = Platform(
+  "Test.ConfigHost",
+  {
+    createRuntimeContext: (id): BaseRuntimeContext => ({
+      Type: "Test.ConfigHost",
+      id,
+      env: {},
+      set: (key) =>
+        Effect.sync(() => {
+          boundKeys.push(key);
+          return key;
+        }),
+      get: <T>() => Effect.succeed<T | undefined>(undefined),
+    }),
+  },
+);
 
 const providers = Provider.succeed(ConfigHost, {
   list: () => Effect.succeed([]),
@@ -49,6 +57,7 @@ test.provider(
   "an absent optional field skips synthetic binding and preserves concrete config bindings",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
       boundKeys.length = 0;
 
       yield* stack.deploy(
@@ -61,9 +70,7 @@ test.provider(
             );
             expect(optional).toEqual({});
 
-            const concrete = yield* Config.String(
-              "ALCHEMY_TEST_PRESENT_CONFIG",
-            );
+            const concrete = yield* Config.String("ALCHEMY_TEST_PRESENT_CONFIG");
             expect(concrete).toBe("present");
             return {};
           }),
@@ -71,6 +78,7 @@ test.provider(
       );
 
       expect(boundKeys).toEqual(["ALCHEMY_TEST_PRESENT_CONFIG"]);
+      yield* stack.destroy();
     }).pipe(
       Effect.provide(
         ConfigProvider.layer(
@@ -80,4 +88,5 @@ test.provider(
         ),
       ),
     ),
+  { tags: ["unit", "local"] },
 );
