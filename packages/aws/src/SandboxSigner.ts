@@ -50,7 +50,7 @@ const signAsHost = (request: SignRequest) =>
  * ```
  *
  * @layer
- * @product IAM
+ * @product Sandbox Signer
  */
 export const SandboxSigner: Layer.Layer<never, never, Gateway.Gateway> = Layer.effectDiscard(
   Effect.gen(function* () {
