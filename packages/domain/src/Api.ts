@@ -37,10 +37,9 @@ import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
 import { captureContext, type StreamStore, type Subscription, type ViewStore } from "./Platform.ts";
-import type * as Projection from "./Projection.ts";
 import * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
-import { Caller, nameOf, readRpcs, RemembersWrites } from "./ReadRpcs.ts";
+import { nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -271,6 +270,15 @@ export interface Recorded<E, Id> {
 export interface CommandOptions extends CallOptions {
   /** A resend with the same id returns the first receipt instead of deciding again. */
   readonly commandId?: string;
+  /**
+   * When the command answers. `"strong"` answers once every view its events
+   * reach has applied them: any read of a view after the answer includes the
+   * command. If a view takes longer than 10 seconds the call fails with
+   * `ConsistencyTimeout`, though the command is committed. `"eventual"`
+   * answers as soon as the events are committed.
+   * @default "strong"
+   */
+  readonly consistency?: Command.Consistency;
 }
 
 /** A command's input and options. The input may be left out when it has no required field. */
@@ -572,6 +580,7 @@ const redactMiddleware = (
 interface CommandPayload {
   readonly commandId?: string;
   readonly input: object;
+  readonly consistency?: Command.Consistency;
 }
 
 /** The wire payload of a query: its input, and the page and write to read at least. */
@@ -718,10 +727,15 @@ const handlersOf = (
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
-        handlers[entry.tag] = ({ commandId, input }: CommandPayload) =>
+        handlers[entry.tag] = ({ commandId, input, consistency }: CommandPayload) =>
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
             aggregate.send(new entry(input), { commandId }).pipe(
+              // The events are committed. Unless told not to, answer once the
+              // views have them, so a read after the answer includes the command.
+              Effect.tap((receipt) =>
+                consistency === "eventual" ? Effect.void : internals.applied(receipt),
+              ),
               Effect.map((receipt) => ({
                 reply: receipt.reply,
                 stream: receipt.stream,
@@ -1066,166 +1080,24 @@ const liveReads = (
 
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
 
-/** How many callers a client that serves several remembers the writes of. */
-const SESSION_CALLERS = 256;
-/** How many of its latest commits a client's reads wait for. */
-const SESSION_WRITES = 32;
-/** How many reads a write is remembered as applied by, before it is sent to all again. */
-const SESSION_APPLIED = 1024;
-
-/** One stream a command committed to, and the reads that answered with it applied. */
-interface Write extends Query.AtLeast {
-  readonly applied: Set<string>;
-}
-
-/**
- * The writes one client made, so its reads see them. The receipts of its
- * latest commands are sent as `atLeast` with every read their aggregates can
- * reach. Each command is kept, not the latest per stream: two commands to
- * one instance can reach different keys. Once a read (a view's key, a
- * stream, a query) has answered with a write applied, the write is no
- * longer sent to it: what has applied a write never goes back.
- */
-interface Session {
-  /** Remember what a command committed. */
-  readonly wrote: (receipt: unknown) => void;
-  /** The remembered writes a read of `target` has not yet been answered with. */
-  readonly pending: (target: string, aggregates: ReadonlySet<string>) => ReadonlyArray<Write>;
-  /** `target` answered with these writes applied. */
-  readonly applied: (target: string, writes: ReadonlyArray<Write>) => void;
-}
-
-/** A client shared between callers remembers nothing: each read names its writes. */
-const forgetful: Session = { wrote: () => {}, pending: () => [], applied: () => {} };
-
-const makeSession = (): Session => {
-  // Oldest first.
-  const writes: Array<Write> = [];
-  const remember = ({ stream, version }: Query.AtLeast) => {
-    // A command sent again under its id answers with its first receipt.
-    if (writes.some((write) => write.stream === stream && write.version === version)) return;
-    writes.push({ stream, version, applied: new Set() });
-    if (writes.length > SESSION_WRITES) writes.shift();
-  };
-  return {
-    wrote: (receipt) => {
-      const { stream, version, commits } = (receipt ?? {}) as {
-        readonly stream?: string;
-        readonly version?: number;
-        readonly commits?: ReadonlyArray<Query.AtLeast>;
-      };
-      if (commits !== undefined) commits.forEach(remember);
-      else if (stream !== undefined && version !== undefined) remember({ stream, version });
-    },
-    pending: (target, aggregates) =>
-      writes.filter(
-        (write) =>
-          !write.applied.has(target) &&
-          aggregates.has(write.stream.slice(0, write.stream.indexOf("/"))),
-      ),
-    applied: (target, answered) => {
-      for (const write of answered) {
-        // Bounded: a write forgotten as applied is only sent once more.
-        if (write.applied.size >= SESSION_APPLIED) write.applied.clear();
-        write.applied.add(target);
-      }
-    },
-  };
-};
-
-/** The names of the aggregates whose events can reach a view, stream, projection or query. */
-const aggregatesBehind = (model: Model.Any) => {
-  const known = new Map<unknown, ReadonlySet<string>>();
-  const behind = (read: Servable | Projection.Any | Aggregate.Any): ReadonlySet<string> => {
-    const found = known.get(read);
-    if (found) return found;
-    const out = new Set<string>();
-    // A cycle is refused by the kernel: an entry seen again adds nothing.
-    known.set(read, out);
-    const add = (sources: ReadonlyArray<Servable | Projection.Any | Aggregate.Any>) => {
-      for (const source of sources) for (const name of behind(source)) out.add(name);
-    };
-    if (read.kind === "Aggregate") out.add(read.aggregateName);
-    else if (read.kind === "View" || read.kind === "Projection") {
-      add(read.definition.from as ReadonlyArray<View.Any | Aggregate.Any>);
-    } else if (read.kind === "Stream") {
-      add(
-        model.definitions.projections.filter((projection) =>
-          (projection.definition.writes ?? []).includes(read),
-        ),
-      );
-    } else if (read.kind === "Query") add(read.definition.waitsFor ?? []);
-    return out;
-  };
-  return behind;
-};
-
 /** Shape the flat Effect RPC client into commands and queries, plus view and stream namespaces. */
-const nest = (
-  model: Model.Any,
-  entries: ReadonlyArray<Servable>,
-  flat: Flat,
-  remembers: boolean,
-): unknown => {
+const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
   const client: Record<string, unknown> = {};
-  const own = remembers ? makeSession() : forgetful;
-  // Least recently used first.
-  const callers = new Map<string, Session>();
-  /** The writes of whoever makes this call: the client's own, or its caller's. */
-  const current = Effect.map(Effect.service(Caller), (caller): Session => {
-    if (caller === undefined) return own;
-    if (!remembers || caller.key === undefined) return forgetful;
-    const session = callers.get(caller.key) ?? makeSession();
-    callers.delete(caller.key);
-    callers.set(caller.key, session);
-    if (callers.size > SESSION_CALLERS) callers.delete(callers.keys().next().value!);
-    return session;
-  });
-  const behind = aggregatesBehind(model);
-  /**
-   * Run a read of `entry` that waits for the writes it should see: the
-   * caller's `atLeast`, or, left out, this client's own.
-   */
-  const seeing = <A>(
-    entry: Servable,
-    name: string,
-    atLeast: Query.AtLeastInput | undefined,
-    run: (atLeast: Query.AtLeastInput | undefined) => Effect.Effect<A, unknown>,
-  ): Effect.Effect<A, unknown> => {
-    if (atLeast !== undefined) return run(atLeast);
-    return Effect.flatMap(current, (session) => {
-      const sent = session.pending(name, behind(entry));
-      return sent.length === 0
-        ? run(undefined)
-        : Effect.tap(run(sent.map(({ stream, version }) => ({ stream, version }))), () =>
-            Effect.sync(() => session.applied(name, sent)),
-          );
-    });
-  };
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
-      client[entry.tag] = (input: object = {}, { commandId, ...options }: CommandOptions = {}) =>
-        Effect.tap(
-          send({ commandId, input }, options) as Effect.Effect<unknown, unknown>,
-          (receipt) => Effect.map(current, (session) => session.wrote(receipt)),
-        );
+      client[entry.tag] = (
+        input: object = {},
+        { commandId, consistency, ...options }: CommandOptions = {},
+      ) =>
+        send({ commandId, input, ...(consistency === undefined ? {} : { consistency }) }, options);
       continue;
     }
     if (entry.kind === "Query") {
       const name = entry.queryName;
       const ask = (input: unknown, options: QueryOptions = {}) => {
-        const { headers, atLeast, ...rest } = options;
-        return seeing(
-          entry,
-          name,
-          atLeast,
-          (atLeast) =>
-            flat[name]!(
-              { input, ...rest, ...(atLeast === undefined ? {} : { atLeast }) },
-              { headers },
-            ) as Effect.Effect<unknown, unknown>,
-        );
+        const { headers, ...rest } = options;
+        return flat[name]!({ input, ...rest }, { headers }) as Effect.Effect<unknown, unknown>;
       };
       if (!entry.definition.paged) {
         client[name] = ask;
@@ -1263,39 +1135,16 @@ const nest = (
         const { headers, ...rest } = options;
         return flat[`${name}.${method}`]!({ key, ...rest }, { headers });
       };
-    /** A read that answers once: it waits for this client's writes. */
-    const read =
-      (method: string) =>
-      (
-        key: unknown,
-        options: CallOptions & { readonly atLeast?: Query.AtLeastInput } & Record<
-            string,
-            unknown
-          > = {},
-      ) => {
-        const { headers, atLeast, ...rest } = options;
-        return seeing(
-          entry,
-          // A view waits for the key it reads; a stream for its writers, whatever the key.
-          entry.kind === "View" ? `${name}/${String(key)}` : name,
-          atLeast,
-          (atLeast) =>
-            flat[`${name}.${method}`]!(
-              { key, ...rest, ...(atLeast === undefined ? {} : { atLeast }) },
-              { headers },
-            ) as Effect.Effect<unknown, unknown>,
-        );
-      };
     client[name] =
       entry.kind === "View"
         ? {
-            get: read("get"),
+            get: call("get"),
             watch: call("watch"),
             events: call("events"),
-            list: read("list"),
-            snapshot: read("snapshot"),
+            list: call("list"),
+            snapshot: call("snapshot"),
           }
-        : { peek: read("peek"), watch: call("watch"), events: call("events"), list: read("list") };
+        : { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") };
   }
   return client;
 };
@@ -1387,10 +1236,9 @@ const build = (
   group: RpcGroup.RpcGroup<Rpc.Any>,
   annotations: Annotations,
 ): unknown => {
-  const client = Effect.gen(function* () {
-    const flat = yield* RpcClient.make(group);
-    return nest(model, entries, flat as unknown as Flat, yield* RemembersWrites);
-  });
+  const client = RpcClient.make(group).pipe(
+    Effect.map((flat) => nest(entries, flat as unknown as Flat)),
+  );
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
   const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
   const rejectionClasses = [...new Set(commands.flatMap((command) => command.rejects))];

@@ -78,7 +78,7 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 
 A view is never updated in the same step as the aggregate. The account commits its events first, then they're delivered to the view. Each view receives every event it reads at least once, in the order each source recorded them, and drops any it has already applied.
 
-So a view is always correct, but it can be a moment behind what other clients just wrote. It is never behind what the reading client wrote itself: an Api client remembers the commands it sent, and its reads wait until the view has applied them.
+The caller doesn't see that gap. A command sent through an [Api](/domain/api) answers once the views have applied it, so a read after the answer includes it.
 
 ```typescript title="packages/server/test/depositThenRead.ts"
 export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
@@ -88,23 +88,22 @@ export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accoun
 });
 ```
 
-`get` waits until the summary has applied the deposit, then answers with the new balance. If the view hasn't applied it within 10 seconds, the read fails with `ConsistencyTimeout`.
+A command can answer at the commit instead, with [`consistency: "eventual"`](/domain/command#choose-when-it-answers). The view is then a moment behind, and a read that must include the command waits for it, using the command's receipt.
 
-The wait is for the key being read. A deposit to another account doesn't reach this summary, so a read of it doesn't wait.
-
-To wait for a command another client sent, pass its receipt as `atLeast`. To read what the view holds right now, pass none:
-
-```typescript title="packages/server/test/readWithout.ts"
-export const readWithout = Effect.fn(function* (
+```typescript title="packages/server/test/depositFastThenRead.ts"
+export const depositFastThenRead = Effect.fn(function* (
   bank: CustomerClient,
   accountId: AccountId,
-  receipt: { readonly stream: string; readonly version: number },
 ) {
-  const after = yield* bank.AccountSummary.get(accountId, { atLeast: receipt });
-  const now = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
-  return { after, now };
+  const receipt = yield* bank.DepositMoney({ accountId, amount: 500 }, { consistency: "eventual" });
+  const summary = yield* bank.AccountSummary.get(accountId, {
+    atLeast: { stream: receipt.stream, version: receipt.version },
+  });
+  return summary?.balance;
 });
 ```
+
+`atLeast` makes `get` wait until the summary has applied that command's events for the key it reads. If it hasn't within 10 seconds, the read fails with `ConsistencyTimeout`. A command whose events never reach that key is not waited for.
 
 A view added to a model that already has events receives them first, so a new screen starts from the whole history (see [Consumers added later receive the history](/domain/model#consumers-added-later-receive-the-history)).
 

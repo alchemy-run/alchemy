@@ -86,11 +86,11 @@ const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem)); 
 yield* bank.DepositMoney({ accountId, amount });
 ```
 
-- A client's reads wait for the commands that client sent, so a `get` or a query right after a command includes it. Pass `atLeast` to wait for another client's receipt, or `atLeast: []` to wait for none. The plain HTTP surface keeps no memory: pass `?stream=&version=`.
+- A command through an Api answers once the model's views have applied it, so a view read after it includes the command. `{ consistency: "eventual" }` answers at the commit; a read then passes the receipt as `atLeast`. Projection stores are not waited for: a query takes `atLeast`.
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
-More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [Api: A client reads its own writes](https://alchemy.run/domain/api#a-client-reads-its-own-writes), [In memory](https://alchemy.run/domain/in-memory).
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [Command: Choose when it answers](https://alchemy.run/domain/command#choose-when-it-answers), [In memory](https://alchemy.run/domain/in-memory).
 
 ## Queries
 

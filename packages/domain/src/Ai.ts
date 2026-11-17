@@ -14,7 +14,6 @@ import type { Servable } from "./Api.ts";
 import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
 import { sendPayload } from "./internal.ts";
 import {
-  Caller,
   type ClientOf,
   exposedOf,
   type OnceCallName,
@@ -210,12 +209,6 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  * (a view's `state | null`) comes back as `{ value }`, since MCP requires an
  * object.
  *
- * A read tool waits for the commands sent through the same toolkit Layer, so
- * an agent that sends a command and then reads sees its result without
- * passing the receipt. Build the Layer once per conversation: every call
- * through it counts as one caller. A read's `atLeast` names other writes,
- * and `[]` reads what is there.
- *
  * Each handler calls the Api in process, through the same RPC server as
  * `clientInProcess`: the call's middleware runs against the headers from
  * `options.headers`, and a rejection or a middleware error comes back as the
@@ -244,22 +237,6 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
 export const toToolkit = <A extends Toolable, R = never>(
   api: A,
   options: ToolkitOptions<A, R> = {},
-): ApiToolkit<Services<A> | R> => toolkitFor(api, options, Effect.succeed(undefined));
-
-/**
- * The caller of an MCP tool call: its MCP session, from the `Mcp-Session-Id`
- * header. A request without one (a sessionless transport) has no caller to
- * remember writes for. Off HTTP (stdio), the server has one client.
- */
-const mcpCaller = Effect.map(Effect.serviceOption(HttpServerRequest), (request) =>
-  Option.isNone(request) ? undefined : { key: request.value.headers["mcp-session-id"] },
-);
-
-const toolkitFor = <A extends Toolable, R = never>(
-  api: A,
-  options: ToolkitOptions<A, R>,
-  // Whose writes a call's reads wait for (`ReadRpcs.Caller`): the toolkit's own when undefined.
-  caller: Effect.Effect<{ readonly key: string | undefined } | undefined>,
 ): ApiToolkit<Services<A> | R> => {
   // A tool name a model provider would refuse fails the Layer, like the model's own definition problems.
   const problems: Array<DefinitionError> = [];
@@ -298,15 +275,13 @@ const toolkitFor = <A extends Toolable, R = never>(
     Effect.gen(function* () {
       if (problems.length > 0) return yield* Effect.die(problems[0]);
       // Without the client half of any middleware (see `outsideClient`).
-      const client = (yield* outsideClient(api, { shared: false })) as Client;
+      const client = (yield* outsideClient(api)) as Client;
       return Object.fromEntries(
         tools.map(({ tool, op, wrapped }) => [
           tool.name,
           (payload: unknown) =>
-            Effect.all([headers, caller]).pipe(
-              Effect.flatMap(([headers, caller]) =>
-                invoke(client, op, payload, headers).pipe(Effect.provideService(Caller, caller)),
-              ),
+            headers.pipe(
+              Effect.flatMap((headers) => invoke(client, op, payload, headers)),
               Effect.map((value) => (wrapped ? { value } : value)),
             ),
         ]),
@@ -318,9 +293,7 @@ const toolkitFor = <A extends Toolable, R = never>(
 
 /**
  * Serve an Api's tools ({@link toToolkit}) from Effect's `McpServer`. Only
- * the calls `options.expose` lists are served; nothing is by default. Each
- * MCP session's reads wait for the commands that session sent to the same
- * server instance; a sessionless request passes the receipt as `atLeast`. Provide
+ * the calls `options.expose` lists are served; nothing is by default. Provide
  * an `McpServer` transport, such as `McpServer.layerHttp`. Over HTTP, each
  * call carries the headers of the MCP request to the Api's middleware, so
  * the Api authenticates an MCP client as it does any other.
@@ -352,7 +325,7 @@ export const toMcp = <A extends Toolable, R = never>(
   api: A,
   options: ToolkitOptions<A, R> = {},
 ): Layer.Layer<never, never, Services<A> | R> => {
-  const { toolkit, layer } = toolkitFor(api, options, mcpCaller);
+  const { toolkit, layer } = toToolkit(api, options);
   return McpServer.toolkit(toolkit).pipe(Layer.provide(layer)) as Layer.Layer<
     never,
     never,

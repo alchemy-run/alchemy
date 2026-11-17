@@ -277,7 +277,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(ToolsLive)),
   );
 
-  it.live("a read tool sees the command the agent just sent", () => {
+  it.live("a write tool answers once the views have the command, so a read tool sees it", () => {
     // Nothing reaches the view until the platform drains.
     const hosted = InMemoryPlatform.make({ manual: true });
     const settle: Effect.Effect<void> = Effect.gen(function* () {
@@ -287,27 +287,28 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
         yield* Effect.sleep("1 millis");
       }
     });
-    return Effect.gen(function* () {
-      yield* call(
+    const deposit = (extra: object) =>
+      call(
         "WalletApi_Deposit_send",
-        { input: { walletId: "sam-wallet", amount: 30 } },
+        { input: { walletId: "sam-wallet", amount: 30 }, ...extra },
         "sam",
       );
-      // The agent passes no receipt: the read waits for its deposit all the same.
-      const read = yield* call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam").pipe(
-        Effect.forkChild,
-      );
-      yield* Effect.sleep("100 millis");
-      expect(read.pollUnsafe()).toBeUndefined();
-      // Asked for what is there, it answers before the view has the deposit.
-      expect(
-        yield* call("WalletApi_Balance_get", { key: "sam-wallet", atLeast: [] }, "sam"),
-      ).toEqual({ isFailure: false, encoded: { value: null } });
+    const balance = call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam");
+    return Effect.gen(function* () {
+      // The deploy is done: the view has its (empty) history.
       yield* settle;
-      expect(yield* Fiber.join(read)).toEqual({
-        isFailure: false,
-        encoded: { value: { balance: 30 } },
-      });
+      const sent = yield* deposit({}).pipe(Effect.forkChild);
+      yield* Effect.sleep("100 millis");
+      expect(sent.pollUnsafe()).toBeUndefined();
+      yield* settle;
+      expect((yield* Fiber.join(sent)).isFailure).toBe(false);
+      // The agent passes no receipt: the read has the deposit.
+      expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
+      // A tool call can ask not to wait: the view is then a moment behind.
+      expect((yield* deposit({ consistency: "eventual" })).isFailure).toBe(false);
+      expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
+      yield* settle;
+      expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 60 } } });
     }).pipe(Effect.provide(walletTools.layer.pipe(Layer.provideMerge(walletsOn(hosted.layer)))));
   });
 
@@ -553,58 +554,6 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
       });
     }).pipe(Effect.scoped),
   );
-
-  it.live("an MCP session's reads wait for the commands that session sent", () => {
-    // Nothing reaches the view until the platform drains.
-    const hosted = InMemoryPlatform.make({ manual: true });
-    const settle: Effect.Effect<void> = Effect.gen(function* () {
-      while (true) {
-        yield* hosted.control.drain;
-        if (yield* hosted.control.idle) return;
-        yield* Effect.sleep("1 millis");
-      }
-    });
-    return Effect.gen(function* () {
-      const { handler, dispose } = HttpRouter.toWebHandler(
-        DomainAi.toMcp(WalletApi, { expose }).pipe(
-          Layer.provide(
-            McpServer.layerHttp({
-              name: "wallet",
-              version: "1.0.0",
-              path: "/mcp",
-              protocols: [McpProtocol.v2025_11_25],
-            }),
-          ),
-          Layer.provide(walletsOn(hosted.layer)),
-        ),
-        { disableLogger: true },
-      );
-      yield* Effect.addFinalizer(() => Effect.promise(dispose));
-      const sam = { "x-owner": "sam" };
-      const [writer, reader] = [mcpClient(handler), mcpClient(handler)];
-      yield* writer.connect;
-      yield* reader.connect;
-      const balance = { name: "WalletApi_Balance_get", arguments: { key: "sam-wallet" } };
-      yield* writer.request(
-        "tools/call",
-        {
-          name: "WalletApi_Deposit_send",
-          arguments: { input: { walletId: "sam-wallet", amount: 30 } },
-        },
-        sam,
-      );
-      // The session that deposited waits for it; another session reads what is there.
-      const own = yield* writer.request("tools/call", balance, sam).pipe(Effect.forkChild);
-      const other = yield* reader.request("tools/call", balance, sam);
-      expect(other!.result.structuredContent).toEqual({ value: null });
-      yield* Effect.sleep("100 millis");
-      expect(own.pollUnsafe()).toBeUndefined();
-      yield* settle;
-      expect((yield* Fiber.join(own))!.result.structuredContent).toEqual({
-        value: { balance: 30 },
-      });
-    }).pipe(Effect.scoped);
-  });
 
   it.live("serves a request-scoped MCP endpoint, as on a Worker", () =>
     Effect.gen(function* () {

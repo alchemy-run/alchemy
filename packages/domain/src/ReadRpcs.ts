@@ -323,45 +323,15 @@ export const exposedOf = (
 };
 
 /**
- * Whether an Api client remembers the commands it sent, so its reads wait
- * for them. True for a client one caller holds. A client a server shares
- * between callers turns it off: one caller's reads must not wait on
- * another's writes.
- *
- * @internal
- */
-export const RemembersWrites = Context.Reference<boolean>("alchemy/Domain/Api/RemembersWrites", {
-  defaultValue: () => true,
-});
-
-/**
- * Whose writes a call's reads wait for, on a client that serves several
- * callers: each `key` has its own, and a call with no `key` has none.
- * Unset, a call uses the client's own.
- *
- * @internal
- */
-export const Caller = Context.Reference<{ readonly key: string | undefined } | undefined>(
-  "alchemy/Domain/Api/Caller",
-  { defaultValue: () => undefined },
-);
-
-/**
  * An Api's in-process client for a caller from outside the app, such as an
  * HTTP request or an MCP client. It runs no middleware's client half (what
  * `RpcMiddleware.layerClient` provides): a credential the server holds for
  * its own calls must never replace the caller's headers.
- *
- * `shared` says the one client serves many callers (every HTTP request,
- * every MCP client), so it does not remember writes ({@link RemembersWrites}).
  */
-export const outsideClient = <A, R>(
-  api: {
-    readonly group: RpcGroup.RpcGroup<Rpc.Any>;
-    readonly clientInProcess: Effect.Effect<A, never, R>;
-  },
-  options: { readonly shared: boolean },
-): Effect.Effect<A, never, R> => {
+export const outsideClient = <A, R>(api: {
+  readonly group: RpcGroup.RpcGroup<Rpc.Any>;
+  readonly clientInProcess: Effect.Effect<A, never, R>;
+}): Effect.Effect<A, never, R> => {
   const middleware = new Set(
     [...api.group.requests.values()].flatMap((rpc) => [...(rpc as Rpc.AnyWithProps).middlewares]),
   );
@@ -369,8 +339,5 @@ export const outsideClient = <A, R>(
   const halves = [...middleware].map(
     (tag) => ({ key: `${tag.key}/Client` }) as unknown as Context.Key<never, unknown>,
   );
-  return api.clientInProcess.pipe(
-    Effect.provideService(RemembersWrites, !options.shared),
-    Effect.updateContext(Context.omit(...halves)),
-  );
+  return api.clientInProcess.pipe(Effect.updateContext(Context.omit(...halves)));
 };

@@ -243,6 +243,29 @@ From a client of an [Api](/domain/api), each command is a method that takes the 
 
 Either way, `send` succeeds once the events have committed, with a receipt. It holds the stream and the version the instance committed at, the events it recorded, and the reply.
 
+## Choose when it answers
+
+A command sent through an Api answers once every [view](/domain/view) its events reach has applied them. Whoever reads a view after the answer, this client or any other, sees the command.
+
+```typescript title="packages/server/test/depositThenRead.ts"
+yield* bank.DepositMoney({ accountId, amount: 500 });
+const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
+```
+
+That is `consistency: "strong"`, the default. A caller that doesn't read afterwards can ask for the answer as soon as the events are committed:
+
+```typescript title="packages/server/test/depositFast.ts"
+const receipt = yield* bank.DepositMoney({ accountId, amount: 500 }, { consistency: "eventual" });
+```
+
+The views then apply the deposit a moment later. A read that must include it passes the receipt as [`atLeast`](/domain/view#views-catch-up-after-the-commit).
+
+If a view hasn't applied the events within 10 seconds, the call fails with `ConsistencyTimeout`. The command did not fail: its events are committed, and the error carries the `stream` and `version` they were committed at. Send it again under the same [command id](#send-it-exactly-once) to get its receipt.
+
+Strong consistency covers the model's views. A [projection](/domain/projection) writes to a store of your own, often in batches, so a command doesn't wait for it: a [query](/domain/query#read-your-own-write) over that store takes the receipt. A view that a deploy is still filling with history is not waited for either.
+
+A command sent from inside the model, by a policy or a saga through an aggregate's client, answers at the commit.
+
 ## Send it exactly once
 
 Networks fail after a command commits but before its receipt arrives. A client that retries could withdraw twice.

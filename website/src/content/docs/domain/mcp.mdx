@@ -91,7 +91,7 @@ const answer = LanguageModel.generateText({
 
 A rejection (`InsufficientFunds`) or a middleware error (`Unauthenticated`) comes back to the model as the tool's typed failure, so the model can tell the user or try again. Any other error is a defect: the model does not see it.
 
-A read tool waits for the commands sent through the same `layer`. An agent that moves money and then reads the summary sees the new balance, without passing the receipt along. Build the `layer` once per conversation, as above: everything that calls through it counts as one caller.
+A command's tool answers once the views have applied it. An agent that moves money and then reads the summary gets the new balance, with no receipt to carry between the two calls. The same holds for an MCP client.
 
 ## An MCP server
 
@@ -120,8 +120,6 @@ const BankMcp = DomainAi.toMcp(CustomerApi, {
 const { handler } = HttpRouter.toWebHandler(BankMcp);
 // handler(request) answers MCP requests on /mcp
 ```
-
-Each MCP session's reads wait for the commands that session sent. A sessionless request has nothing to remember them under: the agent passes the command's receipt as the read's `atLeast`.
 
 `McpServer.layerHttp` keeps one server running for all requests. On a host where work must end with the request, such as a Cloudflare Worker, use `McpServer.layerHttpRequestScoped` with the sessionless protocol `McpProtocol.v2026_07_28`.
 

@@ -6,6 +6,7 @@ import type { Data, Fields } from "./Event.ts";
 import { inputSchema } from "./internal.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
+import * as View from "./View.ts";
 
 /**
  * Instance type of a Command class: its `_tag` plus its input.
@@ -40,10 +41,20 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   ? Schema.Struct<Reply>
   : undefined;
 
-/** What a client sends: an optional idempotency key, and the input. */
+/**
+ * When a command answers. `"strong"`, the default, answers once every view
+ * its events reach has applied them, so any read of a view after the answer
+ * includes the command. `"eventual"` answers as soon as the events are
+ * committed: the views apply them a moment later.
+ */
+export const Consistency = Schema.Literals(["strong", "eventual"]);
+export type Consistency = typeof Consistency.Type;
+
+/** What a client sends: an optional idempotency key, the input, and when to answer. */
 export type PayloadFields<F extends Fields> = {
   readonly commandId: Schema.optional<typeof Schema.String>;
   readonly input: Schema.Struct<F>;
+  readonly consistency: Schema.optional<typeof Consistency>;
 };
 
 /** Where a command's events were committed: one stream, and its version after them. */
@@ -73,7 +84,7 @@ export type CommandRpc<
   Tag,
   Schema.Struct<PayloadFields<F>>,
   Schema.Struct<SuccessFields<Reply>>,
-  Rejects extends readonly [] ? typeof Schema.Never : Schema.Union<Rejects>
+  Schema.Union<[...Rejects, typeof View.ConsistencyTimeout]>
 >;
 
 /**
@@ -206,6 +217,22 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * const receipt = yield* bank.WithdrawMoney({ accountId, amount: 2_000 }, { commandId: requestId });
  * ```
  *
+ * ### Choosing when it answers
+ * Through an Api, a command answers once every view its events reach has
+ * applied them, so a read of a view after the answer includes it. Pass
+ * `consistency: "eventual"` to answer as soon as the events are committed.
+ * A view that takes longer than 10 seconds fails the call with
+ * `ConsistencyTimeout`; the command is committed all the same.
+ *
+ * **Example:** Reading right after a command
+ * ```typescript
+ * yield* bank.DepositMoney({ accountId, amount: 500 });
+ * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
+ *
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 500 }, { consistency: "eventual" });
+ * const later = yield* bank.AccountSummary.get(accountId, { atLeast: receipt });
+ * ```
+ *
  * ### Annotating commands
  * The last argument is its annotations: data for what is built on the
  * model, read back as `X.annotations`. Add your own keys by augmenting
@@ -269,6 +296,7 @@ export const make = <
     payload: {
       commandId: Schema.optional(Schema.String),
       input: inputSchema(options.input),
+      consistency: Schema.optional(Consistency),
     },
     success: Schema.Struct({
       reply,
@@ -276,7 +304,8 @@ export const make = <
       version: Schema.Number,
       commits: Schema.Array(Commit),
     }),
-    error: rejects.length === 0 ? Schema.Never : Schema.Union(rejects),
+    // A command that committed can still time out waiting for a view (`consistency`).
+    error: Schema.Union([...rejects, View.ConsistencyTimeout]),
   });
   return build(
     tag,

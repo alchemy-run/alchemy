@@ -334,7 +334,7 @@ const endpointOf = (
  *
  * | Call          | Method and path              | Input                                          |
  * | ------------- | ---------------------------- | ---------------------------------------------- |
- * | a command     | `POST /<Command>`            | JSON body: `commandId`, input                  |
+ * | a command     | `POST /<Command>`            | JSON body: `commandId`, input, `consistency`   |
  * | a query       | `QUERY /<Query>`             | JSON body: `input`, `atLeast`, `after`, `take` |
  * | `get`, `peek` | `GET /<Name>/{key}`          | `?stream=&version=` waits for a write          |
  * | `snapshot`    | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for a write          |
@@ -432,13 +432,7 @@ export const toHttpApi = <A extends Publishable>(
       // The Api's in-process client: its handlers and middleware, nothing
       // serialized. One per request, as `yield* Api` builds one server per request.
       // Without the client half of any middleware (see `outsideClient`).
-      // It serves every request, so it remembers no caller's writes: a read
-      // waits for the `stream` and `version` its request names.
-      const client = outsideClient(api, { shared: true }) as Effect.Effect<
-        Client,
-        never,
-        Scope.Scope
-      >;
+      const client = outsideClient(api) as Effect.Effect<Client, never, Scope.Scope>;
       for (const { operation, isDeclared } of published) {
         // Only the endpoint's declared failures are public; anything else is a defect.
         const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>

@@ -866,4 +866,8 @@ export const hostedModels = ({
  */
 export const RunWait = Context.Reference<
   <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
->("alchemy/Domain/Platform/RunWait", { defaultValue: () => (effect) => effect });
+>("alchemy/Domain/Platform/RunWait", { defaultValue: () => runDirectly });
+
+/** {@link RunWait} on a platform that does not manage its runs' waits. @internal */
+export const runDirectly = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  effect;

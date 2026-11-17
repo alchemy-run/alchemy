@@ -46,6 +46,7 @@ import {
   type ViewEntry,
   type ViewSnapshot,
   type ViewStore,
+  runDirectly,
   RunWait,
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
@@ -93,6 +94,15 @@ export class Internals extends Context.Service<
      * none of whose events reach it is not waited for.
      */
     readonly caughtUp: ReadonlyMap<string, Query.CaughtUp>;
+    /**
+     * Wait until every view a command's events reach has applied them, on
+     * every key, through any views between. A view whose history has not all
+     * reached it yet (one a deploy is still backfilling) is not waited for.
+     */
+    readonly applied: (
+      receipt: Aggregate.Receipt,
+      options?: { readonly timeout?: Duration.Input },
+    ) => Effect.Effect<void, View.ConsistencyTimeout>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -872,6 +882,16 @@ const build = <A, E, R>(
       queries: queryHosts,
       validators,
       caughtUp,
+      applied: viewsApplied(
+        route,
+        definitions.views.map((view) => ({
+          view,
+          // A view that fills its own keys reads their history before it answers.
+          history: selfFilled.has(view.viewName)
+            ? Effect.succeed({ complete: true })
+            : history(platform, () => viewTarget(view.viewName)),
+        })),
+      ),
     });
   });
 
@@ -1225,7 +1245,17 @@ const listPage = <Row extends { readonly seq: number }, E, A extends { readonly 
     }
   });
 
-/** Wait until a progress check passes, retrying every 25ms up to `timeout`. */
+/** The pause between two tries of a progress check. */
+const WAIT_PAUSE = Duration.millis(25);
+
+/**
+ * Wait until a progress check passes, retrying every 25ms up to `timeout`.
+ *
+ * The pause is for other work to finish (a view applying an event), not a
+ * moment in the domain's time, so it runs on the real clock: a test clock
+ * nobody advances must not hold a command or a read forever. A platform
+ * that manages its runs' waits (`RunWait`) paces the pauses itself.
+ */
 const waitUntil = <A>(
   check: Effect.Effect<A, "stale">,
   timeout: Duration.Input | undefined,
@@ -1233,16 +1263,24 @@ const waitUntil = <A>(
 ) =>
   Effect.gen(function* () {
     const wait = yield* RunWait;
-    return yield* wait(
-      check.pipe(
-        Effect.retry({
-          schedule: Schedule.spaced("25 millis"),
-          times: Math.ceil(
-            Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) / 25,
-          ),
-        }),
-      ),
+    const pause =
+      wait === runDirectly
+        ? Clock.Clock.defaultValue().sleep(WAIT_PAUSE)
+        : Effect.sleep(WAIT_PAUSE);
+    const tries = Math.ceil(
+      Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) /
+        Duration.toMillis(WAIT_PAUSE),
     );
+    const attempt = (left: number): Effect.Effect<A, "stale"> =>
+      Effect.catch(check, (stale) =>
+        left <= 0
+          ? Effect.fail(stale)
+          : Effect.andThen(
+              pause,
+              Effect.suspend(() => attempt(left - 1)),
+            ),
+      );
+    return yield* wait(attempt(tries));
   }).pipe(Effect.mapError(onTimeout));
 
 const streamHost = (
@@ -1620,6 +1658,62 @@ const viewCaughtUp =
       const chain = yield* follow(route, receipt, options?.timeout);
       yield* chain.applied(view, yield* chain.upstream(view), options?.key);
     });
+
+/**
+ * Wait until every view has applied a command's events, on every key they
+ * reach. A view still receiving its history is skipped: it would hold every
+ * command up for as long as the backfill runs, and its readers already know
+ * it is behind (`history`). Once a view's history is complete it stays so.
+ */
+const viewsApplied = (
+  route: Route,
+  views: ReadonlyArray<{
+    readonly view: View.Any;
+    readonly history: Effect.Effect<View.History>;
+  }>,
+) => {
+  const complete = new Set<string>();
+  const current = Effect.forEach(
+    views,
+    ({ view, history }) =>
+      complete.has(view.viewName)
+        ? Effect.succeed([view])
+        : Effect.map(history, (reached) => {
+            if (!reached.complete) return [];
+            complete.add(view.viewName);
+            return [view];
+          }),
+    { concurrency: "unbounded" },
+  );
+  return (
+    receipt: Aggregate.Receipt,
+    options?: { readonly timeout?: Duration.Input },
+  ): Effect.Effect<void, View.ConsistencyTimeout> =>
+    Effect.gen(function* () {
+      if (views.length === 0) return;
+      // An aggregate's command has its events in hand; a decision's are read per stream.
+      const single = receipt.commits.length <= 1;
+      if (single && receipt.events.length === 0) return;
+      const waited = (yield* current).flat();
+      if (waited.length === 0) return;
+      const commits: ReadonlyArray<CaughtUpReceipt> = single
+        ? [{ stream: receipt.stream, version: receipt.version, events: receipt.events }]
+        : receipt.commits;
+      yield* Effect.forEach(
+        commits,
+        Effect.fn(function* (commit) {
+          const chain = yield* follow(route, commit, options?.timeout);
+          yield* Effect.forEach(
+            waited,
+            (view) =>
+              Effect.flatMap(chain.upstream(view), (reached) => chain.applied(view, reached)),
+            { concurrency: "unbounded", discard: true },
+          );
+        }),
+        { concurrency: "unbounded", discard: true },
+      );
+    }).pipe(Effect.withSpan("Domain.applied", { attributes: { "domain.stream": receipt.stream } }));
+};
 
 /**
  * A projection's progress. `caughtUp` follows a command's events from its

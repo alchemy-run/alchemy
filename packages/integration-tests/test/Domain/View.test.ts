@@ -76,61 +76,61 @@ const held = () => {
 };
 
 /**
- * A client reads right after its own command, before the view has applied
- * it: a plain read waits for the write, `atLeast: []` reads what is there,
- * and a client that sent nothing doesn't wait.
+ * A command answers once the view has applied it, so a read by any client
+ * after the answer includes it. `consistency: "eventual"` answers at the
+ * commit, before the view has it.
  */
-const readsItsOwnWrites = (
+const answersOnceApplied = (
   settle: Effect.Effect<void>,
   another: typeof CounterApi.clientInProcess,
 ) =>
   Effect.gen(function* () {
     const api = yield* CounterApi.Client;
     const other = yield* another;
-    yield* api.Increment({ id: "c-1", by: 1 });
+    // The deploy is done: the view has its (empty) history.
     yield* settle;
-    expect(yield* api.Totals.get("c-1")).toEqual({ total: 1 });
-    yield* api.Increment({ id: "c-1", by: 2 });
-    // The view hasn't applied the second command yet.
-    expect(yield* api.Totals.get("c-1", { atLeast: [] })).toEqual({ total: 1 });
-    expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
-    const reads = yield* Effect.all(
-      [
-        api.Totals.get("c-1"),
-        Effect.map(api.Totals.snapshot("c-1"), (snapshot) => snapshot.state),
-        Effect.map(api.Totals.list("c-1"), (page) => page.entries.at(-1)?.state ?? null),
-      ],
-      { concurrency: "unbounded" },
-    ).pipe(Effect.forkChild);
+    const sent = yield* api.Increment({ id: "c-1", by: 1 }).pipe(Effect.forkChild);
     yield* Effect.sleep("100 millis");
-    expect(reads.pollUnsafe()).toBeUndefined();
+    // Nothing is delivered until the platform drains: the command is still waiting.
+    expect(sent.pollUnsafe()).toBeUndefined();
     yield* settle;
-    expect(yield* Fiber.join(reads)).toEqual([{ total: 3 }, { total: 3 }, { total: 3 }]);
-    // A command to another instance doesn't reach this key: nothing to wait for.
-    yield* api.Increment({ id: "c-2", by: 5 });
-    expect(yield* api.Totals.get("c-1")).toEqual({ total: 3 });
-    const elsewhere = yield* api.Totals.get("c-2").pipe(Effect.forkChild);
+    expect((yield* Fiber.join(sent)).version).toBe(1);
+    // Another client, with no receipt, reads it.
+    expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
+    // Asked not to wait, the command answers before the view has it.
+    const eventual = yield* api.Increment({ id: "c-1", by: 2 }, { consistency: "eventual" });
+    expect(eventual.version).toBe(2);
+    expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
+    // A read can still wait for that write by its receipt.
+    const read = yield* other.Totals.get("c-1", { atLeast: eventual }).pipe(Effect.forkChild);
     yield* settle;
-    expect(yield* Fiber.join(elsewhere)).toEqual({ total: 5 });
+    expect(yield* Fiber.join(read)).toEqual({ total: 3 });
   });
 
-/** Each read that waits for a write, on a view that never applies it. */
-const neverCaughtUp = (another: typeof CounterApi.clientInProcess) =>
+/** A command, and each read that waits for it, on a view that never applies it. */
+const neverCaughtUp = (settle: Effect.Effect<void>) =>
   Effect.gen(function* () {
     const api = yield* CounterApi.Client;
-    const other = yield* another;
-    const receipt = yield* api.Increment({ id: "c-3", by: 1 });
+    // The deploy is done: the view has its (empty) history.
+    yield* settle;
+    // The command is committed, and says the view is behind.
+    const command = yield* Effect.flip(api.Increment({ id: "c-3", by: 1 }, { commandId: "i-1" }));
+    // Sent again under its id, without waiting, it answers with its receipt.
+    const receipt = yield* api.Increment(
+      { id: "c-3", by: 1 },
+      { commandId: "i-1", consistency: "eventual" },
+    );
+    expect(receipt.version).toBe(1);
     const atLeast = { stream: receipt.stream, version: receipt.version };
-    return yield* Effect.all(
+    const reads = yield* Effect.all(
       [
-        // The client's own write, and a receipt another client was handed.
-        Effect.flip(api.Totals.snapshot("c-3")),
-        Effect.flip(api.Totals.get("c-3")),
-        Effect.flip(api.Totals.list("c-3")),
-        Effect.flip(other.Totals.get("c-3", { atLeast })),
+        Effect.flip(api.Totals.snapshot("c-3", { atLeast })),
+        Effect.flip(api.Totals.get("c-3", { atLeast })),
+        Effect.flip(api.Totals.list("c-3", { atLeast })),
       ],
       { concurrency: "unbounded" },
     );
+    return [command, ...reads];
   });
 
 /** A snapshot, two writes, then a feed that resumes after the snapshot's cursor. */
@@ -201,40 +201,59 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(InProcess)),
   );
 
-  it.live("a read whose write is never applied fails with ConsistencyTimeout", () =>
-    Effect.gen(function* () {
-      const [inProcess, wire] = yield* Effect.all(
-        [
-          neverCaughtUp(CounterApi.clientInProcess).pipe(
-            Effect.scoped,
-            Effect.provide(inProcessOver(held().layer)),
-          ),
-          neverCaughtUp(overTheWire).pipe(Effect.scoped, Effect.provide(wireOver(held().layer))),
-        ],
-        { concurrency: "unbounded" },
-      );
-      for (const error of [...inProcess, ...wire]) {
-        expect(error).toMatchObject({
-          _tag: "ConsistencyTimeout",
-          view: "Totals",
-          key: "c-3",
-          version: 1,
-        });
-      }
-    }),
+  it.live(
+    "a command and a read whose write is never applied fail with ConsistencyTimeout",
+    () =>
+      Effect.gen(function* () {
+        const [inProcess, wire] = yield* Effect.all(
+          [inProcessOver, wireOver].map((over) => {
+            const platform = held();
+            return neverCaughtUp(platform.settle).pipe(
+              Effect.scoped,
+              Effect.provide(over(platform.layer)),
+            );
+          }),
+          { concurrency: "unbounded" },
+        );
+        for (const error of [...inProcess, ...wire]) {
+          expect(error).toMatchObject({
+            _tag: "ConsistencyTimeout",
+            view: "Totals",
+            key: "c-3",
+            stream: "Counter/c-3",
+            version: 1,
+          });
+        }
+      }),
+    { timeout: 60_000 },
   );
 
-  it.live("a client's reads wait for the commands it sent, in process", () => {
+  it.live("a command does not wait for a view still receiving its history", () => {
+    // Never drained: the deploy's backfill of the view has not finished.
     const platform = held();
-    return readsItsOwnWrites(platform.settle, CounterApi.clientInProcess).pipe(
+    return Effect.gen(function* () {
+      const api = yield* CounterApi.Client;
+      const receipt = yield* api.Increment({ id: "c-9", by: 1 }).pipe(
+        Effect.timeoutOrElse({
+          duration: "2 seconds",
+          orElse: () => Effect.die(new Error("the command waited for a view being filled")),
+        }),
+      );
+      expect(receipt.version).toBe(1);
+    }).pipe(Effect.scoped, Effect.provide(inProcessOver(platform.layer)));
+  });
+
+  it.live("a command answers once its views have applied it, in process", () => {
+    const platform = held();
+    return answersOnceApplied(platform.settle, CounterApi.clientInProcess).pipe(
       Effect.scoped,
       Effect.provide(inProcessOver(platform.layer)),
     );
   });
 
-  it.live("a client's reads wait for the commands it sent, over the wire", () => {
+  it.live("a command answers once its views have applied it, over the wire", () => {
     const platform = held();
-    return readsItsOwnWrites(platform.settle, overTheWire).pipe(
+    return answersOnceApplied(platform.settle, overTheWire).pipe(
       Effect.scoped,
       Effect.provide(wireOver(platform.layer)),
     );
