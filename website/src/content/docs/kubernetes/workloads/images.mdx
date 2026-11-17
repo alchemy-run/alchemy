@@ -93,7 +93,7 @@ Builds then import and export every stage's layers at the image
 repository's `:buildcache` tag. It works the same for `main` programs.
 The cache is off by default and never changes the image, so turning
 it on doesn't trigger a rollout. Other backends take BuildKit's cache
-backends, as in [Docker builds](/docker/build-and-push#cache-layers-in-a-registry).
+backends, as in [Docker builds](/docker/build-caches).
 
 ## Bundle an Effect program
 
@@ -182,7 +182,7 @@ const api = yield* Kubernetes.Deployment("Api", {
 
 You can manage an image's name and tags yourself, for example to
 publish `acme/api:v1.4.0` for other systems too. Build it with
-[`Docker.Image`](/docker/build-and-push) and pass its reference as
+[`Docker.Image`](/docker/build-images) and pass its reference as
 `image`:
 
 ```typescript

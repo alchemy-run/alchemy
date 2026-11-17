@@ -7,6 +7,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -228,6 +229,65 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(refetched.id).toEqual(created.instanceId);
       expect(refetched.scheduling?.automaticRestart).toEqual(false);
       expect(refetched.description).toEqual("alchemy instance update");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Compute.Instance("Vm", {
+            instanceName: created.instanceName,
+            zone: "us-central1-a",
+            machineType: "e2-micro",
+            labels: { env: "prod", role: "web" },
+            deletionProtection: true,
+            tags: ["alchemy-prod"],
+            metadata: { role: "prod" },
+            description: "alchemy instance update",
+            associatePublicIp: false,
+            bootDiskType: "pd-balanced",
+            provisioningModel: "STANDARD",
+            onHostMaintenance: "MIGRATE",
+            automaticRestart: false,
+            serviceAccount: "default",
+            oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
+            shieldedInstanceConfig: {
+              enableIntegrityMonitoring: true,
+              enableSecureBoot: true,
+              enableVtpm: true,
+            },
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Vm",
+        tag: "GCP.Compute.InstanceDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Compute.Instance("Vm", {
+            instanceName: created.instanceName,
+            zone: "us-central1-a",
+            machineType: "e2-micro",
+            labels: { env: "prod", role: "web" },
+            deletionProtection: false,
+            tags: ["alchemy-prod"],
+            metadata: { role: "prod" },
+            description: "alchemy instance update",
+            associatePublicIp: false,
+            bootDiskType: "pd-balanced",
+            provisioningModel: "STANDARD",
+            onHostMaintenance: "MIGRATE",
+            automaticRestart: false,
+            serviceAccount: "default",
+            oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
+            shieldedInstanceConfig: {
+              enableIntegrityMonitoring: true,
+              enableSecureBoot: true,
+              enableVtpm: true,
+            },
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

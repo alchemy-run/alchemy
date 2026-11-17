@@ -95,7 +95,7 @@ export const LibSQL = Effect.fn(function* <E = never, R = never>(
     // The options known at Construction phase. The URL and token resolve
     // on connect.
     config: { ...config } as LibsqlClient.LibsqlClientConfig,
-  }) satisfies LibsqlClient.LibsqlClient as LibsqlClient.LibsqlClient;
+  }) satisfies LibsqlClient.LibsqlClient as LibsqlClient.LibsqlClient & Sql.SqlClient;
 });
 
 /**

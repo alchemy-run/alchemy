@@ -147,6 +147,8 @@ export const PodIdentityAssociationProvider = () =>
                       { concurrency: 5 },
                     ),
                   ),
+                  // A cluster deleted after the listing has no associations left.
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 5 },
             );

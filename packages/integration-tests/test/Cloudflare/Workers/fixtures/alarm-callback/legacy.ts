@@ -265,6 +265,6 @@ export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObjec
           Effect.provideService(Cloudflare.DurableObjectState, state),
         ),
       };
-    });
+    }).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
   }),
 ) {}

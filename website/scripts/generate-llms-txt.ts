@@ -485,6 +485,51 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "DigitalOcean",
+    intro:
+      "DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.",
+    pages: {
+      slugs: [
+        "digitalocean/index",
+        "digitalocean/what-is-digitalocean",
+        "digitalocean/setup",
+        "digitalocean/teams-projects-and-tokens",
+      ],
+    },
+  },
+  {
+    heading: "DigitalOcean — Tutorial",
+    pages: { directory: "digitalocean/tutorial" },
+  },
+  {
+    heading: "DigitalOcean — Security",
+    pages: { directory: "digitalocean/security" },
+  },
+  {
+    heading: "DigitalOcean — Compute",
+    pages: { directory: "digitalocean/compute" },
+  },
+  {
+    heading: "DigitalOcean — Data",
+    pages: { directory: "digitalocean/data" },
+  },
+  {
+    heading: "DigitalOcean — Networking",
+    pages: { directory: "digitalocean/networking" },
+  },
+  {
+    heading: "DigitalOcean — Observability",
+    pages: { directory: "digitalocean/observability" },
+  },
+  {
+    heading: "DigitalOcean — AI",
+    pages: { directory: "digitalocean/ai" },
+  },
+  {
+    heading: "DigitalOcean — Frontend",
+    pages: { directory: "digitalocean/frontend" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
@@ -883,7 +928,9 @@ const SECTIONS: Section[] = [
         "stripe/setup",
         "stripe/guides/subscriptions",
         "stripe/guides/connect",
+        "stripe/guides/pricing",
         "stripe/guides/webhooks",
+        "stripe/guides/tax-and-payouts",
       ],
     },
   },
@@ -896,9 +943,20 @@ const SECTIONS: Section[] = [
         "docker/index",
         "docker/what-is-docker",
         "docker/setup",
-        "docker/local-services",
-        "docker/build-and-push",
+        "docker/engines-and-contexts",
+        "docker/registries",
+        "docker/build-images",
+        "docker/build-caches",
+        "docker/remote-images",
+        "docker/cloud-runtimes",
+        "docker/containers",
+        "docker/networks",
+        "docker/volumes",
+        "docker/limits-and-security",
         "docker/swarm",
+        "docker/services",
+        "docker/effectful-services",
+        "docker/local-services",
       ],
     },
   },
@@ -1009,6 +1067,7 @@ const SECTIONS: Section[] = [
         "domain/command",
         "domain/event",
         "domain/aggregate",
+        "domain/decision",
         "domain/view",
         "domain/projection",
         "domain/stream",

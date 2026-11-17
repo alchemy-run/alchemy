@@ -326,11 +326,11 @@ export const LiveContainerProvider = () =>
         const registryId = props.registryId ?? "registry.cloudflare.com";
         const credentials = yield* Containers.createContainerRegistryCredentials({
           accountId,
-          registryId,
+          domain: registryId,
           permissions,
           expirationMinutes: 60,
         });
-        const username = credentials.username ?? credentials.user;
+        const username = credentials.username;
         if (!username) {
           return yield* ContainerRegistryError.make({
             reason: "CredentialsMissingUsername",
@@ -792,7 +792,6 @@ export const LiveContainerProvider = () =>
         build: ImageBuild,
         imageRef: string,
         imageHash: string,
-        previousImageRef: string | undefined,
         session?: ScopedPlanStatusSession,
         reuseRemotePublication = false,
       ) {
@@ -829,16 +828,7 @@ export const LiveContainerProvider = () =>
           publications.set(key, candidate);
           return candidate;
         });
-        const published = yield* publication;
-        return {
-          ...published,
-          // Previous image identity belongs to each application, not the
-          // shared image publication. Resolve it separately for every caller.
-          previousDigest:
-            previousImageRef === undefined
-              ? undefined
-              : (yield* resolvePublishedImageRef(props, previousImageRef)).digest,
-        };
+        return yield* publication;
       });
 
       const resolveDeploymentImage = Effect.fn(function* ({
@@ -865,26 +855,23 @@ export const LiveContainerProvider = () =>
             message: `Container application '${existing.applicationName}' has no deployment image.`,
           });
         }
-        let deploymentImageRef = existingImage;
-        let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            existing.hash?.digest === undefined ? existingImage : undefined,
-            session,
-          );
-          const existingDigest = existing.hash?.digest ?? published.previousDigest;
-          deploymentImageRef =
-            published.digest === existingDigest && news.publish?.repository === undefined
+        const published =
+          imageHash === existing.hash?.image &&
+          existing.hash?.digest !== undefined &&
+          isRegistryDigest(existing.hash.digest)
+            ? {
+                imageRef: `${repositoryFromImageRef(imageRef)}@${existing.hash.digest}`,
+                digest: existing.hash.digest,
+              }
+            : yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
+        const observed = yield* resolvePublishedImageRef(news, existingImage);
+        return {
+          deploymentImageRef:
+            observed.digest === published.digest && news.publish?.repository === undefined
               ? existingImage
-              : published.imageRef;
-          imageDigest = published.digest;
-        }
-        return { deploymentImageRef, imageDigest };
+              : published.imageRef,
+          imageDigest: published.digest,
+        };
       });
 
       // ---------------------------------------------------------------
@@ -963,7 +950,6 @@ export const LiveContainerProvider = () =>
             image.build,
             image.imageRef,
             image.imageHash,
-            undefined,
             session,
             // The registry tag keyed by image inputs is the durable publication checkpoint.
             // Reuse it after an interrupted preparation, including mirrored images.
@@ -1212,6 +1198,7 @@ export const LiveContainerProvider = () =>
         const hashes = yield* applicationHashes(scaling, news.affinities, configuration);
         if (
           existing.hash?.configuration === hashes.configuration &&
+          existing.configuration.image === deploymentImageRef &&
           (news.instances === undefined || existing.instances === news.instances)
         ) {
           yield* Effect.logInfo(
@@ -1277,7 +1264,10 @@ export const LiveContainerProvider = () =>
         );
         const updated = toAttributes(application);
         if (
-          existing.hash?.rollout !== hashes.rollout &&
+          // Out-of-band image drift leaves the saved hashes current, so the
+          // observed image is compared too.
+          (existing.hash?.rollout !== hashes.rollout ||
+            existing.configuration.image !== deploymentImageRef) &&
           !deepEqual(existing.configuration, configuration)
         ) {
           yield* Effect.logInfo(
@@ -1449,6 +1439,17 @@ export const LiveContainerProvider = () =>
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
           }
+          // Current inputs don't prove the live image is current: an
+          // out-of-band rollout leaves every saved hash intact. Compare the
+          // live image's digest with the one this resource published.
+          const liveImage = application && toAttributes(application).configuration.image;
+          if (!liveImage || !output.hash?.digest || !isRegistryDigest(output.hash.digest)) {
+            return { action: "update" } as const;
+          }
+          const observed = yield* resolvePublishedImageRef(news, liveImage);
+          if (observed.digest !== output.hash.digest) {
+            return { action: "update" } as const;
+          }
         }),
         observe: Effect.fn(function* ({ id, news = {}, previous }) {
           // Precreate creates — or adopts and updates — the application
@@ -1489,15 +1490,7 @@ export const LiveContainerProvider = () =>
           }
           const env = makeContainerEnv(news, accountId);
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            undefined,
-            session,
-          );
+          const published = yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
           const configuration = desiredConfiguration(news, env, published.imageRef);
           const hashes = yield* applicationHashes(
             scalingDefaults(news),
@@ -1710,15 +1703,7 @@ export const LiveContainerProvider = () =>
           // then create. `createApplication` itself tolerates concurrent
           // creates by adopting an existing application with the same
           // name or namespace.
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            undefined,
-            session,
-          );
+          const published = yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
           const configuration = desiredConfiguration(news, env, published.imageRef);
           const hashes = yield* applicationHashes(
             scalingDefaults(news),

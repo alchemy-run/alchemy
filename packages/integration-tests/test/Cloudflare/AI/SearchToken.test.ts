@@ -226,7 +226,9 @@ test.provider(
         .readInstance({ accountId, id: deployed.instance.instanceId })
         .pipe(
           Effect.retry({
-            while: (e) => e._tag === "Forbidden",
+            while: (e) =>
+              // A fresh instance can read as missing for a moment.
+              e._tag === "Forbidden" || e._tag === "AiSearchInstanceNotFound",
             schedule: propagationSchedule,
             times: 15,
           }),

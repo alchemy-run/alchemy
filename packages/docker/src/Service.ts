@@ -1185,8 +1185,8 @@ const normalizeServiceInspect = (value: unknown): ServiceInspect => {
   return value as ServiceInspect;
 };
 
-const inspectOrDie = <T>(
-  inspect: (nameOrId: string, context?: string) => Effect.Effect<T | undefined, any>,
+const inspectOrDie = <T, E>(
+  inspect: (nameOrId: string, context?: string) => Effect.Effect<T | undefined, E>,
   nameOrId: string,
   context?: string,
 ) =>

@@ -500,9 +500,9 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  * @category Storage & Databases
  */
 export const Subscription: SubscriptionClass = Object.assign(
-  (
+  <R>(
     ...args:
-      | [id: string, props: SubscriptionInput | Effect.Effect<SubscriptionInput, never, any>]
+      | [id: string, props: SubscriptionInput | Effect.Effect<SubscriptionInput, never, R>]
       | [methods: Record<string, any>]
   ) => {
     if (typeof args[0] === "object") {
@@ -510,7 +510,7 @@ export const Subscription: SubscriptionClass = Object.assign(
     }
     const [id, props] = args as [
       string,
-      SubscriptionInput | Effect.Effect<SubscriptionInput, never, any>,
+      SubscriptionInput | Effect.Effect<SubscriptionInput, never, R>,
     ];
     // Resource supplies Self while evaluating Effect-valued props.
     return Effect.isEffect(props)
@@ -518,6 +518,7 @@ export const Subscription: SubscriptionClass = Object.assign(
       : SubscriptionResource(id, normalizeSubscriptionProps(props));
   },
   SubscriptionResource,
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- Effectable.Prototype erases the resource class's Effect
   Effectable.Prototype({
     label: `Resource<${TypeId}>`,
     evaluate: (): Effect.Effect<SubscriptionConstructor> => Effect.succeed(Subscription),

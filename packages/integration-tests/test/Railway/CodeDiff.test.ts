@@ -18,8 +18,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { railwayApi } from "./limit.ts";
 
 const { test } = Test.make({
+  limit: railwayApi,
   providers: Layer.mergeAll(ServiceProvider(), FunctionProvider()).pipe(
     Layer.provide(
       Layer.mergeAll(

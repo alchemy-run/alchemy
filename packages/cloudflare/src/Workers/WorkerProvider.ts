@@ -41,6 +41,7 @@ import {
   readAssetsConfigFiles,
   uploadAssets,
 } from "./Assets.ts";
+import { resolveBuildEnv } from "./BuildEnv.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
@@ -65,7 +66,11 @@ import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
-}> {}
+}> {
+  override get message() {
+    return `Durable Object namespaces not found for Worker '${this.scriptName}': ${this.expected.join(", ")}`;
+  }
+}
 
 /**
  * A Durable Object class is being dropped from this Worker while a binding in
@@ -2387,7 +2392,12 @@ export const LiveWorkerProvider = () =>
             id,
             fqn,
             workerName,
-            props,
+            // Literals replace `Worker.URL` and env-bound Effects; bindings
+            // stay, so a source can still read them (Vinext's KV cache).
+            props: {
+              ...props,
+              env: { ...props.env, ...(yield* resolveBuildEnv(props.env, opts.selfUrl)) },
+            },
             compatibility: getCompatibility(props),
             stack: { name: stack.name, stage: stack.stage },
             selfUrl: opts.selfUrl,
@@ -2978,7 +2988,9 @@ export const LiveWorkerProvider = () =>
        * Reconcile a *Preview Worker*: create/update a first-class Preview of
        * the parent script and upload this Worker's code + bindings as a
        * Preview deployment. Isolated same-Worker Durable Object classes
-       * get their own namespace per Preview.
+       * get their own namespace per Preview, which the Preview reports in
+       * `durableObjectNamespaces` so a class's container application
+       * attaches to it.
        */
       const putWorkerPreview = Effect.fn(function* (
         id: string,
@@ -3235,6 +3247,18 @@ export const LiveWorkerProvider = () =>
           }
         }
 
+        // A container-backed class carries its images as the parent's does,
+        // without the parent's application name: the Preview's namespace gets
+        // its own application, attached through `durableObjectNamespaces`.
+        const containerRows = bindings.flatMap((b) => b.data.containers ?? []);
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          effectNativeDurableObjectClasses(news.exports),
+        );
+        const containers = (yield* mergeWorkerContainers(containerRows)).map(
+          ({ className, images }) => ({ className, images }),
+        );
+
         const compatibility = getCompatibility(news);
         const annotations =
           preview.message !== undefined || preview.tag !== undefined
@@ -3259,6 +3283,9 @@ export const LiveWorkerProvider = () =>
             cacheOptions: news.cache ?? getCacheBinding(bindings),
             annotations,
             migrations,
+            containers: containers.length > 0 ? containers : undefined,
+            limits: news.limits,
+            placement: news.placement,
             exports: nonEmptyExports(
               yield* workerEntrypointExports(parentName, news.entrypoints, classNames),
             ),
@@ -3266,6 +3293,16 @@ export const LiveWorkerProvider = () =>
           },
           files: bundle.files,
         });
+
+        const durableObjectNamespaces =
+          classNames.length > 0
+            ? yield* getPreviewDurableObjectNamespaces(
+                accountId,
+                parentName,
+                deployment.previewId ?? previewResource.id,
+                classNames,
+              )
+            : {};
 
         const refreshed = yield* workers
           .getPreview({ accountId, workerId: parentName, previewId: previewResource.id })
@@ -3285,7 +3322,7 @@ export const LiveWorkerProvider = () =>
           urls,
           domain: undefined,
           tags: undefined,
-          durableObjectNamespaces: {},
+          durableObjectNamespaces,
           accountId,
           routes: [],
           crons: [],
@@ -3656,22 +3693,34 @@ export const LiveWorkerProvider = () =>
             continue;
           }
           const targetScriptName = crossScriptClassTargets.get(className);
+          const localNamespaceId = oldBindings.flatMap((binding) =>
+            binding.type === "durable_object_namespace" &&
+            "className" in binding &&
+            binding.className === className &&
+            (!("scriptName" in binding) ||
+              binding.scriptName == null ||
+              binding.scriptName === name) &&
+            "namespaceId" in binding &&
+            typeof binding.namespaceId === "string"
+              ? [binding.namespaceId]
+              : [],
+          )[0];
           const namespaceId =
-            oldBindings.flatMap((binding) =>
-              binding.type === "durable_object_namespace" &&
-              "className" in binding &&
-              binding.className === className &&
-              (!("scriptName" in binding) ||
-                binding.scriptName === undefined ||
-                binding.scriptName === name) &&
-              "namespaceId" in binding &&
-              typeof binding.namespaceId === "string"
-                ? [binding.namespaceId]
-                : [],
-            )[0] ??
+            localNamespaceId ??
             output?.durableObjectNamespaces?.[className] ??
             observedNamespaces.find((ns) => ns.script === name && ns.class === className)?.id;
           if (targetScriptName === undefined) {
+            // The script's own live settings are the authority on what it
+            // hosts. A transfer rewrites the former host's binding (dropping
+            // its class name, or repointing it at the new host through
+            // `scriptName`), so a local binding that still names the class
+            // with a namespace id proves the class lives here. Delete it
+            // without consulting the account-wide listing, whose pages
+            // Cloudflare doesn't return in a stable order.
+            if (localNamespaceId !== undefined) {
+              deletedClasses.push(className);
+              continue;
+            }
             const findNamespace = (namespaces: typeof observedNamespaces) =>
               namespaces.find((ns) =>
                 namespaceId === undefined
@@ -4419,10 +4468,17 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          const { deployments } = yield* workers.listScriptDeployments({
-            accountId,
-            scriptName: name,
-          });
+          // Same eventual-consistency window as `setWorkerSubdomain`: on a
+          // Worker's first deploy, GET /deployments can still return
+          // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
+          const { deployments } = yield* workers
+            .listScriptDeployments({ accountId, scriptName: name })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+              }),
+            );
           const active = deployments[0];
           deploymentId = active?.id;
           versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
@@ -4833,8 +4889,13 @@ export const LiveWorkerProvider = () =>
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
           const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
+          // Previews deployed by older releases recorded no namespaces, so
+          // their classes' container applications never attached. Plan one
+          // update so reconcile records them.
+          const previewNamespacesMissing = newIsPreview && !doNamespacesStable;
           if (
             legacyWorkerId ||
+            previewNamespacesMissing ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -5674,16 +5735,12 @@ export const LiveWorkerProvider = () =>
             }).pipe(Effect.ignore);
           }
           if (liveDomains.length) {
-            yield* Effect.all(
-              liveDomains.flatMap((d) =>
-                d.id
-                  ? [
-                      workers
-                        .deleteDomain({ accountId: output.accountId, domainId: d.id })
-                        .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
-                    ]
-                  : [],
-              ),
+            yield* Effect.forEach(
+              liveDomains.flatMap((d) => (d.id ? [d.id] : [])),
+              (domainId) =>
+                workers
+                  .deleteDomain({ accountId: output.accountId, domainId })
+                  .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
               { concurrency: "unbounded" },
             );
           }
@@ -5767,6 +5824,14 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 /**
+ * Cloudflare returns the namespace listing's pages in an unstable order, so a
+ * walk of 20-row pages can return some rows twice and skip others (#3300).
+ * One large page sidesteps that for every account under this many
+ * namespaces.
+ */
+const LIST_NAMESPACES_PAGE_SIZE = 1000;
+
+/**
  * Observe every Durable Object namespace on the account with its identity,
  * script and class. Namespace ownership is authoritative cloud state: after a
  * transfer the namespace moves to the receiving
@@ -5777,7 +5842,7 @@ const contentTypeFromExtension = (extension: string) => {
  * are inconclusive because pagination is not an atomic account snapshot.
  */
 const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: string) =>
-  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: LIST_NAMESPACES_PAGE_SIZE }).pipe(
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
@@ -5795,6 +5860,42 @@ const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: stri
           : [],
       ),
     ),
+  );
+
+/**
+ * The namespace Cloudflare provisioned for each of a Preview's own Durable
+ * Object classes, by class. A Preview's namespaces name the parent Worker as
+ * their `script`, like the parent's own, and carry the Preview's id. They can
+ * appear in the listing shortly after the Preview deployment that creates
+ * them, so a missing class is retried before it fails.
+ */
+const getPreviewDurableObjectNamespaces = (
+  accountId: string,
+  parentName: string,
+  previewId: string,
+  classNames: readonly string[],
+) =>
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: LIST_NAMESPACES_PAGE_SIZE }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((namespaces) => {
+      const byClass: Record<string, string> = {};
+      for (const ns of namespaces) {
+        if (ns.id && ns.class && ns.script === parentName && ns.preview?.id === previewId) {
+          byClass[ns.class] = ns.id;
+        }
+      }
+      const missing = classNames.filter((className) => !byClass[className]);
+      return missing.length > 0
+        ? Effect.fail(new MissingDurableObjects({ scriptName: parentName, expected: missing }))
+        : Effect.succeed(
+            Object.fromEntries(classNames.map((className) => [className, byClass[className]!])),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "MissingDurableObjects",
+      schedule: Schedule.spaced("1 second"),
+      times: 15,
+    }),
   );
 
 type ObservedDurableObjectNamespace = {

@@ -9,6 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import { notAwaited, openSection, within, type Activation } from "./internal/Calls.ts";
+import type { SocketRegistry } from "./internal/Sockets.ts";
+import type { WebSocket } from "./WebSocket.ts";
 
 /**
  * The least of a RivetKit actor context the state needs: its raw SQLite
@@ -131,6 +133,11 @@ export interface DurableObjectStateShape {
   readonly storage: DurableObjectStorage;
   /** Keep the instance awake until `effect` completes. */
   waitUntil<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, never, R>;
+  /**
+   * The open WebSockets this instance accepted with `Rivet.upgrade()`; with
+   * `tag`, only those accepted with it.
+   */
+  getWebSockets(tag?: string): Effect.Effect<ReadonlyArray<WebSocket>>;
 }
 
 /** The running Durable Object instance's state. */
@@ -332,6 +339,7 @@ const setAlarm = (c: ActorContextLike, at: number, retries?: number) =>
 export const makeDurableObjectState = (
   c: ActorContextLike,
   activation: Activation,
+  sockets: SocketRegistry,
 ): DurableObjectStateShape => {
   const name = c.key[0] ?? "";
 
@@ -490,6 +498,7 @@ export const makeDurableObjectState = (
   return {
     id: { name, toString: () => name },
     storage,
+    getWebSockets: (tag) => Effect.sync(() => sockets.all(tag)),
     // As on Cloudflare: the work runs with the caller's context and a scope
     // of its own, and the call's scope stays open until it settles.
     waitUntil: (effect) =>

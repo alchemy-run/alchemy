@@ -25,7 +25,7 @@ const Line = Schema.Struct({
 type Line = typeof Line.Type;
 ```
 
-Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ target, input, commandId })` through `Command.mapMessage`.
+Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ input, commandId })` through `Command.mapMessage`.
 
 The command and its pending line share one id. Each event caused by the command carries that id in `entry.envelope.commandId`.
 

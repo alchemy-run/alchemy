@@ -291,6 +291,8 @@ export const bootstrap = (
           {
             maxIdleTime: entry.options.maxIdleTime,
             concurrency: entry.options.concurrency,
+            mailboxCapacity: entry.options.mailboxCapacity,
+            disableFatalDefects: entry.options.disableFatalDefects,
           },
         )
         // So does the entity itself: its RPCs' middleware is provided to its Layer.
