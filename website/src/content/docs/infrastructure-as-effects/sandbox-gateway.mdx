@@ -132,16 +132,54 @@ A binding of your own opts out the same way:
 export const MountCache = Binding.Service<MountCache>("MyApp.MountCache", { local: true });
 ```
 
+## What crosses the gateway
+
+A call's arguments and its result travel as JSON, with bytes kept as bytes.
+A binding's typed errors arrive as themselves, so `Effect.catchTag` works as
+it does on any host.
+
+Streams cross in both directions as they are produced. An upload's body is
+sent while the program still writes it, and a download is read while the
+gateway still receives it:
+
+```typescript
+const write = yield* Archil.WriteDisk(MyDisk);
+const read = yield* Archil.ReadDisk(MyDisk);
+// in fetch:
+yield* write.upload("big.bin", body);
+const bytes = read.getStream("big.bin");
+```
+
+A result that is a live handle does not cross. `E2B.CreateSandbox` returns a
+sandbox you call `exec` on, and those methods exist only where the sandbox
+was created. Keep bindings like it on a host you trust.
+
 ## Choosing a gateway host
 
 `Cloudflare.Workers.SandboxGateway` starts in milliseconds and costs nothing
 at rest. A Worker caps a request body (100 MB on most plans), so use it for
-API calls, git and small objects.
+API calls, git and small objects. A Worker whose own bindings you move to a
+gateway reaches it through a service binding.
 
 `AWS.Lambda.SandboxGateway` streams requests and responses of any size and
 gives AWS bindings a role. Its environment is limited to 4 KB, which bounds
 how many credentials one gateway holds.
 
+`Fly.SandboxGateway` runs the gateway as a Fly Service: a process that is
+always on, with no limit on a body or a connection's length.
+
+`AWS.ECS.SandboxGateway` runs it as an ECS Service on your cluster, with a
+task role for AWS bindings. Give its load balancer a domain, so the sandbox's
+token travels over HTTPS:
+
+```typescript
+AWS.ECS.SandboxGateway({
+  cluster: MyCluster,
+  port: 3000,
+  loadBalancer: { domain: "gateway.example.com" },
+})
+```
+
 A sandbox must be able to reach its gateway. A Daytona sandbox below Tier 3
-can only reach an allowlist of hosts, which includes neither, so its bindings
-can't call out until the organization's network tier allows it.
+can only reach an allowlist of hosts, which includes none of these, so its
+bindings can't call out until the organization's network tier allows it.

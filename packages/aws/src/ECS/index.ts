@@ -32,6 +32,7 @@ export * from "./ListTasksHttp.ts";
 export * from "./RunTask.ts";
 export * from "./RunTaskHttp.ts";
 export * from "./Schedule.ts";
+export * from "./SandboxGateway.ts";
 export * from "./Service.ts";
 export * from "./StartTask.ts";
 export * from "./StartTaskHttp.ts";
