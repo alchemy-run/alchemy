@@ -52,8 +52,9 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
         if (action === "book" || action === "cancel") {
           const orgId = OrgId.make(second!);
           const receipt = yield* tours.send(
-            first!,
-            action === "book" ? new BookTour({ orgId, unit: third! }) : new CancelTour({ orgId }),
+            action === "book"
+              ? new BookTour({ id: first!, orgId, unit: third! })
+              : new CancelTour({ id: first!, orgId }),
           );
           const state = yield* schedules.get(orgId, {
             atLeast: { stream: receipt.stream, version: receipt.version },

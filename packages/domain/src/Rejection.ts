@@ -84,10 +84,19 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
  * The class type returned by {@link make}.
  */
 export interface RejectionClass<Tag extends string, F extends Fields> extends Schema.Class<
-  Instance<Tag, F>,
+  Instance<Tag, F> & Cause.YieldableError,
   Schema.TaggedStruct<Tag, F>,
   Cause.YieldableError
 > {
+  /**
+   * Builds an instance of the class `make` is called on, so a subclass's own
+   * members are part of the result (as they are at runtime).
+   */
+  make<C extends abstract new (...args: any) => Instance<Tag, F> & Cause.YieldableError>(
+    this: C,
+    input: RejectionClass<Tag, F>["~type.make.in"],
+    options?: Schema.MakeOptions,
+  ): InstanceType<C>;
   readonly kind: "Rejection";
   readonly annotations: DomainAnnotations;
   readonly tag: Tag;

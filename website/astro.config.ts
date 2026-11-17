@@ -454,6 +454,7 @@ export default defineConfig({
                 },
                 { label: "Doppler", link: "/environments/doppler" },
                 { label: "Infisical", link: "/environments/infisical" },
+                { label: "1Password", link: "/environments/1password" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
@@ -1894,8 +1895,16 @@ export default defineConfig({
                   link: "/stripe/guides/connect",
                 },
                 {
+                  label: "Price your product",
+                  link: "/stripe/guides/pricing",
+                },
+                {
                   label: "React to Stripe events",
                   link: "/stripe/guides/webhooks",
+                },
+                {
+                  label: "Collect tax and pay out",
+                  link: "/stripe/guides/tax-and-payouts",
                 },
               ],
             },
@@ -1967,6 +1976,7 @@ export default defineConfig({
                 { label: "Command", link: "/domain/command" },
                 { label: "Event", link: "/domain/event" },
                 { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "Decision", link: "/domain/decision" },
                 { label: "View", link: "/domain/view" },
                 { label: "Projection", link: "/domain/projection" },
                 { label: "Stream", link: "/domain/stream" },

@@ -7,6 +7,7 @@ import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Plan } from "./Backfill.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
+import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
 import { DefinitionError } from "./internal.ts";
 import type * as Policy from "./Policy.ts";
@@ -199,6 +200,11 @@ export interface AggregateKit {
    * `decide`. Used to seed history (story `given`).
    */
   readonly seed: (input: SeedInput) => Effect.Effect<SeedResult>;
+  /**
+   * Fold the events a decision recorded on an instance into its state and
+   * route them, without running `decide`: they reach policies like any other.
+   */
+  readonly record: (input: RecordInput) => Effect.Effect<SeedResult>;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
@@ -229,6 +235,107 @@ export interface SeedResult {
   readonly version: number;
   readonly events: ReadonlyArray<StoredEvent>;
   readonly deliveries: ReadonlyArray<Delivery>;
+}
+
+/** Input to {@link AggregateKit.record}. */
+export interface RecordInput {
+  readonly id: string;
+  readonly state: Json;
+  readonly version: number;
+  /** The events a decision recorded on this instance, encoded. */
+  readonly events: ReadonlyArray<Json>;
+  readonly commandId: string;
+  /** Epoch milliseconds the decision was made at. */
+  readonly now: number;
+  readonly correlationId: string;
+  readonly trace?: TraceJson;
+}
+
+/** One aggregate instance a decision reads, by the name `reads` gives it. */
+export interface DecisionRead {
+  /** The names `reads` gives the instance: more than one when it is named twice. */
+  readonly keys: ReadonlyArray<string>;
+  readonly aggregate: string;
+  readonly id: string;
+  /** The instance's stream, e.g. `Account/a-1`. */
+  readonly stream: string;
+}
+
+/** A read instance with the state and version it was read at. */
+export interface DecisionState extends DecisionRead {
+  /** The stored state, or `null` for an instance that has never committed. */
+  readonly state: Json;
+  readonly version: number;
+}
+
+/** What a decision writes to one instance it read: nothing, when `events` is empty. */
+export interface DecisionWrite extends DecisionRead {
+  /** The version the instance was read at: it must still have it. */
+  readonly version: number;
+  readonly events: ReadonlyArray<Json>;
+}
+
+/** The receipt of an accepted decision, in JSON form. */
+export interface DecisionReceiptJson {
+  readonly commits: ReadonlyArray<{ readonly stream: string; readonly version: number }>;
+  readonly events: ReadonlyArray<Json>;
+  readonly reply: Json;
+}
+
+/** Input to {@link DecisionKit.decide}. */
+export interface DecideInput {
+  readonly command: Json;
+  readonly commandId: string;
+  readonly context: Readonly<Record<string, Json>>;
+  /** Epoch milliseconds. */
+  readonly now: number;
+  readonly correlationId?: string;
+  readonly trace?: TraceJson;
+  readonly link?: boolean;
+  /** Every instance {@link DecisionKit.reads} named, as it was read. */
+  readonly states: ReadonlyArray<DecisionState>;
+}
+
+/** Result of {@link DecisionKit.decide}. */
+export type DecideResult =
+  | { readonly _tag: "Rejected"; readonly rejection: Json }
+  | {
+      readonly _tag: "Accepted";
+      /** One per instance read, in stream order: its events, or none. */
+      readonly writes: ReadonlyArray<DecisionWrite>;
+      readonly receipt: DecisionReceiptJson;
+      readonly correlationId: string;
+      /** The span that decided, so the events' reactions continue it. */
+      readonly trace?: TraceJson;
+    };
+
+/** Result of {@link DecisionStore.send}. */
+export type DecisionResult =
+  | { readonly _tag: "Rejected"; readonly rejection: Json }
+  | { readonly _tag: "Accepted"; readonly receipt: DecisionReceiptJson };
+
+/**
+ * The kernel for one decision, handed to a platform.
+ */
+export interface DecisionKit {
+  readonly name: string;
+  /** The instances a command involves, each once, ordered by stream. */
+  readonly reads: (command: Json) => Effect.Effect<ReadonlyArray<DecisionRead>>;
+  /** Decide purely against the states read: a rejection, or what to write to each instance. */
+  readonly decide: (input: DecideInput) => Effect.Effect<DecideResult>;
+}
+
+/**
+ * What a platform provides for a decision.
+ */
+export interface DecisionStore {
+  /**
+   * Handle a command across the instances it reads: decide against their
+   * states, and commit every write or none. Nothing commits unless each
+   * instance still has the version it was read at; a command id already
+   * committed returns its first receipt.
+   */
+  readonly send: (command: Json, meta: Aggregate.SendMeta) => Effect.Effect<DecisionResult>;
 }
 
 /**
@@ -310,6 +417,27 @@ export interface ViewSnapshot {
   readonly seq: number;
   /** The view's generation the key was built by: an earlier one is stale and starts over. */
   readonly generation?: number;
+  /**
+   * Per source, what the last command to reach the key from it became: see
+   * {@link EmittedRange}. A reader finds a command's emissions with it instead
+   * of scanning entries. Absent from snapshots written before it existed, and
+   * for a source until the key next applies a delivery from it.
+   */
+  readonly emitted?: Readonly<Record<string, EmittedRange>>;
+}
+
+/**
+ * The entries a view key emitted for one command's deliveries from one source.
+ */
+export interface EmittedRange {
+  /** The command the deliveries came from. */
+  readonly commandId: string;
+  /** The last of its deliveries' `seq` (on the source) the key applied. */
+  readonly sourceSeq: number;
+  /** The key's `seq` before the first of them: its entries are those after it… */
+  readonly after: number;
+  /** …through this one (`after` itself when they emitted nothing). */
+  readonly through: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
@@ -623,6 +751,11 @@ export interface ModelHost {
     aggregate: Aggregate.Any,
     kit: AggregateKit,
   ) => Effect.Effect<AggregateStore>;
+  /**
+   * Called after every aggregate's factory. A platform without it can't host
+   * a model that has decisions.
+   */
+  readonly decision?: (decision: Decision.Any, kit: DecisionKit) => Effect.Effect<DecisionStore>;
   readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
   readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
   readonly projection: (
@@ -720,3 +853,17 @@ export const hostedModels = ({
         }),
     );
 };
+
+/**
+ * How a platform counts a run that waits for another run's work: a read
+ * `atLeast` a write that polls until its view or projection has it. The
+ * manual in-memory platform (a story) runs one queued item at a time, until
+ * every run it started is finished or waiting; it provides this so a poll is
+ * waiting and the run it waits for can start. Other platforms run their work
+ * concurrently and leave it as is.
+ *
+ * @internal
+ */
+export const RunWait = Context.Reference<
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+>("alchemy/Domain/Platform/RunWait", { defaultValue: () => (effect) => effect });

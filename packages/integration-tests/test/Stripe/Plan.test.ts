@@ -223,3 +223,102 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "create a tiered plan and replace it when tiers change",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployPlan = (tiers: Stripe.PlanTier[]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const product = yield* Stripe.Product("TieredPlanProduct", {
+              name: "Alchemy Tiered Plan Product",
+            });
+            return yield* Stripe.Plan("TieredPlan", {
+              product: product.id,
+              currency: "usd",
+              interval: "month",
+              billingScheme: "tiered",
+              tiersMode: "graduated",
+              tiers,
+            });
+          }),
+        );
+
+      const created = yield* deployPlan([
+        { upTo: 10, unitAmount: 500 },
+        { upTo: "inf", unitAmount: 400, flatAmount: 1000 },
+      ]);
+      expect(created.billingScheme).toEqual("tiered");
+      expect(created.tiersMode).toEqual("graduated");
+      expect(created.tiers).toEqual([
+        { upTo: 10, unitAmount: 500 },
+        { upTo: "inf", unitAmount: 400, flatAmount: 1000 },
+      ]);
+
+      const fetched = yield* GetPlan({ plan: created.id, expand: ["tiers"] });
+      expect(fetched.tiers?.map((tier) => tier.up_to)).toEqual([10, null]);
+
+      const unchanged = yield* deployPlan([
+        { upTo: 10, unitAmount: 500 },
+        { upTo: "inf", unitAmount: 400, flatAmount: 1000 },
+      ]);
+      expect(unchanged.id).toEqual(created.id);
+
+      const replaced = yield* deployPlan([
+        { upTo: 20, unitAmount: 450 },
+        { upTo: "inf", unitAmount: 350 },
+      ]);
+      expect(replaced.id).not.toEqual(created.id);
+      expect(replaced.tiers).toEqual([
+        { upTo: 20, unitAmount: 450 },
+        { upTo: "inf", unitAmount: 350 },
+      ]);
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(replaced.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:plan", "provider:stripe:product", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "create a plan that transforms usage before billing",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const product = yield* Stripe.Product("TransformPlanProduct", {
+            name: "Alchemy Transform Plan Product",
+          });
+          return yield* Stripe.Plan("TransformPlan", {
+            product: product.id,
+            currency: "usd",
+            interval: "month",
+            amount: 100,
+            transformUsage: { divideBy: 1000, round: "up" },
+          });
+        }),
+      );
+      expect(created.transformUsage).toEqual({ divideBy: 1000, round: "up" });
+
+      const fetched = yield* GetPlan({ plan: created.id });
+      expect(fetched.transform_usage).toEqual({ divide_by: 1000, round: "up" });
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:plan", "provider:stripe:product", "live"],
+    timeout: 120_000,
+  },
+);
