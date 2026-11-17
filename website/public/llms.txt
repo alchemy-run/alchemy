@@ -83,6 +83,7 @@ Stages, credential profiles, auth providers, secrets and config, local developme
 - [Secret providers](https://alchemy.run/environments/secret-providers) — Configure a stack with dotenv files, environment variables, Doppler, or Infisical.
 - [Doppler](https://alchemy.run/environments/doppler) — Load a Doppler config into your Stack — log in with the browser on your machine, use a service token in CI.
 - [Infisical](https://alchemy.run/environments/infisical) — Load an Infisical environment into your Stack — a machine identity on your machine, the platform's own OIDC token in CI.
+- [1Password](https://alchemy.run/environments/1password) — Read 1Password Environments and op:// vault references into Effect Config using desktop authorization or a service account token.
 - [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local execution, and local emulation with per-resource opt-in to real cloud services.
 - [Worktrees](https://alchemy.run/environments/worktrees) — Run alchemy deploy, dev, and tests from several git worktrees at once — one stage per worktree, so parallel agents never touch each other's resources.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
@@ -366,7 +367,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 ## AWS — Messaging & events
 
 - [DynamoDB Streams](https://alchemy.run/aws/messaging/dynamodb-streams) — How a DynamoDB Stream records every change to a table in order, what each change record carries, and how a Function consumes changes and checkpoints at the first failure.
-- [EventBridge & Scheduler](https://alchemy.run/aws/messaging/eventbridge) — How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule.
+- [EventBridge & Scheduler](https://alchemy.run/aws/messaging/eventbridge) — How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule, including schedules created at runtime.
 - [Kinesis](https://alchemy.run/aws/messaging/kinesis) — How Kinesis Data Streams keep records in order per partition key across shards, how runtimes write records and consume them in batches, and how retention, replay and checkpoints work.
 - [S3 events](https://alchemy.run/aws/messaging/s3-events) — How a Bucket notifies a Function when objects are created or deleted, what each notification carries, and how to process notifications as an Effect Stream.
 - [SNS](https://alchemy.run/aws/messaging/sns) — How SNS Topics broadcast one message to every subscriber, how to publish from a runtime, subscribe Functions and Queues, and filter what each subscriber receives.

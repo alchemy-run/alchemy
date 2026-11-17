@@ -13,7 +13,7 @@ const RDS_RUNNER_DOCKERFILE = RUNNER_DOCKERFILE.replace(
 ADD ${RDS_CA_BUNDLE} /etc/ssl/rds-ca.pem
 ENV NODE_EXTRA_CA_CERTS=/etc/ssl/rds-ca.pem`,
 );
-import { awsNetworkOf, makeAwsGateway } from "./internal/Gateway.ts";
+import { awsNetworkOf, makeAwsGateway, type AwsNetwork } from "./internal/Gateway.ts";
 
 export interface EcsPoolOptions extends PoolSettings {
   /**
@@ -37,13 +37,20 @@ export interface EcsPoolOptions extends PoolSettings {
    * @default "X86_64"
    */
   architecture?: "X86_64" | "ARM64";
+  /**
+   * The VPC runners run in when the database is in none, such as
+   * `Cluster.Database.fromUrl`. `securityGroupId` is the group every runner
+   * joins; it must let runners reach each other on port 34431 and reach
+   * the database. Ignored when the database is in a VPC.
+   */
+  network?: Omit<AwsNetwork, "kind">;
 }
 
 /**
  * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
  * host every class given this pool, in the database's VPC, behind a
- * load balancer that serves their gateway to callers anywhere. Requires a
- * database in an AWS VPC — `ClusterAWS.Database`.
+ * load balancer that serves their gateway to callers anywhere. With a
+ * database in no VPC (`Cluster.Database.fromUrl`), give the pool its `network`.
  *
  * Runners reach each other and the database through the cluster's runner
  * security group; the load balancer only reaches the gateway, which checks
@@ -79,6 +86,9 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
     // verify the database's certificate.
     dockerfile: RDS_RUNNER_DOCKERFILE,
     network: awsNetworkOf,
+    ownNetwork: Effect.succeed(
+      options.network === undefined ? undefined : { kind: "aws" as const, ...options.network },
+    ),
     gateway: (_name, network) => makeAwsGateway(id, network, "ip"),
     nodes: ({ network, gateway, program, environment }) =>
       Effect.gen(function* () {
