@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex/aws";
-import { hostLabelOf, InstanceNameChanged } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
@@ -8,36 +8,45 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { assertDevAccount } from "./guard.ts";
 import {
   assertRuntime,
   BACKEND_IMAGE,
+  DelegatedZone,
+  domainFor,
   listMessages,
   selfHostedApp,
   serviceGone,
-  skipPaid,
-  TEST_DOMAIN,
+  skipSlow,
+  testZoneId,
 } from "./support.ts";
 
-const { test } = Test.make({ providers: Convex.providers() });
-
-// Per stage, so two people's runs never claim the same hosts.
-const domainOf = (stage: string) => ({
-  cloud: `convex-sqlite-${hostLabelOf(stage)}-cloud.${TEST_DOMAIN}`,
-  site: `convex-sqlite-${hostLabelOf(stage)}-site.${TEST_DOMAIN}`,
+const { test } = Test.make({
+  providers: Layer.mergeAll(Convex.providers(), Cloudflare.providers()),
 });
 
+/** Where a deploy puts the backend: this stage's domain, and its parent zone. */
+interface Place {
+  readonly domain: string;
+  readonly parentZoneId: string;
+}
+
 const app = (
-  stage: string,
+  place: Place,
   rootDir: string | undefined,
   env: NonNullable<Convex.BackendProps["env"]>,
   instanceName?: string,
 ) =>
   Effect.gen(function* () {
+    const zone = yield* DelegatedZone(place.parentZoneId, place.domain);
     const backend = yield* Convex.Backend("Backend", {
       image: BACKEND_IMAGE,
-      domain: domainOf(stage),
+      domain: {
+        cloud: `cloud.${place.domain}`,
+        site: `site.${place.domain}`,
+        hostedZoneId: zone.id,
+      },
       db: { engine: "sqlite" },
       deletionProtection: false,
       cpu: 512,
@@ -50,16 +59,19 @@ const app = (
   });
 
 // One long test, because each deploy costs minutes.
-test.provider.skipIf(skipPaid)(
+test.provider.skipIf(skipSlow)(
   "sqlite backend end to end on AWS",
   (stack) =>
     Effect.gen(function* () {
-      yield* assertDevAccount;
       yield* stack.destroy();
       const rootDir = yield* selfHostedApp("backend-sqlite");
+      const place = {
+        domain: yield* domainFor("sqlite", stack.stage),
+        parentZoneId: yield* testZoneId,
+      };
 
       // Site port is healthy with no HTTP routes, before any push.
-      const backend = yield* stack.deploy(app(stack.stage, undefined, { RUST_LOG: "info" }));
+      const backend = yield* stack.deploy(app(place, undefined, { RUST_LOG: "info" }));
       const cluster = backend.service.clusterArn;
       const { services } = yield* ecs.describeServices({
         cluster,
@@ -75,7 +87,7 @@ test.provider.skipIf(skipPaid)(
 
       // A query, a subscription and an HTTP action, through the public hosts,
       // with a socket held past the default 60 second load balancer timeout.
-      const pushed = yield* stack.deploy(app(stack.stage, rootDir, { RUST_LOG: "info" }));
+      const pushed = yield* stack.deploy(app(place, rootDir, { RUST_LOG: "info" }));
       yield* assertRuntime({
         url: pushed.url,
         siteUrl: pushed.siteUrl,
@@ -113,7 +125,7 @@ test.provider.skipIf(skipPaid)(
       // Port 80 redirects.
       const http = yield* HttpClient.HttpClient;
       const redirect = yield* http
-        .get(`http://${domainOf(stack.stage).cloud}/version`)
+        .get(`http://cloud.${place.domain}/version`)
         .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
       expect(redirect.status).toBe(301);
       expect(redirect.headers.location).toMatch(/^https:\/\//);
@@ -121,7 +133,7 @@ test.provider.skipIf(skipPaid)(
       // A redeploy that restarts the task starts SQLite over, and pushes the
       // functions again, so the new task serves them on an empty database.
       const before = yield* ecs.listTasks({ cluster, serviceName: service.serviceName });
-      const redeployed = yield* stack.deploy(app(stack.stage, rootDir, { RUST_LOG: "warn" }));
+      const redeployed = yield* stack.deploy(app(place, rootDir, { RUST_LOG: "warn" }));
       const after = yield* ecs.listTasks({ cluster, serviceName: service.serviceName });
       expect(after.taskArns).not.toEqual(before.taskArns);
       expect(redeployed.dataRevision).not.toBe(pushed.dataRevision);
@@ -135,10 +147,10 @@ test.provider.skipIf(skipPaid)(
       });
       const currentTask = current.services![0]!.taskDefinition;
       const renamed = yield* stack
-        .deploy(app(stack.stage, rootDir, { RUST_LOG: "warn" }, "other"))
+        .deploy(app(place, rootDir, { RUST_LOG: "warn" }, "other"))
         .pipe(Effect.result);
       expect(Result.isFailure(renamed)).toBe(true);
-      if (Result.isFailure(renamed)) expect(renamed.failure).toBeInstanceOf(InstanceNameChanged);
+      if (Result.isFailure(renamed)) expect(renamed.failure._tag).toBe("InstanceNameChanged");
       const unchanged = yield* ecs.describeServices({
         cluster,
         services: [backend.service.serviceArn],

@@ -118,8 +118,8 @@ export const runConvexDeploy = Effect.fn(function* (input: {
       const [exitCode, stdout, stderr] = yield* Effect.all(
         [
           child.exitCode,
-          Stream.mkString(Stream.decodeText(child.stdout)),
-          Stream.mkString(Stream.decodeText(child.stderr)),
+          child.stdout.pipe(Stream.decodeText(), Stream.mkString),
+          child.stderr.pipe(Stream.decodeText(), Stream.mkString),
         ],
         { concurrency: "unbounded" },
       );

@@ -2,7 +2,7 @@ import * as Convex from "@alchemy.run/convex";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as deployments from "@distilled.cloud/convex/deployment";
-import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -95,7 +95,7 @@ test.provider.skipIf(!pro)(
         .deploy(app(name, "https://example.com/mine").pipe(adopt(false)))
         .pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      if (Result.isFailure(refused)) expect(refused.failure._tag).toBe("OwnedBySomeoneElse");
 
       const adopted = yield* stack.deploy(app(name, "https://example.com/mine").pipe(adopt(true)));
       expect(adopted.stream.logStreamId).toBe(foreign.id);

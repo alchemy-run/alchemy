@@ -1,6 +1,5 @@
 import { AdminKey, providers } from "@alchemy.run/convex/aws";
 import { mintAdminKey, openAdminKey } from "@alchemy.run/convex/internal/adminKey";
-import { InstanceNameChanged } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -84,7 +83,7 @@ test.provider(
       yield* stack.deploy(key({}));
       const planned = yield* stack.plan(key({ instanceName: "other" })).pipe(Effect.result);
       expect(Result.isFailure(planned)).toBe(true);
-      if (Result.isFailure(planned)) expect(planned.failure).toBeInstanceOf(InstanceNameChanged);
+      if (Result.isFailure(planned)) expect(planned.failure._tag).toBe("InstanceNameChanged");
       yield* stack.destroy();
     }),
   options,

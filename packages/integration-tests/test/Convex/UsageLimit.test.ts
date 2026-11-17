@@ -3,7 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as deployments from "@distilled.cloud/convex/deployment";
 import * as management from "@distilled.cloud/convex/management";
-import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -85,7 +85,7 @@ test.provider(
         .deploy(app(name, { ...limit, limit: 9 }).pipe(adopt(false)))
         .pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      if (Result.isFailure(refused)) expect(refused.failure._tag).toBe("OwnedBySomeoneElse");
 
       const adopted = yield* stack.deploy(app(name, { ...limit, limit: 9 }).pipe(adopt(true)));
       expect(adopted.usage.usageLimitId).toBe(foreign.usageLimit.id);

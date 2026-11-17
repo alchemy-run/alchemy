@@ -209,13 +209,13 @@ const URL_ENV = { postgres: "POSTGRES_URL", mysql: "MYSQL_URL" } as const;
 const asUrl = (
   engine: DatabaseEngine,
   username: string,
-  password: Input<Redacted.Redacted<string>>,
-  host: Input<string>,
-  port: Input<number>,
+  password: Redacted.Redacted<string> | Output.Output<Redacted.Redacted<string>>,
+  host: string | Output.Output<string>,
+  port: number | Output.Output<number>,
 ) =>
   Output.map(
-    Output.all(password as never, host as never, port as never),
-    ([secret, address, number]: [Redacted.Redacted<string>, string, number]) =>
+    Output.all(Output.asOutput(password), Output.asOutput(host), Output.asOutput(port)),
+    ([secret, address, number]) =>
       Redacted.make(`${engine}://${username}:${Redacted.value(secret)}@${address}:${number}`),
   );
 
@@ -235,12 +235,12 @@ const hostsOn = (
 ) => {
   const resolved = Output.map(
     Output.all(
-      Output.asOutput(platform.domain as string) as never,
-      Output.asOutput(platform.hosts as HostTemplate | undefined) as never,
+      Output.asOutput(platform.domain as string),
+      Output.asOutput(platform.hosts as HostTemplate | undefined),
     ),
     ([domain, template]: [string, HostTemplate | undefined]) =>
       backendHosts(domain, template, options),
-  ) as Output.Output<{ cloud: string; site: string }, never>;
+  );
   return {
     cloud: Output.map(resolved, (hosts) => hosts.cloud),
     site: Output.map(resolved, (hosts) => hosts.site),
@@ -460,11 +460,11 @@ export const Backend = (id: string, props: BackendProps) =>
       };
       let secrets: Input<Record<string, string>> = {
         INSTANCE_SECRET: instanceSecret.parameterArn,
-      } as never;
+      };
       if (props.platform !== undefined && !onSqlite) {
         const password = yield* Random("DatabasePassword", { bytes: 16 });
         const stageDatabase = yield* StageDatabase("Database", {
-          platform: props.platform as never,
+          platform: props.platform,
           instanceName,
           password: password.text,
           deletionProtection: props.deletionProtection ?? production,
@@ -477,20 +477,21 @@ export const Backend = (id: string, props: BackendProps) =>
         // From another stack the engine is an Output, so the name resolves with it.
         secrets = Output.map(
           Output.all(
-            instanceSecret.parameterArn as never,
-            parameter.parameterArn as never,
-            Output.asOutput(props.platform.database!.engine) as never,
+            instanceSecret.parameterArn,
+            parameter.parameterArn,
+            Output.asOutput(props.platform.database!.engine),
           ),
-          ([instance, database, engine]: [string, string, DatabaseEngine]) => ({
+          // A platform with stage databases always has a database engine.
+          ([instance, database, engine]: [string, string, DatabaseEngine | undefined]) => ({
             INSTANCE_SECRET: instance,
-            [URL_ENV[engine]]: database,
+            [URL_ENV[engine!]]: database,
           }),
-        ) as never;
+        );
       } else if (onSqlite) {
         if (props.platform !== undefined) {
           // The stage database cleans up the bucket prefix; SQLite has none.
           yield* StageStorage("Storage", {
-            storage: platform.storage as never,
+            storage: platform.storage,
             instanceName,
           });
         }
@@ -516,12 +517,12 @@ export const Backend = (id: string, props: BackendProps) =>
           INSTANCE_SECRET: instanceSecret.parameterArn,
           // Only an owned backend on a server reaches here: a url, or one it created.
           [URL_ENV[url?.engine ?? created!.owned!.engine]]: parameter.parameterArn,
-        } as never;
+        };
       }
 
       // Traffic. These stay in this stage on a shared listener.
       const cloudTarget = yield* ELBv2.TargetGroup("CloudTarget", {
-        vpcId: platform.vpcId as never,
+        vpcId: platform.vpcId,
         port: CLOUD_PORT,
         protocol: "HTTP",
         targetType: "ip",
@@ -531,7 +532,7 @@ export const Backend = (id: string, props: BackendProps) =>
         tags,
       });
       const siteTarget = yield* ELBv2.TargetGroup("SiteTarget", {
-        vpcId: platform.vpcId as never,
+        vpcId: platform.vpcId,
         port: SITE_PORT,
         protocol: "HTTP",
         targetType: "ip",
@@ -546,17 +547,17 @@ export const Backend = (id: string, props: BackendProps) =>
         (props.platform !== undefined ? props.listenerPriority : undefined) ??
         listenerPriority(instanceName);
       yield* ELBv2.ListenerRule("CloudRule", {
-        listenerArn: platform.listenerArn as never,
+        listenerArn: platform.listenerArn,
         priority,
-        conditions: [{ hostHeader: { values: [hosts.cloud as never] } }],
+        conditions: [{ hostHeader: { values: [hosts.cloud] } }],
         actions: [
           { type: "forward", targetGroups: [{ targetGroupArn: cloudTarget.targetGroupArn }] },
         ],
       });
       yield* ELBv2.ListenerRule("SiteRule", {
-        listenerArn: platform.listenerArn as never,
+        listenerArn: platform.listenerArn,
         priority: priority + 1,
-        conditions: [{ hostHeader: { values: [hosts.site as never] } }],
+        conditions: [{ hostHeader: { values: [hosts.site] } }],
         actions: [
           { type: "forward", targetGroups: [{ targetGroupArn: siteTarget.targetGroupArn }] },
         ],
@@ -570,11 +571,13 @@ export const Backend = (id: string, props: BackendProps) =>
         ["SiteRecord", hosts.site],
       ] as const) {
         yield* dns.alias(recordId, {
-          name: name as never,
+          // An Output when the platform is another stack's. The adapters pass
+          // the name into record props, which resolve it.
+          name: name as string,
           target: {
-            hostname: platform.albDnsName as never,
+            hostname: platform.albDnsName,
             route53Alias: {
-              hostedZoneId: platform.albZoneId as never,
+              hostedZoneId: platform.albZoneId,
               evaluateTargetHealth: true,
             },
           },
@@ -601,17 +604,17 @@ export const Backend = (id: string, props: BackendProps) =>
                 "s3:AbortMultipartUpload",
                 "s3:ListMultipartUploadParts",
               ],
-              Resource: objects as never,
+              Resource: objects,
             },
             {
               Effect: "Allow",
               Action: ["s3:GetBucketLocation"],
-              Resource: buckets as never,
+              Resource: buckets,
             },
             {
               Effect: "Allow",
               Action: ["s3:ListBucket"],
-              Resource: buckets as never,
+              Resource: buckets,
               ...(props.platform === undefined
                 ? {}
                 : {
@@ -624,7 +627,7 @@ export const Backend = (id: string, props: BackendProps) =>
       });
 
       const service = yield* ECS.Service("Service", {
-        cluster: { clusterArn: platform.clusterArn as never },
+        cluster: { clusterArn: platform.clusterArn },
         image: props.image,
         mirror: props.mirror ?? false,
         cpu,
@@ -633,8 +636,8 @@ export const Backend = (id: string, props: BackendProps) =>
         desiredCount: 1,
         // Fargate on Graviton, and the image is published for it.
         runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" },
-        subnets: [platform.subnetId as never],
-        securityGroups: [platform.backendSecurityGroupId as never],
+        subnets: [platform.subnetId],
+        securityGroups: [platform.backendSecurityGroupId],
         assignPublicIp: false,
         loadBalancers: [
           {
@@ -684,7 +687,7 @@ export const Backend = (id: string, props: BackendProps) =>
             STORAGE_KEYS.map((key) => [STORAGE_ENV[key], platform.storage[key].name]),
           ),
         },
-        secrets: secrets as never,
+        secrets: secrets,
         taskRoleManagedPolicyArns: [storagePolicy.policyArn],
         logging: { retention: props.logRetention },
         tags,
@@ -693,7 +696,7 @@ export const Backend = (id: string, props: BackendProps) =>
       // Through the service, so a push waits for a running backend.
       const running = (value: Output.Output<string, any>) =>
         Output.map(
-          Output.all(value as never, service.serviceArn as never),
+          Output.all(value, service.serviceArn),
           ([resolved]: [string, string]) => resolved,
         );
 

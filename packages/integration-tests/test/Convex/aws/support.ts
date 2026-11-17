@@ -1,8 +1,16 @@
+import * as NodeCrypto from "node:crypto";
+import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { hostLabelOf } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Output from "alchemy/Output";
 import { ConvexClient } from "convex/browser";
 import { anyApi } from "convex/server";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { SELF_HOSTED_FIXTURE_DIR, scratchApp } from "../support.ts";
@@ -11,21 +19,59 @@ import { SELF_HOSTED_FIXTURE_DIR, scratchApp } from "../support.ts";
 export const BACKEND_IMAGE =
   "ghcr.io/convex/convex-backend:latest@sha256:207cf95def42f01614b6e3af0af5c20d0dcaa5ff2adf258ee7bc9555576644fa";
 
-// Self-hosted suites cost money and time, so they run only when asked:
-//   CONVEX_TEST_AWS=1                         run the paid AWS suites, on SQLite
-//   CONVEX_TEST_RDS=1                         also run the suites that create RDS (slow)
-//   CONVEX_TEST_DOMAIN=<zone>                 a public Route 53 zone in the test account
-//   CONVEX_TEST_PRODUCTION_AWS_ACCOUNT=<id>   an account no suite may ever run in
-// Convex Cloud suites that need the Professional plan run with CONVEX_TEST_PRO=1.
+/** The standing Cloudflare test zone. Each suite's public domain sits under it. */
+export const TEST_ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
-/** A public Route 53 domain in the test account. Tests create hosts under it. */
-export const TEST_DOMAIN = process.env.CONVEX_TEST_DOMAIN ?? "";
+/** Self-hosted suites take tens of minutes, so `--fast` skips them. */
+export const skipSlow = !!process.env.FAST;
 
-/** Paid suites run only when asked for, and only with a domain for their certificate. */
-export const skipPaid = process.env.CONVEX_TEST_AWS !== "1" || TEST_DOMAIN === "";
+/**
+ * A suite's public domain for this stage. Kept short, because ACM refuses a
+ * certificate whose domain is over 64 characters: a long stage is cut and
+ * suffixed with its hash, so it still differs per stage.
+ */
+export const domainFor = Effect.fn(function* (suite: string, stage: string) {
+  const label = `cx-${suite}-${hostLabelOf(stage)}`;
+  if (label.length <= 30) return `${label}.${TEST_ZONE}`;
+  const hash = yield* Effect.sync(() =>
+    NodeCrypto.createHash("sha256").update(label).digest("hex").slice(0, 8),
+  );
+  return `${label.slice(0, 21).replace(/-+$/, "")}-${hash}.${TEST_ZONE}`;
+});
 
-/** RDS takes ten minutes or more to come up, so its suites run only on request. */
-export const skipRds = skipPaid || process.env.CONVEX_TEST_RDS !== "1";
+export class TestZoneNotFound extends Data.TaggedError("TestZoneNotFound")<{
+  readonly zone: string;
+}> {}
+
+/** The id of the standing Cloudflare test zone. */
+export const testZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: TEST_ZONE });
+  if (!zone) return yield* new TestZoneNotFound({ zone: TEST_ZONE });
+  return zone.id;
+});
+
+/**
+ * A Route 53 zone for `domain`, delegated from the Cloudflare test zone so the
+ * internet resolves it, and ACM can validate certificates in it.
+ */
+export const DelegatedZone = Effect.fn(function* (parentZoneId: string, domain: string) {
+  const zone = yield* AWS.Route53.HostedZone("Zone", {
+    name: domain,
+    // Removes the validation and host records with the zone.
+    forceDestroy: true,
+  });
+  // Route 53 always assigns four nameservers.
+  yield* Effect.forEach([0, 1, 2, 3], (index) =>
+    Cloudflare.DNS.Record(`Delegation${index}`, {
+      zoneId: parentZoneId,
+      name: domain,
+      type: "NS",
+      content: Output.map(zone.nameServers, (nameServers) => nameServers[index]!),
+    }),
+  );
+  return zone;
+});
 
 /** A private copy of the self-hosted fixture app. */
 export const selfHostedApp = (name: string) => scratchApp(name, SELF_HOSTED_FIXTURE_DIR);

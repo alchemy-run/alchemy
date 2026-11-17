@@ -3,7 +3,6 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { assertDevAccount } from "./guard.ts";
 import { BACKEND_IMAGE } from "./support.ts";
 
 // A shared platform needs a stage that fits in a hostname.
@@ -40,11 +39,10 @@ const platform = Output.literal({
 }) as unknown as Convex.PlatformHandle;
 
 // Plans only, so this creates nothing and costs nothing.
-test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1")(
+test.provider(
   "a backend plans from another stack's platform",
   (stack) =>
     Effect.gen(function* () {
-      yield* assertDevAccount;
       const plan = yield* stack.plan(
         Convex.Backend("Backend", { platform, image: BACKEND_IMAGE, cpu: 512, memory: 1024 }),
       );

@@ -3,7 +3,7 @@ import { team } from "@alchemy.run/convex/Credentials";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as management from "@distilled.cloud/convex/management";
-import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
@@ -120,7 +120,7 @@ test.provider(
 
       const refused = yield* stack.deploy(App({ name }).pipe(adopt(false))).pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      if (Result.isFailure(refused)) expect(refused.failure._tag).toBe("OwnedBySomeoneElse");
       expect(yield* projectsNamed(name)).toHaveLength(1);
 
       const adopted = yield* stack.deploy(App({ name }).pipe(adopt(true)));

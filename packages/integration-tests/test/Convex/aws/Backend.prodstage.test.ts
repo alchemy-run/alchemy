@@ -10,7 +10,6 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as ssm from "@distilled.cloud/aws/ssm";
-import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -18,7 +17,6 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import { assertDevAccount } from "./guard.ts";
 import { BACKEND_IMAGE, databaseServerGone } from "./support.ts";
 
 // A production backend's behaviour, on real AWS. A platform is built by hand
@@ -209,11 +207,10 @@ const databaseExists = Effect.fn(function* (handle: {
   return parsed.rows.length > 0;
 });
 
-test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1" || process.env.CONVEX_TEST_RDS !== "1")(
+test.provider.skipIf(!!process.env.FAST)(
   "a production backend uses bare hosts and refuses to drop its database",
   (stack) =>
     Effect.gen(function* () {
-      yield* assertDevAccount;
       yield* stack.destroy();
 
       // A production backend gets cloud.<domain>, and is protected by default.
@@ -226,7 +223,7 @@ test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1" || process.env.CONVEX_T
       // taken over, so the old one's destroy can't drop data the new one uses.
       const renamed = yield* stack.deploy(app({ id: "Api" })).pipe(Effect.result);
       expect(Result.isFailure(renamed)).toBe(true);
-      if (Result.isFailure(renamed)) expect(renamed.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      if (Result.isFailure(renamed)) expect(renamed.failure._tag).toBe("OwnedBySomeoneElse");
       expect(yield* databaseExists(first.handle as never)).toBe(true);
       yield* stack.deploy(app({}));
 

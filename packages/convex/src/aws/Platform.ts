@@ -1,15 +1,17 @@
 import { domainCertificate, isRoute53Dns } from "@alchemy.run/aws/CustomDomain";
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ECS from "@alchemy.run/aws/ECS";
+import type { ClusterArn } from "@alchemy.run/aws/ECS/Cluster";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
+import type { ListenerArn } from "@alchemy.run/aws/ELBv2/Listener";
 import * as RDS from "@alchemy.run/aws/RDS";
 import { CurrentRegion } from "@alchemy.run/aws/Region";
-import { resolveHostedZoneId } from "@alchemy.run/aws/Route53/HostedZoneLookup";
 import * as S3 from "@alchemy.run/aws/S3";
 import * as SSM from "@alchemy.run/aws/SSM";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
+import * as Output from "alchemy/Output";
 import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import {
@@ -85,9 +87,9 @@ export interface PlatformHandle {
   /** The private subnet in the database's availability zone. */
   subnetId: string;
   /** The ECS cluster stages run in. */
-  clusterArn: string;
+  clusterArn: ClusterArn;
   /** The HTTPS listener stages add their rules to. */
-  listenerArn: string;
+  listenerArn: ListenerArn;
   /** The load balancer's DNS name, for alias records. */
   albDnsName: string;
   /** The load balancer's hosted zone, for alias records. */
@@ -191,10 +193,8 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
 
   const cluster = yield* ECS.Cluster("Cluster", { tags });
 
-  const hostedZoneId = isRoute53Dns(props.dns)
-    ? (props.hostedZoneId ??
-      (yield* resolveHostedZoneId(undefined, props.domain).pipe(Effect.orDie)))
-    : undefined;
+  // Unset, the certificate and each stage's records find the zone by name.
+  const hostedZoneId = isRoute53Dns(props.dns) ? props.hostedZoneId : undefined;
   const { certificateArn } = yield* domainCertificate(
     "Certificate",
     {
@@ -202,7 +202,8 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
       // ACM defaults to us-east-1, for CloudFront. An ALB needs its own region.
       region: yield* CurrentRegion,
       validationMethod: "DNS",
-      ...(hostedZoneId === undefined ? {} : { hostedZoneId: hostedZoneId as never }),
+      // The helper takes plain props; Certificate itself resolves the Output.
+      ...(hostedZoneId === undefined ? {} : { hostedZoneId: hostedZoneId as string }),
       tags,
     },
     props.dns,
@@ -322,8 +323,9 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
     skipFinalSnapshot: !props.deletionProtection,
     tags,
   });
-  const host = database.endpointAddress as Input<string>;
-  const port = database.endpointPort as Input<number>;
+  // Reconcile returns once the instance is available, which is when it has an endpoint.
+  const host = Output.map(database.endpointAddress, (address) => address!);
+  const port = Output.map(database.endpointPort, (number) => number!);
 
   if (runnerSecurityGroup === undefined) {
     return {

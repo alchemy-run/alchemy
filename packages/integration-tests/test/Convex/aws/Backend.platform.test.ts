@@ -1,4 +1,5 @@
 import * as NodePath from "node:path";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex/aws";
 import { hostLabelOf, instanceNameOf } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
@@ -10,13 +11,22 @@ import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import { assertDevAccount } from "./guard.ts";
-import { assertRuntime, listMessages, skipPaid, TEST_DOMAIN } from "./support.ts";
+import {
+  assertRuntime,
+  DelegatedZone,
+  domainFor,
+  listMessages,
+  skipSlow,
+  testZoneId,
+} from "./support.ts";
 
-const { test } = Test.make({ providers: Convex.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Convex.providers(), Cloudflare.providers()),
+});
 
 const EXAMPLE = NodePath.join(
   import.meta.dirname,
@@ -24,7 +34,7 @@ const EXAMPLE = NodePath.join(
 );
 
 /** Drives the example the way a person does, through the real CLI and state store. */
-const alchemy = (platformStage: string, ...args: string[]) =>
+const alchemy = (domain: string, platformStage: string, ...args: string[]) =>
   Effect.scoped(
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner;
@@ -32,7 +42,7 @@ const alchemy = (platformStage: string, ...args: string[]) =>
       const child = yield* spawner.spawn(
         ChildProcess.make("pnpm", ["exec", "alchemy", ...args, "--profile", profile, "--yes"], {
           cwd: EXAMPLE,
-          env: { CONVEX_DOMAIN: TEST_DOMAIN, CONVEX_PLATFORM_STAGE: platformStage },
+          env: { CONVEX_DOMAIN: domain, CONVEX_PLATFORM_STAGE: platformStage },
           extendEnv: true,
           stdin: "ignore",
         }),
@@ -76,7 +86,7 @@ const taskDefinitionOf = (instance: string) =>
 
 const UUID = "3f2b9c1e-0000-4000-8000-000000000000";
 
-test.provider.skipIf(skipPaid)(
+test.provider.skipIf(skipSlow)(
   "two SQLite stages share one platform and stay apart",
   (stack) =>
     Effect.gen(function* () {
@@ -85,12 +95,16 @@ test.provider.skipIf(skipPaid)(
       const platform = `${base}-platform`;
       const one = base;
       const two = `${base}-2`;
-      const cli = (...args: string[]) => alchemy(platform, ...args);
+      const domain = yield* domainFor("platform", stack.stage);
+      const cli = (...args: string[]) => alchemy(domain, platform, ...args);
       const oneInstance = instanceNameOf("ConvexApp", one);
       const twoInstance = instanceNameOf("ConvexApp", two);
 
       return yield* Effect.gen(function* () {
-        yield* assertDevAccount;
+        // The example looks its Route 53 zone up by name, so it exists first.
+        yield* stack.destroy();
+        const parentZoneId = yield* testZoneId;
+        yield* stack.deploy(DelegatedZone(parentZoneId, domain));
         yield* cli("deploy", "stacks/platform.ts", "--stage", platform);
 
         // Once the platform exists, a preview stage is up within five minutes.
@@ -100,8 +114,8 @@ test.provider.skipIf(skipPaid)(
           `stage deploys took ${Duration.format(firstTook)} and ${Duration.format(secondTook)}`,
         );
 
-        const oneUrl = `https://${one}.cloud.${TEST_DOMAIN}`;
-        const twoUrl = `https://${two}.cloud.${TEST_DOMAIN}`;
+        const oneUrl = `https://${one}.cloud.${domain}`;
+        const twoUrl = `https://${two}.cloud.${domain}`;
 
         // The TanStack Start site serves, on the real Website component.
         const websiteUrl = /websiteUrl: '([^']+)'/.exec(first)?.[1];
@@ -186,6 +200,7 @@ test.provider.skipIf(skipPaid)(
             yield* Effect.exit(cli("destroy", "--stage", one));
             yield* Effect.exit(cli("destroy", "--stage", two));
             yield* Effect.exit(cli("destroy", "stacks/platform.ts", "--stage", platform));
+            yield* Effect.exit(stack.destroy());
           }),
         ),
       );

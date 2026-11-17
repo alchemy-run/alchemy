@@ -1,36 +1,45 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex/aws";
-import { hostLabelOf } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { assertDevAccount } from "./guard.ts";
 import {
   assertRuntime,
   BACKEND_IMAGE,
   databaseServerGone,
   selfHostedApp,
   serviceGone,
-  skipRds,
-  TEST_DOMAIN,
+  DelegatedZone,
+  domainFor,
+  skipSlow,
+  testZoneId,
 } from "./support.ts";
 
 /** One backend on a database this stack creates, from deploy to destroy. */
 export const databaseSuite = (engine: "postgres" | "mysql") => {
-  const { test } = Test.make({ providers: Convex.providers() });
-
-  // Per stage, so two people's runs never claim the same hosts.
-  const domainOf = (stage: string) => ({
-    cloud: `convex-${engine}-${hostLabelOf(stage)}-cloud.${TEST_DOMAIN}`,
-    site: `convex-${engine}-${hostLabelOf(stage)}-site.${TEST_DOMAIN}`,
+  const { test } = Test.make({
+    providers: Layer.mergeAll(Convex.providers(), Cloudflare.providers()),
   });
 
-  const app = (stage: string, rootDir: string, deletionProtection: boolean | undefined) =>
+  /** Where a deploy puts the backend: this stage's domain, and its parent zone. */
+  interface Place {
+    readonly domain: string;
+    readonly parentZoneId: string;
+  }
+
+  const app = (place: Place, rootDir: string, deletionProtection: boolean | undefined) =>
     Effect.gen(function* () {
-      const domain = domainOf(stage);
+      const zone = yield* DelegatedZone(place.parentZoneId, place.domain);
+      const domain = {
+        cloud: `cloud.${place.domain}`,
+        site: `site.${place.domain}`,
+        hostedZoneId: zone.id,
+      };
       const backend = yield* Convex.Backend("Backend", {
         image: BACKEND_IMAGE,
         domain,
@@ -43,12 +52,12 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
       return backend;
     });
 
-  const run = (stack: Test.ScratchStack, rootDir: string) =>
+  const run = (stack: Test.ScratchStack, rootDir: string, place: Place) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       // deletionProtection defaults on.
-      const backend = yield* stack.deploy(app(stack.stage, rootDir, undefined));
+      const backend = yield* stack.deploy(app(place, rootDir, undefined));
       yield* assertRuntime({
         url: backend.url,
         siteUrl: backend.siteUrl,
@@ -91,25 +100,28 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
       expect(still.DBInstances?.length).toBe(1);
 
       // Lifting protection lets it go, and nothing is left behind.
-      yield* stack.deploy(app(stack.stage, rootDir, false));
+      yield* stack.deploy(app(place, rootDir, false));
       yield* stack.destroy();
       expect(yield* databaseServerGone(instance.Endpoint!.Address!)).toBe(true);
       expect(yield* serviceGone(backend.service.clusterArn, backend.service.serviceArn)).toBe(true);
     });
 
-  test.provider.skipIf(skipRds)(
+  test.provider.skipIf(skipSlow)(
     `${engine} backend end to end on AWS`,
     (stack) =>
       Effect.gen(function* () {
-        yield* assertDevAccount;
         const rootDir = yield* selfHostedApp(`backend-${engine}`);
-        yield* run(stack, rootDir).pipe(
+        const place = {
+          domain: yield* domainFor(engine, stack.stage),
+          parentZoneId: yield* testZoneId,
+        };
+        yield* run(stack, rootDir, place).pipe(
           // A protected database refuses to go, so a run that stopped early
           // has to lift protection before it can clean up. A run that got
           // through has already destroyed everything itself.
           Effect.onError(() =>
             stack
-              .deploy(app(stack.stage, rootDir, false))
+              .deploy(app(place, rootDir, false))
               .pipe(Effect.ignore, Effect.andThen(stack.destroy()), Effect.ignore),
           ),
         );

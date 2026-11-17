@@ -1,5 +1,4 @@
 import * as Convex from "@alchemy.run/convex";
-import { DeploymentProtected } from "@alchemy.run/convex/Deployment";
 import { isConvexCloudUrl, siteUrlOf } from "@alchemy.run/convex/internal/deployment";
 import { previewIdentifier, previewReference } from "@alchemy.run/convex/internal/references";
 import { expect } from "@alchemy.run/test";
@@ -156,7 +155,7 @@ test.provider(
         .deploy(app(name, { type: "preview", region: "aws-us-east-1", deletionProtection: true }))
         .pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(DeploymentProtected);
+      if (Result.isFailure(refused)) expect(refused.failure._tag).toBe("DeploymentProtected");
       expect(yield* missing(first.deployment.deploymentName)).toBe(false);
 
       yield* stack.deploy(
@@ -178,7 +177,7 @@ test.provider(
 
       const refused = yield* stack.deploy(app(name, { type: "dev" })).pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(DeploymentProtected);
+      if (Result.isFailure(refused)) expect(refused.failure._tag).toBe("DeploymentProtected");
       const live = yield* management.getDeployment({ deploymentName: deployment.deploymentName });
       expect(live.deploymentType).toBe("prod");
 

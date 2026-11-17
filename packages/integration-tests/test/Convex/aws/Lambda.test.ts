@@ -9,7 +9,6 @@ import * as Schedule from "effect/Schedule";
 import ConvexBindingLambda from "../fixtures/lambda.ts";
 import { BindingDeployment } from "../fixtures/resources.ts";
 import { FIXTURE_DIR } from "../support.ts";
-import { assertDevAccount } from "./guard.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Convex.providers(), AWS.providers()),
@@ -19,7 +18,6 @@ test.provider(
   "bindings run from a deployed Lambda",
   (stack) =>
     Effect.gen(function* () {
-      yield* assertDevAccount;
       yield* stack.destroy();
       const { url, deploymentUrl } = yield* stack.deploy(
         Effect.gen(function* () {
