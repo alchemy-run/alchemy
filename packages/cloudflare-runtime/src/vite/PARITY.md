@@ -1,7 +1,7 @@
 # Parity with `@cloudflare/vite-plugin`
 
 Alchemy's Vite plugin replaces `@cloudflare/vite-plugin` (checked against
-**1.69.1**, the catalog version). Frameworks are built against the official
+**1.70.0**, the catalog version). Frameworks are built against the official
 plugin's behavior, so anything they can observe must match. This file is the
 inventory of that surface: every behavior is **matched** (with the test that
 pins it), **different on purpose** (with the reason), or **out of scope**.

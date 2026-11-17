@@ -125,8 +125,8 @@ been dedicated to the public domain. See <https://www.sqlite.org/copyright.html>
 - Astro: [`a2240c43830e29c1d85667f4c610655d6b10253f`](https://github.com/withastro/astro/tree/a2240c43830e29c1d85667f4c610655d6b10253f)
 - SvelteKit: [`f36b3a4cd307bd8c89e03fa191becc175e7b3077`](https://github.com/sveltejs/kit/tree/f36b3a4cd307bd8c89e03fa191becc175e7b3077)
 - Waku: [`39e868f2638c27de9635c68ebf965e14a4112e9b`](https://github.com/wakujs/waku/tree/39e868f2638c27de9635c68ebf965e14a4112e9b)
-- Cloudflare Workers SDK: [`4bca70b301302b018ca28c53af0813de430bedd6`](https://github.com/cloudflare/workers-sdk/tree/4bca70b301302b018ca28c53af0813de430bedd6)
-- Cloudflare Workers SDK (local R2 S3 endpoint, `R2BucketS3.worker.ts`): [`4bca70b301302b018ca28c53af0813de430bedd6`](https://github.com/cloudflare/workers-sdk/tree/4bca70b301302b018ca28c53af0813de430bedd6)
+- Cloudflare Workers SDK: [`110c16279a91927427396b0f3760e27d59a8079a`](https://github.com/cloudflare/workers-sdk/tree/110c16279a91927427396b0f3760e27d59a8079a)
+- Cloudflare Workers SDK (local R2 S3 endpoint, `R2BucketS3.worker.ts`): [`110c16279a91927427396b0f3760e27d59a8079a`](https://github.com/cloudflare/workers-sdk/tree/110c16279a91927427396b0f3760e27d59a8079a)
 - OpenNext for Cloudflare: [`da4b7fc8c89441a6f96205635fa70e329d1f0df7`](https://github.com/opennextjs/opennextjs-cloudflare/tree/da4b7fc8c89441a6f96205635fa70e329d1f0df7)
 - SST: <https://github.com/sst/sst>
 - node-sanitize-filename: <https://github.com/parshap/node-sanitize-filename>
