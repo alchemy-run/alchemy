@@ -12,6 +12,7 @@ import {
 import { NodeHost, type PoolHost } from "@alchemy.run/rivet/Host";
 import type { Providers } from "@alchemy.run/rivet/Providers";
 import { upgrade } from "@alchemy.run/rivet/WebSocket";
+import type { Callbacks } from "alchemy/Callback";
 import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
@@ -59,7 +60,7 @@ export { providers, Providers } from "../Providers.ts";
 type InstanceBuild = Effect.Effect<
   Record<string, unknown>,
   never,
-  EngineState | ObjectState | RuntimeContext | Scope.Scope
+  EngineState | ObjectState | RuntimeContext | Callbacks | Scope.Scope
 >;
 
 /** Domain's storage over a Rivet Durable Object's. */
@@ -295,11 +296,10 @@ const hostClassPhase = (
         set: (at) => state.storage.setAlarm(at),
         get: state.storage.getAlarm(),
       });
-      const runtime = yield* RuntimeContext;
       const record = yield* build.pipe(
         Effect.provideService(ObjectState, objectState(state, storage)),
         Effect.provideService(EngineState, engineState(state)),
-        Effect.provideService(RuntimeContext, { ...runtime, makeCallback: callbacks.makeCallback }),
+        Effect.provide(callbacks.callbacks),
       );
       return { ...record, alarm: () => callbacks.fire } satisfies DomainShape;
     });

@@ -33,10 +33,10 @@ it.effect("withdraws within the balance, and refuses beyond it", () =>
     Story.given(a1, new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" }),
                     new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     Story.provide(CurrentActor, customer("c-1")),        // what the command's middleware would provide
-    Story.when(a1, new WithdrawMoney({ amount: 30 })),
+    Story.when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
     Story.then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
     Story.replied({ balance: 70 }),
-    Story.when(a1, new WithdrawMoney({ amount: 100 })),
+    Story.when(new WithdrawMoney({ accountId: a1.id, amount: 100 })),
     Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
   ),
 );
@@ -100,7 +100,7 @@ A system left out of `stub` is called for real through its adapter Layer, which 
 const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   // Payments runs for real
 
 story(
-  Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+  Story.when(new RecordSettlement({ accountId: account.id, settlementId: "st_1", amount: 500 })),
   Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
   Story.returned(Payments.refund, { refundId: "re_st_1" }),
 ).pipe(Effect.provide(StripePayments));
@@ -136,7 +136,7 @@ Test what a saga does: the events its steps record on aggregates, and how the ru
 Story.then(a1, new TransferDebited({ ... }), new TransferRefunded({ ... })),   // the compensation ran
 Story.saga(ExecuteTransfer, t1, { _tag: "Rejected", rejection: new DestinationClosed() }),
 Story.saga(ExecuteTransfer, t1, { _tag: "Running" }),
-Story.signal(ExecuteTransfer, t1, Decision, "approved"),    // complete a DurableDeferred it waits on
+Story.signal(ExecuteTransfer, t1, Approval, "approved"),    // complete a DurableDeferred it waits on
 ```
 
 The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted` and `Died`. A run that dies fails the story unless a step asserts `{ _tag: "Died" }`.
@@ -183,10 +183,10 @@ const asCustomer = (id: string) =>
 it.live("only the owner may withdraw", () =>
   Effect.gen(function* () {
     const sam = yield* asCustomer("c-1");
-    const deposited = yield* sam.DepositMoney(accountId, { amount: 250 });
+    const deposited = yield* sam.DepositMoney({ accountId, amount: 250 });
     // deposited: { reply: { balance: 250 }, stream: "Account/...", version: 2 }
     const alex = yield* asCustomer("c-2");
-    const refused = yield* alex.WithdrawMoney(accountId, { amount: 10 }, mfa).pipe(Effect.flip);
+    const refused = yield* alex.WithdrawMoney({ accountId, amount: 10 }, mfa).pipe(Effect.flip);
     expect(refused._tag).toBe("NotOwner");
   }).pipe(Effect.scoped, Effect.provide(World)),
 );

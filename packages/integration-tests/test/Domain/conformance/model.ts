@@ -1,10 +1,11 @@
 /**
  * The model every Domain platform runs for the conformance suite: an
  * aggregate that rejects, a view, a projection fed by that view, a policy
- * that starts a saga, a saga that writes to another aggregate, and a policy
- * that schedules and cancels a command, plus a view that refuses every reader
- * and a command that dies. Between them the platform hosts every kind of object and runs
- * its workflow engine and its durable timers.
+ * that starts a saga, a saga that writes to another aggregate, a policy that
+ * schedules and cancels a command, and a decision that commits across two
+ * instances, plus a view that refuses every reader and a command that dies.
+ * Between them the platform hosts every kind of object, runs its workflow
+ * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
@@ -16,16 +17,27 @@ export class Incremented extends Domain.Event("Incremented", { by: Schema.Int })
 export class TooBig extends Domain.Rejection("TooBig", { max: Schema.Int }) {}
 
 export class Increment extends Domain.Command("Increment", {
-  target: Schema.String,
-  input: { by: Schema.Int },
+  input: { id: Schema.String, by: Schema.Int },
   events: [Incremented],
   rejects: [TooBig],
   reply: { total: Schema.Int },
 }) {}
 
+export class Taken extends Domain.Event("Taken", { by: Schema.Int }) {}
+export class Received extends Domain.Event("Received", { by: Schema.Int }) {}
+export class Short extends Domain.Rejection("Short", { total: Schema.Int }) {}
+
+/** Move part of one counter's total to another: both change, or neither. */
+export class Give extends Domain.Command("Give", {
+  input: { from: Schema.String, to: Schema.String, by: Schema.Int },
+  events: [Taken, Received],
+  rejects: [Short],
+  reply: { total: Schema.Int },
+}) {}
+
 /** A command whose handler dies, with internals in the defect a client must never see. */
 export class Explode extends Domain.Command("Explode", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [Incremented],
 }) {}
 
@@ -37,6 +49,8 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment, Explode],
+  keyOf: (command) => command.id,
+  events: [Taken, Received],
   decide: {
     Increment: (_, command) =>
       command.by > 10 ? new TooBig({ max: 10 }) : [new Incremented({ by: command.by })],
@@ -44,17 +58,28 @@ export class Counter extends Domain.Aggregate("Counter", {
   },
   evolve: {
     Incremented: (state, event) => ({ total: state.total + event.by }),
+    Taken: (state, event) => ({ total: state.total - event.by }),
+    Received: (state, event) => ({ total: state.total + event.by }),
   },
   reply: {
     Increment: (state) => ({ total: state.total }),
   },
 }) {}
 
+export class Giving extends Domain.Decision(Give, {
+  reads: { from: Counter, to: Counter },
+  keyOf: (command) => ({ from: command.from, to: command.to }),
+  decide: ({ from, to }, command) =>
+    command.by > from.state.total
+      ? new Short({ total: from.state.total })
+      : [from.record(new Taken({ by: command.by })), to.record(new Received({ by: command.by }))],
+  reply: ({ from }) => ({ total: from.total }),
+}) {}
+
 export class Mirrored extends Domain.Event("Mirrored", { by: Schema.Int }) {}
 
 export class Mirror extends Domain.Command("Mirror", {
-  target: Schema.String,
-  input: { by: Schema.Int },
+  input: { id: Schema.String, by: Schema.Int },
   events: [Mirrored],
 }) {}
 
@@ -64,6 +89,7 @@ export class Echo extends Domain.Aggregate("Echo", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Mirror],
+  keyOf: (command) => command.id,
   decide: {
     Mirror: (_, command) => [new Mirrored({ by: command.by })],
   },
@@ -82,6 +108,8 @@ export class CounterTotal extends Domain.View("CounterTotal", {
       total: view.total + event.by,
       increments: view.increments + 1,
     }),
+    Taken: (view, event) => ({ ...view, total: view.total - event.by }),
+    Received: (view, event) => ({ ...view, total: view.total + event.by }),
   },
 }) {}
 
@@ -150,7 +178,7 @@ const MirrorFirstLive = MirrorFirst.toLayer(
     return Effect.fn(function* ({ key, by }) {
       yield* Activity.make({
         name: "mirror",
-        execute: echoes.send(key, new Mirror({ by })).pipe(Effect.orDie),
+        execute: echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie),
       });
     });
   }),
@@ -180,15 +208,15 @@ export class HoldReleased extends Domain.Event("HoldReleased") {}
 export class HoldExpired extends Domain.Event("HoldExpired") {}
 
 export class PlaceHold extends Domain.Command("PlaceHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldPlaced],
 }) {}
 export class ReleaseHold extends Domain.Command("ReleaseHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldReleased],
 }) {}
 export class ExpireHold extends Domain.Command("ExpireHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldExpired],
 }) {}
 
@@ -197,6 +225,7 @@ export class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
+  keyOf: (command) => command.id,
   decide: {
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],
@@ -220,7 +249,10 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
-        yield* holds.schedule(source, new ExpireHold(), { after: HOLD_WINDOW, commandId: EXPIRY });
+        yield* holds.schedule(new ExpireHold({ id: source.id }), {
+          after: HOLD_WINDOW,
+          commandId: EXPIRY,
+        });
       } else {
         yield* holds
           .unschedule(source, EXPIRY)
@@ -237,6 +269,7 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold],
+  decisions: [Giving],
   views: [CounterTotal, HiddenTotal],
   projections: [TotalWriter],
   streams: [Recorded],
@@ -247,7 +280,7 @@ export class Conformance extends Domain.Model("Conformance", {
 /** The model's Api: its counter and view, served at the front's `/api`. */
 export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
-  commands: ["Increment", "Explode"],
+  commands: ["Increment", "Explode", "Give"],
   views: ["CounterTotal", "HiddenTotal"],
 }) {}
 

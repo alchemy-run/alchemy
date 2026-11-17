@@ -1,4 +1,7 @@
-import { outsideAlarmPass } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
+import {
+  DurableObjectCallbacks,
+  outsideAlarmPass,
+} from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import {
   DurableObject as CloudflareDurableObject,
   type DurableObjectGetDurableObjectOptions,
@@ -19,7 +22,7 @@ import {
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
 import * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
+import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -159,7 +162,10 @@ const onCloudflare = (impl: ObjectImpl): CloudflareImpl =>
     Effect.gen(function* () {
       const state = yield* DurableObjectState;
       const runtime = yield* RuntimeContext;
-      return yield* impl.pipe(Effect.provideService(ObjectState, objectState(state, runtime)));
+      return yield* impl.pipe(
+        Effect.provideService(ObjectState, objectState(state, runtime)),
+        Effect.provide(DurableObjectCallbacks),
+      );
     }),
   );
 
@@ -580,7 +586,11 @@ const sagaEngine = (
   makeDurableObjectEngine({
     declare: (name, impl) =>
       Effect.map(
-        declare(name, sagaRenames.get(name) ?? {}, impl as unknown as CloudflareImpl),
+        declare(
+          name,
+          sagaRenames.get(name) ?? {},
+          provideCallbacks(impl, DurableObjectCallbacks) as unknown as CloudflareImpl,
+        ),
         (namespace) => placed(namespace, placement),
       ),
     state: DurableObjectState,

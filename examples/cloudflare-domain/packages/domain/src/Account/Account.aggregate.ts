@@ -94,6 +94,7 @@ export class Account extends Domain.Aggregate("Account", {
     RefundTransfer,
     RecordSettlement,
   ],
+  keyOf: (command) => command.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened"
