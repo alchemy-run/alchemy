@@ -289,9 +289,10 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         // It is listed once the directory answers, with no further command.
         yield* eventually(() => directory.state.attempts > 0);
         yield* Deferred.succeed(directory.state.gate!, undefined);
-        yield* eventually(() => directory.listed.length > 0);
-        expect(directory.listed).toContain("main");
-        // It is listed once: nothing is pending afterwards.
+        // The view's key lists itself too, once it has applied the first event.
+        yield* eventually(() => directory.listed.length === 2);
+        expect(directory.listed).toEqual(["main", "main"]);
+        // Each is listed once: nothing is pending afterwards.
         const attempts = directory.state.attempts;
         yield* (yield* Ledger).send(new BookMany({ id: Ledger.ref("main").id, count: 1 }));
         yield* Effect.sleep("300 millis");
