@@ -213,7 +213,12 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       const bindWebSocket = () => {
         removeUpgradeListener?.();
         removeUpgradeListener = server.httpServer
-          ? handleWebSocket(server.httpServer, address, proxySharedSecret)
+          ? handleWebSocket(
+              server.httpServer,
+              address,
+              proxySharedSecret,
+              server.config.server.ws !== false,
+            )
           : undefined;
       };
 
