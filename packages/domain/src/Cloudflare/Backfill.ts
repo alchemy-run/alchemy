@@ -151,6 +151,18 @@ const retryInternal = {
   times: 30,
 };
 
+/**
+ * Right after `createInstance` on a Workflow uploaded in the same deploy,
+ * `getInstance` can answer not found (and internal errors) for a few seconds:
+ * call again, for at most a minute.
+ */
+const retryJustStarted = {
+  while: (error: { readonly _tag: string }) =>
+    error._tag === "InstanceNotFound" || error._tag === "WorkflowInternalError",
+  schedule: Schedule.spaced("2 seconds"),
+  times: 30,
+};
+
 /** Each run's progress from the latest check step's output (an array of {@link Progress}). */
 export const progressOf = (steps: ReadonlyArray<object>) => {
   for (let i = steps.length - 1; i >= 0; i--) {
@@ -281,6 +293,17 @@ const BackfillLive = () =>
                 times: 30,
               }),
             );
+          // On a Workflow created in the same deploy, the instance just created can read as
+          // missing for a moment. Wait for it here, once: later polls treat a missing
+          // instance as missing.
+          yield* workflows
+            .getInstance({
+              accountId,
+              workflowName: news.workflowName,
+              instanceId: id,
+              simple: true,
+            })
+            .pipe(Effect.retry(retryJustStarted));
           return id;
         });
 

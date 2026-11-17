@@ -27,7 +27,7 @@ export const ApproveLive = Approve.toLayer(
       yield* Activity.make({
         name: "open",
         execute: accounts
-          .send(key, new Open({ owner: `${owner}:${approvedBy}` }))
+          .send(new Open({ id: key, owner: `${owner}:${approvedBy}` }))
           .pipe(Effect.asVoid),
       });
     });
@@ -110,7 +110,7 @@ export const upgradeWorker = ({
         if (!route || !model) return HttpServerResponse.text("Not Found", { status: 404 });
         const id = decodeURIComponent(route[3]!);
         if (route[2] === "open") {
-          const receipt = yield* model.accounts.send(id, new Open({ owner: route[4]! }));
+          const receipt = yield* model.accounts.send(new Open({ id, owner: route[4]! }));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
         if (route[2] === "owners")
