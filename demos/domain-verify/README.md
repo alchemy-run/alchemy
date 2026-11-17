@@ -7,4 +7,6 @@ pnpm studio   # edit with live preview
 pnpm render   # out/domain-verify.mp4
 ```
 
+The rendered video is checked in at [`out/domain-verify.mp4`](./out/domain-verify.mp4).
+
 Each scene is one file in `src/scenes`, and `src/Video.tsx` puts them in order with their lengths.

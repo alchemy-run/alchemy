@@ -1,2 +1,2 @@
-# The rendered video and stills; regenerate with `pnpm render`.
-out/
+# Stills are scratch output; the rendered video is checked in. Regenerate with `pnpm render`.
+out/stills/
