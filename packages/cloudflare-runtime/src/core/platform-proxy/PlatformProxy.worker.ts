@@ -312,7 +312,18 @@ const handleCall = async (request: WorkerRequest, env: Env): Promise<Response> =
     throw new ProxyRequestError("platform-proxy: malformed /call request body");
   }
   const result = await evaluateChain(env, binding, chain);
-  return await encodeResult(result);
+  try {
+    return await encodeResult(result);
+  } finally {
+    // Streams become the response body and must stay live until it is consumed.
+    if (!(result instanceof ReadableStream)) {
+      try {
+        (result as Partial<Disposable> | null | undefined)?.[Symbol.dispose]?.();
+      } catch {
+        // Preserve the encoded response, or the original encoding error.
+      }
+    }
+  }
 };
 
 // ---------------------------------------------------------------------------
