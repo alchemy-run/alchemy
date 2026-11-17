@@ -36,6 +36,15 @@ export const awsApp = Effect.gen(function* () {
         Effect.match({ onFailure: (error) => error._tag, onSuccess: () => "allowed" }),
         Effect.provide(own),
       );
+      // 1 MiB of bytes up, and streamed back down in pieces, through the
+      // gateway.
+      yield* put({ Key: "bytes.bin", Body: new Uint8Array(1024 * 1024).fill(7) });
+      const streamed = yield* (yield* get({ Key: "bytes.bin" })).Body!.pipe(
+        Stream.runFold(
+          () => 0,
+          (bytes, part) => bytes + part.length,
+        ),
+      );
       // The gateway signs the URL; the sandbox downloads straight from S3.
       const signed = yield* presign({ key: "note.txt" });
       const client = yield* HttpClient.HttpClient;
@@ -44,6 +53,7 @@ export const awsApp = Effect.gen(function* () {
         Effect.provide(FetchHttpClient.layer),
       );
       return yield* HttpServerResponse.json({
+        streamed,
         presignedHost: new URL(signed).host,
         downloaded,
         body,
@@ -69,6 +79,7 @@ export const AwsGateway = Layer.mergeAll(
 
 /** What {@link awsApp} answers. */
 export interface AwsServed {
+  readonly streamed: number;
   readonly presignedHost: string;
   readonly downloaded: string;
   readonly body: string;

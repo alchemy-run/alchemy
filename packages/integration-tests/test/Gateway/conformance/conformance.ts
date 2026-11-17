@@ -35,6 +35,8 @@ export const expectNoCredential = (
 export const expectAwsGatewayed = (served: AwsServed) => {
   expect(served.body).toBe("written through the gateway");
   expect(served.contentLength).toBe(27);
+  // Bytes arrived whole, and streamed back.
+  expect(served.streamed).toBe(1024 * 1024);
   // A presigned URL is signed by the gateway and points at S3, not at it.
   expect(served.presignedHost).toContain("amazonaws.com");
   expect(served.downloaded).toBe("written through the gateway");

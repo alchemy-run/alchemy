@@ -266,9 +266,19 @@ const unreachable =
 const BYTES = "~alchemy/gateway/bytes";
 
 /** JSON with bytes kept. A `Redacted` value never crosses: it encodes as `<redacted>`. */
+const toBase64 = (bytes: Uint8Array) => {
+  // In pieces: one `fromCharCode` call takes a bounded number of arguments.
+  let text = "";
+  for (let at = 0; at < bytes.length; at += 0x8000) {
+    text += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  }
+  return btoa(text);
+};
+
+/** JSON with bytes kept. A `Redacted` value never crosses: it encodes as `<redacted>`. */
 export const encode = (value: unknown): string =>
   JSON.stringify(value, (_key, item) =>
-    item instanceof Uint8Array ? { _tag: BYTES, b64: btoa(String.fromCharCode(...item)) } : item,
+    item instanceof Uint8Array ? { _tag: BYTES, b64: toBase64(item) } : item,
   ) ?? "null";
 
 export const decode = (text: string): unknown =>
