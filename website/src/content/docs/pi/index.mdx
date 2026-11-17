@@ -66,7 +66,6 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   RunTestsLive,
   PiCloudflare.DurableObjectStorage,
-  Pi.NoEnv,
 ).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
 
 export default class Session extends Cloudflare.DurableObject<Session>()(
@@ -129,7 +128,7 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 
 ## Tools in a sandbox
 
-A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi.Sandbox` is the function that finds or creates a conversation's sandbox:
+A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi.Sandbox` opens a conversation's sandbox and removes it:
 
 ```typescript
 const E2BSandbox = Layer.effect(
@@ -137,27 +136,48 @@ const E2BSandbox = Layer.effect(
   Effect.gen(function* () {
     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* E2B.CreateSandbox(base);
-    return Effect.fn(function* ({ instanceId, conversationId }) {
-      const metadata = { instance: instanceId, conversation: String(conversationId) };
-      const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
-      return existing
-        ? yield* sandboxes.connect(existing.sandboxID)
-        : yield* sandboxes.create({ metadata, timeout: 600 });
+    const metadataOf = ({ instanceId, conversationId }: Pi.SandboxKey) => ({
+      instance: instanceId,
+      conversation: String(conversationId),
     });
+    const find = (key: Pi.SandboxKey) =>
+      sandboxes.list({ metadata: metadataOf(key), state: ["running", "paused"] });
+
+    return {
+      open: Effect.fn(function* (target) {
+        const [existing] = yield* find(target);
+        return existing
+          ? yield* sandboxes.connect(existing.sandboxID)
+          : yield* sandboxes.create({ metadata: metadataOf(target), timeout: 600 });
+      }),
+      remove: Effect.fn(function* (key) {
+        const found = yield* find(key);
+        yield* Effect.forEach(found, (sandbox) => sandboxes.kill(sandbox.sandboxID));
+      }),
+    };
   }),
 ).pipe(Layer.provide(E2B.CreateSandboxHttp));
 ```
 
 The template is the image every sandbox boots from; the deploy builds it. Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
 
-`Pi.SandboxEnv` starts Pi's own `pi-env` daemon in that sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they do locally:
+`Pi.CodingTools` require a `Pi.Sandbox`, so a harness that lists them compiles only once the Layer is provided:
 
 ```typescript
-const HarnessLive = Layer.mergeAll(
-  FastLive,
-  PiCloudflare.DurableObjectStorage,
-  Pi.SandboxEnv,
-).pipe(Layer.provide(E2BSandbox));
+const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
+```
+
+```typescript
+const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, E2BSandbox);
+```
+
+Pi's own `pi-env` daemon runs in the sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they do locally.
+
+A conversation deletes its own sandbox. Its next tool call opens a new one:
+
+```typescript
+const conversation = yield* harness.conversationByName(name);
+yield* conversation.removeSandbox;
 ```
 
 ### Another sandbox platform
@@ -170,15 +190,20 @@ const DaytonaSandbox = Layer.effect(
   Effect.gen(function* () {
     const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* Daytona.CreateSandbox(base);
-    return Effect.fn(function* ({ instanceId, conversationId }) {
-      const name = `pi-${instanceId.slice(0, 16)}-${conversationId}`;
-      const existing = yield* sandboxes.get(name);
-      if (existing === undefined) {
-        return yield* sandboxes.create({ name, autoStopInterval: 15 });
-      }
-      yield* existing.startSandbox();
-      return existing;
-    });
+    const nameOf = ({ instanceId, conversationId }: Pi.SandboxKey) =>
+      `pi-${instanceId.slice(0, 16)}-${conversationId}`;
+
+    return {
+      open: Effect.fn(function* (target) {
+        const existing = yield* sandboxes.get(nameOf(target));
+        if (existing === undefined) {
+          return yield* sandboxes.create({ name: nameOf(target), autoStopInterval: 15 });
+        }
+        yield* existing.startSandbox();
+        return existing;
+      }),
+      remove: (key) => sandboxes.delete(nameOf(key)),
+    };
   }),
 ).pipe(Layer.provide(Daytona.CreateSandboxHttp));
 ```
@@ -189,9 +214,9 @@ Changing platform is changing that one Layer:
 const HarnessLive = Layer.mergeAll(
   FastLive,
   PiCloudflare.DurableObjectStorage,
-  Pi.SandboxEnv,
--).pipe(Layer.provide(E2BSandbox));
-+).pipe(Layer.provide(DaytonaSandbox));
+-  E2BSandbox,
++  DaytonaSandbox,
+);
 ```
 
 The [cloudflare-pi example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-pi) has the Layer for each of the five platforms.
@@ -246,7 +271,7 @@ The harness keeps the Durable Object's alarm armed while Pi has work. An evicted
 
 ## Other hosts
 
-On a long-lived machine (a Fly Machine, an ECS task, a container) swap the storage and the environment; the harness and its tools are unchanged:
+On a long-lived machine (a Fly Machine, an ECS task, a container) swap the storage, and give the coding tools the machine itself in place of a sandbox; the harness and its tools are unchanged:
 
 ```typescript
 const BoxLive = Layer.mergeAll(

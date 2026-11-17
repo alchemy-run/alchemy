@@ -25,7 +25,6 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
   PiCloudflare.DurableObjectStorage,
-  Pi.NoEnv,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 ).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
 

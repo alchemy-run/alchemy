@@ -9,7 +9,6 @@ import { BoatSandbox } from "./sandboxes/Boat.ts";
 import { DaytonaSandbox } from "./sandboxes/Daytona.ts";
 import { E2BSandbox } from "./sandboxes/E2B.ts";
 import { ModalSandbox } from "./sandboxes/Modal.ts";
-import { RemoveSandbox } from "./sandboxes/RemoveSandbox.ts";
 
 /**
  * A coding agent: Pi's own `read`, `write`, `edit` and `bash` tools, run in
@@ -18,14 +17,11 @@ import { RemoveSandbox } from "./sandboxes/RemoveSandbox.ts";
  * Which platform the sandbox is on is the one Layer passed in. Nothing else
  * changes from one platform to the next.
  */
-const workspace = <E, R>(sandbox: Layer.Layer<Pi.Sandbox | RemoveSandbox, E, R>) =>
+const workspace = <E, R>(sandbox: Layer.Layer<Pi.Sandbox, E, R>) =>
   Effect.gen(function* () {
-    const removeSandbox = yield* RemoveSandbox;
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
       return {
         create: Effect.fn(function* (name: string) {
           const conversation = yield* harness.createConversation({
@@ -65,20 +61,11 @@ const workspace = <E, R>(sandbox: Layer.Layer<Pi.Sandbox | RemoveSandbox, E, R>)
         /** Delete the conversation's sandbox. Its next tool call starts a new one. */
         remove: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
-          yield* removeSandbox({
-            instanceId: state.id.toString(),
-            conversationId: conversation.id,
-          });
+          yield* conversation.removeSandbox;
         }),
       };
     });
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, Pi.SandboxEnv).pipe(
-        Layer.provideMerge(sandbox),
-      ),
-    ),
-  );
+  }).pipe(Effect.provide(Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, sandbox)));
 
 export class E2BWorkspace extends Cloudflare.DurableObject<E2BWorkspace>()(
   "E2BWorkspace",

@@ -20,7 +20,7 @@ import { Storage } from "../Storage.ts";
  *
  * **Example:** A harness in a Durable Object
  * ```typescript
- * const HarnessLive = Layer.mergeAll(ModelsLive, PiCloudflare.DurableObjectStorage, Pi.NoEnv);
+ * const HarnessLive = Layer.mergeAll(ModelsLive, PiCloudflare.DurableObjectStorage);
  * ```
  *
  * @layer

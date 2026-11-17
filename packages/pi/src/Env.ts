@@ -1,11 +1,9 @@
 import type { Context as ChordContext } from "@earendil-works/chord/context";
 import type { EnvTarget as PiEnvTarget } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { fromPi } from "./internal/promise.ts";
 
 /** A file operation or command in the conversation's environment failed. */
@@ -114,52 +112,3 @@ export type EnvTarget = PiEnvTarget & {
    */
   readonly instanceId: string;
 };
-
-/**
- * Where a conversation's tools run: builds the Pi `ExecutionEnv` for each
- * tool call from the conversation's id and working directory. Provide one
- * of `Pi.LocalEnv`, `Pi.NoEnv`, or a sandbox environment.
- */
-export class EnvHost extends Context.Service<
-  EnvHost,
-  {
-    readonly make: (
-      target: EnvTarget,
-    ) => Effect.Effect<ExecutionEnv | undefined, EnvError, RuntimeContext>;
-  }
->()("Pi.EnvHost") {}
-
-/**
- * No files and no shell: the built-in coding tools answer with an error,
- * and only your own tools run. For agents that only call APIs.
- *
- * @layer
- * @provides Pi.EnvHost
- */
-export const NoEnv: Layer.Layer<EnvHost> = Layer.succeed(EnvHost, {
-  make: () => Effect.succeed(undefined),
-});
-
-/**
- * Tools run on this machine, in `cwd` or the conversation's own working
- * directory. Needs Node or Bun (a Fly Machine, an ECS task, a container).
- *
- * @layer
- * @provides Pi.EnvHost
- */
-export const LocalEnv = (options: { readonly cwd: string }): Layer.Layer<EnvHost> =>
-  Layer.succeed(EnvHost, {
-    make: (target) =>
-      Effect.tryPromise({
-        try: async () => {
-          const { NodeExecutionEnv } = await import("@earendil-works/pi-durable/env/node");
-          return new NodeExecutionEnv({ cwd: target.cwd ?? options.cwd });
-        },
-        catch: (cause) =>
-          new EnvError({
-            operation: "open",
-            code: "unknown",
-            message: `Pi.LocalEnv needs Node or Bun: ${String(cause)}`,
-          }),
-      }),
-  });

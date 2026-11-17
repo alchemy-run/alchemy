@@ -1,8 +1,10 @@
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 import { CodingTools as PiCodingTools } from "@earendil-works/pi-durable/tools";
+import type { Sandbox } from "./Sandbox.ts";
 import { builtin, group, type BuiltinTool } from "./Tool.ts";
 
-const named = <Name extends string>(name: Name): BuiltinTool<Name> => {
+/** A coding tool works on files or a shell, so listing it requires a `Pi.Sandbox`. */
+const named = <Name extends string>(name: Name): BuiltinTool<Name, Sandbox> => {
   const registration = (PiCodingTools.tools ?? []).find((tool) => tool.name === name);
   if (registration === undefined) throw new Error(`Pi's coding tools have no "${name}"`);
   return builtin(registration as ToolRegistration & { name: Name });
@@ -17,5 +19,8 @@ export const Edit = named("edit");
 /** Run a shell command in the conversation's environment. */
 export const Bash = named("bash");
 
-/** Pi's coding tools: `read`, `write`, `edit` and `bash`. */
+/**
+ * Pi's coding tools: `read`, `write`, `edit` and `bash`. They run in the
+ * conversation's `Pi.Sandbox`, which a harness that lists them requires.
+ */
 export const CodingTools = group(Read, Write, Edit, Bash);

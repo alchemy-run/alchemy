@@ -115,10 +115,12 @@ export interface InlineTool<Name extends string, Spec extends ToolSpec> {
 }
 
 /** One of Pi's own tools (`read`, `bash`, …), used as is. */
-export interface BuiltinTool<Name extends string = string> {
+export interface BuiltinTool<Name extends string = string, Requires = never> {
   readonly [ToolTypeId]: "builtin";
   readonly toolName: Name;
   readonly registration: ToolRegistration;
+  /** Phantom: what yielding the harness that lists this tool requires. */
+  readonly "~requires"?: Requires;
 }
 
 /** Several tools listed as one. */
@@ -135,20 +137,21 @@ export interface AnyToolClass {
   readonly spec: ToolSpec;
   readonly impl: Effect.Effect<any, never, any> | undefined;
 }
-export type AnyTool = AnyToolClass | InlineTool<string, any> | BuiltinTool | ToolGroup;
+export type AnyTool = AnyToolClass | InlineTool<string, any> | BuiltinTool<string, any> | ToolGroup;
+
+type OwnRequirements<T> =
+  T extends ToolClass<any, any, any, infer Requires>
+    ? Requires
+    : T extends BuiltinTool<any, infer Requires>
+      ? Requires
+      : never;
 
 /** What listing `T` on a harness requires to be provided. */
 export type ToolRequirements<T> =
-  T extends ToolClass<any, any, any, infer Requires>
-    ? Requires
-    : T extends ToolGroup<infer Tools>
-      ? Tools[number] extends ToolClass<any, any, any, infer Requires>
-        ? Requires
-        : never
-      : never;
+  T extends ToolGroup<infer Tools> ? OwnRequirements<Tools[number]> : OwnRequirements<T>;
 
 /** A tool that can be enabled on a conversation, by reference. */
-export type ToolRef = AnyToolClass | InlineTool<string, any> | BuiltinTool;
+export type ToolRef = AnyToolClass | InlineTool<string, any> | BuiltinTool<string, any>;
 
 export const isTool = (u: unknown): u is AnyTool =>
   (typeof u === "object" || typeof u === "function") && u !== null && ToolTypeId in u;
@@ -251,9 +254,9 @@ export const group = <const Tools extends ReadonlyArray<AnyTool>>(
 });
 
 /** Wrap one of Pi's own tool registrations. */
-export const builtin = <Name extends string>(
+export const builtin = <Name extends string, Requires = never>(
   registration: ToolRegistration & { name: Name },
-): BuiltinTool<Name> => ({
+): BuiltinTool<Name, Requires> => ({
   [ToolTypeId]: "builtin",
   toolName: registration.name,
   registration,
@@ -350,7 +353,7 @@ const missingEnv = new Proxy(
     get: (_target, property) => {
       if (property === "then") return undefined;
       throw new Error(
-        `This harness has no environment (Pi.NoEnv): the tool cannot use files or a shell (${String(property)}).`,
+        `This harness has no Pi.Sandbox: the tool cannot use files or a shell (${String(property)}).`,
       );
     },
   },

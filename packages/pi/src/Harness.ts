@@ -44,12 +44,12 @@ import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { CODEMODE_TOOL, CodeModeConvention, isCodeMode } from "./CodeMode.ts";
-import { EnvHost } from "./Env.ts";
 import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
 import type { AnyModel, ModelService } from "./Model.ts";
+import { makeEnvFor, Sandbox } from "./Sandbox.ts";
 import { isSkill, type AnySkill } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
@@ -181,6 +181,11 @@ export interface Conversation {
   readonly watch: (
     window?: ConversationWindow,
   ) => Stream.Stream<ConversationView, PiError, RuntimeContext>;
+  /**
+   * Delete the conversation's sandbox (`Pi.Sandbox`'s `remove`). Its next
+   * tool call opens a new one. Does nothing on a harness without a sandbox.
+   */
+  readonly removeSandbox: Effect.Effect<void, PiError, RuntimeContext>;
   /** Pi's own handle, for what this view doesn't cover. */
   readonly raw: Effect.Effect<PiConversation, PiError, RuntimeContext>;
 }
@@ -310,7 +315,6 @@ export const Harness = <
   Harness,
   never,
   | Storage
-  | EnvHost
   | ModelServices<Models>
   | ToolRequirements<Tools[number]>
   | ExtensionRequirements<Extensions[number]>
@@ -318,7 +322,10 @@ export const Harness = <
   Effect.gen(function* () {
     const prefix = `${options.name ?? "pi"}_`;
     const storage = yield* (yield* Storage).instance;
-    const envHost = yield* EnvHost;
+    // Where tools find files and a shell. A harness without one runs only
+    // tools that need neither; the coding tools require it in their type.
+    const sandbox = Option.getOrUndefined(yield* Effect.serviceOption(Sandbox));
+    const envFor = sandbox === undefined ? undefined : makeEnvFor(sandbox);
 
     // Resolve every model and tool implementation here, where their Layers
     // (and the bindings those declare) are provided.
@@ -540,12 +547,16 @@ export const Harness = <
                       ...options.settings,
                       extensions: defaultExtensions,
                     },
-                    env: (target) =>
-                      Effect.runPromiseWith(base)(
-                        envHost
-                          .make({ ...target, instanceId: storage.id })
-                          .pipe(Effect.catch((error) => Effect.die(new Error(error.message)))),
-                      ),
+                    ...(envFor === undefined
+                      ? {}
+                      : {
+                          env: (target) =>
+                            Effect.runPromiseWith(base)(
+                              envFor({ ...target, instanceId: storage.id }).pipe(
+                                Effect.catch((error) => Effect.die(new Error(error.message))),
+                              ),
+                            ),
+                        }),
                     // With `onWake`, Pi arms no timers of its own: the
                     // instance's alarm wakes it (see `arm`).
                     ...(storage.evictable ? { onWake } : {}),
@@ -732,6 +743,17 @@ export const Harness = <
       return {
         id,
         raw: Effect.map(raw, ({ conversation }) => conversation),
+        removeSandbox:
+          sandbox === undefined
+            ? Effect.void
+            : Effect.suspend(() =>
+                sandbox.remove({ instanceId: storage.id, conversationId: id }),
+              ).pipe(
+                Effect.asVoid,
+                Effect.mapError(
+                  (cause) => new PiError({ message: `Sandbox: ${messageOf(cause)}`, cause }),
+                ),
+              ),
         agent: on((conversation) => fromPi((context) => conversation.agent(context))),
         configure: (requested) =>
           on((conversation) =>
@@ -901,5 +923,8 @@ export const Harness = <
   }) as Effect.Effect<
     Harness,
     never,
-    Storage | EnvHost | ModelServices<Models> | ToolRequirements<Tools[number]>
+    | Storage
+    | ModelServices<Models>
+    | ToolRequirements<Tools[number]>
+    | ExtensionRequirements<Extensions[number]>
   >;

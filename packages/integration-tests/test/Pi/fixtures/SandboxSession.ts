@@ -38,22 +38,30 @@ const SandboxLive = Layer.effect(
   Pi.Sandbox,
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
-    return Effect.fn(function* ({ instanceId, conversationId }) {
-      const metadata = markOf(instanceId, conversationId);
-      const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
-      return existing
-        ? yield* sandboxes.connect(existing.sandboxID)
-        : yield* sandboxes.create({ metadata, timeout: 600 });
-    });
+    const find = ({ instanceId, conversationId }: Pi.SandboxKey) =>
+      sandboxes.list({
+        metadata: markOf(instanceId, conversationId),
+        state: ["running", "paused"],
+      });
+    return {
+      open: Effect.fn(function* (target) {
+        const [existing] = yield* find(target);
+        return existing
+          ? yield* sandboxes.connect(existing.sandboxID)
+          : yield* sandboxes.create({
+              metadata: markOf(target.instanceId, target.conversationId),
+              timeout: 600,
+            });
+      }),
+      remove: Effect.fn(function* (key) {
+        const found = yield* find(key);
+        yield* Effect.forEach(found, (sandbox) => sandboxes.kill(sandbox.sandboxID));
+      }),
+    };
   }),
 );
 
-const HarnessLive = Layer.mergeAll(
-  ModelsLive,
-  PiCloudflare.DurableObjectStorage,
-  Pi.SandboxEnv,
-).pipe(
-  Layer.provide(SandboxLive),
+const HarnessLive = Layer.mergeAll(ModelsLive, PiCloudflare.DurableObjectStorage, SandboxLive).pipe(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, E2B.CreateSandboxHttp)),
 );
 
@@ -115,8 +123,8 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
           );
         }),
         kill: Effect.fn(function* (name: string) {
-          const sandboxId = yield* sandboxIdOf(name);
-          if (sandboxId !== undefined) yield* sandboxes.kill(sandboxId);
+          const conversation = yield* harness.conversationByName(name);
+          yield* conversation.removeSandbox;
         }),
       };
     });

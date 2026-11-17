@@ -7,16 +7,7 @@ export {
   type CodeModeExtension,
 } from "./CodeMode.ts";
 export { CodingTools, Bash, Edit, Read, Write } from "./CodingTools.ts";
-export {
-  Env,
-  EnvError,
-  EnvHost,
-  LocalEnv,
-  NoEnv,
-  type EnvTarget,
-  type ExecOptions,
-  type ExecResult,
-} from "./Env.ts";
+export { Env, EnvError, type EnvTarget, type ExecOptions, type ExecResult } from "./Env.ts";
 export { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 export {
   Harness,
@@ -26,7 +17,7 @@ export {
   type Submission,
   type SubmissionDraft,
 } from "./Harness.ts";
-export { Sandbox, SandboxEnv, type SandboxLike } from "./SandboxEnv.ts";
+export { LocalEnv, Sandbox, type SandboxKey, type SandboxLike } from "./Sandbox.ts";
 export {
   block,
   Extension,
