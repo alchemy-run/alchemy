@@ -124,7 +124,23 @@ export class NativeAsyncObject extends DurableObject<{
         instance: "lite",
       });
     }
+    try {
+      return await this.run(container, path);
+    } catch (error) {
+      // A container that fails to start only says "has not been started";
+      // `monitor()` rejects with the reason it stopped.
+      const reason = await Promise.race([
+        container.monitor().then(
+          () => "exited",
+          (cause) => String(cause),
+        ),
+        new Promise((resolve) => setTimeout(resolve, 2000, "still starting")),
+      ]);
+      throw new Error(`${String(error)} (container: ${reason})`);
+    }
+  }
 
+  private async run(container: NonNullable<DurableObjectState["container"]>, path: string) {
     let output;
     if (path === "/stdin") {
       const child = await container.exec(["cat"], { stdin: "pipe" });

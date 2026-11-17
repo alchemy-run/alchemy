@@ -327,7 +327,9 @@ export const materializeRuntimeBindings = Effect.fn(function* (
     Text.local("ALCHEMY_STAGE", options.stack.stage),
     Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", options.accountId),
     ...Object.entries(config.env ?? {})
-      .filter(([key]) => !descriptorNames.has(key))
+      // An undefined value binds nothing, as on a deploy: workerd rejects a
+      // binding without a value.
+      .filter(([key, value]) => !descriptorNames.has(key) && value !== undefined)
       .map(([key, value]) => {
         const unredacted = Redacted.isRedacted(value) ? Redacted.value(value) : value;
         return typeof unredacted === "string"

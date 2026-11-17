@@ -36,6 +36,7 @@ test.provider(
             name: "Alchemy Catalog Product",
             description: "Initial description",
             images: ["https://example.com/product.png"],
+            taxCode: "txcd_10103001",
             metadata: { tier: "pro" },
           });
         }),
@@ -47,6 +48,7 @@ test.provider(
       expect(created.description).toEqual("Initial description");
       expect(created.active).toEqual(true);
       expect(created.images).toEqual(["https://example.com/product.png"]);
+      expect(created.taxCode).toEqual("txcd_10103001");
       expect(created.metadata).toMatchObject({ tier: "pro" });
       expect(created.created).toEqual(expect.any(Number));
       expect(created.livemode).toEqual(false);
@@ -57,6 +59,7 @@ test.provider(
       expect(fetched.description).toEqual("Initial description");
       expect(fetched.active).toEqual(true);
       expect(fetched.images).toEqual(["https://example.com/product.png"]);
+      expect(fetched.tax_code).toEqual("txcd_10103001");
       expect(fetched.metadata?.tier).toEqual("pro");
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
@@ -69,6 +72,7 @@ test.provider(
             description: "Updated description",
             active: false,
             images: ["https://example.com/product-updated.png"],
+            taxCode: "txcd_10000000",
             metadata: { tier: "enterprise", sku: "ent-1" },
           });
         }),
@@ -79,6 +83,7 @@ test.provider(
       expect(updated.description).toEqual("Updated description");
       expect(updated.active).toEqual(false);
       expect(updated.images).toEqual(["https://example.com/product-updated.png"]);
+      expect(updated.taxCode).toEqual("txcd_10000000");
       expect(updated.metadata).toEqual({ tier: "enterprise", sku: "ent-1" });
 
       const refetched = yield* GetProduct({ id: updated.id });
@@ -86,6 +91,7 @@ test.provider(
       expect(refetched.description).toEqual("Updated description");
       expect(refetched.active).toEqual(false);
       expect(refetched.images).toEqual(updated.images);
+      expect(refetched.tax_code).toEqual("txcd_10000000");
       expect(refetched.metadata?.tier).toEqual("enterprise");
       expect(refetched.metadata?.sku).toEqual("ent-1");
       expect(refetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
@@ -175,6 +181,87 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:price", "provider:stripe:product", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "set, change, and clear a product's display and shipping details",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployProduct = (details: Partial<Stripe.ProductProps>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Product("DetailedProduct", {
+              name: "Alchemy Detailed Product",
+              ...details,
+            });
+          }),
+        );
+
+      const created = yield* deployProduct({
+        marketingFeatures: ["Unlimited projects", "Priority support"],
+        unitLabel: "seat",
+        statementDescriptor: "ALCHEMY PRO",
+        url: "https://example.com/pro",
+        shippable: true,
+        packageDimensions: { height: 1, length: 10, weight: 2.5, width: 8 },
+      });
+      expect(created.marketingFeatures).toEqual(["Unlimited projects", "Priority support"]);
+      expect(created.unitLabel).toEqual("seat");
+      expect(created.statementDescriptor).toEqual("ALCHEMY PRO");
+      expect(created.url).toEqual("https://example.com/pro");
+      expect(created.shippable).toEqual(true);
+      expect(created.packageDimensions).toEqual({ height: 1, length: 10, weight: 2.5, width: 8 });
+
+      const fetched = yield* GetProduct({ id: created.id });
+      expect(fetched.marketing_features.map((feature) => feature.name)).toEqual([
+        "Unlimited projects",
+        "Priority support",
+      ]);
+      expect(fetched.unit_label).toEqual("seat");
+      expect(fetched.statement_descriptor).toEqual("ALCHEMY PRO");
+      expect(fetched.package_dimensions?.weight).toEqual(2.5);
+
+      const changed = yield* deployProduct({
+        marketingFeatures: ["Unlimited projects"],
+        unitLabel: "user",
+        statementDescriptor: "ALCHEMY TEAM",
+        url: "https://example.com/team",
+        shippable: false,
+        packageDimensions: { height: 2, length: 10, weight: 3, width: 8 },
+      });
+      expect(changed.id).toEqual(created.id);
+      expect(changed.marketingFeatures).toEqual(["Unlimited projects"]);
+      expect(changed.unitLabel).toEqual("user");
+      expect(changed.statementDescriptor).toEqual("ALCHEMY TEAM");
+      expect(changed.url).toEqual("https://example.com/team");
+      expect(changed.shippable).toEqual(false);
+      expect(changed.packageDimensions).toEqual({ height: 2, length: 10, weight: 3, width: 8 });
+
+      const cleared = yield* deployProduct({});
+      expect(cleared.id).toEqual(created.id);
+      expect(cleared.marketingFeatures).toEqual([]);
+      expect(cleared.unitLabel).toBeUndefined();
+      expect(cleared.statementDescriptor).toEqual("ALCHEMY TEAM");
+      expect(cleared.url).toBeUndefined();
+      expect(cleared.shippable).toEqual(false);
+      expect(cleared.packageDimensions).toBeUndefined();
+
+      const refetched = yield* GetProduct({ id: created.id });
+      expect(refetched.marketing_features).toEqual([]);
+      expect(refetched.unit_label ?? undefined).toBeUndefined();
+      expect(refetched.url || undefined).toBeUndefined();
+      expect(refetched.package_dimensions).toBeNull();
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:product", "live"],
     timeout: 120_000,
   },
 );

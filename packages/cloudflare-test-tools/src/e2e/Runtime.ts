@@ -24,6 +24,7 @@ const logger = Logger.make<unknown, void>(({ message, logLevel, cause, date }) =
 
 export const layer = Server.layer.pipe(
   Layer.provideMerge(Logger.layer([logger])),
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the fixture's framework comes from a dynamically imported module; `Options.FrameworkLayer` can only promise an unknown failure
   Layer.provideMerge(Framework.layer),
   Layer.provideMerge(
     ConfigProvider.layer(

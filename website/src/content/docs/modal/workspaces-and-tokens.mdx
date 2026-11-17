@@ -17,10 +17,10 @@ A **workspace** holds your apps, images, Volumes, Dicts, Queues and Secrets, the
 <Tree
   nodes={[
     { id: "ws", label: "acme", type: "workspace" },
-    { id: "dev", label: "Agents-dev", type: "environment", parent: "ws" },
+    { id: "dev", label: "MyEnv-dev", type: "environment", parent: "ws" },
     { id: "devCoder", label: "Coder", type: "app", parent: "dev" },
     { id: "devWeights", label: "Weights", type: "Volume", parent: "dev" },
-    { id: "prod", label: "Agents-prod", type: "environment", parent: "ws" },
+    { id: "prod", label: "MyEnv-prod", type: "environment", parent: "ws" },
     { id: "prodCoder", label: "Coder", type: "app", parent: "prod" },
     { id: "prodWeights", label: "Weights", type: "Volume", parent: "prod" },
   ]}
@@ -35,17 +35,17 @@ Declare one environment and put everything in it. Alchemy names it from your app
 ```typescript title="src/environments.ts"
 import * as Modal from "@alchemy.run/modal";
 
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 
-export const Coder = Modal.App("Coder", { environment: Agents });
+export const Coder = Modal.App("Coder", { environment: MyEnv });
 
-export const Weights = Modal.Volume("Weights", { environment: Agents });
+export const Weights = Modal.Volume("Weights", { environment: MyEnv });
 ```
 
 An environment can cap what its stage spends:
 
 ```typescript title="src/environments.ts"
-export const Agents = Modal.Environment("Agents", {
+export const MyEnv = Modal.Environment("MyEnv", {
   maxConcurrentTasks: 50,
   maxConcurrentGpus: 4,
   budget: 200,
@@ -93,7 +93,7 @@ Declare a service user yourself for anything outside the Stack, like a CI job:
 
 ```typescript title="src/identities.ts"
 export const Deployer = Modal.ServiceUser("Deployer", {
-  environments: [{ environment: Agents, role: "contributor" }],
+  environments: [{ environment: MyEnv, role: "contributor" }],
 });
 ```
 

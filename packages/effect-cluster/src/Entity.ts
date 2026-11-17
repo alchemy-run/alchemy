@@ -56,10 +56,25 @@ export interface EntityProps extends PlatformProps {
    */
   maxIdleTime?: Duration.Input;
   /**
-   * How many of an instance's messages run at once.
+   * How many of an instance's messages run at once. A handler that returns
+   * `Rpc.fork(...)` runs outside this limit.
    * @default 1
    */
   concurrency?: number | "unbounded";
+  /**
+   * How many messages an instance may hold, running or waiting to run.
+   * Past that, a message fails with `MailboxFull`, unless it is persisted:
+   * a persisted message is stored and runs once there is room.
+   * @default 4096
+   */
+  mailboxCapacity?: number | "unbounded";
+  /**
+   * Return a handler's defect to its caller instead of restarting the
+   * instance. By default, as on Effect Cluster's runners, a defect rebuilds
+   * the instance and runs its messages again, backing off between restarts.
+   * @default false
+   */
+  disableFatalDefects?: boolean;
 }
 
 export interface EntityAttributes {
@@ -259,7 +274,10 @@ export interface HostedEntity {
   readonly entity: EffectEntity.Entity<string, Rpc.Any>;
   readonly instance: Effect.Effect<Record<string, unknown>, never, any>;
   readonly context: Context.Context<never>;
-  readonly options: Pick<EntityProps, "maxIdleTime" | "concurrency">;
+  readonly options: Pick<
+    EntityProps,
+    "maxIdleTime" | "concurrency" | "mailboxCapacity" | "disableFatalDefects"
+  >;
 }
 
 export type EntityRuntimeContext = HostedRuntimeContext<HostedEntity>;
@@ -274,7 +292,12 @@ const createRuntimeContext = makeHostedRuntimeContext<HostedEntity>(
     entity: entities.get(id)!,
     instance: instance as HostedEntity["instance"],
     context,
-    options: { maxIdleTime: props?.maxIdleTime, concurrency: props?.concurrency },
+    options: {
+      maxIdleTime: props?.maxIdleTime,
+      concurrency: props?.concurrency,
+      mailboxCapacity: props?.mailboxCapacity,
+      disableFatalDefects: props?.disableFatalDefects,
+    },
   }),
   // Every RPC's middleware must reach the pool with the entity.
   (id, context) => {

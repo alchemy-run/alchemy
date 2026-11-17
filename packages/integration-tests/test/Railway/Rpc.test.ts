@@ -17,8 +17,10 @@ import Greeter from "./fixtures/rpc-greeter.ts";
 import Query from "./fixtures/rpc-query.ts";
 import TracedCallee from "./fixtures/traced-rpc-callee.ts";
 import TracedCaller from "./fixtures/traced-rpc-caller.ts";
+import { railwayApi } from "./limit.ts";
 
 const { test } = Test.make({
+  limit: railwayApi,
   providers: Layer.mergeAll(Railway.providers(), Cloudflare.providers()),
 });
 

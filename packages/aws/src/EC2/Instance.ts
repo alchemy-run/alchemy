@@ -488,17 +488,16 @@ export const InstanceProvider = () =>
           return false;
         }
         const unknown = error as {
-          errorTag?: string;
+          code?: string;
           message?: string;
-          errorData?: {
+          body?: {
             message?: string;
             Message?: string;
           };
         };
-        const message =
-          unknown.message ?? unknown.errorData?.message ?? unknown.errorData?.Message ?? "";
+        const message = unknown.message ?? unknown.body?.message ?? unknown.body?.Message ?? "";
         return (
-          unknown.errorTag === "InvalidParameterValue" &&
+          unknown.code === "InvalidParameterValue" &&
           message.includes("iamInstanceProfile.name") &&
           message.includes("Invalid IAM Instance Profile name")
         );

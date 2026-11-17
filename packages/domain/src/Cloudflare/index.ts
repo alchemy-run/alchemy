@@ -1,7 +1,9 @@
 import { outsideAlarmPass } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import {
   DurableObject as CloudflareDurableObject,
+  type DurableObjectGetDurableObjectOptions,
   type DurableObjectJurisdiction,
+  type DurableObjectLocationHint,
   type InlineDurableObjectProps,
 } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
@@ -58,9 +60,12 @@ import { DeployVersion } from "./Version.ts";
 export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
 
-/** A Cloudflare Durable Object namespace: Domain's, plus fetch and jurisdictions. */
+/** A Cloudflare Durable Object namespace: Domain's, plus fetch, jurisdictions and placement. */
 interface CloudflareNamespace extends Namespace {
-  readonly getByName: (name: string) => Stub & {
+  readonly getByName: (
+    name: string,
+    options?: DurableObjectGetDurableObjectOptions,
+  ) => Stub & {
     readonly fetch: (
       request: HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
@@ -88,6 +93,35 @@ const declare = CloudflareDurableObject as unknown as (
   props: InlineDurableObjectProps,
   impl: CloudflareImpl,
 ) => Effect.Effect<CloudflareNamespace, never, Worker>;
+
+/** Where the platform keeps the model's Durable Objects. */
+interface Placement {
+  readonly jurisdiction: DurableObjectJurisdiction | undefined;
+  readonly locationHint: DurableObjectLocationHint | undefined;
+}
+
+/**
+ * A namespace whose objects live in the platform's jurisdiction and are
+ * created near its location hint. Every namespace Domain reaches goes
+ * through here, so no kind of object is left outside either.
+ */
+const placed = (namespace: CloudflareNamespace, placement: Placement): CloudflareNamespace => {
+  const inside =
+    placement.jurisdiction === undefined
+      ? namespace
+      : namespace.jurisdiction(placement.jurisdiction);
+  return placement.locationHint === undefined ? inside : hinted(inside, placement.locationHint);
+};
+
+/** A namespace that creates each new object near `locationHint`. */
+const hinted = (
+  namespace: CloudflareNamespace,
+  locationHint: DurableObjectLocationHint,
+): CloudflareNamespace => ({
+  ...namespace,
+  getByName: (name, options) => namespace.getByName(name, { locationHint, ...options }),
+  jurisdiction: (inside) => hinted(namespace.jurisdiction(inside), locationHint),
+});
 
 /** Domain's view of a Cloudflare Durable Object's state. */
 const objectState = (
@@ -199,7 +233,7 @@ const renamedFrom = (
 
 /** The Domain host over a Worker's Durable Objects. */
 const cloudflareHost = (
-  jurisdiction: DurableObjectJurisdiction | undefined,
+  placement: Placement,
   /** How long a deploy waits for a backfill, in seconds. */
   backfillTimeoutSeconds: number | undefined,
   /** The Domain version to lay models out with: `undefined` for the layout from before versions. */
@@ -210,13 +244,13 @@ const cloudflareHost = (
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
-      /** A Durable Object namespace from the Worker's bindings, in the platform's jurisdiction. */
+      /** A Durable Object namespace from the Worker's bindings, placed as the platform says. */
       const fromBinding = (native: any): CloudflareNamespace => {
         const wrap = (namespace: any): CloudflareNamespace => ({
-          getByName: (name: string) => makeRpcStub(namespace.getByName(name)) as never,
-          jurisdiction: (inside: DurableObjectJurisdiction) => wrap(namespace.jurisdiction(inside)),
+          getByName: (name, options) => makeRpcStub(namespace.getByName(name, options)) as never,
+          jurisdiction: (inside) => wrap(namespace.jurisdiction(inside)),
         });
-        return wrap(jurisdiction === undefined ? native : native.jurisdiction(jurisdiction));
+        return placed(wrap(native), placement);
       };
       // The Worker's bindings, at runtime: see `lookup`.
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
@@ -234,16 +268,16 @@ const cloudflareHost = (
       };
       const host: Host<Worker> = {
         // Every kind of object is declared through here, so none is left
-        // outside the jurisdiction.
+        // outside the jurisdiction or the location hint.
         declare: ({ modelName, legacyData }, name, impl) =>
-          Effect.gen(function* () {
-            const namespace = yield* declare(
+          Effect.map(
+            declare(
               named(modelName, name),
               renamedFrom(version, legacyData, name),
               onCloudflare(impl),
-            );
-            return jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
-          }),
+            ),
+            (namespace) => placed(namespace, placement),
+          ),
         lookup: ({ modelName }, name) => fromEnv(env, named(modelName, name)),
         // Each saga's runs live on a Durable Object class of the workflow
         // engine, named after the model too.
@@ -426,6 +460,23 @@ const cloudflareHost = (
  * );
  * ```
  *
+ * ### Placing a model's Durable Objects
+ * A Durable Object is created near the Worker that first reaches it, and
+ * stays there. When the model's other dependencies sit in one region (the
+ * database its projections write to, the Workers that call it), hint that
+ * region instead.
+ *
+ * **Example:** Every new Durable Object of the model in western North America
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ locationHint: "wnam" })),
+ * );
+ * ```
+ *
  * ### Hosting several models in one Worker
  * Each model gets its own Durable Object classes, named after the model
  * (`Billing.AccountAggregate`), so models that list the same aggregate never
@@ -453,6 +504,7 @@ const cloudflareHost = (
  */
 export function layerDurableObjects({
   jurisdiction,
+  locationHint,
   backfillTimeout,
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
@@ -463,7 +515,8 @@ export function layerDurableObjects({
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  const key = `${jurisdiction ?? ""}|${timeoutSeconds ?? ""}`;
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}`;
+  const placement: Placement = { jurisdiction, locationHint };
   let platform = platforms.get(key);
   if (platform === undefined)
     platforms.set(
@@ -472,10 +525,10 @@ export function layerDurableObjects({
         Effect.gen(function* () {
           const version = yield* DeployVersion;
           const sagaRenames = new Map<string, InlineDurableObjectProps>();
-          const engine = sagaEngine(jurisdiction, sagaRenames);
+          const engine = sagaEngine(placement, sagaRenames);
           const legacySagas = new Map<string, string>();
           return Layer.merge(
-            cloudflareHost(jurisdiction, timeoutSeconds, version, legacySagas, sagaRenames),
+            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames),
             version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
           );
         }),
@@ -495,15 +548,14 @@ export function layerDurableObjects({
  * class taking over the class its runs lived on before Domain version 0.
  */
 const sagaEngine = (
-  jurisdiction: DurableObjectJurisdiction | undefined,
+  placement: Placement,
   sagaRenames: ReadonlyMap<string, InlineDurableObjectProps>,
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   makeDurableObjectEngine({
     declare: (name, impl) =>
       Effect.map(
         declare(name, sagaRenames.get(name) ?? {}, impl as unknown as CloudflareImpl),
-        (namespace) =>
-          jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+        (namespace) => placed(namespace, placement),
       ),
     state: DurableObjectState,
   });
@@ -561,6 +613,22 @@ export interface DurableObjectsOptions {
    * @default undefined (no jurisdiction restriction)
    */
   readonly jurisdiction?: DurableObjectJurisdiction;
+  /**
+   * Create every new Durable Object of the model (aggregates, views,
+   * policies, projections, streams and saga executions) near this location,
+   * e.g. `"wnam"`, instead of near the Worker that first reaches it.
+   *
+   * It only affects objects that do not exist yet: an object stays where it
+   * was created, so setting or changing the hint does not move existing
+   * ones. It is a hint, as on Cloudflare: an object is created in the
+   * nearest location that can host it, which may not be the hinted one.
+   * Unlike `jurisdiction`, it does not change which object a name refers to.
+   *
+   * Not emulated in `alchemy dev`, where every object runs on this machine.
+   *
+   * @default undefined (each object is created near its first request)
+   */
+  readonly locationHint?: DurableObjectLocationHint;
   /**
    * How long a deploy waits for the backfill of the views and projections it
    * adds or rebuilds. Past it the deploy fails with `BackfillStillRunning`,

@@ -624,6 +624,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "477938ebf30f4bc781d5cb94a8710606",
+    name: "Audit Logs Read",
+    description: "Grants read access to Audit Logs",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "d7887c7a417e4cf2a69f1d01c1a1dc3b",
     name: "Auto Rag Read",
     description: "Grants access to reading data from Auto Rag",
@@ -640,6 +646,19 @@ export const PERMISSION_GROUPS = [
     name: "Auto Rag Write Run Engine",
     description: "Grants access to run Auto RAG engine",
     scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "cf92514d52864f11b91c2536618b643a",
+    name: "Basin Catalog Object Editor",
+    description:
+      "Grants read, write and delete access to selected Basin Catalog namespaces, tables and views.",
+    scopes: ["com.cloudflare.edge.basin-catalog.object"],
+  },
+  {
+    id: "c7bf234bfc6d4ec58c2159414082daaa",
+    name: "Basin Catalog Object Reader",
+    description: "Grants read access to selected Basin Catalog namespaces, tables and views.",
+    scopes: ["com.cloudflare.edge.basin-catalog.object"],
   },
   {
     id: "7cf72faf220841aabcfdfab81c43c4f6",
@@ -1355,6 +1374,13 @@ export const PERMISSION_GROUPS = [
     name: "Health Checks Write",
     description: "Grants write access to Health Checks",
     scopes: ["com.cloudflare.api.account.zone"],
+  },
+  {
+    id: "8403be883cd24643a746fba96c37ec0b",
+    name: "Hyperdrive PlanetScale Setup",
+    description:
+      "Grants access to create Cloudflare-billed PlanetScale databases through Hyperdrive",
+    scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "4d62ccf834df44808bc9283d65c4e4e9",
@@ -2146,6 +2172,12 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "c555ff8502d24839a02d9d5a2e24d01f",
+    name: "Trust API Assessments Write",
+    description: "Grants write access to submit Trust API assessments via the API",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "f0ba3733e746429182fcd40ec648c066",
     name: "Trust and Safety Read",
     description: "Grants access to read abuse reports and abuse actions",
@@ -2345,6 +2377,33 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "537766c66ad34162923ea0ad55b8bb00",
+    name: "Workers Namespace Admin",
+    description:
+      "Full access to Workers in a namespace, including adding, updating, deploying, and removing Workers.",
+    scopes: ["com.cloudflare.edge.worker.namespace"],
+  },
+  {
+    id: "85a82dfabf6149af99e476124d2113e2",
+    name: "Workers Namespace Content Read-Only",
+    description: "Read metadata and script source content for Workers in a namespace.",
+    scopes: ["com.cloudflare.edge.worker.namespace"],
+  },
+  {
+    id: "bd1de57b3f9b4f798763af3038d03324",
+    name: "Workers Namespace Editor",
+    description:
+      "Add, update, deploy, and remove Workers in a namespace. Does not include managing the namespace itself.",
+    scopes: ["com.cloudflare.edge.worker.namespace"],
+  },
+  {
+    id: "7cbeb5fa8da14e8d826910736f8c775e",
+    name: "Workers Namespace Metadata Read-Only",
+    description:
+      "Read metadata and settings for Workers in a namespace. Does not include script source content.",
+    scopes: ["com.cloudflare.edge.worker.namespace"],
+  },
+  {
     id: "66c1ed49f4ed46098b75696a6d4ee3c9",
     name: "Workers Observability Read",
     description: "Grants read access to Cloudflare Workers Observability",
@@ -2365,14 +2424,14 @@ export const PERMISSION_GROUPS = [
   {
     id: "45db74139a62490b9b60eb7c4f34994b",
     name: "Workers R2 Data Catalog Read",
-    description: "Grants read access to R2 Data Catalog",
-    scopes: ["com.cloudflare.api.account"],
+    description: "Grants read access to Basin Catalog",
+    scopes: ["com.cloudflare.api.account", "com.cloudflare.edge.r2.bucket"],
   },
   {
     id: "d229766a2f7f4d299f20eaa8c9b1fde9",
     name: "Workers R2 Data Catalog Write",
-    description: "Grants write access to R2 Data Catalog",
-    scopes: ["com.cloudflare.api.account"],
+    description: "Grants write access to Basin Catalog",
+    scopes: ["com.cloudflare.api.account", "com.cloudflare.edge.r2.bucket"],
   },
   {
     id: "f45430d92e2b4a6cb9f94f2594c141b8",

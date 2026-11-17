@@ -97,7 +97,7 @@ Choose it for APIs and websites that live next to their data. See [Programs](/ar
 `Archil.CreateSandbox` gives a Worker or Lambda a client that creates sandboxes by name, from an image. Your code drives each one: it runs commands, starts processes, opens terminals and deletes it when the task is done.
 
 ```typescript
-const sandboxes = yield* Archil.CreateSandbox(Agent);
+const sandboxes = yield* Archil.CreateSandbox(MyImage);
 const sandbox = yield* sandboxes.create({ name: `task-${id}` });
 yield* sandbox.exec("npm test");
 ```

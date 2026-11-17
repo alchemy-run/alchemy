@@ -2,10 +2,10 @@
 import * as Modal from "@alchemy.run/modal";
 
 /** Everything the app creates lives in this environment. */
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 
 /** Sandboxes run in an app. */
-export const Coder = Modal.App("Coder", { environment: Agents });
+export const Coder = Modal.App("Coder", { environment: MyEnv });
 
 /** The image: Node 22 with git. */
 export const Node = Modal.Image("Node", {

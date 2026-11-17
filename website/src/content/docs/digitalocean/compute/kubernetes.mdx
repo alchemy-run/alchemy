@@ -1,0 +1,112 @@
+---
+title: Kubernetes
+description: Create DigitalOcean Kubernetes (DOKS) clusters and node pools, apply manifests from the same Stack, pull images from the team's registry, install 1-Click apps and forward logs.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+**DigitalOcean Kubernetes** (DOKS) runs the Kubernetes control plane for you. Your workloads run on **node pools**: groups of Droplets of one size, which DigitalOcean patches and can scale with demand. You pay for the nodes; the control plane is free unless you make it highly available.
+
+<Tree
+  nodes={[
+    {
+      id: "c", label: "K8s", type: "cluster · nyc3", icon: "boxes", colGap: 4,
+      areas: ["default extra"],
+      phoneAreas: ["default", "extra"],
+    },
+    { id: "default", label: "default", type: "node pool · s-2vcpu-4gb × 1", parent: "c", dashed: true, areas: ["p1"] },
+    { id: "p1", label: "api", type: "Pod", parent: "default", tone: "accent" },
+    { id: "extra", label: "Extra", type: "node pool · s-1vcpu-2gb × 2", parent: "c", dashed: true, areas: ["p2 p3"] },
+    { id: "p2", label: "worker", type: "Pod", parent: "extra" },
+    { id: "p3", label: "worker", type: "Pod", parent: "extra" },
+  ]}
+  caption="A cluster has a default node pool, created with it, and any pools you add. Kubernetes places Pods on their nodes; labels let a workload ask for one pool."
+/>
+
+## Create a cluster
+
+```typescript title="src/cluster.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const K8s = DigitalOcean.Kubernetes.Cluster("K8s", {
+  region: "nyc3",
+  nodePool: { size: "s-2vcpu-4gb", count: 1 },
+});
+```
+
+A cluster takes five to ten minutes to create. `version` pins a Kubernetes version; without it the cluster starts on the latest and a later `version` upgrades it in place.
+
+## Add a node pool
+
+```typescript
+const cluster = yield* K8s;
+yield* DigitalOcean.Kubernetes.NodePool("Extra", {
+  clusterId: cluster.clusterId,
+  size: "s-1vcpu-2gb",
+  count: 2,
+  labels: { pool: "extra" },
+});
+```
+
+Changing `count` scales the pool in place.
+
+## Apply manifests
+
+`@alchemy.run/kubernetes` applies Kubernetes objects to the cluster from the same Stack. Add `Kubernetes.providers()` to the Stack's providers, then:
+
+```typescript
+import * as Kubernetes from "@alchemy.run/kubernetes";
+
+yield* Kubernetes.Manifest("Config", {
+  cluster,
+  manifest: {
+    apiVersion: "v1",
+    kind: "ConfigMap",
+    metadata: { name: "greeting", namespace: "default" },
+    data: { greeting: "hello" },
+  },
+});
+```
+
+The cluster connects with your DigitalOcean token; there's no kubeconfig to manage.
+
+## Pull images from the Container Registry
+
+```typescript
+DigitalOcean.Kubernetes.Cluster("K8s", {
+  region: "nyc3",
+  nodePool: { size: "s-2vcpu-4gb", count: 1 },
+  registryEnabled: true,
+});
+```
+
+`registryEnabled` installs a pull secret for the team's registry in every namespace, so Pods can run `registry.digitalocean.com/<registry>/<image>`.
+
+## Install 1-Click apps
+
+```typescript
+{ region: "nyc3", nodePool: { size: "s-2vcpu-4gb", count: 1 }, oneClickApps: ["metrics-server"] }
+```
+
+Newly listed apps install on the next deploy. DigitalOcean has no API to uninstall one, so removing a slug leaves the app running.
+
+## Forward the cluster's logs
+
+A log sink sends a cluster's logs to OpenSearch:
+
+```typescript
+const logs = yield* DigitalOcean.Monitoring.Destination("Logs", {
+  opensearch: { endpoint: "https://opensearch.example.com:9200", username: "alchemy", password },
+});
+yield* DigitalOcean.Monitoring.Sink("LogSink", {
+  destinationId: logs.destinationId,
+  resources: [{ urn: cluster.urn, name: "k8s" }],
+});
+```
+
+## Limits
+
+- Destroying a cluster leaves the load balancers and volumes its Services and PersistentVolumeClaims created, unless you set `destroyAssociatedResources: true`.
+- A new region, VPC or subnet replaces the cluster.
+
+See [Monitoring](/digitalocean/observability/monitoring) for alerts on the cluster's nodes.

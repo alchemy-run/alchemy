@@ -128,7 +128,7 @@ export const serveRailwayRpc = <Req = never>(
       return yield* HttpServerResponse.json(invoked ?? null);
     }
     const result = yield* Effect.result(
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RPC methods are pre-provided service Effects
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- RPC methods are pre-provided service Effects of any shape
       (invoked as Effect.Effect<unknown, unknown>).pipe(
         withCallerSpan(
           header(headers, RPC_TRACEPARENT_HEADER) || undefined,

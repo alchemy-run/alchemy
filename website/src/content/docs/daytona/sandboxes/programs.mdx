@@ -19,7 +19,7 @@ The sandbox outlives the program. A code change restarts the process in the same
     { id: "sbx2", label: "sandbox 2" },
   ]}
   bars={[
-    { lane: "sbx1", start: 0, end: 6.8, label: "agent.url stays the same" },
+    { lane: "sbx1", start: 0, end: 6.8, label: "sandbox.url stays the same" },
     { lane: "proc", start: 0, end: 3.4, label: "bundle a1b2" },
     { lane: "proc", start: 3.6, end: 6.8, label: "bundle c3d4" },
     { lane: "sbx2", start: 7, end: 10, label: "new sandbox" },
@@ -33,14 +33,14 @@ The sandbox outlives the program. A code change restarts the process in the same
 
 ## Run a program
 
-```typescript title="src/Agent.ts"
+```typescript title="src/MySandbox.ts"
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Base } from "./Images.ts";
 
-export default class Agent extends Daytona.Sandbox<Agent>()(
-  "Agent",
+export default class MySandbox extends Daytona.Sandbox<MySandbox>()(
+  "MySandbox",
   { snapshot: Base, main: import.meta.url, port: 3000, public: true },
   Effect.gen(function* () {
     return {
@@ -50,7 +50,7 @@ export default class Agent extends Daytona.Sandbox<Agent>()(
 ) {}
 ```
 
-`agent.url` is the preview URL of port 3000. `public` opens it to anyone; a private sandbox's preview needs its token in `X-Daytona-Preview-Token`. See [Network and previews](/daytona/networking/network).
+`sandbox.url` is the preview URL of port 3000. `public` opens it to anyone; a private sandbox's preview needs its token in `X-Daytona-Preview-Token`. See [Network and previews](/daytona/networking/network).
 
 ## A deploy restarts the process
 
@@ -60,7 +60,7 @@ A sandbox with `main` doesn't auto-stop. If it stopped anyway, its process ended
 
 ## Mount a volume in the program
 
-```typescript title="src/Agent.ts"
+```typescript title="src/MySandbox.ts"
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -68,8 +68,8 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Base } from "./Images.ts";
 import { Data } from "./Storage.ts";
 
-export default class Agent extends Daytona.Sandbox<Agent>()(
-  "Agent",
+export default class MySandbox extends Daytona.Sandbox<MySandbox>()(
+  "MySandbox",
   { snapshot: Base, main: import.meta.url, public: true },
   Effect.gen(function* () {
     const data = yield* Daytona.MountVolume(Data, { path: "/data" });

@@ -10,10 +10,12 @@ export interface RunTaskRequest extends Omit<ECS.RunTaskRequest, "cluster" | "ta
  * Runtime binding for `ecs:RunTask`.
  *
  * Bind this operation to a `Cluster` and `Task` inside a function runtime to
- * get a callable that starts a Fargate task from the bound task
- * definition. The cluster and task definition ARNs are injected automatically;
- * the host is granted `ecs:RunTask` on the task definition plus `iam:PassRole`
- * on the task and execution roles.
+ * get a callable that starts a task from the bound task definition, on
+ * Fargate or on a capacity provider. The cluster and task definition are
+ * injected automatically; the host is granted `ecs:RunTask` on the task
+ * definition plus `iam:PassRole` on the task and execution roles. The rest of
+ * the request is ECS's own `RunTask` request.
+ *
  * ### Running Tasks
  * **Example:** Launch a Fargate Task from a handler
  * ```typescript
@@ -43,6 +45,28 @@ export interface RunTaskRequest extends Omit<ECS.RunTaskRequest, "cluster" | "ta
  *     };
  *   }),
  * );
+ * ```
+ *
+ * **Example:** Run an isolated Task on a capacity provider
+ * A Task with `isolation: "isolated"` runs in its own Nitro Sandbox on a
+ * Managed Instances capacity provider. Name the provider and the subnets; the
+ * task joins the VPC's default security group unless you pass
+ * `securityGroups`.
+ * ```typescript
+ * const capacity = yield* Capacity;
+ * const runTask = yield* AWS.ECS.RunTask(Cluster, MyJob);
+ * const CapacityName = yield* capacity.name;
+ * const Subnets = yield* capacity.subnets;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const { tasks } = yield* runTask({
+ *       capacityProviderStrategy: [{ capacityProvider: yield* CapacityName, weight: 1 }],
+ *       networkConfiguration: { awsvpcConfiguration: { subnets: yield* Subnets } },
+ *     });
+ *     return HttpServerResponse.text(tasks?.[0]?.taskArn ?? "no task started");
+ *   }).pipe(Effect.orDie),
+ * };
  * ```
  *
  * @binding

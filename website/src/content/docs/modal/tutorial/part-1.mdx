@@ -20,7 +20,7 @@ Finish [Modal setup](/modal/setup) and [Cloudflare setup](/cloudflare/setup).
 ```typescript title="src/Sandbox.ts"
 import * as Modal from "@alchemy.run/modal";
 
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 ```
 
 Everything the app creates goes in this environment.
@@ -29,12 +29,12 @@ Everything the app creates goes in this environment.
 
 ```diff lang="typescript"
 // src/Sandbox.ts
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 +
-+export const Coder = Modal.App("Coder", { environment: Agents });
++export const Coder = Modal.App("Coder", { environment: MyEnv });
 ```
 
-Sandboxes run in an app. Passing `Agents` puts the app in that environment and deploys the environment first.
+Sandboxes run in an app. Passing `MyEnv` puts the app in that environment and deploys the environment first.
 
 ## Build an image
 
@@ -87,7 +87,7 @@ export default Alchemy.Stack(
 
 <PackageManagers run="alchemy deploy" />
 
-`Warm` starts from `Node`, which lives in `Coder`, in `Agents`, so deploying it creates all four. The output shows the image id (`im-…`). A deploy that changes nothing leaves them alone.
+`Warm` starts from `Node`, which lives in `Coder`, in `MyEnv`, so deploying it creates all four. The output shows the image id (`im-…`). A deploy that changes nothing leaves them alone.
 
 ## Next
 

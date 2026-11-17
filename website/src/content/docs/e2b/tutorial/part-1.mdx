@@ -23,7 +23,7 @@ A template is the image a sandbox boots from:
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as E2B from "@alchemy.run/e2b";
 
-export const Agent = E2B.Template("Agent", {
+export const MyTemplate = E2B.Template("MyTemplate", {
   dockerfile: Dockerfile.inline`
     FROM node:22-bookworm
     RUN apt-get update && apt-get install -y git
@@ -41,7 +41,7 @@ A snapshot starts a sandbox from the template, runs commands in it, and saves th
 
 ```typescript title="src/Sandbox.ts"
 export const Warm = E2B.Snapshot("Warm", {
-  template: Agent,
+  template: MyTemplate,
   run: ["git clone --depth 1 https://github.com/sindresorhus/is repo"],
 });
 ```
@@ -71,7 +71,7 @@ export default Alchemy.Stack(
 );
 ```
 
-`Warm` depends on `Agent`, so deploying it builds both.
+`Warm` depends on `MyTemplate`, so deploying it builds both.
 
 ## Deploy
 

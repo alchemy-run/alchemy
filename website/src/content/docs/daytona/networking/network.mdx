@@ -40,6 +40,21 @@ export const DevBox = Daytona.Sandbox("DevBox", {
 
 Use `networkAllowList` for CIDR ranges, and `networkBlockAll: true` to cut the network entirely. All three change in place.
 
+## Route traffic through your own proxy
+
+```typescript title="src/DevBox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import { Base } from "./Images.ts";
+
+export const DevBox = Daytona.Sandbox("DevBox", {
+  snapshot: Base,
+  domainAllowList: ["github.com", "registry.npmjs.org"],
+  outboundProxyUrl: "http://proxy.example.com:3128",
+});
+```
+
+Daytona sets `HTTP_PROXY` and `HTTPS_PROXY` in the sandbox to this URL, and enforces it at the network only when the sandbox also has a `domainAllowList`. It's a forward proxy: HTTPS requests reach it as `CONNECT` tunnels, so it runs on a host that accepts them, such as a Fly Machine. A Cloudflare Worker can't serve `CONNECT`, so it can't be one. The URL is in the sandbox's environment, so the sandbox can read any password in it. To add a credential the sandbox never sees, use a [Secret](/daytona/security/secrets#declare-a-secret-for-some-hosts). Changing the URL replaces the sandbox.
+
 ## Limit sandboxes you create
 
 ```typescript

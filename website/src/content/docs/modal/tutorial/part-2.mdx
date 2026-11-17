@@ -14,26 +14,26 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Agents, Warm } from "./Sandbox.ts";
+import { MyEnv, Warm } from "./Sandbox.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
     const sandboxes = yield* Modal.CreateSandbox(Warm);
-    const volumes = yield* Modal.CreateVolume(Agents);
+    const volumes = yield* Modal.CreateVolume(MyEnv);
     return {};
   }).pipe(Effect.provide(Layer.mergeAll(Modal.CreateSandboxHttp, Modal.CreateVolumeHttp))),
 ) {}
 ```
 
-`CreateSandbox(Warm)` boots every sandbox from the warm image. `CreateVolume(Agents)` creates volumes by name in the environment.
+`CreateSandbox(Warm)` boots every sandbox from the warm image. `CreateVolume(MyEnv)` creates volumes by name in the environment.
 
 ## Run a command in a fresh sandbox
 
 ```diff lang="typescript"
 // src/Api.ts
-    const volumes = yield* Modal.CreateVolume(Agents);
+    const volumes = yield* Modal.CreateVolume(MyEnv);
 +
 +    const run = Effect.fn("run")(function* (user: string, command: string) {
 +      const home = yield* volumes.getOrCreate(`home-${user}`);

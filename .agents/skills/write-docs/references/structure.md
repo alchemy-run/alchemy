@@ -75,7 +75,7 @@ Fix the component, not the page.
 
 | The section answers | Component | Good example |
 | --- | --- | --- |
-| What holds what? What is the platform made of? | `DAG` with `groups` (borders) | `aws/what-is-aws`, `aws/networking` |
+| What holds what, and what calls what? What is the platform made of? | `Tree` with `links`: borders for containment, arrows for calls, placed with `areas` so it reflows to a phone. See [Tree: borders and arrows](#tree-borders-and-arrows) | `aws/what-is-aws`, `cloudflare/what-is-cloudflare`, `gcp/what-is-gcp` |
 | What connects to what, and what flows where? (rarely: reach for a component below first) | `DAG` (arrows) | `aws/frontend/websites` |
 | Where does one event or message go, and why? Routing by content, broadcast copies, filters | `Fanout` (the item's JSON, each route's condition, match or not). No labels sitting on a line: a "copy" chip on each delivery was rejected | `aws/messaging/eventbridge`, `aws/messaging/sns` |
 | What's in a queue right now, and who holds what? | `Queue` (`messages` for a standard queue in no order, `groups` for FIFO message groups) | `aws/messaging/sqs` |
@@ -91,7 +91,7 @@ Fix the component, not the page.
 | How does a value or a line of code travel from deploy to run time? | `Timeline` (what runs when) or `Sequence` (a value's journey) | `infrastructure-as-effects/phases`, `infrastructure-as-effects/circular-bindings` |
 | How do copies relate over time? | `BranchGraph` | `neon/data/branching` |
 | What runs inside what? A library's Layers inside the runtime that hosts them | `Shell`: boxes inside boxes, read like a call, `Worker(Git.Api(Repository, Registry, …))`. Only for real nesting: an authority does not contain an account, and an order does not contain its certificate | `git/what-is-git` |
-| What nests inside what, to any depth, and what applies to each branch? | `Tree`: nested borders, each parent drawn around its children, spanning the panel with every row filled; mark small branches `side` so they stack beside a big one instead of taking a mostly empty row (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
+| What nests inside what, to any depth, and what applies to each branch? | `Tree` without `links`: nested borders, each parent drawn around its children, spanning the panel with every row filled; mark small branches `side` so they stack beside a big one instead of taking a mostly empty row (`scopes` tag the container a policy is attached to; `dashed`, `wide`, `specs` for a box's own properties) | `aws/accounts-and-regions`, `aws/compute/ec2`, `aws/compute/eks` |
 
 Each component's JSDoc has its props and a usage example. Read it before using
 one.
@@ -130,6 +130,15 @@ Rules for every diagram:
   type. A label that doesn't fit a short bar or edge belongs in a `legend` or
   the caption.
 - **The caption says what the picture means**, in a sentence or two.
+- **Check a Tree at both widths.** Run `node scripts/tree-check.mjs
+  http://localhost:4321 /tmp/trees <path>…` (or `--all`) against the dev
+  server. It measures every Tree at 1280px and 390px and fails on boxes that
+  don't sit flush, text spilling out, arrows with no clear route, arrows that
+  cross or overlap, arrows through a heading, arrowheads on short stubs, and
+  labels on a border, line, text or another label, and any gutter no arrow
+  uses. It also screenshots every
+  figure at both widths, so read those too: a clean report is necessary, not
+  sufficient. Fix what it reports before showing anyone.
 - **Look at it.** Run `scripts/diagram-sheet.py /tmp/sheet.png <path>…` against
   the dev server and read the sheet (`SHEET_SCALE=1` for long pages). The sheet
   shrinks every diagram to one width, so also screenshot the real page
@@ -137,10 +146,82 @@ Rules for every diagram:
   width. Overlapping labels, overflowing text,
   missing edges and clipped bottoms don't show up any other way.
 
+### Tree: borders and arrows
+
+A What is page draws the platform's pieces, where they live and how they call
+each other. Containment and connections are both the point, so draw both:
+borders for what holds what, `links` for what calls what. A Tree that wrote its
+connections as text inside boxes (`specs: [["binds", "Uploads · Rooms · Jobs"]]`)
+was rejected: "I don't think much thought is going into how the boxes envelope
+and connect to each other". The redraw with arrows was accepted.
+
+```tsx
+<Tree
+  nodes={[
+    {
+      id: "account", label: "acme", type: "account", icon: "brand:cloudflare", colGap: 2.75,
+      areas: ["zone api uploads", "zone api rooms", "zone api jobs", "zone api consumer"],
+    },
+    { id: "zone", label: "example.com", type: "zone", parent: "account", dashed: true, icon: "globe" },
+    { id: "domain", label: "app.example.com", type: "custom domain", parent: "zone", icon: "link" },
+    { id: "api", label: "Api", type: "Worker · every city", parent: "account", tone: "accent", icon: "square-function" },
+    // …uploads, rooms (a namespace holding room-a, room-b), jobs, consumer
+  ]}
+  links={[
+    { from: "domain", to: "api", label: "routes" },
+    { from: "api", to: "rooms", label: "binds" },   // ends on the namespace's border
+    { from: "jobs", to: "consumer", label: "delivers", dashed: true },
+  ]}
+/>
+```
+
+- **A connection is an arrow, a property is `specs`.** "binds", "mounts",
+  "runs as", "reaches", "from", "points at", "selects" are arrows. An
+  instance's size, a pod's schedule, a token's scope stay as `specs`. A type
+  line that hides a connection ("Service · selects app=api") is the same
+  mistake.
+- **Label arrows with a short verb**: `binds`, `mounts`, `runs as`, `reads`,
+  `writes`, `from`, `invokes`, `:5432`. Use `dashed` for what the platform
+  delivers (a queue to its consumer, a webhook, a sync), solid for calls you
+  make. Leave a label off when the caption says it and two labels would crowd.
+- **An arrow ends where the relationship does.** A Worker binds a namespace,
+  so the arrow ends on the namespace's border, not on one object in it. Api
+  runs as a Role that belongs to the account, so the arrow leaves the region.
+- **Draw what's outside the platform** when the page talks about it (your
+  Worker, your own bucket): a top-level node, placed with the Tree's own
+  `areas`.
+- **Place boxes so every arrow is short and straight.** Give a container
+  `areas` (CSS grid-template-areas naming child ids) and set `colGap` so the
+  labels fit: about 6.3px a character plus 10. Lay the flow out left to right:
+  callers on the left, what they call on the right, a box spanning several rows
+  when it calls several things. Placed boxes keep their own height and centre
+  in the rows they span. Don't stretch them to fill the space. Keep it to
+  three columns: four didn't fit the ~590px column.
+- **Design the phone layout too.** Without `phoneAreas`, a container's
+  children stack in node order, so order nodes in the direction the arrows
+  flow. Give two-column `phoneAreas` when an arrow would otherwise have to
+  cross a box (put the targets side by side under their caller). Arrows that
+  still must go around boxes run down a left gutter and branch off. The router
+  opens that gutter itself, only in the container that needs it and only at
+  the width where it's needed: a gutter kept for arrows that ran straight was
+  rejected as wasted whitespace. It's wide enough that each branch has a
+  visible stub before its arrowhead (a head on a 10px stub looked like a blob).
+- **Mind headings.** A straight arrow can't enter a container through its
+  heading, so a target that is a container's first child is reached from the
+  side or from below. Put the caller below, or the target in the right-hand
+  column, clear of the heading text.
+- **The router picks, in order**: straight down or across where two boxes
+  overlap, one bend, then around through the gutter. It never crosses a box,
+  a heading, or another arrow unless nothing else is possible. Arrows from one
+  box, or into one box, may share a trunk. Labels go on the longest clear part
+  of the line, never on a border, line, text or other label. When the checker
+  still finds a problem, change the layout (`areas`, `phoneAreas`, node order,
+  `colGap`), not the router.
+
 ### Component gotchas
 
 - A `caption="…"` is a JSX string: `\"` doesn't escape a quote inside it and the page fails to render (the sheet shows 0 diagrams). Use single quotes inside, `getByName('alice')`, or none.
-- `side` works only on a node with a parent. Two top-level nodes always stack, so wrap them in their container (an account, a project) to sit them side by side.
+- `side` works only on a node with a parent. Top-level nodes stack unless the Tree itself has `areas`: use that to put something outside the platform (your Worker, your bucket) beside it.
 
 Each of these came up on a sheet and was fixed:
 
@@ -154,10 +235,12 @@ Each of these came up on a sheet and was fixed:
   rejected.
 - **Fanout:** never put a chip or label on top of a line. A "copy" box on each
   delivery was rejected. Say "each gets its own copy" in the caption.
-- **Tree:** the tree spans the panel and its boxes and leaves grow to fill each row (a tree sized to fit sat in a mostly empty panel), and `side` stacks small siblings in a column
-  beside a big one instead of leaving an empty row. `specs` writes a box's own
-  properties inside it. Two top-level nodes always stack, so wrap them in their
-  container.
+- **Tree:** the tree spans the panel. In an unplaced row, boxes stretch to the
+  row's height and a container's contents grow to fill it, so everything ends
+  flush (ragged rows and empty space under a container were rejected). `side`
+  stacks small siblings in a column beside a big one instead of leaving an
+  empty row. `specs` writes a box's own properties inside it. For arrows, see
+  [Tree: borders and arrows](#tree-borders-and-arrows).
 - **Sequence:** actor boxes widen to fit their label and type. Keep at most four
   or five actors, or the labels get small.
 

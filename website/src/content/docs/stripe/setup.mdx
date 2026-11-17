@@ -76,7 +76,7 @@ never wire that up by hand. Each binding you yield —
 `Stripe.CreateCustomer()`, `Stripe.CreateCheckoutSession()`, and so
 on — declares the permission it needs (`customers_write`,
 `checkout_sessions_write`, …) on a
-[`RestrictedApiKey`](/providers/stripe/restrictedapikey) resource
+[`RestrictedApiKey`](/providers/stripe/reference/secrets#restrictedapikey) resource
 that alchemy creates per Worker. The key's value is injected as a
 `secret_text` binding.
 

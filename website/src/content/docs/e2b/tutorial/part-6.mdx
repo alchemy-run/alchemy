@@ -63,7 +63,7 @@ jobs:
       - run: bun alchemy deploy --stage "$STAGE" --yes
 ```
 
-Each pull request gets its own stage, and so its own base: a pull request that changes `Agent` or `Warm` rebuilds them for that stage only. E2B has no keyless CI login, so the workflow uses the token.
+Each pull request gets its own stage, and so its own base: a pull request that changes `MyTemplate` or `Warm` rebuilds them for that stage only. E2B has no keyless CI login, so the workflow uses the token.
 
 ## Clean up closed pull requests
 
