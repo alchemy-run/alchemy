@@ -411,7 +411,15 @@ export interface ViewSnapshot {
   readonly state: Json;
   /** Number of applied deliveries. */
   readonly version: number;
-  /** Last applied `seq` per source. */
+  /**
+   * Last applied `seq` per source.
+   *
+   * A command that waits for its views (`consistency: "strong"`) and a read's
+   * `atLeast` both answer once a `seq` is reported here, and promise that any
+   * read after that includes it. So a platform that serves a key's reads from
+   * more than one copy (read replicas) reports a `seq` only once every copy
+   * that serves reads has applied it.
+   */
   readonly checkpoints: Readonly<Record<string, number>>;
   /** Number of events the key has emitted. */
   readonly seq: number;

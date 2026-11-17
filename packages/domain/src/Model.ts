@@ -98,6 +98,10 @@ export class Internals extends Context.Service<
      * Wait until every view a command's events reach has applied them, on
      * every key, through any views between. A view whose history has not all
      * reached it yet (one a deploy is still backfilling) is not waited for.
+     *
+     * "Applied" is what the view key's stored checkpoints say, so the
+     * guarantee is only as strong as the platform's: see
+     * `ViewSnapshot.checkpoints` for what a platform with read replicas owes.
      */
     readonly applied: (
       receipt: Aggregate.Receipt,
