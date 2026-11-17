@@ -222,6 +222,14 @@ export const programPlugin = (sandbox: unknown) => {
  */
 export const gatewayId = (sandboxId: string) => `${sandboxId}Gateway`;
 
+/** A value a platform's `set` packed for its environment, as it was bound. */
+const unpackBound = (packed: unknown): unknown => {
+  // Some platforms keep `Redacted` around the packed string.
+  const text = Redacted.isRedacted(packed) ? Redacted.value(packed) : packed;
+  const value = typeof text === "string" ? unpackEnvValue<unknown>(text) : text;
+  return Redacted.isRedacted(packed) && !Redacted.isRedacted(value) ? Redacted.make(value) : value;
+};
+
 const literal = <A>(value: A) => Output.literal(value) as unknown as Output.Output<A, never>;
 
 /**
@@ -269,10 +277,12 @@ export const make = <R>(
         output.pipe(Output.map((value) => (Redacted.isRedacted(value) ? "" : value)));
       // A Layer built before this one already bound its values onto the
       // sandbox: move them here, so Layer order never leaves a secret there.
-      for (const [key, value] of Object.entries(sandbox.env)) {
+      for (const [key, packed] of Object.entries(sandbox.env)) {
         if (key === SANDBOX_URL_KEY || key === SANDBOX_TOKEN_KEY) continue;
-        yield* deployed.set(key, value as Output.Output);
-        sandbox.env[key] = withoutSecrets(value as Output.Output);
+        // The platform already packed the value for its environment.
+        const value = (packed as Output.Output).pipe(Output.map(unpackBound));
+        yield* deployed.set(key, value);
+        yield* setOnSandbox(key, withoutSecrets(value));
       }
       sandbox.gateway = {
         phase: "plan",

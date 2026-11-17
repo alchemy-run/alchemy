@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import type { Served } from "./conformance/app.ts";
 import { expectGatewayed } from "./conformance/conformance.ts";
 import GitSandbox, { owner, Repo, repository } from "./fixtures/e2b-git.ts";
+import OrderSandbox from "./fixtures/e2b-order.ts";
 import GatewayedE2B from "./fixtures/e2b.ts";
 
 const { test } = Test.make({
@@ -101,6 +102,28 @@ test.provider(
       expect(head.object.sha).toBe(pushed.sha);
 
       yield* gh(Git.deleteRef(ref));
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:e2b", "provider:github", "provider:cloudflare", "live"],
+    timeout: 900_000,
+  },
+);
+
+test.provider(
+  "a binding built before its gateway still keeps its token out of the sandbox",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const template = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Repo;
+          return yield* OrderSandbox;
+        }),
+      );
+      const served = yield* ask<{ listed: boolean; token: boolean }>(template.templateId, "/");
+      expect(served.listed).toBe(true);
+      expect(served.token).toBe(false);
       yield* stack.destroy();
     }),
   {
