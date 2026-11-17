@@ -63,6 +63,7 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
       "op://My Vault/My Item/My Section/My Field",
       "op://vault/item/a.b_c-d",
       "op://vault/item/field?attribute=otp",
+      "op://vault/item/field?attribute=totp",
       "op://vault/item/field?ssh-format=openssh",
     ]) {
       expect(Schema.decodeUnknownSync(OnePassword.SecretReference)(reference)).toBe(reference);

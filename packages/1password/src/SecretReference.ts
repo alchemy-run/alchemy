@@ -4,13 +4,13 @@ import * as Schema from "effect/Schema";
  * A 1Password SDK secret reference: `op://vault/item/[section/]field`.
  * Segments accept ASCII letters, digits, spaces, hyphens, underscores and periods.
  * Use IDs for names containing unsupported characters, not URL encoding.
- * The SDK supports the optional query `?attribute=otp` or `?ssh-format=openssh`.
+ * The SDK supports the optional query `?attribute=otp` (or `totp`) or `?ssh-format=openssh`.
  * Validation is synchronous and offline; it does not check whether a secret exists.
  */
 export const SecretReference = Schema.String.check(
   Schema.makeFilter(
     (value) =>
-      /^op:\/\/[A-Za-z0-9_. -]+\/[A-Za-z0-9_. -]+\/(?:[A-Za-z0-9_. -]+\/)?[A-Za-z0-9_. -]+(?:\?(?:attribute=otp|ssh-format=openssh))?$(?![\s\S])/.test(
+      /^op:\/\/[A-Za-z0-9_. -]+\/[A-Za-z0-9_. -]+\/(?:[A-Za-z0-9_. -]+\/)?[A-Za-z0-9_. -]+(?:\?(?:attribute=t?otp|ssh-format=openssh))?$(?![\s\S])/.test(
         value,
       ) &&
       value

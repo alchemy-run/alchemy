@@ -44,7 +44,7 @@ export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecret
       case "InvalidEnvironment":
         return "1Password: environmentId must be non-empty and the Environment must contain unique, non-empty variable names with string values.";
       case "InvalidOptions":
-        return "1Password: specify exactly one of a non-empty environmentId or a non-empty references map. References must be op://vault/item/[section/]field strings with supported SDK syntax and non-empty config keys. Optional queries are ?attribute=otp or ?ssh-format=openssh. Use IDs for names with unsupported characters, not URL encoding.";
+        return "1Password: specify exactly one of a non-empty environmentId or a non-empty references map. References must be op://vault/item/[section/]field strings with supported SDK syntax and non-empty config keys. Optional queries are ?attribute=otp, ?attribute=totp or ?ssh-format=openssh. Use IDs for names with unsupported characters, not URL encoding.";
       default:
         return `${prefix} Check the Environment ID or secret references and read permissions, OP_SERVICE_ACCOUNT_TOKEN or desktop account selection, and the 1Password SDK installation. For desktop access, unlock the app and enable Settings > Developer > Integrate with other apps.`;
     }
