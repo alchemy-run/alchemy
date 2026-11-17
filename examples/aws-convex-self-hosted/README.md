@@ -4,25 +4,25 @@ A TanStack Start site reading live data from a self-hosted Convex backend, with 
 
 | File | Deployed | Holds |
 | --- | --- | --- |
-| `stacks/platform.ts` | Once per account | VPC, ECS cluster, load balancer, Postgres, buckets |
-| `alchemy.run.ts` | Once per stage | Backend service, its database and hosts, the site |
+| `stacks/platform.ts` | Once per account | VPC, ECS cluster, load balancer, buckets, and Postgres in production |
+| `alchemy.run.ts` | Once per stage | Backend service, its data and hosts, the site |
 
-Stages other than `prod` share the development account's platform. `prod` uses the production account's platform.
+Stages other than `prod` are previews on the development account's platform, and keep their data in SQLite, so the development platform runs no database server. `prod` uses the production account's platform and its Postgres.
 
 ## Deploy
 
-You need Docker running, and a Route 53 hosted zone for your domain in the account.
+You need a Route 53 hosted zone for your domain in the account. Docker isn't needed.
 
 ```bash
 pnpm install
-export CONVEX_DOMAIN=dev.example.com
+export CONVEX_DOMAIN=previews.example.com
 pnpm alchemy deploy stacks/platform.ts --stage dev --profile dev --yes
 pnpm alchemy deploy --stage alice --profile dev --yes
 ```
 
 Open the `websiteUrl` it prints and click "Add a message". The row appears through the Convex websocket.
 
-A stage gets `alice-cloud.dev.example.com` and `alice-site.dev.example.com`, with its own database and its own prefix in the buckets.
+A stage gets `alice.cloud.previews.example.com` and `alice.site.previews.example.com`, with SQLite on its task's disk and its own prefix in the buckets. Once the platform exists, a new stage takes a few minutes. Its data starts over whenever a deploy restarts the backend.
 
 ## Production
 
@@ -43,4 +43,4 @@ pnpm alchemy destroy --stage alice --profile dev --yes
 pnpm alchemy destroy stacks/platform.ts --stage dev --profile dev --yes
 ```
 
-Destroying a stage drops its database and deletes its bucket prefix. Other stages keep running.
+Destroying a stage deletes its data and its bucket prefix. Other stages keep running.

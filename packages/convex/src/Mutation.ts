@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { type ConvexFunctionError, onHost, unwrap } from "./BindingHttp.ts";
 import type { Deployment } from "./Deployment.ts";
+import { createOnce } from "./internal/retry.ts";
 
 export type MutationError = ConvexFunctionError | functions.MutationError;
 
@@ -56,7 +57,8 @@ export const MutationHttp = Layer.effect(
         path: string,
         args: Record<string, unknown> = {},
       ) =>
-        functions.mutation({ path, args, format: "json" }).pipe(
+        // Not idempotent: a retry after a lost response would run it twice.
+        createOnce(functions.mutation({ path, args, format: "json" })).pipe(
           Effect.flatMap((response) => unwrap<A>(path, response)),
           on,
         );

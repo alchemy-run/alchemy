@@ -11,7 +11,10 @@ import { onDeployment, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
 const pro = !!process.env.CONVEX_TEST_PRO;
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:logstream", "live"],
+  timeout: 180_000,
+};
 
 const base = (name: string) =>
   Effect.gen(function* () {
@@ -41,7 +44,7 @@ test.provider.skipIf(pro)(
         .pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
       if (Result.isFailure(refused)) {
-        expect((refused.failure as { _tag: string })._tag).toBe("LogStreamingNotEnabled");
+        expect(refused.failure).toMatchObject({ _tag: "LogStreamingNotEnabled" });
       }
       yield* stack.destroy();
     }),

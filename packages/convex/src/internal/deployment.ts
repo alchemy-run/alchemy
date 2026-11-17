@@ -14,3 +14,21 @@ export const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R
  * must fail the delete rather than drop the state row and leave the data.
  */
 export const GONE = ["NotFound"] as const;
+
+const CLOUD_SUFFIX = ".convex.cloud";
+const SITE_SUFFIX = ".convex.site";
+
+/** Whether a deployment URL is a Convex Cloud host, which is where a team token belongs. */
+export const isConvexCloudUrl = (url: string) =>
+  URL.canParse(url) && new URL(url).hostname.endsWith(CLOUD_SUFFIX);
+
+/**
+ * A Convex Cloud deployment's own HTTP actions URL: the same host under
+ * `.convex.site`. `undefined` for any other host.
+ */
+export const siteUrlOf = (url: string) => {
+  if (!isConvexCloudUrl(url)) return undefined;
+  const site = new URL(url);
+  site.hostname = `${site.hostname.slice(0, -CLOUD_SUFFIX.length)}${SITE_SUFFIX}`;
+  return site.origin;
+};

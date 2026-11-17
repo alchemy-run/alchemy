@@ -12,7 +12,15 @@ import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
-import { STORAGE_KEYS, type StorageKey } from "../internal/selfhosted.ts";
+import {
+  assertHostTemplate,
+  certificateNames,
+  type HostTemplate,
+  resolveHostTemplate,
+  type ResolvedHostTemplate,
+  STORAGE_KEYS,
+  type StorageKey,
+} from "../internal/selfhosted.ts";
 
 export type DatabaseEngine = "postgres" | "mysql";
 
@@ -28,6 +36,16 @@ export interface CreatedDatabase {
 export interface PlatformProps {
   /** The domain stages live under. Covers `*.<domain>`, so stage hosts stay flat. */
   domain: string;
+  /**
+   * How stage hosts are named. `{stage}`, `{app}` and `{domain}` are filled in,
+   * and the certificate gets a wildcard for each template, so a new stage never
+   * waits for one. Put `{app}` in the templates to share the platform between
+   * apps. The production backend always takes the bare `cloud.<domain>` and
+   * `site.<domain>`. Changing it replaces the certificate, and each stage moves
+   * to its new hosts on its next deploy.
+   * @default { web: "{stage}.{domain}", cloud: "{stage}.cloud.{domain}", site: "{stage}.site.{domain}" }
+   */
+  hosts?: HostTemplate;
   /** The Route 53 hosted zone for `domain`. Found from the domain when omitted. */
   hostedZoneId?: Input<string>;
   /**
@@ -35,8 +53,12 @@ export interface PlatformProps {
    * @default Route 53
    */
   dns?: DnsConfig;
-  /** The database server stages share. Each stage gets its own database and user. */
-  db: CreatedDatabase;
+  /**
+   * The database server stages share. Each stage gets its own database and
+   * user. Omit it for a platform whose stages all run on SQLite, which needs no
+   * RDS and comes up faster.
+   */
+  db?: CreatedDatabase;
   /**
    * Protect the database from deletion and refuse to delete buckets with
    * objects. Turn it off and deploy before destroying.
@@ -51,6 +73,11 @@ export interface PlatformProps {
 export interface PlatformHandle {
   /** The domain stages live under. */
   domain: string;
+  /**
+   * How stage hosts are named. Absent on a platform deployed before templates,
+   * which names them the default way.
+   */
+  hosts?: ResolvedHostTemplate;
   /** The Route 53 hosted zone for `domain`, when Route 53 is the DNS host. */
   hostedZoneId?: string;
   /** The VPC. */
@@ -111,6 +138,8 @@ const BUCKET_IDS: Record<StorageKey, string> = {
 export interface InfrastructureProps {
   certificate: { domainName: string; subjectAlternativeNames?: string[] };
   domain: string;
+  /** Set on a shared platform, whose stages name their hosts from it. */
+  hosts?: ResolvedHostTemplate;
   hostedZoneId?: Input<string>;
   dns?: DnsConfig;
   db?: CreatedDatabase;
@@ -220,6 +249,7 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
 
   const handle: PlatformInputs = {
     domain: props.domain,
+    ...(props.hosts === undefined ? {} : { hosts: props.hosts }),
     hostedZoneId,
     vpcId: network.vpcId,
     subnetId,
@@ -329,19 +359,55 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
 
 /**
  * Infrastructure stages share in one AWS account: the network, ECS cluster, load
- * balancer with a wildcard certificate, one database server and five buckets.
+ * balancer with a wildcard certificate, five buckets, and a database server
+ * unless every stage runs on SQLite.
  * Deploy it once per account, from its own stack, and pass it to each
  * `Convex.Backend`.
+ *
+ * :::caution
+ * By default a platform serves the stages of one app. Hosts come from the stage
+ * name alone, so a second app's `alice` stage would claim `alice.cloud.<domain>`
+ * too: traffic would reach only one of them, and destroying either would delete
+ * the other's DNS records. Give each app its own platform, or put `{app}` in
+ * the host template (see below).
+ * :::
  *
  * ### Two accounts
  * **Example:** One platform per account
  * ```typescript
  * // stacks/platform.ts, deployed once to production and once to development
+ * const isProd = stage === "prod";
  * const convex = yield* Convex.Platform("Convex", {
- *   domain: stage === "prod" ? "domain.com" : "dev.domain.com",
- *   db: { engine: "postgres", instanceClass: "db.t4g.medium", storage: 100 },
+ *   domain: isProd ? "example.com" : "previews.example.com",
+ *   // Previews run on SQLite, so the development platform needs no database.
+ *   db: isProd ? { engine: "postgres", instanceClass: "db.t4g.medium", storage: 100 } : undefined,
  * });
  * return { convex };
+ * ```
+ *
+ * ### Naming stage hosts
+ * A stage `alice` gets `alice.cloud.<domain>` and `alice.site.<domain>` unless
+ * `hosts` says otherwise. `{stage}` and `{app}` go in the first label, which the
+ * platform's wildcard certificate covers, so a new stage never waits for a
+ * certificate.
+ *
+ * **Example:** Flat hosts under one wildcard
+ * ```typescript
+ * const convex = yield* Convex.Platform("Convex", {
+ *   domain: "preview.example.com",
+ *   hosts: { cloud: "{stage}-api.{domain}", site: "{stage}-site.{domain}" },
+ * });
+ * // stage pippo: pippo-api.preview.example.com, pippo-site.preview.example.com
+ * ```
+ *
+ * **Example:** Two apps on one platform
+ * ```typescript
+ * const convex = yield* Convex.Platform("Convex", {
+ *   domain: "preview.example.com",
+ *   hosts: { cloud: "{stage}-{app}-api.{domain}", site: "{stage}-{app}-site.{domain}" },
+ * });
+ * // in each app's stack
+ * const backend = yield* Convex.Backend("Backend", { platform: convex, image, app: "shop" });
  * ```
  *
  * ### Safety
@@ -356,14 +422,19 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
 export const Platform = (id: string, props: PlatformProps) =>
   Namespace.push(
     id,
-    Infrastructure({
-      certificate: { domainName: props.domain, subjectAlternativeNames: [`*.${props.domain}`] },
-      domain: props.domain,
-      hostedZoneId: props.hostedZoneId,
-      dns: props.dns,
-      db: props.db,
-      shared: true,
-      deletionProtection: props.deletionProtection ?? true,
-      tags: props.tags,
-    }).pipe(Effect.map(({ handle }) => handle)),
+    Effect.gen(function* () {
+      yield* assertHostTemplate(props.hosts).pipe(Effect.orDie);
+      const { handle } = yield* Infrastructure({
+        certificate: certificateNames(props.domain, props.hosts),
+        domain: props.domain,
+        hosts: resolveHostTemplate(props.hosts),
+        hostedZoneId: props.hostedZoneId,
+        dns: props.dns,
+        db: props.db,
+        shared: true,
+        deletionProtection: props.deletionProtection ?? true,
+        tags: props.tags,
+      });
+      return handle;
+    }),
   );

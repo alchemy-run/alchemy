@@ -5,7 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { fromDeployment } from "./Credentials.ts";
-import { GONE, onDeployment } from "./internal/deployment.ts";
+import { GONE, isConvexCloudUrl, onDeployment } from "./internal/deployment.ts";
 import { envChanges, envHash } from "./internal/env.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -16,6 +16,11 @@ export interface EnvironmentVariablesProps {
   token: Redacted.Redacted<string>;
   /** The variables to set. */
   env: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Changes whenever the deployment's data starts over, such as a self-hosted
+   * SQLite backend's new task. A new value sets every variable again.
+   */
+  revision?: string;
 }
 
 export interface EnvironmentVariablesAttributes {
@@ -92,10 +97,11 @@ export const EnvironmentVariablesProvider = () =>
         const update = deployment.updateEnvironmentVariables({ changes });
         yield* update.pipe(
           on(olds.url, olds.token),
-          // The deploy key may have been revoked. The team token can still
-          // clean up, and if it's refused too, the delete fails.
-          Effect.catchTag(["Unauthorized", "MalformedAccessToken"], () =>
-            onDeployment(olds.url, update),
+          // The deploy key may have been revoked. On Convex Cloud the team
+          // token can still clean up, and if it's refused too, the delete
+          // fails. A self-hosted backend never sees the team token.
+          Effect.catchTag(["Unauthorized", "MalformedAccessToken"], (error) =>
+            isConvexCloudUrl(olds.url) ? onDeployment(olds.url, update) : Effect.fail(error),
           ),
           // A deployment that has gone took its variables with it.
           Effect.catchTag(GONE, () => Effect.void),

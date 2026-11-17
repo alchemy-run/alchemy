@@ -44,5 +44,8 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:convex", "provider:convex:bindings", "provider:aws", "live"],
+    timeout: 300_000,
+  },
 );

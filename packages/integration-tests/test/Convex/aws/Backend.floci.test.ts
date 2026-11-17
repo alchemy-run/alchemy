@@ -123,7 +123,7 @@ provider(
       yield* Fiber.interrupt(deploy);
       yield* outcome;
     }),
-  { timeout: 420_000 },
+  { tags: ["provider:convex", "provider:convex:backend", "local"], timeout: 420_000 },
 );
 
 const POSTGRES = "alchemy-convex-test-postgres";
@@ -226,5 +226,5 @@ provider(
       yield* removePostgres;
       yield* outcome;
     }),
-  { timeout: 420_000 },
+  { tags: ["provider:convex", "provider:convex:backend", "local"], timeout: 420_000 },
 );

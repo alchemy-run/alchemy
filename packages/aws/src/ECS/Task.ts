@@ -37,8 +37,8 @@ import {
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
   type ResolvedImageAgent,
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -271,9 +271,10 @@ export interface BundledTaskProps extends TaskPropsBase, BundledImageSource {}
  */
 export interface DockerfileTaskProps extends TaskPropsBase, DockerfileImageSource {}
 /**
- * Run a pre-built registry image (`image`), mirrored into ECR.
+ * Run a pre-built registry image (`image`), mirrored into ECR unless
+ * `mirror: false`.
  */
-export interface ImageTaskProps extends TaskPropsBase, RegistryImageSource {}
+export interface ImageTaskProps extends TaskPropsBase, EcrRegistryImageSource {}
 
 /**
  * Task props — the image comes from exactly one of three sources, flat on

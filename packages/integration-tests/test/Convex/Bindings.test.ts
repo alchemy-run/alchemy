@@ -39,7 +39,7 @@ const get = (path: string) =>
     return (yield* res.json) as { value?: any; tag?: string; message?: string };
   });
 
-const options = { timeout: 120_000 };
+const options = { tags: ["provider:convex", "provider:convex:bindings", "live"], timeout: 120_000 };
 
 test(
   "Connect gives the host the deployment's URLs",

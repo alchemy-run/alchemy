@@ -33,6 +33,8 @@ export interface DataSyncClient {
  *
  * The host gets a deploy key that can only do `deployment:data:view` on this
  * deployment, which reads every table.
+ * The Deployment API accepts only Convex's own keys, so there is no host
+ * identity to federate.
  *
  * :::caution
  * Data sync needs the Convex Professional plan. Below it, calls fail with

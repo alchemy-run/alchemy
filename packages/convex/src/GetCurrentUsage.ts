@@ -18,6 +18,8 @@ export type GetCurrentUsageClient = () => Effect.Effect<
  *
  * The host gets a deploy key that can only do `deployment:usage:view` on this
  * deployment. Convex marks this API as beta.
+ * The Deployment API accepts only Convex's own keys, so there is no host
+ * identity to federate.
  *
  * ### Reading Usage
  * **Example:** Report function calls this month

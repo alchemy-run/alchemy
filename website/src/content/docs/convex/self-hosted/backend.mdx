@@ -5,7 +5,7 @@ description: Run one self-hosted Convex backend on AWS, with its own network, bu
 
 `Convex.Backend` runs the open-source Convex backend as one Fargate task behind a load balancer. Import it from `@alchemy.run/convex/aws`, whose `providers()` already include AWS.
 
-You need Docker on the machine that deploys, because Docker mints the admin key and copies the image to ECR. You also need a Route 53 hosted zone for the domain in the same account.
+You need a Route 53 hosted zone for the domain in the same account. Deploying needs no Docker: Alchemy computes the admin key itself, and the task pulls the image from its registry.
 
 ## Deploy a backend
 
@@ -45,16 +45,16 @@ db: { engine: "postgres", instanceClass: "db.t4g.micro", storage: 20 }
 db: { engine: "mysql", instanceClass: "db.t4g.micro", storage: 20 }
 
 // A server you already run
-db: { engine: "postgres", url: yield* Config.redacted("DATABASE_URL") }
-db: { engine: "mysql", url: yield* Config.redacted("DATABASE_URL") }
+db: { engine: "postgres", url: yield* Config.Redacted("DATABASE_URL") }
+db: { engine: "mysql", url: yield* Config.Redacted("DATABASE_URL") }
 
-// A file on EFS, for development
+// A file on the task's disk, for development; it starts empty with each new task
 db: { engine: "sqlite" }
 ```
 
 A created database sits in the task's availability zone and admits only the backend's security group. With `url`, the backend connects to a database named after the instance, with hyphens swapped for underscores, so create it first.
 
-SQLite is refused on the `prod` stage.
+SQLite is refused for a production backend: the `prod` stage, or any backend with `production: true`.
 
 ## Size the task
 

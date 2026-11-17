@@ -21,6 +21,8 @@ const SYSTEM_NAMES = new Set([
   "template1",
 ]);
 
+const MAX_MYSQL_USER = 32;
+
 /** The only names that reach SQL. Quoting isn't relied on to stop injection. */
 export const isSafeIdentifier = (name: string) =>
   /^[a-z][a-z0-9_]{0,62}$/.test(name) && !SYSTEM_NAMES.has(name);
@@ -48,6 +50,13 @@ export const createStatements = Effect.fn(function* (
 ) {
   yield* assertName(name);
   yield* assertPassword(password);
+  // The stage's user shares the database's name, and MySQL stops at 32. Fail
+  // before `CREATE DATABASE`, which would otherwise succeed and be orphaned.
+  if (engine === "mysql" && name.length > MAX_MYSQL_USER) {
+    return yield* new InvalidIdentifier({
+      message: `${name} is ${name.length} characters, and a MySQL user name holds ${MAX_MYSQL_USER}. Use a shorter stack or stage name, or set instanceName.`,
+    });
+  }
   return engine === "postgres"
     ? [
         `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${name}') THEN CREATE ROLE "${name}" LOGIN PASSWORD '${password}'; END IF; END $$`,

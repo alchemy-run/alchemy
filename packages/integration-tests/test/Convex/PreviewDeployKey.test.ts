@@ -9,7 +9,10 @@ import { convexCli, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
 const provider = test.provider;
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:previewdeploykey", "live"],
+  timeout: 180_000,
+};
 
 const app = (name: string) =>
   Effect.gen(function* () {

@@ -10,7 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { team } from "./Credentials.ts";
-import { onDeployment } from "./internal/deployment.ts";
+import { onDeployment, siteUrlOf } from "./internal/deployment.ts";
 import { previewIdentifier, previewReference } from "./internal/references.ts";
 import { createOnce } from "./internal/retry.ts";
 import { isOwnershipTag } from "./internal/tags.ts";
@@ -295,7 +295,12 @@ const toAttrs = Effect.fn(function* (
   protection: boolean,
   paused: boolean | undefined,
 ) {
-  const urls = yield* onDeployment(deployment.deploymentUrl, deploymentApi.getCanonicalUrls({}));
+  // The deployment's own hosts. A canonical URL can point elsewhere, and
+  // dependents send their token to `url`, so an override must never land here.
+  const siteUrl =
+    siteUrlOf(deployment.deploymentUrl) ??
+    (yield* onDeployment(deployment.deploymentUrl, deploymentApi.getCanonicalUrls({})))
+      .convexSiteUrl;
   return {
     deploymentName: deployment.name,
     deploymentId: deployment.id,
@@ -305,8 +310,8 @@ const toAttrs = Effect.fn(function* (
     reference: deployment.reference,
     region: deployment.region,
     class: deployment.class,
-    url: urls.convexCloudUrl,
-    siteUrl: urls.convexSiteUrl,
+    url: deployment.deploymentUrl,
+    siteUrl,
     isDefault: deployment.isDefault,
     expiresAt: deployment.expiresAt ?? undefined,
     deletionProtection: protection,
@@ -456,13 +461,15 @@ export const DeploymentProvider = () =>
           return yield* toAttrs(deployment, protectionOf(news), news.paused);
         }),
         delete: Effect.fn(function* ({ output }) {
+          yield* assertTeam(output.teamId, `deployment ${output.deploymentName}`);
+          // Protection guards data, and a deployment that is gone has none.
+          if ((yield* byName(output.deploymentName)) === undefined) return;
           if (output.deletionProtection) {
             return yield* new DeploymentProtected({
               deploymentName: output.deploymentName,
               message: `Deployment ${output.deploymentName} has deletionProtection on. Set it to false and deploy before deleting.`,
             });
           }
-          yield* assertTeam(output.teamId, `deployment ${output.deploymentName}`);
           yield* management
             .deleteDeployment({ deploymentName: output.deploymentName })
             .pipe(Effect.catchTag("DeploymentNotFound", () => Effect.void));

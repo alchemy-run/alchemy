@@ -64,7 +64,10 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:convex", "provider:convex:defaultenvironmentvariables", "live"],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -77,5 +80,8 @@ test.provider(
       expect(yield* defaults(project.projectId)).toEqual({ A: ["1", ["preview"]] });
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:convex", "provider:convex:defaultenvironmentvariables", "live"],
+    timeout: 120_000,
+  },
 );

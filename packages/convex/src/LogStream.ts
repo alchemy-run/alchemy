@@ -20,7 +20,7 @@ export interface LogStreamProps {
   /** The deployment whose logs to send. Changing it replaces the stream. */
   deployment: Pick<DeploymentAttributes, "url">;
   /**
-   * Where the logs go, named by `logStreamType`: `axiom`, `datadog`, `s3`,
+   * Where the logs go, named by `logStreamType`: `axiom`, `datadog`, `s3Export`,
    * `sentry`, `webhook` and others. Changing the type replaces the stream.
    */
   config: deployment.CreateLogStreamArgs;

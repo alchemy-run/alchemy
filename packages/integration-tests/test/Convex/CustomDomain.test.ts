@@ -9,7 +9,10 @@ import { testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
 const pro = !!process.env.CONVEX_TEST_PRO;
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:customdomain", "live"],
+  timeout: 180_000,
+};
 
 const app = (name: string, domain: string) =>
   Effect.gen(function* () {
@@ -34,7 +37,7 @@ test.provider.skipIf(pro)(
         .pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
       if (Result.isFailure(refused)) {
-        expect((refused.failure as { _tag: string })._tag).toBe("VanityDomainsDisabled");
+        expect(refused.failure).toMatchObject({ _tag: "VanityDomainsDisabled" });
       }
       yield* stack.destroy();
     }),

@@ -1,7 +1,5 @@
 import { resolveDomainDns } from "@alchemy.run/aws/CustomDomain";
-import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ECS from "@alchemy.run/aws/ECS";
-import * as EFS from "@alchemy.run/aws/EFS";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
 import * as IAM from "@alchemy.run/aws/IAM";
 import { CurrentRegion } from "@alchemy.run/aws/Region";
@@ -19,14 +17,16 @@ import {
   assertNoReservedEnv,
   assertPinnedImage,
   assertStageHosts,
+  hostLabelOf,
   backendEnv,
+  backendHosts,
+  type HostTemplate,
   type BackendEnv,
   databaseName,
   databaseUrl,
   instanceNameOf,
   listenerPriority,
   SqliteInProduction,
-  stageHosts,
   STORAGE_ENV,
   STORAGE_KEYS,
   storagePrefixPattern,
@@ -40,6 +40,7 @@ import {
   type PlatformInputs,
 } from "./Platform.ts";
 import { StageDatabase } from "./StageDatabase.ts";
+import { StageStorage } from "./StageStorage.ts";
 
 const CONTAINER = "backend";
 const RDS_CA_PATH = "/tmp/rds-ca.pem";
@@ -50,7 +51,11 @@ const SITE_PORT = 3211;
 
 export type BackendDb =
   | {
-      /** SQLite on EFS, for development only. Refused on the `prod` stage. */
+      /**
+       * SQLite on the task's own disk, for development and tests. The data
+       * starts empty whenever a new task does, which includes a deploy that
+       * changes the backend. Refused when `production` is true.
+       */
       engine: "sqlite";
     }
   | CreatedDatabase
@@ -79,6 +84,15 @@ interface BackendCommonProps {
    * go forward, so an Alchemy update must never change your image.
    */
   image: string;
+  /**
+   * Copy the image into an ECR repository of the stage's own before running it.
+   * Off, the task pulls `image` from its registry through the platform's NAT
+   * gateway, so a deploy pushes nothing from your machine. Turn it on when the
+   * tasks can't reach the registry, or to stop depending on it at each task
+   * start. On, the deploy needs Docker, which pulls the image and pushes it.
+   * @default false
+   */
+  mirror?: boolean;
   /** Environment for the backend. Names the resource sets are rejected. */
   env?: BackendEnv;
   /**
@@ -96,6 +110,13 @@ interface BackendCommonProps {
    * @default derived from the stack and stage
    */
   instanceName?: string;
+  /**
+   * Whether this is the production backend. It refuses SQLite and, on a
+   * platform, protects its database and takes the platform's bare hosts
+   * (`cloud.<domain>`).
+   * @default true on the `prod` stage, otherwise false
+   */
+  production?: boolean;
   /** How long to keep logs. */
   logRetention?: Duration.Input;
   /** Tags for the resources that take them. */
@@ -138,13 +159,46 @@ export interface PlatformBackendProps extends BackendCommonProps {
    */
   dns?: DnsConfig;
   domain?: never;
-  db?: never;
+  /**
+   * The app's name in its hosts, which fills `{app}` in the platform's host
+   * template. Required when the template uses `{app}`, refused when it doesn't.
+   * Lowercase letters, digits and hyphens.
+   */
+  app?: string;
+  /**
+   * The two hosts this backend takes, in place of the ones the platform's host
+   * template names. The platform's certificate must cover them, and a stage
+   * can't take the production backend's. Use it for a second app's production
+   * backend, which would otherwise claim the same bare hosts.
+   * @default named by the platform's host template
+   */
+  hosts?: {
+    /** Serves the Convex API on port 3210. */
+    cloud: string;
+    /** Serves HTTP actions on port 3211. */
+    site: string;
+  };
+  /**
+   * `{ engine: "sqlite" }` keeps this stage's data in a file on the task's own
+   * disk instead of the platform's database server. It needs no RDS and no
+   * volume, so a preview comes up fastest; the data starts empty whenever a new
+   * task does. Production refuses it.
+   * @default a database on the platform's server
+   */
+  db?: { engine: "sqlite" };
   /**
    * Refuse to destroy this stage's database and bucket prefix. Turn it off and
    * deploy before destroying.
-   * @default true on the `prod` stage, otherwise false
+   * @default `production`
    */
   deletionProtection?: boolean;
+  /**
+   * The first of the two listener rule priorities this stage takes on the
+   * platform's listener (it uses this and the next). Derived from the instance
+   * name; set it only if a deploy fails with `ListenerRulePriorityInUse`.
+   * @default derived from the instance name
+   */
+  listenerPriority?: number;
 }
 
 export type BackendProps = OwnedBackendProps | PlatformBackendProps;
@@ -165,12 +219,33 @@ const asUrl = (
       Redacted.make(`${engine}://${username}:${Redacted.value(secret)}@${address}:${number}`),
   );
 
-/** A platform's values are Outputs from another stack, and plain in the same one. */
-const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
-  Output.map(
-    Output.asOutput(domain as string) as Output.Output<string, never>,
-    (name: string) => stageHosts(name, stage, stage === "prod")[host],
-  );
+/**
+ * A backend's hosts on a platform. The platform's values are Outputs from
+ * another stack and plain in the same one; one deployed before host templates
+ * has none and names hosts the default way.
+ */
+const hostsOn = (
+  platform: PlatformBackendProps["platform"],
+  options: {
+    stage: string;
+    production: boolean;
+    app?: string;
+    hosts?: { cloud: string; site: string };
+  },
+) => {
+  const resolved = Output.map(
+    Output.all(
+      Output.asOutput(platform.domain as string) as never,
+      Output.asOutput(platform.hosts as HostTemplate | undefined) as never,
+    ),
+    ([domain, template]: [string, HostTemplate | undefined]) =>
+      backendHosts(domain, template, options),
+  ) as Output.Output<{ cloud: string; site: string }, never>;
+  return {
+    cloud: Output.map(resolved, (hosts) => hosts.cloud),
+    site: Output.map(resolved, (hosts) => hosts.site),
+  };
+};
 
 /**
  * Self-hosted Convex on AWS: one Fargate task behind a load balancer, with
@@ -180,8 +255,10 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  * @see https://github.com/convex/convex-backend/tree/main/self-hosted
  *
  * ### Requirements
- * Deploying needs Docker, which mints the admin key and mirrors the image into
- * ECR. The domain's hosted zone must be in the same account.
+ * Deploying needs no Docker: the admin key is computed on the deploying
+ * machine, and the task pulls the image from its registry through the
+ * platform's NAT gateway, unless `mirror` copies it into ECR first. The
+ * domain's hosted zone must be in the same account.
  *
  * ### Running on its own
  * **Example:** Postgres and buckets, created by the resource
@@ -200,11 +277,11 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  * const backend = yield* Convex.Backend("Backend", {
  *   image,
  *   domain,
- *   db: { engine: "mysql", url: yield* Config.redacted("DATABASE_URL") },
+ *   db: { engine: "mysql", url: yield* Config.Redacted("DATABASE_URL") },
  * });
  * ```
  *
- * **Example:** A file on EFS, for development
+ * **Example:** A file on the task's disk, for development
  * ```typescript
  * const backend = yield* Convex.Backend("Backend", {
  *   image,
@@ -234,6 +311,31 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  * const backend = yield* Convex.Backend("Backend", { platform: convex, image });
  * ```
  *
+ * A stage named `alice` gets `alice.cloud.<domain>` and `alice.site.<domain>`,
+ * or whatever the platform's `hosts` template names.
+ * The production backend gets `cloud.<domain>` and `site.<domain>`, a protected
+ * database, and no SQLite. That's the `prod` stage unless you say otherwise.
+ *
+ * **Example:** A production stage with another name
+ * ```typescript
+ * const { stage } = yield* Stack;
+ * const backend = yield* Convex.Backend("Backend", {
+ *   platform: convex,
+ *   image,
+ *   production: stage === "production",
+ * });
+ * ```
+ *
+ * **Example:** Hosts the stage picks itself
+ * ```typescript
+ * // The platform's certificate must cover them.
+ * const backend = yield* Convex.Backend("Backend", {
+ *   platform: convex,
+ *   image,
+ *   hosts: { cloud: "demo-api.preview.example.com", site: "demo-site.preview.example.com" },
+ * });
+ * ```
+ *
  * ### Removing a Backend
  * :::caution
  * `deletionProtection` keeps a created database and buckets with objects, not
@@ -249,6 +351,19 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  *   domain,
  *   db,
  *   deletionProtection: false,
+ * });
+ * ```
+ *
+ * ### Building a site in parallel
+ * `backend.url` resolves once the backend is running, so whatever reads it
+ * waits for the service. A site only needs the address, which
+ * `backend.endpoints` has from the start, so it builds while the backend
+ * comes up.
+ *
+ * **Example:** A website that doesn't wait for the backend
+ * ```typescript
+ * const website = yield* AWS.Website.TanStackStart("Website", {
+ *   env: { CONVEX_URL: backend.endpoints.url },
  * });
  * ```
  *
@@ -269,10 +384,12 @@ export const Backend = (id: string, props: BackendProps) =>
       const env = props.env ?? {};
       yield* assertPinnedImage(props.image).pipe(Effect.orDie);
       yield* assertNoReservedEnv(env).pipe(Effect.orDie);
-      if (props.db?.engine === "sqlite" && stage === "prod") {
+      const production = props.production ?? stage === "prod";
+      if (props.db?.engine === "sqlite" && production) {
         return yield* Effect.die(
           new SqliteInProduction({
-            message: "SQLite is for development only. Use postgres or mysql on the prod stage.",
+            message:
+              "SQLite is for development only. Use postgres or mysql for a production backend.",
           }),
         );
       }
@@ -303,14 +420,20 @@ export const Backend = (id: string, props: BackendProps) =>
           : undefined;
       const platform = (props.platform ?? created!.handle) as PlatformInputs;
 
-      if (props.platform !== undefined) yield* assertStageHosts(stage).pipe(Effect.orDie);
+      const label = hostLabelOf(stage);
+      // A stage that picks its own hosts doesn't need a name that fits in one.
+      if (props.platform !== undefined && !production && props.hosts === undefined) {
+        yield* assertStageHosts(label).pipe(Effect.orDie);
+      }
       const hosts =
         props.platform === undefined
           ? { cloud: props.domain.cloud, site: props.domain.site }
-          : {
-              cloud: hostOn(props.platform.domain, stage, "cloud"),
-              site: hostOn(props.platform.domain, stage, "site"),
-            };
+          : hostsOn(props.platform, {
+              stage: label,
+              production,
+              app: props.app,
+              hosts: props.hosts,
+            });
       const cloudUrl = Output.interpolate`https://${hosts.cloud}`;
       const siteUrl = Output.interpolate`https://${hosts.site}`;
 
@@ -323,14 +446,14 @@ export const Backend = (id: string, props: BackendProps) =>
       });
       // The service reads the name from here, so a rename fails before it changes.
       const adminKey = yield* AdminKey("AdminKey", {
-        image: props.image,
         instanceName,
         instanceSecret: secret.text,
       });
 
       // Where the data lives.
       const url = props.db !== undefined && "url" in props.db ? props.db : undefined;
-      const onRds = props.platform !== undefined || created?.owned !== undefined;
+      const onSqlite = props.db?.engine === "sqlite";
+      const onRds = (props.platform !== undefined && !onSqlite) || created?.owned !== undefined;
       const databaseEnv: Record<string, string> = {
         ...(url?.requireSsl === false ? { DO_NOT_REQUIRE_SSL: "1" } : {}),
         ...(onRds ? { PG_CA_FILE: RDS_CA_PATH, MYSQL_CA_FILE: RDS_CA_PATH } : {}),
@@ -338,18 +461,13 @@ export const Backend = (id: string, props: BackendProps) =>
       let secrets: Input<Record<string, string>> = {
         INSTANCE_SECRET: instanceSecret.parameterArn,
       } as never;
-      let volumes: Parameters<typeof ECS.Service>[1] extends infer P
-        ? P extends { volumes?: infer V }
-          ? V
-          : never
-        : never;
-      if (props.platform !== undefined) {
+      if (props.platform !== undefined && !onSqlite) {
         const password = yield* Random("DatabasePassword", { bytes: 16 });
         const stageDatabase = yield* StageDatabase("Database", {
           platform: props.platform as never,
           instanceName,
           password: password.text,
-          deletionProtection: props.deletionProtection ?? stage === "prod",
+          deletionProtection: props.deletionProtection ?? production,
         });
         const parameter = yield* SSM.Parameter("DatabaseUrlParameter", {
           type: "SecureString",
@@ -368,27 +486,16 @@ export const Backend = (id: string, props: BackendProps) =>
             [URL_ENV[engine]]: database,
           }),
         ) as never;
-      } else if (props.db.engine === "sqlite") {
-        const efsSecurityGroup = yield* EC2.SecurityGroup("DataSecurityGroup", {
-          vpcId: platform.vpcId as never,
-          description: "Convex SQLite on EFS, reachable from the backend only",
-          ingress: [
-            {
-              ipProtocol: "tcp",
-              fromPort: 2049,
-              toPort: 2049,
-              referencedGroupId: platform.backendSecurityGroupId as never,
-            },
-          ],
-          tags,
-        });
-        const fileSystem = yield* EFS.FileSystem("Data", { encrypted: true, tags });
-        const mount = yield* EFS.MountTarget("DataMount", {
-          fileSystemId: fileSystem.fileSystemId,
-          subnetId: platform.subnetId as never,
-          securityGroups: [efsSecurityGroup.groupId],
-        });
-        volumes = [{ efs: { fileSystemId: mount.fileSystemId }, path: "/convex/data" }];
+      } else if (onSqlite) {
+        if (props.platform !== undefined) {
+          // The stage database cleans up the bucket prefix; SQLite has none.
+          yield* StageStorage("Storage", {
+            storage: platform.storage as never,
+            instanceName,
+          });
+        }
+        // The SQLite file lives on the task's own disk, so it needs no volume
+        // and starts empty whenever a new task does.
       } else {
         const value =
           url !== undefined
@@ -407,7 +514,8 @@ export const Backend = (id: string, props: BackendProps) =>
         });
         secrets = {
           INSTANCE_SECRET: instanceSecret.parameterArn,
-          [URL_ENV[props.db.engine]]: parameter.parameterArn,
+          // Only an owned backend on a server reaches here: a url, or one it created.
+          [URL_ENV[url?.engine ?? created!.owned!.engine]]: parameter.parameterArn,
         } as never;
       }
 
@@ -434,7 +542,9 @@ export const Backend = (id: string, props: BackendProps) =>
         attributes: { "deregistration_delay.timeout_seconds": "10" },
         tags,
       });
-      const priority = listenerPriority(instanceName);
+      const priority =
+        (props.platform !== undefined ? props.listenerPriority : undefined) ??
+        listenerPriority(instanceName);
       yield* ELBv2.ListenerRule("CloudRule", {
         listenerArn: platform.listenerArn as never,
         priority,
@@ -516,6 +626,7 @@ export const Backend = (id: string, props: BackendProps) =>
       const service = yield* ECS.Service("Service", {
         cluster: { clusterArn: platform.clusterArn as never },
         image: props.image,
+        mirror: props.mirror ?? false,
         cpu,
         memory,
         port: CLOUD_PORT,
@@ -576,7 +687,6 @@ export const Backend = (id: string, props: BackendProps) =>
         secrets: secrets as never,
         taskRoleManagedPolicyArns: [storagePolicy.policyArn],
         logging: { retention: props.logRetention },
-        ...(volumes! === undefined ? {} : { volumes }),
         tags,
       });
 
@@ -590,6 +700,11 @@ export const Backend = (id: string, props: BackendProps) =>
       return {
         url: running(cloudUrl),
         siteUrl: running(siteUrl),
+        // Known before the backend runs, so a site build can start right away.
+        endpoints: { url: cloudUrl, siteUrl },
+        // A SQLite backend's data lives with its task, and a new task definition
+        // means a new task. Functions pushes again when this changes.
+        dataRevision: onSqlite ? service.taskDefinitionArn : undefined,
         adminKey: adminKey.value,
         instanceName,
         databaseName: database,

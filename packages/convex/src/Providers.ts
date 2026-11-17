@@ -15,6 +15,7 @@ import {
 import { DeployKey, DeployKeyProvider } from "./DeployKey.ts";
 import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import { EnvironmentVariables, EnvironmentVariablesProvider } from "./EnvironmentVariables.ts";
+import { Functions, FunctionsProvider } from "./Functions.ts";
 import { LogStream, LogStreamProvider } from "./LogStream.ts";
 import { PreviewDeployKey, PreviewDeployKeyProvider } from "./PreviewDeployKey.ts";
 import { Project, ProjectProvider } from "./Project.ts";
@@ -48,6 +49,7 @@ export const providers = () =>
       Deployment,
       DeployKey,
       EnvironmentVariables,
+      Functions,
       LogStream,
       PreviewDeployKey,
       Project,
@@ -62,6 +64,7 @@ export const providers = () =>
         DeploymentProvider(),
         DeployKeyProvider(),
         EnvironmentVariablesProvider(),
+        FunctionsProvider(),
         LogStreamProvider(),
         PreviewDeployKeyProvider(),
         ProjectProvider(),
