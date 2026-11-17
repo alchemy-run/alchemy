@@ -1,4 +1,5 @@
 import path from "node:path";
+import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
 import { describe, expect, it, vi } from "vitest";
 import cloudflareVitePlugin, {
@@ -115,6 +116,35 @@ describe("alchemy Cloudflare Vite plugin name", () => {
     expect(customizer).toHaveBeenCalledTimes(1);
     await expect((failing.config as () => Promise<void>)()).resolves.toBeUndefined();
   });
+
+  // The installed release, not a stand-in: v2 loads `cloudflare.config.ts`
+  // (absent here) before it calls `config`, and Flue's `flueWorkerConfig()`
+  // only edits the config it is given and returns nothing.
+  it.each(["serve", "build"] as const)(
+    "runs a real official cloudflare()'s customizer and keeps Alchemy's build (%s)",
+    async (command) => {
+      const customizer = vi.fn((_config: unknown) => undefined);
+      const resolved = await vite.resolveConfig(
+        {
+          configFile: false,
+          root,
+          logLevel: "silent",
+          plugins: [
+            officialCloudflare({
+              inspectorPort: false,
+              persistState: false,
+              config: customizer as never,
+            }),
+            cloudflareVitePlugin({ main: "./worker-entry.ts" }),
+          ],
+        },
+        command,
+      );
+      expect(customizer).toHaveBeenCalledTimes(1);
+      expect(customizer.mock.calls[0]![0]).toMatchObject({ worker: expect.any(Object) });
+      expect(resolved.environments.ssr!.build.outDir).toBe("dist/ssr");
+    },
+  );
 
   it("disables official plugins an async plugin factory resolves to", async () => {
     const configureServer = vi.fn();

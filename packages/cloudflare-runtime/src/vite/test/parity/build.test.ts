@@ -13,8 +13,12 @@ import cloudflareVitePlugin from "../../plugin.ts";
 const COMPATIBILITY_DATE = "2026-03-17";
 const FLAGS = ["nodejs_compat"];
 
-// Wrangler's deploy configuration, not part of the build output Alchemy reads.
-const WRANGLER_OUTPUTS = new Set([".dev.vars", "wrangler.json", ".assetsignore"]);
+// v2 writes Build Output for `cf deploy`, which Alchemy doesn't use: each
+// environment goes to its own directory under `.cloudflare/output/v1`, beside
+// deploy metadata. Alchemy keeps Vite's `dist/<environment>` layout, so each
+// directory is compared with the `dist` directory it replaces.
+const BUILD_OUTPUT_WORKER = ".cloudflare/output/v1/workers/default";
+const OFFICIAL_DIRECTORIES = { client: "assets", ssr: "bundle" } as const;
 
 const WORKER = [
   `import { Buffer } from "node:buffer";`,
@@ -130,15 +134,19 @@ const build = async (root: string, plugins: vite.PluginOption, config: vite.Inli
 
 const official = (shape: Shape) =>
   officialCloudflare({
-    viteEnvironment: { name: "ssr" },
     inspectorPort: false,
     persistState: false,
-    config: {
-      name: "worker",
-      ...(shape.worker ? { main: "./src/index.ts" } : {}),
-      compatibility_date: COMPATIBILITY_DATE,
-      compatibility_flags: FLAGS,
-    },
+    types: { generate: false },
+    config: (loaded) => ({
+      ...loaded,
+      worker: {
+        ...loaded.worker,
+        name: "worker",
+        ...(shape.worker ? { entrypoint: "./src/index.ts" } : {}),
+        compatibilityDate: COMPATIBILITY_DATE,
+        compatibilityFlags: FLAGS,
+      },
+    }),
   });
 
 const alchemy = (shape: Shape) =>
@@ -148,25 +156,52 @@ const alchemy = (shape: Shape) =>
     compatibilityFlags: FLAGS,
   });
 
-/** Every output file, relative to `dist`, with content hashes normalized. */
-const outputs = async (root: string) => {
-  const dist = NodePath.join(root, "dist");
-  const files = await NodeFs.readdir(dist, { recursive: true, withFileTypes: true }).catch(
-    () => [],
+type Plugin = "official" | "alchemy";
+
+type Environment = keyof typeof OFFICIAL_DIRECTORIES;
+
+/**
+ * Where a plugin writes an environment's output. Without a Worker, Alchemy's
+ * client is Vite's only environment and builds straight to `dist`.
+ */
+const outDir = (root: string, plugin: Plugin, environment: Environment, worker = true) =>
+  plugin === "official"
+    ? NodePath.join(root, BUILD_OUTPUT_WORKER, OFFICIAL_DIRECTORIES[environment])
+    : worker
+      ? NodePath.join(root, "dist", environment)
+      : environment === "client"
+        ? NodePath.join(root, "dist")
+        : undefined;
+
+/** Every output file, as `<environment>/<path>`, with content hashes normalized. */
+const outputs = async (root: string, plugin: Plugin, worker: boolean) => {
+  const environments = Object.keys(OFFICIAL_DIRECTORIES) as Array<Environment>;
+  const files = await Promise.all(
+    environments.map(async (environment) => {
+      const directory = outDir(root, plugin, environment, worker);
+      if (directory === undefined) return [];
+      const entries = await NodeFs.readdir(directory, {
+        recursive: true,
+        withFileTypes: true,
+      }).catch(() => []);
+      return entries
+        .filter((file) => file.isFile())
+        .map((file) =>
+          NodePath.join(
+            environment,
+            NodePath.relative(directory, NodePath.join(file.parentPath, file.name)),
+          )
+            .replaceAll("\\", "/")
+            .replace(/-[\w-]{8}(?=\.)/g, "-[hash]"),
+        );
+    }),
   );
-  return files
-    .filter((file) => file.isFile() && !WRANGLER_OUTPUTS.has(file.name))
-    .map((file) =>
-      NodePath.relative(dist, NodePath.join(file.parentPath, file.name))
-        .replaceAll("\\", "/")
-        .replace(/-[\w-]{8}(?=\.)/g, "-[hash]"),
-    )
-    .sort();
+  return files.flat().sort();
 };
 
 // The exported names; the local bindings behind them are the bundler's.
-const exportedNames = (root: string) =>
-  NodeFs.readFile(NodePath.join(root, "dist/ssr/index.js"), "utf8").then((code) =>
+const exportedNames = (root: string, plugin: Plugin) =>
+  NodeFs.readFile(NodePath.join(outDir(root, plugin, "ssr")!, "index.js"), "utf8").then((code) =>
     [...code.matchAll(/export\s*\{([^}]*)\}/g)]
       .flatMap((match) => match[1]!.split(","))
       .map((specifier) =>
@@ -196,14 +231,18 @@ describe.each(SHAPES)("build output matches @cloudflare/vite-plugin for $name", 
 
   it("emits the same files", async () => {
     const { officialRoot, alchemyRoot } = await built;
-    expect(await outputs(alchemyRoot)).toEqual(await outputs(officialRoot));
+    expect(await outputs(alchemyRoot, "alchemy", shape.worker)).toEqual(
+      await outputs(officialRoot, "official", shape.worker),
+    );
   }, 120_000);
 
   it.skipIf(!shape.worker)(
     "keeps the same entry chunk exports",
     async () => {
       const { officialRoot, alchemyRoot } = await built;
-      expect(await exportedNames(alchemyRoot)).toEqual(await exportedNames(officialRoot));
+      expect(await exportedNames(alchemyRoot, "alchemy")).toEqual(
+        await exportedNames(officialRoot, "official"),
+      );
     },
     120_000,
   );
