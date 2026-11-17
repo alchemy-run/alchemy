@@ -330,6 +330,40 @@ describe("Docker.run failure output", (it) => {
       }),
     { tags: ["provider:docker", "local"] },
   );
+
+  it.effect(
+    "classifies remote volume inspect's 'get name: no such volume' without hiding transport errors",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-volume-errors-" });
+        const executable = path.join(dir, "docker-stub");
+        const writeError = (message: string) =>
+          fs.writeFileString(
+            executable,
+            `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(message)} >&2\nexit 1\n`,
+          );
+        yield* writeError("get missing-remote-volume: no such volume");
+        yield* fs.chmod(executable, 0o755);
+        const target = { host: "ssh://remote-engine" };
+        const runInspect = Effect.gen(function* () {
+          const docker = yield* Docker;
+          return yield* docker.volume.inspect("missing-remote-volume", target).pipe(Effect.flip);
+        }).pipe(
+          Effect.provide(dockerLive({ bin: executable })),
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+        );
+
+        const missing = yield* runInspect;
+        expect(missing.reason._tag).toBe("NotFound");
+
+        yield* writeError("ssh: connection failed: no such volume");
+        const connection = yield* runInspect;
+        expect(connection.reason._tag).not.toBe("NotFound");
+      }),
+    { tags: ["provider:docker", "local"] },
+  );
 });
 
 describe("Docker.image", (it) => {

@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
+import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
@@ -493,10 +494,15 @@ export declare namespace Docker {
    * TLS fields are file paths, never private-key or certificate contents.
    */
   export interface EndpointTarget {
+    /** Engine URL, such as `ssh://user@host` or `tcp://host:2376`. */
     host: string;
+    /** Path to the certificate authority PEM file. */
     ca?: string;
+    /** Path to the client certificate PEM file. */
     cert?: string;
+    /** Path to the client private key PEM file; not the key contents. */
     key?: string;
+    /** Disable server certificate verification when explicitly requested. */
     skipTlsVerify?: boolean;
   }
 
@@ -1291,28 +1297,40 @@ export const dockerContextTarget = (
   return host && /^(?:ssh|unix|npipe):\/\//.test(host) ? { host } : name;
 };
 
-/** Stable, structural target identity for comparing resource destinations. */
+/**
+ * The Docker endpoint identifies physical resources; TLS certificate paths and
+ * verification flags only control how the client authenticates to it.
+ * Rotating client credentials must not replace volumes, services or Swarms.
+ */
 export const dockerTargetIdentity = (target: Docker.Target | undefined): string =>
   target === undefined
     ? "default"
     : typeof target === "string"
       ? `context:${target}`
-      : `endpoint:${JSON.stringify(target)}`;
+      : `endpoint:${target.host}`;
 
+/** Whether two context references address the same Docker Engine endpoint. */
 export const sameDockerContextTarget = (
   a: Docker.ContextRef | undefined,
   b: Docker.ContextRef | undefined,
 ): boolean =>
   dockerTargetIdentity(dockerContextTarget(a)) === dockerTargetIdentity(dockerContextTarget(b));
 
+/** Whether two context references use the same client transport configuration. */
+export const sameDockerContextConnection = (
+  a: Docker.ContextRef | undefined,
+  b: Docker.ContextRef | undefined,
+): boolean => Equal.equals(dockerContextTarget(a), dockerContextTarget(b));
+
 /**
- * Resolve an {@link Docker.EngineRef} to a context name. A `Docker.Swarm`
- * reference (narrowed by its `nodeId` attribute) contributes the context the
- * swarm was initialized on.
+ * Resolve an {@link Docker.EngineRef} to a local CLI context name, if present.
+ *
+ * @deprecated Prefer `dockerEngineTarget` for managed remote Engine endpoints.
+ * Their destinations may be structured targets without a CLI context name.
  */
 export const dockerEngineContextName = (ref: Docker.EngineRef | undefined): string | undefined => {
   if (typeof ref === "object" && ref !== null && "nodeId" in ref) {
-    return dockerContextName((ref as { context?: string }).context);
+    return typeof ref.context === "string" ? ref.context : undefined;
   }
   return dockerContextName(ref as Docker.ContextRef | undefined);
 };
@@ -1327,15 +1345,32 @@ export const dockerEngineTarget = (
   return dockerContextTarget(ref as Docker.ContextRef | undefined);
 };
 
+/** Whether two context or Swarm references address the same Docker Engine. */
 export const sameDockerEngineTarget = (
   a: Docker.EngineRef | undefined,
   b: Docker.EngineRef | undefined,
 ): boolean =>
   dockerTargetIdentity(dockerEngineTarget(a)) === dockerTargetIdentity(dockerEngineTarget(b));
 
+/** Whether two engine references use the same client transport configuration. */
+export const sameDockerEngineConnection = (
+  a: Docker.EngineRef | undefined,
+  b: Docker.EngineRef | undefined,
+): boolean => Equal.equals(dockerEngineTarget(a), dockerEngineTarget(b));
+
 /** Only absent Docker objects, not unreachable daemons, have NotFound semantics. */
 const isMissingDockerResource = (args: string[], stderr: string): boolean => {
   const diagnostic = stderr.replace(/^Error response from daemon:\s*/i, "").trim();
+  // Some remote Engines report volume inspection misses as
+  // `get <name>: no such volume` without the usual daemon error prefix.
+  // Scope that wording to volume inspect, so an SSH/TLS transport failure
+  // cannot be mistaken for an absent resource.
+  if (
+    args.some((arg, index) => arg === "volume" && args[index + 1] === "inspect") &&
+    /^get\s+\S+:\s+no such volume\b/i.test(diagnostic)
+  ) {
+    return true;
+  }
   if (/^Error response from daemon:/i.test(stderr)) {
     return (
       /^no such (?:container|image|network|volume|service|object|secret|config)\b/i.test(

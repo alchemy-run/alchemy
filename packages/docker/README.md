@@ -57,6 +57,8 @@ const network = yield* Docker.Network("remote-network", { context: remote });
 
 The runner still needs access to the remote engine and its SSH keys or TLS certificate files. Alchemy stores endpoint metadata and certificate **paths**, not private key or certificate contents. A plain context name or `Docker.Context.lookup()` continues to use the machine-local Docker CLI context.
 
+For mTLS connections, set `docker` to a Docker endpoint spec with `host`, `ca`, `cert`, and `key` file paths accessible to each runner. For SSH, the runner's Docker CLI must be able to authenticate to the remote host. A missing or unreachable remote Engine is an error, not an absent Docker resource.
+
 ## Network configuration
 
 A network can be internal, attachable, and pinned to an explicit subnet:

@@ -17,7 +17,13 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
-import { Docker, dockerEngineTarget, dockerTargetArgs, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerEngineTarget,
+  dockerTargetArgs,
+  dockerTargetIdentity,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
@@ -650,11 +656,18 @@ export const ServiceProvider = () =>
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
           const newDesired = yield* normalizeDesired(id, news, instanceId);
+          const oldComparable = comparableService(oldDesired);
+          const newComparable = comparableService(newDesired);
 
-          if (!Equal.equals(oldDesired, newDesired)) {
-            return requiresReplacement(oldDesired, newDesired)
+          if (!Equal.equals(oldComparable, newComparable)) {
+            return requiresReplacement(oldComparable, newComparable)
               ? { action: "replace" as const, deleteFirst: true }
               : { action: "update" as const };
+          }
+          // The endpoint has not moved, but the client credentials did.
+          // Reconcile refreshes the stored target without a task rollout.
+          if (!Equal.equals(oldDesired.context, newDesired.context)) {
+            return { action: "update" as const };
           }
 
           // Bundled program: the image identity is the content hash — a code
@@ -683,7 +696,7 @@ export const ServiceProvider = () =>
           if (output && olds) {
             const oldDesired = yield* normalizeDesired(id, olds, instanceId);
             if (
-              deepEqual(oldDesired, desired) &&
+              deepEqual(comparableService(oldDesired), comparableService(desired)) &&
               (resolved.codeHash === undefined || resolved.codeHash === output.code?.hash)
             ) {
               const current = yield* inspect(output.id, desired.context);
@@ -979,6 +992,13 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
   );
 
 type DesiredService = Effect.Success<ReturnType<typeof normalizeDesired>>;
+
+// Client-side TLS credentials are not part of a Swarm service's physical
+// identity. Rotating certificate paths must not replace or roll out tasks.
+const comparableService = (desired: DesiredService) => ({
+  ...desired,
+  context: dockerTargetIdentity(desired.context),
+});
 
 /**
  * Fields `docker service update` changes in place. Swarm rolls the tasks

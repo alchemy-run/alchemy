@@ -72,11 +72,7 @@ export const SwarmControlPlane = (
       const token = yield* adminToken(id);
       const context = props.context === undefined ? {} : { context: props.context };
       const network = yield* Docker.Network(`${id}Network`, { driver: "overlay", ...context });
-      const volumeContext = Docker.dockerEngineContextName(props.context);
-      const data = yield* Docker.Volume(
-        `${id}Data`,
-        volumeContext === undefined ? {} : { context: volumeContext },
-      );
+      const data = yield* Docker.Volume(`${id}Data`, context);
       const engine = yield* Docker.Service(`${id}Engine`, {
         image: props.image ?? DEFAULT_ENGINE_IMAGE,
         ...context,

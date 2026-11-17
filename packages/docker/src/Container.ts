@@ -18,6 +18,7 @@ import * as Schema from "effect/Schema";
 import {
   Docker,
   dockerContextTarget,
+  sameDockerContextConnection,
   sameDockerContextTarget,
   dockerPhysicalName,
 } from "./Docker.ts";
@@ -870,6 +871,9 @@ export const ContainerProvider = () =>
             if (applied !== undefined && applied !== (yield* desiredConfigHash(newArgs, news))) {
               return { action: "update" as const };
             }
+          }
+          if (output && !sameDockerContextConnection(olds.context, news.context)) {
+            return { action: "update" as const };
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {

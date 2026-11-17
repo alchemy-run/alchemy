@@ -1,8 +1,12 @@
 import * as Docker from "@alchemy.run/docker";
 import {
   dockerContextTarget,
+  dockerEngineTarget,
   dockerTargetArgs,
+  sameDockerContextConnection,
   sameDockerContextTarget,
+  sameDockerEngineConnection,
+  sameDockerEngineTarget,
 } from "@alchemy.run/docker/Docker";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -15,83 +19,34 @@ import { expectFound } from "./lookup.ts";
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 test.provider(
-  "diff replaces a context when name changes",
-  () =>
+  "plans replacement when a managed context name changes",
+  (stack) =>
     Effect.gen(function* () {
-      const contextProvider = yield* Provider.findProvider(Docker.Context);
-      const contextDiff = yield* contextProvider.diff!({
-        id: "build-context",
-        fqn: "build-context",
-        instanceId: "instance",
-        olds: { name: "old-context", description: "old" },
-        news: { name: "new-context", description: "old" },
-        oldBindings: [],
-        newBindings: [],
-        output: { id: "old-context", name: "old-context", description: "old", docker: undefined },
+      const oldName = `${stack.stage}-context-rename-old`;
+      const newName = `${stack.stage}-context-rename-new`;
+      yield* stack.destroy();
+      yield* stack.deploy(Docker.Context("build-context", { name: oldName }));
+      const plan = yield* stack.plan(Docker.Context("build-context", { name: newName }));
+      expect(plan.resources["build-context"]).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
       });
-      expect(contextDiff).toEqual({ action: "replace", deleteFirst: true });
+      yield* stack.destroy();
     }),
   { tags: ["provider:docker", "provider:docker:context", "local"] },
 );
 
 test.provider(
-  "diff updates a context when description changes",
-  () =>
+  "plans update when a managed context description changes",
+  (stack) =>
     Effect.gen(function* () {
-      const contextProvider = yield* Provider.findProvider(Docker.Context);
-      const contextDiff = yield* contextProvider.diff!({
-        id: "build-context",
-        fqn: "build-context",
-        instanceId: "instance",
-        olds: {
-          name: "build-context",
-          description: "old description",
-          docker: "host=unix:///var/run/docker.sock",
-        },
-        news: {
-          name: "build-context",
-          description: "new description",
-          docker: "host=unix:///var/run/docker.sock",
-        },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "build-context",
-          name: "build-context",
-          description: "old description",
-          docker: "host=unix:///var/run/docker.sock",
-        },
-      });
-      expect(contextDiff).toEqual({ action: "update" });
-    }),
-  { tags: ["provider:docker", "provider:docker:context", "local"] },
-);
-
-test.provider(
-  "diff replaces a context when docker endpoint is removed",
-  () =>
-    Effect.gen(function* () {
-      const contextProvider = yield* Provider.findProvider(Docker.Context);
-      const contextDiff = yield* contextProvider.diff!({
-        id: "build-context",
-        fqn: "build-context",
-        instanceId: "instance",
-        olds: {
-          name: "build-context",
-          description: "dev context",
-          docker: "host=ssh://user@example.com",
-        },
-        news: { name: "build-context", description: "dev context" },
-        oldBindings: [],
-        newBindings: [],
-        output: {
-          id: "build-context",
-          name: "build-context",
-          description: "dev context",
-          docker: "host=ssh://user@example.com",
-        },
-      });
-      expect(contextDiff).toEqual({ action: "replace", deleteFirst: true });
+      yield* stack.destroy();
+      yield* stack.deploy(Docker.Context("build-context", { description: "old description" }));
+      const plan = yield* stack.plan(
+        Docker.Context("build-context", { description: "new description" }),
+      );
+      expect(plan.resources["build-context"]).toMatchObject({ action: "update" });
+      yield* stack.destroy();
     }),
   { tags: ["provider:docker", "provider:docker:context", "local"] },
 );
@@ -109,6 +64,8 @@ test.provider(
         description: "",
         docker: { Host: "ssh://deploy@example.com", SkipTLSVerify: false },
       };
+      // Legacy state lacks dockerSpec. Construct an old state row directly
+      // because a current stack.deploy always persists that new attribute.
       const provider = yield* Provider.findProvider(Docker.Context);
       const missing = yield* docker.context.inspect(name).pipe(Effect.flip);
       expect(missing.reason._tag).toBe("NotFound");
@@ -144,6 +101,54 @@ describe(
       );
       expect(sameDockerContextTarget(remote, { name: "ci-context" })).toBe(false);
       expect(dockerContextTarget({ name: "external-context" })).toBe("external-context");
+    });
+
+    it("resolves a Swarm reference to its persisted remote engine target", () => {
+      const target = {
+        host: "tcp://docker.example.com:2376",
+        ca: "/certs/ca.pem",
+        cert: "/certs/client.pem",
+        key: "/certs/client-key.pem",
+      };
+      const swarm = { nodeId: "manager", context: target };
+      expect(dockerEngineTarget(swarm)).toEqual(target);
+      expect(sameDockerEngineTarget(swarm, { ...swarm, context: { ...target } })).toBe(true);
+      expect(sameDockerEngineTarget(swarm, "default")).toBe(false);
+    });
+
+    it("does not replace the same Engine when its TLS credentials rotate", () => {
+      const previous = {
+        name: "managed-tls",
+        dockerSpec:
+          "host=tcp://docker.example.com:2376,ca=/certs/old-ca.pem,cert=/certs/old.pem,key=/certs/old-key.pem",
+      };
+      const rotated = {
+        ...previous,
+        dockerSpec:
+          "host=tcp://docker.example.com:2376,ca=/certs/new-ca.pem,cert=/certs/new.pem,key=/certs/new-key.pem",
+      };
+      expect(sameDockerContextTarget(previous, rotated)).toBe(true);
+      expect(sameDockerContextConnection(previous, rotated)).toBe(false);
+      expect(
+        sameDockerEngineTarget(
+          { nodeId: "swarm-manager", context: dockerContextTarget(previous) },
+          { nodeId: "swarm-manager", context: dockerContextTarget(rotated) },
+        ),
+      ).toBe(true);
+      expect(
+        sameDockerEngineConnection(
+          { nodeId: "swarm-manager", context: dockerContextTarget(previous) },
+          { nodeId: "swarm-manager", context: dockerContextTarget(rotated) },
+        ),
+      ).toBe(false);
+      expect(
+        sameDockerContextTarget(previous, {
+          ...rotated,
+          dockerSpec: "host=tcp://different.example.com:2376,ca=/certs/new-ca.pem",
+        }),
+      ).toBe(false);
+      // Command flags must still use the newly configured certificate paths.
+      expect(dockerTargetArgs(dockerContextTarget(rotated))).toContain("/certs/new-key.pem");
     });
 
     test.provider("preserves named context selection for external lookups", (stack) =>

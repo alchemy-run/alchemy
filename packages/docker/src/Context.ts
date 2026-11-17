@@ -92,6 +92,14 @@ export interface ContextLookup {
  * });
  * ```
  *
+ * ### Mutual TLS
+ * **Example:** Remote engine with certificate files available to the runner
+ * ```typescript
+ * const secure = yield* Docker.Context("secure", {
+ *   docker: "host=tcp://docker.example.com:2376,ca=/certs/ca.pem,cert=/certs/client.pem,key=/certs/client-key.pem",
+ * });
+ * ```
+ *
  * ### Using a Context
  * **Example:** Deploy resources through the context
  * ```typescript

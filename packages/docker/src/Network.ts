@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import {
   Docker,
   dockerEngineTarget,
+  sameDockerEngineConnection,
   sameDockerEngineTarget,
   dockerPhysicalName,
 } from "./Docker.ts";
@@ -333,6 +334,11 @@ export const NetworkProvider = () =>
           // Reconcile can recreate a missing network. An update avoids
           // deleting a generation that has already disappeared.
           if (!current) return { action: "update" };
+          // A noop retains old state props. Refresh client credentials in
+          // state without replacing an otherwise unchanged Docker network.
+          if (!sameDockerEngineConnection(olds?.context, news?.context)) {
+            return { action: "update" };
+          }
         }),
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
           const context = dockerEngineTarget(news?.context);

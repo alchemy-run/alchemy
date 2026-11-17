@@ -3,7 +3,12 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { Docker, dockerContextTarget, sameDockerContextTarget } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  sameDockerContextConnection,
+  sameDockerContextTarget,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface SwarmProps {
@@ -159,6 +164,11 @@ export const SwarmProvider = () =>
           if (!isResolved(news)) return undefined;
           if (!sameDockerContextTarget(olds?.context, news?.context)) {
             return { action: "replace" as const, deleteFirst: true };
+          }
+          // Refresh persisted connection metadata when certificates rotate.
+          // This does not leave or re-initialize the existing Swarm.
+          if (!sameDockerContextConnection(olds?.context, news?.context)) {
+            return { action: "update" as const };
           }
           // The remaining props only apply at `swarm init`; changing them on
           // a live swarm is a no-op rather than a destructive re-init.

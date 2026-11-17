@@ -10,6 +10,7 @@ import { type BuildCacheOptions, buildCacheRef, resolveBuildCache } from "./Buil
 import {
   Docker,
   dockerContextTarget,
+  sameDockerContextConnection,
   sameDockerContextTarget,
   dockerPhysicalName,
 } from "./Docker.ts";
@@ -322,6 +323,9 @@ export const ImageProvider = () =>
           }
           const { image } = yield* buildAndInspectImage(id, news, instanceId);
           if (output?.imageId !== image.Id) {
+            return { action: "update" };
+          }
+          if (!sameDockerContextConnection(olds.context, news.context)) {
             return { action: "update" };
           }
         }),

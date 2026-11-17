@@ -3,7 +3,12 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
-import { Docker, dockerContextTarget, sameDockerContextTarget } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  sameDockerContextConnection,
+  sameDockerContextTarget,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
@@ -187,6 +192,9 @@ export const RemoteImageProvider = () =>
             source.Id !== (output.sourceImageId ?? output.imageId) ||
             source.Id !== target.Id
           ) {
+            return { action: "update" };
+          }
+          if (!sameDockerContextConnection(olds.context, news.context)) {
             return { action: "update" };
           }
         }),
