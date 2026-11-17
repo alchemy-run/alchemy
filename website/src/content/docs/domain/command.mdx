@@ -266,6 +266,16 @@ Strong consistency covers the model's views. A [projection](/domain/projection) 
 
 A command sent from inside the model, by a policy or a saga through an aggregate's client, answers at the commit.
 
+### What the wait costs
+
+An eventual command is one call to the aggregate. A strong command also waits for each view to receive the events, so it takes longer with every view they reach.
+
+On Cloudflare, with the model near its callers, an eventual command answers in 30 to 100 milliseconds. A strong one usually answers in 100 to 400 milliseconds, and within a second 99 times in 100.
+
+The first command to an instance is slower, because the platform creates its object and one for each view: about half a second eventual, and 1 to 2 seconds strong. An instance nobody has used for a while pays part of that again.
+
+Send a command with `consistency: "eventual"` when the caller shows the result from the receipt, or [predicts it](/domain/optimistic-updates), and keep the default when the next thing it does is read a view.
+
 ## Send it exactly once
 
 Networks fail after a command commits but before its receipt arrives. A client that retries could withdraw twice.
