@@ -155,6 +155,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
   it.each(["serve", "build"] as const)(
     "keeps Alchemy's build when a real official cloudflare() rejects a leftover wrangler.jsonc (%s)",
     async (command) => {
+      const customizer = vi.fn((_config: unknown) => undefined);
       const project = await fs.mkdtemp(path.join(os.tmpdir(), "alchemy-official-wrangler-"));
       try {
         await fs.writeFile(
@@ -171,13 +172,20 @@ describe("alchemy Cloudflare Vite plugin name", () => {
             root: project,
             logLevel: "silent",
             plugins: [
-              officialCloudflare({ inspectorPort: false, persistState: false }),
+              officialCloudflare({
+                inspectorPort: false,
+                persistState: false,
+                config: customizer as never,
+              }),
               cloudflareVitePlugin({ main: "./worker-entry.ts" }),
             ],
           },
           command,
         );
         expect(resolved.environments.ssr!.build.outDir).toBe("dist/ssr");
+        // PARITY.md documents this; a release that stops rejecting the file
+        // fails here so the row gets updated.
+        expect(customizer).not.toHaveBeenCalled();
       } finally {
         await fs.rm(project, { recursive: true, force: true });
       }

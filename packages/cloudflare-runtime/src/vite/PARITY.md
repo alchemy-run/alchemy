@@ -1,7 +1,8 @@
 # Parity with `@cloudflare/vite-plugin`
 
 Alchemy's Vite plugin replaces `@cloudflare/vite-plugin` (checked against
-**2.0.0-rc.1**, the catalog version). Frameworks are built against the official
+**2.0.0-rc.1**, the `cloudflare-vite-plugin-v2` catalog version; apps use v1, see
+Tracking v2). Frameworks are built against the official
 plugin's behavior, so anything they can observe must match. This file is the
 inventory of that surface: every behavior is **matched** (with the test that
 pins it), **different on purpose** (with the reason), or **out of scope**.
@@ -21,7 +22,9 @@ v2's prerelease line (the `cloudflare-vite-plugin-v2` catalog). The examples
 and Website fixtures stay on npm `latest` (v1, the default catalog), which is
 what create-cloudflare templates and framework docs install today; a v2 that
 meets their leftover `wrangler.jsonc` rejects the project (see the rows on
-Wrangler configs below).
+Wrangler configs below). Alchemy's handling of the v1 plugin those apps load
+is covered by `ViteTemplates.test.ts`, which runs every template under
+`alchemy dev` and deployed; the unit tests here import only v2.
 
 Most of v2 is how a project is configured and deployed: native
 `cloudflare.config.ts`, Build Output in `.cloudflare/output/v1` for
@@ -56,7 +59,7 @@ the differential tests ignore until the installed release catches up.
 | Frameworks detect the plugin by a `vite-plugin-cloudflare` name prefix (React Router, vinext, Vike's `@universal-deploy`, Flue) | Matched (`vite-plugin-cloudflare:alchemy`) | `plugin-name.test.ts` |
 | An official `cloudflare()` left in the config (or added by an async factory, e.g. RedwoodSDK) is neutralized | Matched | `plugin-name.test.ts`, `ViteTemplates.test.ts` |
 | The `config` customizer of a neutralized `cloudflare()` still runs (Flue's `flueWorkerConfig()`). In v2 it is a callback over the loaded `cloudflare.config.ts`, and it runs when the project has neither that file nor a Wrangler config (v1 always calls it) | Matched, against the installed release | `plugin-name.test.ts`, `examples/cloudflare-flue` |
-| v2 with a leftover `wrangler.json`/`wrangler.jsonc` and no `cloudflare.config.ts` | Different: v2 rejects the project before calling the customizer, so a customizer (Flue) doesn't run. That is v2's own migration step (it fails the same way without Alchemy), so Alchemy doesn't work around it; the project still builds with Alchemy's plugin | `plugin-name.test.ts` |
+| v2 with a leftover `wrangler.json`, `wrangler.jsonc` or `wrangler.toml` and no `cloudflare.config.ts` | Different: v2 rejects the project before calling the customizer, so a customizer (Flue) doesn't run. That is v2's own migration step (it fails the same way without Alchemy), so Alchemy doesn't work around it; the project still resolves with Alchemy's build | `plugin-name.test.ts` |
 | A framework that reloads `vite.config.ts` for a second Vite server (React Router's child compiler) gets a fresh official `cloudflare()` that Alchemy never sees | Different: that instance runs as configured. v1 reads `wrangler.jsonc` there and works; v2 rejects a leftover `wrangler.jsonc` there, as it does without Alchemy, so `alchemy dev` of the React Router template fails with v2 until the project moves to `cloudflare.config.ts`. The fixtures stay on v1 for this reason | `ViteTemplates.test.ts` (react-router, dev) |
 | `rsc: { serverHandler: false }` for `@vitejs/plugin-rsc` | Matched | React Router RSC fixtures |
 | Worker settings from `cloudflare.config.ts` (v2) or `wrangler.json` (v1), and the customizer's result | Different: declared on the Website resource | — |
