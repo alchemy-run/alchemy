@@ -389,6 +389,10 @@ export default defineConfig({
                 },
                 { label: "Layers", link: "/infrastructure-as-effects/layers" },
                 {
+                  label: "Sandbox gateways",
+                  link: "/infrastructure-as-effects/sandbox-gateway",
+                },
+                {
                   label: "Event Sources",
                   link: "/infrastructure-as-effects/event-sources",
                 },
