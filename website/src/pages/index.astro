@@ -52,7 +52,8 @@ const PREVIEW_COMMENT_LINES: [number, number][] = [[6, 12]];
 // The vertical track beside the sections that walk the full picture.
 const RAIL = [
   { label: "Declare", steps: [{ id: "loop-model", title: "the model" }] },
-  { label: "Prove", steps: [{ id: "loop-prove", title: "stories and rules" }] },
+  { label: "Specify", steps: [{ id: "loop-stories", title: "stories" }] },
+  { label: "Prove", steps: [{ id: "loop-prove", title: "invariants" }] },
   { label: "Ground", steps: [{ id: "loop-ground", title: "Layers" }] },
   { label: "Run", steps: [{ id: "loop-local", title: "on your machine" }] },
   { label: "Ship", steps: [{ id: "loop-pr", title: "preview per PR" }] },
@@ -523,21 +524,30 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── PROVE ───────────────── -->
+  <!-- ───────────────── SPECIFY ───────────────── -->
   <AlchemicalDivider variant="triangle" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-feature" id="loop-prove" data-rail-section>
+  <section class="v2-section v2-pat-3 v2-feature" id="loop-stories" data-rail-section>
     <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-prove")}</p>
-      <h2 class="v2-h2" data-copy>Prove it before it runs</h2>
+      <p class="v2-kicker">{railKicker("loop-stories")}</p>
+      <h2 class="v2-h2" data-copy>Specify behavior as stories, in the words of the business</h2>
       <p class="v2-lede" data-copy>
-        A <a href="/domain/story">story</a> states behavior as an example: given this history, when this command, then these events. It runs the real model in memory in milliseconds, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
+        A <a href="/domain/story">story</a> is a test written in the model's own terms: given this history, when this command, then these events. It reads like the requirement it came from, so the person who asked for the behavior can check it. It runs the real model in memory in milliseconds, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
       </p>
       <div class="v2-split">
         <CodeBlock filename="test/Account.test.ts" code={STORY_RULE_SRC} compact />
         <CodeBlock filename="test/Fraud.test.ts" code={STORY_CHAIN_SRC} compact />
       </div>
-      <p class="v2-lede v2-lede--next" data-copy>
-        A story checks the examples you thought of. A rule says what must always be true, and one test proves it for every state and input, or searches every short sequence of commands for one that breaks it. A broken rule fails with the shortest sequence that breaks it, written as a story. None of this needs a cloud.
+    </div>
+  </section>
+
+  <!-- ───────────────── PROVE ───────────────── -->
+  <AlchemicalDivider variant="square" class="v2-divider" />
+  <section class="v2-section v2-pat-4 v2-feature" id="loop-prove" data-rail-section>
+    <div class="v2-container">
+      <p class="v2-kicker">{railKicker("loop-prove")}</p>
+      <h2 class="v2-h2" data-copy>State an invariant and have it proved</h2>
+      <p class="v2-lede" data-copy>
+        A story tests the cases you thought of. An invariant is a predicate that must hold in every case, and nobody writes a case for it. One test proves each aggregate's invariants for every state and every input, then explores every short sequence of commands across the model for one that breaks a rule. A broken invariant fails with the shortest sequence that breaks it, written as a story.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/Account.aggregate.ts" code={RULES_SRC} compact />
@@ -547,13 +557,13 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── GROUND ───────────────── -->
-  <AlchemicalDivider variant="square" class="v2-divider" />
-  <section class="v2-section v2-pat-4 v2-feature" id="loop-ground" data-rail-section>
+  <AlchemicalDivider variant="pentagon" class="v2-divider" />
+  <section class="v2-section v2-pat-5 v2-feature" id="loop-ground" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-ground")}</p>
       <h2 class="v2-h2" data-copy>A Layer grounds it in a real platform</h2>
       <p class="v2-lede" data-copy>
-        A proved model still knows nothing about the cloud. A Layer answers each contract with a real platform, and owns the resources and the access that takes: Durable Objects for the aggregates, a database for the ledger, a vendor for payments. Swap a Layer and the same program runs in memory, on your machine, or on another platform.
+        A specified and proved model still knows nothing about the cloud. A Layer answers each contract with a real platform, and owns the resources and the access that takes: Durable Objects for the aggregates, a database for the ledger, a vendor for payments. Swap a Layer and the same program runs in memory, on your machine, or on another platform.
       </p>
       <dl class="v2-layers">
         {LAYERS.map((family) => (
@@ -582,8 +592,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── RUN ───────────────── -->
-  <AlchemicalDivider variant="pentagon" class="v2-divider" />
-  <section class="v2-section v2-pat-5 v2-feature" id="loop-local" data-rail-section>
+  <AlchemicalDivider variant="hexagon" class="v2-divider" />
+  <section class="v2-section v2-pat-6 v2-feature" id="loop-local" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-local")}</p>
       <h2 class="v2-h2" data-copy>Run the whole system on your machine</h2>
@@ -598,8 +608,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── SHIP ───────────────── -->
-  <AlchemicalDivider variant="hexagon" class="v2-divider" />
-  <section class="v2-section v2-pat-6 v2-feature" id="loop-pr" data-rail-section>
+  <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1 v2-feature" id="loop-pr" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-pr")}</p>
       <h2 class="v2-h2" data-copy>Every pull request gets its own deployment</h2>
@@ -627,8 +637,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── OBSERVE ───────────────── -->
-  <AlchemicalDivider variant="heptagon" class="v2-divider" />
-  <section class="v2-section v2-pat-1 v2-feature" id="loop-prod" data-rail-section>
+  <AlchemicalDivider variant="octagon" class="v2-divider" />
+  <section class="v2-section v2-pat-2 v2-feature" id="loop-prod" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-prod")}</p>
       <h2 class="v2-h2" data-copy>Production traces speak the model's language</h2>
@@ -643,8 +653,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── SENTIMENT ───────────────── -->
-  <AlchemicalDivider variant="octagon" class="v2-divider" />
-  <section class="v2-section v2-pat-2" aria-labelledby="sentiment-h">
+  <AlchemicalDivider variant="nonagon" class="v2-divider" />
+  <section class="v2-section v2-pat-3" aria-labelledby="sentiment-h">
     <div class="v2-container">
       <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
       <p class="v2-lede" data-copy>
@@ -657,7 +667,7 @@ const PROVIDERS = [
 
   <!-- ───────────────── GET STARTED ───────────────── -->
   <AlchemicalDivider variant="circle" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-section--last">
+  <section class="v2-section v2-pat-4 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Manifest yours</h2>
       <ol class="v2-steps">
