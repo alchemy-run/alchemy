@@ -27,3 +27,10 @@ const bash = Pi.Harness({ models: [Fast], tools: [Pi.Bash] });
 type _OneCodingToolNeedsSandbox = Assert<
   Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | AI.Sandbox>
 >;
+
+// An MCP server listed as a tool requires its client Layer.
+class Docs extends AI.McpServer<Docs>()("docs") {}
+const withServer = Pi.Harness({ models: [Fast], tools: [Add, Docs] });
+type _McpServerNeedsItsLayer = Assert<
+  Equals<Effect.Services<typeof withServer>, Pi.Storage | Fast | Add | Docs>
+>;

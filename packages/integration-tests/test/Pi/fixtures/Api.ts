@@ -4,6 +4,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import { Notes } from "./infra.ts";
+import PiMcpSession from "./McpSession.ts";
 import PiSandboxSession from "./SandboxSession.ts";
 import PiSession from "./Session.ts";
 
@@ -13,6 +14,7 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
   Effect.gen(function* () {
     const sessions = yield* PiSession;
     const sandboxSessions = yield* PiSandboxSession;
+    const mcpSessions = yield* PiMcpSession;
     const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
 
     return {
@@ -24,6 +26,29 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
         const body =
           request.method === "POST" ? ((yield* request.json) as Record<string, any>) : {};
 
+        if (user === "mcp") {
+          const session = mcpSessions.getByName(name!);
+          switch (action) {
+            case "create":
+              return yield* HttpServerResponse.json({
+                id: yield* session.create(name!, body.withServer),
+              });
+            case "tools":
+              return yield* HttpServerResponse.json(yield* session.tools(name!));
+            case "add-server":
+              yield* session.addServer(name!);
+              return yield* HttpServerResponse.json({ ok: true });
+            case "remove-server":
+              yield* session.removeServer(name!);
+              return yield* HttpServerResponse.json({ ok: true });
+            case "prompt":
+              return yield* HttpServerResponse.json({
+                status: yield* session.prompt(name!, body.text, body.requestId),
+              });
+            case "results":
+              return yield* HttpServerResponse.json(yield* session.results(name!));
+          }
+        }
         if (user === "sandbox") {
           const session = sandboxSessions.getByName(name!);
           switch (action) {

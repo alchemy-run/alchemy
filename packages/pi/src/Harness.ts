@@ -1,3 +1,9 @@
+import {
+  isMcpServer,
+  type AnyMcpServer,
+  type McpServerClass,
+  type McpServerService,
+} from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandbox } from "@alchemy.run/ai/Sandbox";
 import type { AnySkill } from "@alchemy.run/ai/Skill";
@@ -36,7 +42,7 @@ import {
 import * as Alchemy from "alchemy";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
-import { LanguageModel } from "effect/ai";
+import { LanguageModel, McpClient } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -49,6 +55,7 @@ import * as Stream from "effect/Stream";
 import { CODEMODE_TOOL, CodeModeConvention, isCodeMode } from "./CodeMode.ts";
 import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
+import { mcpExtensionName, mcpRegistrations } from "./internal/mcp.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
 import { makeEnvFor, sandboxKey } from "./Sandbox.ts";
@@ -75,7 +82,7 @@ const ConversationNames = defineDoc<{ names: Record<string, number> }>({
 /** Options of {@link Harness}. */
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
-  Tools extends ReadonlyArray<AnyTool>,
+  Tools extends ReadonlyArray<AnyTool | AnyMcpServer>,
   Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
 > {
   /**
@@ -86,7 +93,10 @@ export interface HarnessOptions<
   readonly name?: string;
   /** Every model a conversation may run on. The first is the default. */
   readonly models: Models;
-  /** Every tool a conversation may be given. */
+  /**
+   * Every tool a conversation may be given. An MCP server gives every tool
+   * it lists when an instance opens, named `mcp__<server>__<tool>`.
+   */
   readonly tools?: Tools;
   /**
    * Every extension and skill a conversation may select. Extensions are
@@ -103,11 +113,14 @@ export interface AgentOptions {
   readonly thinkingLevel?: ModelThinkingLevel | null;
   /**
    * The tools the conversation may use: exactly these, or `add`/`remove`
-   * relative to what it has now.
+   * relative to what it has now. An MCP server stands for all of its tools.
    */
   readonly tools?:
-    | ReadonlyArray<ToolRef>
-    | { readonly add?: ReadonlyArray<ToolRef>; readonly remove?: ReadonlyArray<ToolRef> }
+    | ReadonlyArray<ToolRef | AnyMcpServer>
+    | {
+        readonly add?: ReadonlyArray<ToolRef | AnyMcpServer>;
+        readonly remove?: ReadonlyArray<ToolRef | AnyMcpServer>;
+      }
     | null;
   /**
    * The extensions and skills the conversation selects: exactly these, or
@@ -274,6 +287,9 @@ type ModelServices<Models extends ReadonlyArray<AnyModel>> = Models[number] exte
     : never
   : never;
 
+/** What listing `T` in a harness's `tools` requires to be provided. */
+type ListedRequirements<T> = T extends McpServerClass<infer Self, any> ? Self : ToolRequirements<T>;
+
 /** The extension the harness's own tools are installed in; always selected. */
 const BASE_EXTENSION = "alchemy";
 
@@ -352,7 +368,7 @@ const HEARTBEAT = "30 seconds";
  */
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
-  const Tools extends ReadonlyArray<AnyTool> = readonly [],
+  const Tools extends ReadonlyArray<AnyTool | AnyMcpServer> = readonly [],
   const Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
 >(
   options: HarnessOptions<Models, Tools, Extensions>,
@@ -361,7 +377,7 @@ export const Harness = <
   never,
   | Storage
   | ModelServices<Models>
-  | ToolRequirements<Tools[number]>
+  | ListedRequirements<Tools[number]>
   | ExtensionRequirements<Extensions[number]>
 > =>
   Effect.gen(function* () {
@@ -396,7 +412,18 @@ export const Harness = <
           }
         }
       });
-    const tools = yield* resolveTools(options.tools ?? []);
+    const listed: ReadonlyArray<AnyTool | AnyMcpServer> = options.tools ?? [];
+    const tools = yield* resolveTools(listed.filter((tool): tool is AnyTool => !isMcpServer(tool)));
+    const servers = yield* Effect.forEach(
+      listed.filter((tool): tool is AnyMcpServer => isMcpServer(tool)),
+      (server) =>
+        Effect.map(
+          Effect.service(server as Context.Key<unknown, McpServerService>),
+          ({ client }) => ({ server, client }),
+        ),
+    );
+    /** Each server's tools, by name: known once an instance has opened and asked it. */
+    const serverTools = new Map<string, ReadonlyArray<string>>();
     const extensions = yield* Effect.forEach(
       (options.extensions ?? []).map(toExtension),
       (extension) =>
@@ -563,6 +590,33 @@ export const Harness = <
             return { name: extension.extensionName, tools: tools.map(compile), sections, hooks };
           },
         );
+        // Each server is asked for its tools once per instance. Like a
+        // model's, its client's scope is never closed.
+        const buildServers = Effect.gen(function* () {
+          const scope = yield* Scope.make();
+          return yield* Effect.forEach(servers, ({ server, client }) =>
+            Effect.gen(function* () {
+              const built = yield* Layer.buildWithScope(client, scope);
+              const registrations = yield* mcpRegistrations(
+                server.serverName,
+                Context.get(built, McpClient.McpClient),
+                runModel,
+              );
+              return {
+                name: mcpExtensionName(server.serverName),
+                tools: registrations,
+              } satisfies PiExtension;
+            }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new PiError({
+                    message: `MCP server ${server.serverName}: ${messageOf(cause)}`,
+                    cause,
+                  }),
+              ),
+            ),
+          );
+        }).pipe(Effect.provideContext(base));
         const registry = createRegistry();
         registry.install(baseExtension);
         for (const extension of piExtensions) {
@@ -579,13 +633,21 @@ export const Harness = <
         ];
 
         opened = Effect.runPromiseWith(base)(
-          Effect.all([buildModels, storage.open(prefix), buildCodemode]).pipe(
-            Effect.tap(([, , codemode]) =>
+          Effect.all([buildModels, storage.open(prefix), buildCodemode, buildServers]).pipe(
+            Effect.tap(([, , codemode, mcp]) =>
               Effect.sync(() => {
                 for (const extension of codemode) registry.install(extension);
+                for (const [index, extension] of mcp.entries()) {
+                  registry.install(extension);
+                  const names = extension.tools.map((tool) => tool.name);
+                  serverTools.set(servers[index]!.server.serverName, names);
+                  for (const toolName of names) {
+                    toolByName.set(toolName, { toolName } as ToolRef);
+                  }
+                }
               }),
             ),
-            Effect.flatMap(([piModels, piStorage]) =>
+            Effect.flatMap(([piModels, piStorage, , mcp]) =>
               fromPi((context) =>
                 PiHarness.open(
                   piStorage,
@@ -594,7 +656,7 @@ export const Harness = <
                     registry,
                     settings: {
                       ...options.settings,
-                      extensions: defaultExtensions,
+                      extensions: [...defaultExtensions, ...mcp],
                     },
                     ...(envFor === undefined
                       ? {}
@@ -676,6 +738,15 @@ export const Harness = <
             ? Effect.fail(new NotOnHarness({ kind: "tool", missing: ref.toolName }))
             : Effect.succeed({ name: ref.toolName } as ToolRegistration);
         };
+        /** The tool names a list stands for: an MCP server is every tool it listed. */
+        const namesOf = (refs: ReadonlyArray<ToolRef | AnyMcpServer>) =>
+          Effect.forEach(refs, (ref) => {
+            if (!isMcpServer(ref)) return Effect.succeed([ref.toolName]);
+            const names = serverTools.get(ref.serverName);
+            return names === undefined
+              ? Effect.fail(new NotOnHarness({ kind: "tool", missing: ref.serverName }))
+              : Effect.succeed(names);
+          }).pipe(Effect.map((names) => names.flat()));
         // Selecting an extension enables the tools it brings.
         const brought = broughtBy(
           agent.extensions == null
@@ -699,14 +770,20 @@ export const Harness = <
               ? yield* exactly([...current, ...brought.map((tool) => tool.toolName)])
               : undefined;
         } else if (Array.isArray(agent.tools)) {
-          tools = yield* exactly([...agent.tools, ...brought].map((tool) => tool.toolName));
+          tools = yield* exactly([
+            ...(yield* namesOf(agent.tools)),
+            ...brought.map((tool) => tool.toolName),
+          ]);
         } else {
           const edit = agent.tools as {
-            add?: ReadonlyArray<ToolRef>;
-            remove?: ReadonlyArray<ToolRef>;
+            add?: ReadonlyArray<ToolRef | AnyMcpServer>;
+            remove?: ReadonlyArray<ToolRef | AnyMcpServer>;
           };
-          const remove = new Set((edit.remove ?? []).map((tool) => tool.toolName));
-          const add = [...(edit.add ?? []), ...brought].map((tool) => tool.toolName);
+          const remove = new Set(yield* namesOf(edit.remove ?? []));
+          const add = [
+            ...(yield* namesOf(edit.add ?? [])),
+            ...brought.map((tool) => tool.toolName),
+          ];
           // Pi stores only a removal list or an exact list; adding means
           // writing out the exact list.
           const enabled = current ?? [...toolByName.keys()];
@@ -994,6 +1071,6 @@ export const Harness = <
     never,
     | Storage
     | ModelServices<Models>
-    | ToolRequirements<Tools[number]>
+    | ListedRequirements<Tools[number]>
     | ExtensionRequirements<Extensions[number]>
   >;

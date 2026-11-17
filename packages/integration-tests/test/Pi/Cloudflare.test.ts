@@ -148,43 +148,55 @@ test(
   "coding tools run in an E2B sandbox that suspends, resumes and is removed",
   Effect.gen(function* () {
     const name = `sbx-${Date.now()}`;
+    /** E2B's listing trails a state change by a moment. */
+    const stateBecomes = (wanted: string | null) =>
+      call(`/sandbox/${name}/state`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (result: { state: string | null }) => result.state === wanted,
+          times: 15,
+        }),
+      );
     yield* call(`/sandbox/${name}/create`, {});
-    const status = yield* call(`/sandbox/${name}/prompt`, {
-      text: 'Use the write tool to create /home/user/hello.txt containing exactly the text "pi was here". Then use bash to run: wc -c /home/user/hello.txt',
-      requestId: "sbx-1",
-    }).pipe(Effect.ensuring(Effect.void));
-    const tools = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
-      tool: string;
-      isError: boolean;
-    }>;
-    const file = yield* call(`/sandbox/${name}/file`, { path: "/home/user/hello.txt" });
-    expect(status.status).toBe("done");
-    expect(tools.some((used) => used.tool === "write" && !used.isError)).toBe(true);
-    expect(tools.some((used) => used.tool === "bash" && !used.isError)).toBe(true);
-    expect(file.text).toContain("pi was here");
+    yield* Effect.gen(function* () {
+      const status = yield* call(`/sandbox/${name}/prompt`, {
+        text: 'Use the write tool to create /home/user/hello.txt containing exactly the text "pi was here". Then use bash to run: wc -c /home/user/hello.txt',
+        requestId: "sbx-1",
+      });
+      const tools = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
+        tool: string;
+        isError: boolean;
+      }>;
+      const file = yield* call(`/sandbox/${name}/file`, { path: "/home/user/hello.txt" });
+      expect(status.status).toBe("done");
+      expect(tools.some((used) => used.tool === "write" && !used.isError)).toBe(true);
+      expect(tools.some((used) => used.tool === "bash" && !used.isError)).toBe(true);
+      expect(file.text).toContain("pi was here");
 
-    // Suspending pauses the sandbox, and suspending it again changes nothing.
-    yield* call(`/sandbox/${name}/suspend`, {});
-    yield* call(`/sandbox/${name}/suspend`, {});
-    expect((yield* call(`/sandbox/${name}/state`)).state).toBe("paused");
+      // Suspending pauses the sandbox, and suspending it again changes nothing.
+      yield* call(`/sandbox/${name}/suspend`, {});
+      yield* call(`/sandbox/${name}/suspend`, {});
+      expect((yield* stateBecomes("paused")).state).toBe("paused");
 
-    // The next tool call resumes it, with the file still there.
-    const resumed = yield* call(`/sandbox/${name}/prompt`, {
-      text: "Use bash to run: cat /home/user/hello.txt",
-      requestId: "sbx-2",
-    });
-    expect(resumed.status).toBe("done");
-    expect((yield* call(`/sandbox/${name}/state`)).state).toBe("running");
-    const after = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
-      tool: string;
-      isError: boolean;
-    }>;
-    expect(after.filter((used) => used.tool === "bash" && !used.isError).length).toBe(2);
+      // The next tool call resumes it, with the file still there.
+      const resumed = yield* call(`/sandbox/${name}/prompt`, {
+        text: "Use bash to run: cat /home/user/hello.txt",
+        requestId: "sbx-2",
+      });
+      expect(resumed.status).toBe("done");
+      expect((yield* stateBecomes("running")).state).toBe("running");
+      const after = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
+        tool: string;
+        isError: boolean;
+      }>;
+      expect(after.filter((used) => used.tool === "bash" && !used.isError).length).toBe(2);
 
-    // Removing deletes it, and removing it again changes nothing.
-    yield* call(`/sandbox/${name}/kill`, {});
-    yield* call(`/sandbox/${name}/kill`, {});
-    expect((yield* call(`/sandbox/${name}/state`)).state).toBeNull();
+      // Removing deletes it, and removing it again changes nothing.
+      yield* call(`/sandbox/${name}/kill`, {});
+      yield* call(`/sandbox/${name}/kill`, {});
+      expect((yield* stateBecomes(null)).state).toBeNull();
+      // A failed assertion must not leave a sandbox holding the template.
+    }).pipe(Effect.ensuring(Effect.ignore(call(`/sandbox/${name}/kill`, {}))));
   }),
   { tags: [...tags, "provider:e2b"], timeout: 300_000 },
 );
@@ -263,4 +275,53 @@ test(
     expect(script?.text).toContain("1030");
   }),
   { tags, timeout: 180_000 },
+);
+
+test(
+  "an MCP server's tools are listed, called, and added or removed as one",
+  Effect.gen(function* () {
+    const name = `mcp-${Date.now()}`;
+    yield* call(`/mcp/${name}/create`, { withServer: true });
+    expect(yield* call(`/mcp/${name}/tools`)).toEqual([
+      "add",
+      "mcp__codes__always_fails",
+      "mcp__codes__lookup_code",
+    ]);
+
+    const status = yield* call(`/mcp/${name}/prompt`, {
+      text: 'Look up the secret code for the word "teal" with the lookup tool, then reply with the code.',
+      requestId: "mcp-1",
+    });
+    expect(status.status).toBe("done");
+    const results = (yield* call(`/mcp/${name}/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const looked = results.find((result) => result.tool === "mcp__codes__lookup_code");
+    expect(looked?.isError).toBe(false);
+    expect(looked?.text).toContain("CODE-TEAL-7391");
+
+    // The server's own error reaches the model as an error result.
+    yield* call(`/mcp/${name}/prompt`, {
+      text: "Call the always_fails tool once and tell me what it said.",
+      requestId: "mcp-2",
+    });
+    const failed = ((yield* call(`/mcp/${name}/results`)) as typeof results).find(
+      (result) => result.tool === "mcp__codes__always_fails",
+    );
+    expect(failed?.isError).toBe(true);
+    expect(failed?.text).toContain("this tool always fails");
+
+    // The server stands for all of its tools when a conversation's tools change.
+    yield* call(`/mcp/${name}/remove-server`, {});
+    expect(yield* call(`/mcp/${name}/tools`)).toEqual(["add"]);
+    yield* call(`/mcp/${name}/add-server`, {});
+    expect(yield* call(`/mcp/${name}/tools`)).toHaveLength(3);
+
+    // A conversation created without the server has none of its tools.
+    yield* call(`/mcp/${name}-plain/create`, { withServer: false });
+    expect(yield* call(`/mcp/${name}-plain/tools`)).toEqual(["add"]);
+  }),
+  { tags, timeout: 240_000 },
 );
