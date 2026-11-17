@@ -1,6 +1,7 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import type { BindingNameOptions } from "../Workers/WorkerBinding.ts";
 import type { Queue } from "./Queue.ts";
 import { maybeQueueShim } from "./QueueShim.ts";
 import { SendError } from "./QueueTypes.ts";
@@ -9,9 +10,10 @@ import { SendError } from "./QueueTypes.ts";
  * Shared scaffolding for the Worker-binding implementations of the Queue
  * services.
  *
- * Resolves the {@link WorkerEnvironment} and host {@link Worker}, registers
- * the `queue` binding at deploy time, then delegates to `makeClient` with the
- * shared {@link makeQueueHelpers} to build the producer client.
+ * Resolves the {@link WorkerEnvironment} and host {@link Worker}. Registers
+ * the `queue` binding (and any dev-mode shim) only when no explicit name is
+ * given; a named client uses the existing `Worker.env` entry and its wiring.
+ * Delegates to `makeClient` with shared {@link makeQueueHelpers}.
  */
 export const makeQueueBinding = <Client>(options: {
   makeClient: (helpers: ReturnType<typeof makeQueueHelpers>) => Client;
@@ -28,8 +30,8 @@ export const makeQueueBinding = <Client>(options: {
     // guarded branch never runs there).
     const context = yield* Effect.context<never>();
 
-    return Effect.fn(function* (queue: Queue) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
+    return Effect.fn(function* (queue: Queue, binding?: BindingNameOptions) {
+      if (!globalThis.__ALCHEMY_RUNTIME__ && binding === undefined) {
         // A LOCAL host binding a LIVE queue needs the dev-mode
         // remote-producer shim (see `QueueShim.ts`) — registered here as
         // ordinary engine-managed resources, like the `AccountApiToken`
@@ -54,13 +56,15 @@ export const makeQueueBinding = <Client>(options: {
         });
       }
 
-      return options.makeClient(makeQueueHelpers(env, queue));
+      return options.makeClient(makeQueueHelpers(env, queue, binding?.binding));
     });
   });
 
 /** Primitives shared by the Worker-binding producer clients. */
-export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
-  const raw = Effect.sync(() => (env as Record<string, runtime.Queue<unknown>>)[queue.LogicalId]!);
+export const makeQueueHelpers = (env: Record<string, any>, queue: Queue, binding?: string) => {
+  const raw = Effect.sync(
+    () => (env as Record<string, runtime.Queue<unknown>>)[binding ?? queue.LogicalId]!,
+  );
 
   const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, SendError> =>
     Effect.tryPromise({

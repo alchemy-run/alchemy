@@ -372,6 +372,17 @@ export type BucketLookup = {
  * }
  * ```
  *
+ * **Example:** Reusing an explicit Worker env name
+ * ```typescript
+ * // Worker props: { main: import.meta.url, env: { MEDIA: MyBucket } }
+ * const media = yield* Cloudflare.R2.ReadWriteBucket(MyBucket, { binding: "MEDIA" });
+ * yield* media.put("hello.txt", "Hello!");
+ * ```
+ *
+ * The `binding` option reuses the existing `MEDIA` entry instead of adding
+ * another binding named after `MyBucket.LogicalId`. Omitting it preserves
+ * automatic registration for Workers without an explicit env entry.
+ *
  * **Example:** Streaming upload with content length
  * ```typescript
  * const bucket = yield* Cloudflare.R2.ReadWriteBucket(MyBucket);

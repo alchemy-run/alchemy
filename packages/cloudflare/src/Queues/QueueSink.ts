@@ -2,6 +2,7 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type * as Sink from "effect/Sink";
+import type { BindingNameOptions } from "../Workers/WorkerBinding.ts";
 import type { Queue } from "./Queue.ts";
 import type { SendError } from "./QueueTypes.ts";
 
@@ -19,6 +20,20 @@ import type { SendError } from "./QueueTypes.ts";
  * (current credentials, for Actions). Each one is the sink layered over
  * the matching `WriteQueue` implementation and wires the queue into the
  * host exactly as that layer does.
+ *
+ * To reuse an existing native Worker `env` entry, pass its name as
+ * `{ binding: "EVENTS" }`. The option is forwarded to `WriteQueue`; it does
+ * not create a second producer binding. Omit it for automatic registration
+ * under the queue's logical id.
+ *
+ * ### Using an existing binding name
+ * **Example:** Drain through a named producer binding
+ * ```typescript
+ * // The Worker props contain env: { EVENTS: MyQueue }.
+ * const sink = yield* Cloudflare.Queues.QueueSink(MyQueue, { binding: "EVENTS" });
+ * yield* Stream.succeed({ event: "signup" }).pipe(Stream.run(sink));
+ * ```
+ *
  * ### Draining a Stream into a Queue
  * **Example:** Run a Stream into a Queue
  * ```typescript
@@ -78,7 +93,7 @@ import type { SendError } from "./QueueTypes.ts";
 export interface QueueSink extends Binding.Service<
   QueueSink,
   "Cloudflare.Queues.QueueSink",
-  (queue: Queue) => Effect.Effect<QueueSinkClient>
+  (queue: Queue, options?: BindingNameOptions) => Effect.Effect<QueueSinkClient>
 > {}
 
 export const QueueSink = Binding.Service<QueueSink>("Cloudflare.Queues.QueueSink");

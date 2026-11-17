@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
+import type { BindingNameOptions } from "../Workers/WorkerBinding.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { R2Object, ObjectBody } from "./BucketTypes.ts";
 import { R2Error } from "./BucketTypes.ts";
@@ -10,9 +11,10 @@ import { R2Error } from "./BucketTypes.ts";
 /**
  * Shared scaffolding for the Worker-binding implementations of the R2 services.
  *
- * Resolves the {@link WorkerEnvironment} and host {@link Worker}, registers the
- * `r2_bucket` binding at deploy time, then delegates to `makeClient` with the
- * shared {@link Helpers} to build the read/write/read-write client.
+ * Resolves the {@link WorkerEnvironment} and host {@link Worker}. Registers
+ * the `r2_bucket` binding at deploy time only when no explicit binding name
+ * is given; a named client uses the existing `Worker.env` entry instead.
+ * Delegates to `makeClient` with shared helpers for read/write clients.
  */
 export const makeBucketBinding = <Client>(options: {
   makeClient: (helpers: ReturnType<typeof makeHelpers>) => Client;
@@ -21,8 +23,8 @@ export const makeBucketBinding = <Client>(options: {
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (bucket: Bucket) {
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
+    return Effect.fn(function* (bucket: Bucket, binding?: BindingNameOptions) {
+      if (!globalThis.__ALCHEMY_RUNTIME__ && binding === undefined) {
         yield* host.bind`${bucket}`({
           bindings: [
             {
@@ -39,7 +41,7 @@ export const makeBucketBinding = <Client>(options: {
         });
       }
 
-      return options.makeClient(makeHelpers(env, bucket));
+      return options.makeClient(makeHelpers(env, bucket, binding?.binding));
     });
   });
 
@@ -50,8 +52,10 @@ export const makeBucketBinding = <Client>(options: {
  * live in {@link makeRead}/{@link makeWrite} respectively — only the primitives
  * used by both sides are exposed here.
  */
-export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
-  const raw = Effect.sync(() => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId]!);
+export const makeHelpers = (env: Record<string, any>, bucket: Bucket, binding?: string) => {
+  const raw = Effect.sync(
+    () => (env as Record<string, runtime.R2Bucket>)[binding ?? bucket.LogicalId]!,
+  );
   const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, R2Error> =>
     Effect.tryPromise({
       try: fn,

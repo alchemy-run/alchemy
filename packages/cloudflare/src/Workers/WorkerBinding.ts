@@ -282,8 +282,38 @@ const isHostWorker = (target: unknown, host: Worker): boolean => {
   return "LogicalId" in target && target.LogicalId === host.LogicalId;
 };
 
+/**
+ * Select an existing binding by its name in a Worker's declared `env`.
+ *
+ * With this option, a native binding client reuses the declared binding
+ * that points to the supplied resource rather than adding a second binding
+ * under its logical id. The name must exist in the host Worker's `env`.
+ * Omit it when the client should register its own binding automatically.
+ */
+export interface BindingNameOptions {
+  /** Key already declared in the host Worker's `env` for this resource. */
+  readonly binding: string;
+}
+
+/**
+ * Bind another Effect-native Worker as a typed RPC client.
+ *
+ * By default the service binding is registered using the target Worker's
+ * logical id. If the host already declares the target under a different
+ * `env` key, pass `{ binding: "AUTH" }` to read that existing service
+ * binding without registering another. Self bindings use the Worker's own
+ * `ctx.exports.default` loopback and do not need a binding name.
+ *
+ * @example Reuse an existing Worker env binding
+ * ```typescript
+ * // The caller Worker props declare env: { AUTH: AuthWorker }.
+ * const auth = yield* Cloudflare.Workers.bindWorker(AuthWorker, { binding: "AUTH" });
+ * const result = yield* auth.greet("alice");
+ * ```
+ */
 export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   workerEff: (Worker & Rpc<Shape>) | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
+  options?: BindingNameOptions,
 ) {
   const self = yield* Worker;
   if (isHostWorker(workerEff, self)) {
@@ -301,22 +331,24 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   const worker = isYieldableEffectLike(workerEff)
     ? yield* workerEff as Effect.Effect<Worker & Rpc<Shape>, never, Req>
     : workerEff;
-  yield* self.bind`${worker}`({
-    bindings: [
-      {
-        type: "service",
-        name: worker.LogicalId,
-        service: worker.workerName,
-      },
-    ],
-  });
+  if (options === undefined) {
+    yield* self.bind`${worker}`({
+      bindings: [
+        {
+          type: "service",
+          name: worker.LogicalId,
+          service: worker.workerName,
+        },
+      ],
+    });
+  }
 
   // `bindWorker` runs at *init* phase (both at plantime and at runtime
   // cold-start). `WorkerEnvironment` only exists at exec phase on the
   // deployed worker, so we hand `makeRpcStub` an `Effect<stub>` that
   // resolves the binding lazily on each method call.
   const stubEff = WorkerEnvironment.pipe(
-    Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
+    Effect.map((env) => (env as Record<string, unknown>)[options?.binding ?? worker.LogicalId]),
   );
   return makeRpcStub<Shape>(stubEff);
 });
