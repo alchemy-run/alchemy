@@ -902,6 +902,31 @@ importers:
         specifier: 'catalog:'
         version: 1.4.4(typescript@7.1.0-dev.20261105.1)
 
+  demos/domain-verify:
+    dependencies:
+      '@remotion/cli':
+        specifier: 'catalog:'
+        version: 4.0.535(@swc/helpers@0.5.23)(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-dev.20261105.1)
+      '@remotion/google-fonts':
+        specifier: 'catalog:'
+        version: 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
+      remotion:
+        specifier: 'catalog:'
+        version: 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+
   demos/effect-prezzy:
     dependencies:
       '@effect/sql-d1':
@@ -37715,6 +37740,47 @@ snapshots:
       - webpack-cli
       - webpack-hot-middleware
 
+  '@remotion/cli@4.0.535(@swc/helpers@0.5.23)(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-dev.20261105.1)':
+    dependencies:
+      '@babel/parser': 7.24.1
+      '@remotion/bundler': 4.0.535(@swc/helpers@0.5.23)(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/codemods': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/media-utils': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/player': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/renderer': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/studio': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/studio-server': 4.0.535(@swc/helpers@0.5.23)(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-dev.20261105.1)
+      '@remotion/studio-shared': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      dotenv: 17.3.1
+      mediabunny: 1.61.3
+      minimist: 1.2.6
+      prompts: 2.4.2
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+      remotion: 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      semver: 7.5.3
+    transitivePeerDependencies:
+      - '@minify-html/node'
+      - '@remotion/video-matting'
+      - '@remotion/whisper-webgpu'
+      - '@swc/core'
+      - '@swc/css'
+      - '@swc/helpers'
+      - '@swc/html'
+      - bufferutil
+      - clean-css
+      - cssnano
+      - csso
+      - html-minifier-terser
+      - lightningcss
+      - postcss
+      - supports-color
+      - typescript
+      - uglify-js
+      - utf-8-validate
+      - webpack-cli
+      - webpack-hot-middleware
+
   '@remotion/codemods@4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@babel/parser': 7.24.1
@@ -37843,6 +37909,48 @@ snapshots:
       '@remotion/studio-shared': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@svgr/core': 8.1.0(supports-color@10.2.2)(typescript@7.1.0-dev.20260923.1)
       '@svgr/plugin-jsx': 8.1.0(@svgr/core@8.1.0(supports-color@10.2.2)(typescript@7.1.0-dev.20260923.1))(supports-color@10.2.2)
+      kiwi-schema: 0.5.0
+      memfs: 3.4.3
+      open: 8.4.2
+      recast: 0.23.21
+      remotion: 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      semver: 7.5.3
+      zod: 4.5.4
+    transitivePeerDependencies:
+      - '@minify-html/node'
+      - '@remotion/video-matting'
+      - '@remotion/whisper-webgpu'
+      - '@swc/core'
+      - '@swc/css'
+      - '@swc/helpers'
+      - '@swc/html'
+      - bufferutil
+      - clean-css
+      - cssnano
+      - csso
+      - html-minifier-terser
+      - lightningcss
+      - postcss
+      - react
+      - react-dom
+      - supports-color
+      - typescript
+      - uglify-js
+      - utf-8-validate
+      - webpack-cli
+      - webpack-hot-middleware
+
+  '@remotion/studio-server@4.0.535(@swc/helpers@0.5.23)(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-dev.20261105.1)':
+    dependencies:
+      '@babel/parser': 7.24.1
+      '@babel/types': 7.24.0
+      '@remotion/bundler': 4.0.535(@swc/helpers@0.5.23)(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(lightningcss@1.33.0)(postcss@8.5.31)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/codemods': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/renderer': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@remotion/studio-protocol': 4.0.535
+      '@remotion/studio-shared': 4.0.535(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@svgr/core': 8.1.0(supports-color@10.2.2)(typescript@7.1.0-dev.20261105.1)
+      '@svgr/plugin-jsx': 8.1.0(@svgr/core@8.1.0(supports-color@10.2.2)(typescript@7.1.0-dev.20261105.1))(supports-color@10.2.2)
       kiwi-schema: 0.5.0
       memfs: 3.4.3
       open: 8.4.2

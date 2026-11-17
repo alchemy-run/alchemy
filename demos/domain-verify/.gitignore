@@ -1,0 +1,2 @@
+# The rendered video and stills; regenerate with `pnpm render`.
+out/
