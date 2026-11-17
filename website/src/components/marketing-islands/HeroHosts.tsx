@@ -11,9 +11,10 @@ import {
 import "./HeroHosts.css";
 
 /*
- * The hero: one model cycling through eight providers. Each turn rolls the
- * Layer that hosts it the way the talk deck's Roll does, then runs the tests
- * and deploys it, showing the resources that provider needs.
+ * The hero: one model cycling through seven providers. Each turn rolls the
+ * parts that change (the host, its props, the Bank Layer) the way the talk
+ * deck's Roll does, then runs the tests and deploys it, showing the resources
+ * that provider needs and the binding.
  * Clicking a provider in the reel jumps to it.
  */
 
@@ -190,7 +191,7 @@ export default function HeroHosts() {
         </div>
       </div>
       <div className="v2-hero__term" aria-hidden>
-        <TermChrome title="~/bank" badge="DEPLOY" badgeColor={GREEN} maxLines={9}>
+        <TermChrome title="~/bank" badge="DEPLOY" badgeColor={GREEN} maxLines={10}>
           <Line>
             <span style={{ color: GREEN }}>$ </span>
             {testCmd}
