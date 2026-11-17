@@ -98,6 +98,26 @@ This works for a sandbox on any platform. A Boat or E2B sandbox reads an S3
 object through its gateway's role without an AWS credential of its own. An
 object's body is streamed through the gateway, not buffered.
 
+## Send AWS requests from the sandbox
+
+With only a gateway, an AWS binding's whole call runs in the gateway, and
+every byte of an object passes through it. Add `AWS.SandboxSigner` and the
+binding runs in the sandbox instead:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(AWS.S3.GetObjectHttp, AWS.S3.PutObjectHttp).pipe(
+    Layer.provide(AWS.SandboxSigner),
+    Layer.provide(AWS.Lambda.SandboxGateway),
+  ),
+)
+```
+
+The sandbox asks the gateway for a signature, made with the gateway's role,
+and sends the request straight to AWS. It still holds no key, and a large
+upload or download never touches the gateway. The gateway signs only what
+its role may do, which is what the sandbox's AWS bindings were granted.
+
 ## Command-line tools
 
 A CLI can't call a binding, so a binding for one returns an origin instead.
@@ -120,6 +140,23 @@ token. The gateway forwards git's requests to GitHub and adds the GitHub
 token, so `git clone`, `git fetch` and `git push` work and the token never
 enters the sandbox. On a Worker or a Lambda with no gateway, the same code
 gets GitHub's URL and the token directly.
+
+## Lock the sandbox to its gateway
+
+An Archil sandbox can set headers on requests as they leave it. With a
+gateway, Archil adds the gateway's token there, so the sandbox holds no
+token at all. Deny everything else and the gateway is the only host the
+sandbox can reach:
+
+```typescript
+export default class MySandbox extends Archil.Sandbox<MySandbox>()(
+  "MySandbox",
+  { main: import.meta.url, network: { egress: { default: "deny" } } },
+  program,
+) {}
+```
+
+The gateway's host is added to the allowed destinations for you.
 
 ## Bindings that stay in the sandbox
 
