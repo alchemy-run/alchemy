@@ -182,12 +182,12 @@ export const simHost = (
             env: {},
             get: () => Effect.undefined,
             set: (key: string) => Effect.succeed(key),
-            makeCallback: callbacks.makeCallback,
           } as RuntimeContext["Service"],
+          callbacks: callbacks.callbacks,
         };
       });
       built = Effect.gen(function* () {
-        const { state, runtime } = yield* services;
+        const { state, runtime, callbacks } = yield* services;
         const record = yield* classes
           .get(cls)!
           .pipe(
@@ -195,6 +195,7 @@ export const simHost = (
             Effect.provideService(DurableObjects.ObjectState, state),
             Effect.provideService(RuntimeContext, runtime),
             Effect.provideService(Scope.Scope, scope),
+            Effect.provide(callbacks),
           );
         // Each call runs as its own event, with the instance's runtime.
         const methods: Record<string, unknown> = {};
