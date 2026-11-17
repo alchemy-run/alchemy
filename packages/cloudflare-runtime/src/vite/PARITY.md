@@ -50,6 +50,7 @@ the differential tests ignore until the installed release catches up.
 | Frameworks detect the plugin by a `vite-plugin-cloudflare` name prefix (React Router, vinext, Vike's `@universal-deploy`, Flue) | Matched (`vite-plugin-cloudflare:alchemy`) | `plugin-name.test.ts` |
 | An official `cloudflare()` left in the config (or added by an async factory, e.g. RedwoodSDK) is neutralized | Matched | `plugin-name.test.ts`, `ViteTemplates.test.ts` |
 | The `config` customizer of a neutralized `cloudflare()` still runs (Flue's `flueWorkerConfig()`). In v2 it is a callback over the loaded `cloudflare.config.ts`, and it runs without that file | Matched, against the installed release | `plugin-name.test.ts`, `examples/cloudflare-flue` |
+| v2 with a leftover `wrangler.json`/`wrangler.jsonc` and no `cloudflare.config.ts` | Different: v2 rejects the project before calling the customizer, so a customizer (Flue) doesn't run. That is v2's own migration step (it fails the same way without Alchemy), so Alchemy doesn't work around it; the project still builds with Alchemy's plugin | `plugin-name.test.ts` |
 | `rsc: { serverHandler: false }` for `@vitejs/plugin-rsc` | Matched | React Router RSC fixtures |
 | Worker settings from `cloudflare.config.ts` (v2) or `wrangler.json` (v1), and the customizer's result | Different: declared on the Website resource | — |
 | `auxiliaryWorkers`, `persistState`, `remoteBindings`, `inspectorPort` | Different: separate `Cloudflare.Worker` resources, Alchemy state, `Alchemy.remote()` | — |

@@ -1,3 +1,5 @@
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import path from "node:path";
 import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
@@ -143,6 +145,42 @@ describe("alchemy Cloudflare Vite plugin name", () => {
       expect(customizer).toHaveBeenCalledTimes(1);
       expect(customizer.mock.calls[0]![0]).toMatchObject({ worker: expect.any(Object) });
       expect(resolved.environments.ssr!.build.outDir).toBe("dist/ssr");
+    },
+  );
+
+  // Templates that still ship `wrangler.jsonc` (the Website fixtures): v2
+  // refuses a Wrangler config without `cloudflare.config.ts` before it calls
+  // `config`, with or without Alchemy. The project must still resolve, with
+  // Alchemy's build.
+  it.each(["serve", "build"] as const)(
+    "keeps Alchemy's build when a real official cloudflare() rejects a leftover wrangler.jsonc (%s)",
+    async (command) => {
+      const project = await fs.mkdtemp(path.join(os.tmpdir(), "alchemy-official-wrangler-"));
+      try {
+        await fs.writeFile(
+          path.join(project, "wrangler.jsonc"),
+          JSON.stringify({ name: "worker", main: "./worker-entry.ts" }),
+        );
+        await fs.copyFile(
+          path.join(root, "worker-entry.ts"),
+          path.join(project, "worker-entry.ts"),
+        );
+        const resolved = await vite.resolveConfig(
+          {
+            configFile: false,
+            root: project,
+            logLevel: "silent",
+            plugins: [
+              officialCloudflare({ inspectorPort: false, persistState: false }),
+              cloudflareVitePlugin({ main: "./worker-entry.ts" }),
+            ],
+          },
+          command,
+        );
+        expect(resolved.environments.ssr!.build.outDir).toBe("dist/ssr");
+      } finally {
+        await fs.rm(project, { recursive: true, force: true });
+      }
     },
   );
 
