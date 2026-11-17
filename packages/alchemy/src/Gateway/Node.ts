@@ -5,14 +5,21 @@ import * as http from "node:http";
  * the sandbox's program.
  */
 import { NodeServices } from "@effect/platform-node";
+import * as Layer from "effect/Layer";
 import { serve } from "./Serve.ts";
 
 /** Serve `entrypoint` as a gateway on `host:port`. */
 export const listen = (
   entrypoint: unknown,
   address: { readonly host: string; readonly port: number },
+  options?: {
+    /** What the host gives its bindings at run time (its cloud's credentials, …). */
+    readonly services?: Layer.Layer<any>;
+  },
 ) => {
-  const handle = serve(entrypoint, { services: NodeServices.layer });
+  const handle = serve(entrypoint, {
+    services: Layer.mergeAll(NodeServices.layer, options?.services ?? Layer.empty),
+  });
   const answer = async (incoming: http.IncomingMessage, outgoing: http.ServerResponse) => {
     const headers = new Headers();
     for (const [name, value] of Object.entries(incoming.headers)) {

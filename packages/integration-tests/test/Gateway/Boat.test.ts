@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -10,7 +11,9 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { Served } from "./conformance/app.ts";
+import type { AwsServed } from "./conformance/aws-app.ts";
 import { expectGatewayed } from "./conformance/conformance.ts";
+import AwsGatewayedBoat from "./fixtures/boat-aws.ts";
 import WebGatewayedBoat from "./fixtures/boat-web-function.ts";
 import GatewayedBoat from "./fixtures/boat.ts";
 
@@ -68,6 +71,27 @@ test.provider(
     }),
   {
     tags: ["provider:boat", "provider:e2b", "provider:aws", "provider:aws:lambda", "live"],
+    timeout: 900_000,
+  },
+);
+
+test.provider(
+  "a Boat sandbox's S3 bindings run on its gateway's role, with no AWS key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const sandbox = yield* stack.deploy(AwsGatewayedBoat);
+      const served = (yield* ask(sandbox)) as unknown as AwsServed;
+      // Written and read back through the gateway, the body streamed.
+      expect(served.body).toBe("written through the gateway");
+      expect(served.contentLength).toBe(27);
+      // The sandbox has nothing to sign an S3 request with.
+      expect(served.direct).not.toBe("allowed");
+      expect(served.gateway).toContain(".on.aws");
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:boat", "provider:aws", "provider:aws:lambda", "provider:aws:s3", "live"],
     timeout: 900_000,
   },
 );

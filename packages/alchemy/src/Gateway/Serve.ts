@@ -17,7 +17,14 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { clients, decode, encode, TOKEN_HEADER, TOKEN_KEY } from "../Gateway.ts";
+import {
+  clients,
+  decode,
+  encode,
+  STREAM_FIELD_HEADER,
+  TOKEN_HEADER,
+  TOKEN_KEY,
+} from "../Gateway.ts";
 import { encodeRpcError, encodeRpcResponseStream, ErrorTag, RPC_STREAM_HEADER } from "../Rpc.ts";
 import { reifyBoundConfigProvider } from "../Runtime.ts";
 import { entrypointLayer, stackFromEnv } from "../Runtime/Bootstrap.ts";
@@ -118,9 +125,31 @@ export const serve = (
       >,
     );
     if (Exit.isSuccess(exit)) {
-      return Stream.isStream(exit.value)
-        ? stream(Stream.provideContext(exit.value, services) as Stream.Stream<unknown, unknown>)
-        : reply(exit.value ?? null);
+      const result = exit.value;
+      if (Stream.isStream(result)) {
+        return stream(Stream.provideContext(result, services) as Stream.Stream<unknown, unknown>);
+      }
+      // A result with one streamed field (an object's body): the value
+      // first, then the field's chunks, as they are produced.
+      const field =
+        result !== null && typeof result === "object"
+          ? Object.keys(result).find((name) => Stream.isStream((result as any)[name]))
+          : undefined;
+      if (field !== undefined) {
+        const { [field]: body, ...head } = result as Record<string, unknown>;
+        return new Response(
+          Stream.toReadableStream(
+            encodeRpcResponseStream(
+              Stream.concat(
+                Stream.succeed(JSON.parse(encode(head))),
+                Stream.provideContext(body as Stream.Stream<unknown, unknown, never>, services),
+              ),
+            ) as Stream.Stream<Uint8Array>,
+          ),
+          { headers: { [STREAM_FIELD_HEADER]: field } },
+        );
+      }
+      return reply(result ?? null);
     }
     const error = Cause.findErrorOption(exit.cause);
     return Option.isSome(error)

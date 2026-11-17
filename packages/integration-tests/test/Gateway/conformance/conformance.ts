@@ -1,5 +1,6 @@
 import { expect } from "@alchemy.run/test";
 import type { Served } from "./app.ts";
+import type { AwsServed } from "./aws-app.ts";
 
 /**
  * What every gatewayed sandbox must show: its binding answered, and the
@@ -24,4 +25,15 @@ export const expectNoCredential = (
 ) => {
   expect(served.gateway).toContain(options.gatewayHost);
   expect(served.apiKey ?? "").toBe("");
+};
+
+/**
+ * What a gatewayed sandbox on AWS must show: its S3 bindings work through
+ * the gateway's role, and its own role is refused.
+ */
+export const expectAwsGatewayed = (served: AwsServed) => {
+  expect(served.body).toBe("written through the gateway");
+  expect(served.contentLength).toBe(27);
+  expect(served.direct).toBe("AccessDenied");
+  expect(served.gateway).toContain(".on.aws");
 };

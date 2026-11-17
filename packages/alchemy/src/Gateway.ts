@@ -21,7 +21,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Output from "./Output.ts";
 import {
@@ -47,6 +50,9 @@ export class Gateway extends Context.Service<
     readonly token: Effect.Effect<Redacted.Redacted<string>>;
   }
 >()("Alchemy.Gateway") {}
+
+/** Names the field of a result that is streamed after it. */
+export const STREAM_FIELD_HEADER = "x-alchemy-gateway-stream-field";
 
 /** The header a sandbox proves itself to its gateway with. */
 export const TOKEN_HEADER = "x-alchemy-gateway-token";
@@ -169,6 +175,21 @@ export const make = <R>(deploy: Effect.Effect<Deployed, never, R>) =>
               }
               if (response.headers[RPC_STREAM_HEADER] !== undefined) {
                 return decodeRpcResponseStream(response.stream) as Stream.Stream<unknown, unknown>;
+              }
+              const field = response.headers[STREAM_FIELD_HEADER];
+              if (field !== undefined) {
+                // The first line is the value; the rest is its stream field,
+                // read as the caller consumes it. The response stays open
+                // until that stream ends.
+                const scope = Scope.makeUnsafe();
+                const [head, rest] = yield* Stream.peel(
+                  decodeRpcResponseStream(response.stream),
+                  Sink.head(),
+                ).pipe(Effect.provideService(Scope.Scope, scope), unreachable(key));
+                return {
+                  ...(Option.getOrUndefined(head) as object),
+                  [field]: rest.pipe(Stream.onExit((exit) => Scope.close(scope, exit))),
+                };
               }
               const text = yield* response.text.pipe(unreachable(key));
               return yield* decodeRpcResult(decode(text));

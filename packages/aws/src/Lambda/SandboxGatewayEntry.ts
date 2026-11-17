@@ -1,4 +1,8 @@
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
+import * as Region from "@distilled.cloud/aws/Region";
 import { listen } from "alchemy/Gateway/Node";
+import * as Layer from "effect/Layer";
 // The Web Function a `SandboxGateway` layer deploys. `virtual:alchemy-gateway-program`
 // is the sandbox's own `main`: the gateway runs the same program's
 // Construction to build its bindings, and never its handlers.
@@ -9,4 +13,9 @@ const [host = "localhost", port = "3000"] = (
   process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? "localhost:3000"
 ).split(":");
 
-listen(program, { host, port: Number(port) });
+listen(
+  program,
+  { host, port: Number(port) },
+  // AWS bindings sign as the Web Function's execution role.
+  { services: Layer.mergeAll(Credentials.fromEnv(), Region.fromEnv(), Endpoint.fromEnv()) },
+);
