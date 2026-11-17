@@ -92,15 +92,15 @@ const toHandledWebResponse = <Req>(
     const webResponse = yield* Deferred.make<Response>();
     // Under a Worker or Durable Object bridge the event's scope closes once
     // the handler, its streamed body and its `waitUntil` work have all
-    // settled. `toHandled` opens a request scope of its own and closes it as
-    // soon as the response is written, so the handler runs on the event's
-    // scope instead and Effect's request scope stays empty.
+    // settled. `toHandled` would close its request scope as soon as the
+    // response is written, so the event's scope takes it over: it closes the
+    // request scope, with the event's exit, when the event ends.
     const lifetime = Context.getOption(context, EventLifetime);
     const eventScope = Context.getOption(context, Scope.Scope);
 
     yield* EffectHttp.toHandled(
       Option.isSome(lifetime) && Option.isSome(eventScope)
-        ? Effect.provideService(handler, Scope.Scope, eventScope.value)
+        ? adoptRequestScope(handler, eventScope.value)
         : handler,
       (request, response) =>
         Effect.gen(function* () {
@@ -120,9 +120,26 @@ const toHandledWebResponse = <Req>(
   });
 
 /**
+ * Hand the request scope `toHandled` created to the event's scope, which
+ * closes it when the event ends. `scopeDisableClose` stops `toHandled`
+ * closing it when the request finishes; the scope must never be transferred
+ * to a streamed body, whose exit would still close it (see
+ * {@link extendWithBody}).
+ */
+const adoptRequestScope = <A, E, R>(handler: Effect.Effect<A, E, R>, eventScope: Scope.Scope) =>
+  Effect.gen(function* () {
+    // `toHandled` makes the request scope with `Scope.makeUnsafe`, so it is closeable.
+    const requestScope = (yield* Effect.scope) as Scope.Closeable;
+    yield* Scope.addFinalizerExit(eventScope, (exit) => Scope.close(requestScope, exit));
+    EffectHttp.scopeDisableClose(requestScope);
+    return yield* handler;
+  });
+
+/**
  * Keep the event open until a streamed `response` body settles: Effect's
  * `scopeTransferToStream` closes the fiber's scope when the body exits, so
- * hand it one whose close only tells the event.
+ * hand it one whose close only tells the event, never the adopted request
+ * scope.
  */
 const extendWithBody = (
   response: HttpServerResponse.HttpServerResponse,
