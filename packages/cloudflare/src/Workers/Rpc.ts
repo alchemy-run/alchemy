@@ -63,8 +63,9 @@ export const makeRpcStub = <Shape>(
      *   arguments untouched, and the call's metadata (the caller's trace
      *   context). Only for a callee known to run Alchemy's bridge of this
      *   version or later — a Durable Object or Worker built by the same
-     *   deploy. While a deploy rolls out, a host still on older code rejects
-     *   the method as unknown; the call is retried until it isn't.
+     *   deploy. A host still on older code (while a deploy or a gradual
+     *   rollout is under way) rejects the method as unknown before running
+     *   anything; the call is then made `"direct"`, without trace context.
      * - `"direct"`: the method itself, with exactly the caller's arguments
      *   and no metadata — for any other callee (plain JS, another stack, a
      *   script name).
@@ -99,29 +100,41 @@ export const makeRpcStub = <Shape>(
                     meta: yield* currentRpcMeta,
                   } satisfies RpcRequest)
                 : undefined;
-            return yield* Effect.tryPromise({
-              try: () =>
-                envelope === undefined
-                  ? (stub as any)[prop](...args)
-                  : (stub as any)[RPC_REQUEST_METHOD](envelope),
-              catch: (cause) => new RpcCallError({ method: String(prop), cause }),
-            }).pipe(
-              // Right after a deploy, an object can still start on the
-              // placeholder script, which runs none of the real code and
-              // resets itself so the next call gets the deployed code. The
-              // new code can take a while to reach every edge (~35s here).
-              Effect.retry({
-                while: (error) =>
-                  isPlaceholderReset(error.cause) ||
-                  (envelope !== undefined && isRequestMethodMissing(error.cause)),
-                schedule: Schedule.min([
-                  Schedule.exponential("200 millis"),
-                  Schedule.spaced("2 seconds"),
-                ]),
-                times: 20,
-              }),
-              Effect.flatMap((value) => decodeRpcResult(value, revive)),
-            );
+            const call = (useEnvelope: boolean) =>
+              Effect.tryPromise({
+                try: () =>
+                  useEnvelope
+                    ? (stub as any)[RPC_REQUEST_METHOD](envelope)
+                    : (stub as any)[prop](...args),
+                catch: (cause) => new RpcCallError({ method: String(prop), cause }),
+              }).pipe(
+                // Right after a deploy, an object can still start on the
+                // placeholder script, which runs none of the real code and
+                // resets itself so the next call gets the deployed code. The
+                // new code can take a while to reach every edge (~35s here).
+                Effect.retry({
+                  while: (error) => isPlaceholderReset(error.cause),
+                  schedule: Schedule.min([
+                    Schedule.exponential("200 millis"),
+                    Schedule.spaced("2 seconds"),
+                  ]),
+                  times: 20,
+                }),
+              );
+            return yield* (
+              envelope === undefined
+                ? call(false)
+                : call(true).pipe(
+                    // A host on older code (mid-deploy, or the old side of a
+                    // gradual rollout) has no `~alchemy/rpc`; it rejected the
+                    // call before running anything. Call the method itself, the
+                    // form that host speaks: the call succeeds, untraced.
+                    Effect.catchIf(
+                      (error) => isRequestMethodMissing(error.cause),
+                      () => call(false),
+                    ),
+                  )
+            ).pipe(Effect.flatMap((value) => decodeRpcResult(value, revive)));
           }),
         );
     },
