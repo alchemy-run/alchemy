@@ -30,11 +30,16 @@ export const expectNoCredential = (
 
 /**
  * What a gatewayed sandbox on AWS must show: its S3 bindings work through
- * the gateway's role, and its own role is refused.
+ * the gateway's role, and the sandbox itself cannot call S3.
  */
 export const expectAwsGatewayed = (served: AwsServed) => {
   expect(served.body).toBe("written through the gateway");
   expect(served.contentLength).toBe(27);
-  expect(served.direct).toBe("AccessDenied");
+  // A presigned URL is signed by the gateway and points at S3, not at it.
+  expect(served.presignedHost).toContain("amazonaws.com");
+  expect(served.downloaded).toBe("written through the gateway");
+  // Calling S3 as itself fails: with no credentials, or with a role that
+  // was granted nothing.
+  expect(served.direct).not.toBe("allowed");
   expect(served.gateway).toContain(".on.aws");
 };

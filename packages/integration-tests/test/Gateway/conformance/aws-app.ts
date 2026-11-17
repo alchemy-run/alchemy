@@ -5,6 +5,7 @@ import * as S3 from "@distilled.cloud/aws/s3";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -21,6 +22,7 @@ export const awsApp = Effect.gen(function* () {
   const bucket = yield* Objects;
   const put = yield* AWS.S3.PutObject(bucket);
   const get = yield* AWS.S3.GetObject(bucket);
+  const presign = yield* AWS.S3.PresignGetObject(bucket);
   const bucketName = yield* bucket.bucketName;
   // What the sandbox itself can sign with: its own role.
   const own = Layer.mergeAll(Credentials.fromEnv(), Region.fromEnv(), FetchHttpClient.layer);
@@ -34,7 +36,16 @@ export const awsApp = Effect.gen(function* () {
         Effect.match({ onFailure: (error) => error._tag, onSuccess: () => "allowed" }),
         Effect.provide(own),
       );
+      // The gateway signs the URL; the sandbox downloads straight from S3.
+      const signed = yield* presign({ key: "note.txt" });
+      const client = yield* HttpClient.HttpClient;
+      const downloaded = yield* client.get(signed).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.provide(FetchHttpClient.layer),
+      );
       return yield* HttpServerResponse.json({
+        presignedHost: new URL(signed).host,
+        downloaded,
         body,
         contentLength: object.ContentLength,
         direct,
@@ -50,12 +61,16 @@ export const awsApp = Effect.gen(function* () {
 });
 
 /** The program's bindings, built on a Lambda Web Function gateway. */
-export const AwsGateway = Layer.mergeAll(AWS.S3.PutObjectHttp, AWS.S3.GetObjectHttp).pipe(
-  Layer.provide(AWS.Lambda.SandboxGateway),
-);
+export const AwsGateway = Layer.mergeAll(
+  AWS.S3.PutObjectHttp,
+  AWS.S3.GetObjectHttp,
+  AWS.S3.PresignGetObjectHttp,
+).pipe(Layer.provide(AWS.Lambda.SandboxGateway));
 
 /** What {@link awsApp} answers. */
 export interface AwsServed {
+  readonly presignedHost: string;
+  readonly downloaded: string;
   readonly body: string;
   readonly contentLength: number;
   readonly direct: string;
