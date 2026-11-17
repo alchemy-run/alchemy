@@ -5,6 +5,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Ref from "effect/Ref";
 import { stripUnowned } from "./AdoptPolicy.ts";
 import {
@@ -15,7 +16,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { deepEqual } from "./Diff.ts";
-import { captureEmit, emit } from "./Events.ts";
+import { captureEmit, emit, failureMessage } from "./Events.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
@@ -26,6 +27,7 @@ import {
   isActionState,
   State,
   type CreatedResourceState,
+  type StateStoreError,
   type ResourceState,
   type UpdatedResourceState,
 } from "./State/index.ts";
@@ -130,7 +132,7 @@ const runDrift = (
     /** Check and repair only these resources; the rest of the stage is untouched. */
     readonly only?: ReadonlyArray<string>;
   },
-): Effect.Effect<DriftResult, any, State> =>
+): Effect.Effect<DriftResult, StateStoreError, State> =>
   Effect.gen(function* () {
     // Phase markers and per-resource progress are emitted as events so
     // renderers can show the drift check as it runs.
@@ -413,6 +415,16 @@ const runDrift = (
             id: persisted.logicalId,
             resourceType: persisted.resourceType,
             status: "fail",
+            // The provider's own error, not the wrapper naming the resource:
+            // the row already says which resource failed.
+            message: failureMessage(
+              Cause.map(cause, (error) =>
+                Predicate.isTagged(error, "DriftResourceError") &&
+                Predicate.hasProperty(error, "cause")
+                  ? error.cause
+                  : error,
+              ),
+            ),
           });
         }
         return undefined;
@@ -610,7 +622,7 @@ export interface DriftPlan {
 export const plan = (stack: {
   name: string;
   stage: string;
-}): Effect.Effect<DriftPlan, any, State> =>
+}): Effect.Effect<DriftPlan, StateStoreError, State> =>
   Effect.gen(function* () {
     const result = yield* detect(stack);
     const state = yield* yield* State;
@@ -664,6 +676,7 @@ export const plan = (stack: {
           Mode: persisted.providerMode,
           RuntimeContext: undefined!,
           Providers: undefined,
+          Lookup: undefined as never,
         } as ResourceLike,
         // Drift repairs from the persisted bindings verbatim — surface them
         // as noop rows so the renderer shows the binding topology without

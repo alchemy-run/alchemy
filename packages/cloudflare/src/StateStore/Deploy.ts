@@ -165,17 +165,18 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
 
 /**
  * A store's Worker name: lowercase letters, digits, `-` and `_`, starting with
- * a letter or digit, at most 63 characters. Cloudflare takes longer names, but
- * the store serves on `<name>.<subdomain>.workers.dev`, whose labels are capped
- * at 63, and the cap keeps its secret names well under the Secrets Store's 255.
+ * a letter or digit, at most 54 characters. The store enables workers.dev
+ * previews, and Cloudflare rejects a longer script name with previews enabled
+ * (the preview hostname prefixes it); the cap also keeps its secret names well
+ * under the Secrets Store's 255.
  */
 export const validateStateStoreWorkerName = (scriptName: string) =>
-  /^[a-z0-9][a-z0-9_-]{0,62}$/.test(scriptName)
+  /^[a-z0-9][a-z0-9_-]{0,53}$/.test(scriptName)
     ? Effect.succeed(scriptName)
     : Effect.fail(
         new StateStoreError({
           message:
-            `Invalid Cloudflare State Store Worker name '${scriptName}': use 1-63 lowercase ` +
+            `Invalid Cloudflare State Store Worker name '${scriptName}': use 1-54 lowercase ` +
             `letters, digits, '-' and '_', starting with a letter or digit.`,
         }),
       );

@@ -6,6 +6,7 @@ import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,6 +65,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.DLP.JobTrigger.lookup({ triggerId: created.triggerId }), created);
 
       expect(created.triggerId).toEqual(expect.any(String));
       expect(created.name).toEqual(`projects/${project}/jobTriggers/${created.triggerId}`);

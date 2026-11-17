@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -155,8 +156,27 @@ export type Sink = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SinkLookup
 >;
+
+/**
+ * Props for {@link Sink.lookup}: find a sink this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface SinkLookup {
+  /**
+   * Sink id (the `{sink}` segment of `projects/{project}/sinks/{sink}`).
+   * Limited to 100 characters: letters, digits, underscores, hyphens,
+   * periods; first character must be alphanumeric.
+   */
+  sinkId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging sink that routes log entries to a destination.
@@ -202,6 +222,16 @@ export type Sink = Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing sink
+ * `Sink.lookup` references a sink Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared sink.
+ *
+ * **Example:** Reference an existing sink
+ * ```typescript
+ * const sink = GCP.Logging.Sink.lookup({ sinkId: "my-sink" });
  * ```
  *
  * @resource
@@ -352,6 +382,14 @@ export const SinkProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sinkId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, sinkId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

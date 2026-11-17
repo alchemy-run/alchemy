@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -222,31 +223,45 @@ export const expectUrlContains = (
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
-  return fetchOnce(url, marker, options.headers).pipe(
-    Effect.retry({
-      // Cap individual sleeps at 8s so very long timeouts still
-      // sample at a reasonable rate near the end of the budget.
-      schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
-    }),
-    // Bound the *total* retry budget. `Effect.retry` on its own would
-    // back off forever; the timeout guarantees the test fails loudly
-    // instead of stalling out the suite. We swap the default
-    // `TimeoutException` for a typed assertion error so the failure
-    // message says *what* we were waiting for, not just "timed out".
-    Effect.timeoutOrElse({
-      duration: totalTimeout,
-      orElse: () =>
-        Effect.fail(
-          new HttpAssertionFailed({
-            url,
-            marker,
-            status: 0,
-            bodyExcerpt: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for marker "${marker}"]`,
-          }),
+  return Effect.gen(function* () {
+    // The last attempt's outcome, so a timeout says what the URL served.
+    const last = yield* Ref.make<string>("no attempt finished");
+    return yield* fetchOnce(url, marker, options.headers).pipe(
+      Effect.tapError((error) =>
+        Ref.set(
+          last,
+          error._tag === "HttpAssertionFailed"
+            ? `${error.status}: ${error.bodyExcerpt}`
+            : `fetch failed: ${error.message}`,
         ),
-    }),
-    Effect.tapError((error) => Effect.logError(`expectUrlContains(${label}) failed`, error)),
-  );
+      ),
+      Effect.retry({
+        // Cap individual sleeps at 8s so very long timeouts still
+        // sample at a reasonable rate near the end of the budget.
+        schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
+      }),
+      // Bound the *total* retry budget. `Effect.retry` on its own would
+      // back off forever; the timeout guarantees the test fails loudly
+      // instead of stalling out the suite. We swap the default
+      // `TimeoutException` for a typed assertion error so the failure
+      // message says *what* we were waiting for, not just "timed out".
+      Effect.timeoutOrElse({
+        duration: totalTimeout,
+        orElse: () =>
+          Effect.flatMap(Ref.get(last), (lastOutcome) =>
+            Effect.fail(
+              new HttpAssertionFailed({
+                url,
+                marker,
+                status: 0,
+                bodyExcerpt: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for marker "${marker}"; last attempt: ${lastOutcome}]`,
+              }),
+            ),
+          ),
+      }),
+      Effect.tapError((error) => Effect.logError(`expectUrlContains(${label}) failed`, error)),
+    );
+  });
 };
 
 /**

@@ -32,7 +32,6 @@ import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
 import { kindOf, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -44,6 +43,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import type { Limit } from "./Model.ts";
 
 /**
  * Configuration shared by every test in a file. Pass to `Test.make(...)`.
@@ -55,6 +55,13 @@ export interface MakeOptions<ROut = any> {
   state?: Layer.Layer<State.State, never, StackServices>;
   /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
+  /**
+   * A counted lock every test and `beforeAll`/`afterAll` hook of this file
+   * holds, on top of its own `exclusive`. Files that pass the same label
+   * share its permits, so a suite caps its load on a rate-limited cloud API
+   * in one place while every test stays independently schedulable.
+   */
+  limit?: Limit;
   /**
    * Default stage for deploy/destroy. Defaults to `test_$USER` (or
    * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
@@ -110,6 +117,13 @@ export interface MakeOptions<ROut = any> {
    * exports credentials).
    */
   sidecar?: boolean | SidecarOptions;
+  /**
+   * Directory for Alchemy's runtime data (logs, local state) for every
+   * deploy in the file, sidecar included — the `.alchemy` the CLI uses.
+   * Set it to put `.alchemy` somewhere a test controls, e.g. inside a
+   * container build context. Defaults to `.alchemy` under the cwd.
+   */
+  dotAlchemy?: string;
 }
 
 /** Options for the dev sidecar process — see {@link MakeOptions.sidecar}. */
@@ -166,8 +180,9 @@ const sidecarOmitEnv = (options: MakeOptions): ReadonlyArray<string> =>
 
 /**
  * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
- * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
- * concurrent worktrees that share a cloud account.
+ * `test_$USERNAME` / `test_unknown`). The runner sets ALCHEMY_TEST_STAGE to
+ * `test_$USER_<worktree>` in a linked git worktree, so concurrent worktrees
+ * sharing a cloud account stay isolated.
  * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
  */
 export const defaultStage = (): string =>
@@ -346,10 +361,16 @@ export const makeSidecarHandle = <ROut = any>(
   };
 };
 
-const overrideAlchemyContext = (overrides: { dev: boolean }) =>
+const overrideAlchemyContext = (overrides: { dev: boolean; dotAlchemy?: string }) =>
   Layer.effect(
     AlchemyContext,
-    AlchemyContext.pipe(Effect.map((ctx) => ({ ...ctx, ...overrides }))),
+    AlchemyContext.pipe(
+      Effect.map((ctx) => ({
+        ...ctx,
+        dev: overrides.dev,
+        dotAlchemy: overrides.dotAlchemy ?? ctx.dotAlchemy,
+      })),
+    ),
   );
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
@@ -395,6 +416,18 @@ const testServicesLayer =
     : testServices
         .map((services) => services.layer)
         .reduce((merged, layer) => Layer.merge(merged, layer));
+
+/**
+ * The stack's state store under the emulator: a store that reads the cloud
+ * environment (an AWS S3 store) gets the test services too, so its bucket
+ * lives in the emulator alongside the stack's resources instead of needing
+ * live credentials.
+ */
+const testStateLayer = <E, R>(state: Layer.Layer<State.State, E, R>) =>
+  testServicesLayer === undefined
+    ? state
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services the store would otherwise resolve itself
+      (state.pipe(Layer.provide(testServicesLayer)) as Layer.Layer<State.State, E, R>);
 
 const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // Test services override services already present in R.
@@ -547,12 +580,14 @@ export const toEffect = <A, ROut = any>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
-    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
+    Effect.provide(
+      overrideAlchemyContext({ dev: resolveDev(options), dotAlchemy: options.dotAlchemy }),
+    ),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
     // satisfied — which surfaces as `Service not found: AuthProviders`.
-    Effect.provide(options.state ?? State.localState()),
+    Effect.provide(testStateLayer(options.state ?? State.localState())),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );

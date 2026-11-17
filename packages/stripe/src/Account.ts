@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteAccount,
   GetAccounts,
@@ -11,6 +10,7 @@ import {
   type CreateAccountRequestBusinessProfile,
   type CreateAccountRequestCapabilities,
   type CreateAccountRequestCompany,
+  type CreateAccountRequestDocuments,
   type CreateAccountRequestController,
   type CreateAccountRequestIndividual,
   type CreateAccountRequestSettings,
@@ -214,6 +214,19 @@ export interface AccountProps {
    */
   controller?: AccountController;
   /**
+   * Verification documents (company license, proof of address, tax id
+   * verification…), each as uploaded File ids. Write-only: Stripe never
+   * returns them, so a deploy sends them when they change. Nested fields
+   * use Stripe's wire names.
+   */
+  documents?: CreateAccountRequestDocuments;
+  /**
+   * Pricing group the account belongs to, by its key or id
+   * (`paymentsPricing`), for platforms that price connected accounts
+   * differently.
+   */
+  groups?: { paymentsPricing?: string };
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`.
@@ -264,14 +277,26 @@ export type Account = Resource<
     requirementsCurrentlyDue: string[];
     /** Why the account is currently disabled, if it is. */
     requirementsDisabledReason: string | undefined;
+    /** Pricing group the account belongs to, if any. */
+    paymentsPricingGroup: string | undefined;
     /** Unix timestamp when the account was connected. */
     created: number | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AccountLookup
 >;
+
+/**
+ * Props for {@link Account.lookup}: find a connected account this stack
+ * doesn't manage by its id.
+ */
+export interface AccountLookup {
+  /** Stripe connected account id, e.g. `"acct_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Connect connected account — a Standard, Express, or Custom
@@ -352,6 +377,16 @@ export type Account = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connected account
+ * `Account.lookup` references a connected account Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing connected account
+ * ```typescript
+ * const ref = Stripe.Account.lookup({ id: "acct_1A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Account
  */
@@ -429,6 +464,7 @@ const toAttrs = (account: StripeAccount) => ({
   capabilities: capabilityStatuses(account.capabilities),
   requirementsCurrentlyDue: [...(account.requirements?.currently_due ?? [])],
   requirementsDisabledReason: account.requirements?.disabled_reason ?? undefined,
+  paymentsPricingGroup: account.groups?.payments_pricing ?? undefined,
   created: account.created,
   metadata: userMetadata(account.metadata),
 });
@@ -580,6 +616,11 @@ export const AccountProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -631,12 +672,13 @@ export const AccountProvider = () =>
           ...(news.company !== undefined ? { company: news.company } : {}),
           ...(news.individual !== undefined ? { individual: news.individual } : {}),
           ...(tosAcceptance !== undefined ? { tos_acceptance: tosAcceptance } : {}),
+          ...(news.documents !== undefined ? { documents: news.documents } : {}),
+          ...(news.groups?.paymentsPricing !== undefined
+            ? { groups: { payments_pricing: news.groups.paymentsPricing } }
+            : {}),
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-account-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-account-${instanceId}`,
+        });
         createdThisPass = true;
       }
 
@@ -675,7 +717,15 @@ export const AccountProvider = () =>
             (olds === undefined ||
               !deepEqual(news.tosAcceptance, olds.tosAcceptance, {
                 stripNullish: true,
+              }))) ||
+          (news.documents !== undefined &&
+            (olds === undefined ||
+              !deepEqual(news.documents, olds.documents, {
+                stripNullish: true,
               }))));
+      const groupsChanged =
+        news.groups?.paymentsPricing !== undefined &&
+        (current.groups?.payments_pricing ?? undefined) !== news.groups.paymentsPricing;
 
       if (
         !emailChanged &&
@@ -684,6 +734,7 @@ export const AccountProvider = () =>
         !profileChanged &&
         !capsChanged &&
         !writeOnlyChanged &&
+        !groupsChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -704,6 +755,8 @@ export const AccountProvider = () =>
         ...(writeOnlyChanged && tosAcceptance !== undefined
           ? { tos_acceptance: tosAcceptance }
           : {}),
+        ...(writeOnlyChanged && news.documents !== undefined ? { documents: news.documents } : {}),
+        ...(groupsChanged ? { groups: { payments_pricing: news.groups!.paymentsPricing } } : {}),
         ...(metadataChanged
           ? {
               metadata: {

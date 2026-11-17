@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -89,14 +90,14 @@ test.provider.skipIf(!entitled)(
 
       const cluster = yield* stack.deploy(
         Cloudflare.DNS.Firewall("TestCluster", {
-          name: "alchemy-dnsfw-lifecycle",
+          name: testName("alchemy-dnsfw-lifecycle"),
           upstreamIps: ["192.0.2.1"],
         }),
       );
 
       expect(cluster.dnsFirewallId).toBeTruthy();
       expect(cluster.accountId).toEqual(accountId);
-      expect(cluster.name).toEqual("alchemy-dnsfw-lifecycle");
+      expect(cluster.name).toEqual(testName("alchemy-dnsfw-lifecycle"));
       expect(cluster.upstreamIps).toEqual(["192.0.2.1"]);
       // The key output — the assigned anycast IPs NS glue points at.
       expect(cluster.dnsFirewallIps.length).toBeGreaterThan(0);
@@ -106,7 +107,7 @@ test.provider.skipIf(!entitled)(
       expect(cluster.retries).toEqual(2);
 
       const live = yield* getCluster(accountId, cluster.dnsFirewallId);
-      expect(live.name).toEqual("alchemy-dnsfw-lifecycle");
+      expect(live.name).toEqual(testName("alchemy-dnsfw-lifecycle"));
       expect([...live.upstreamIps]).toEqual(["192.0.2.1"]);
 
       yield* stack.destroy();
@@ -126,7 +127,7 @@ test.provider.skipIf(!entitled)(
 
       const initial = yield* stack.deploy(
         Cloudflare.DNS.Firewall("UpdateCluster", {
-          name: "alchemy-dnsfw-update",
+          name: testName("alchemy-dnsfw-update"),
           upstreamIps: ["192.0.2.1"],
         }),
       );
@@ -134,7 +135,7 @@ test.provider.skipIf(!entitled)(
       // In-place update: settings + an extra upstream IP, same id.
       const updated = yield* stack.deploy(
         Cloudflare.DNS.Firewall("UpdateCluster", {
-          name: "alchemy-dnsfw-update",
+          name: testName("alchemy-dnsfw-update"),
           upstreamIps: ["192.0.2.1", "192.0.2.2"],
           ratelimit: 600,
           minimumCacheTtl: 120,
@@ -154,7 +155,7 @@ test.provider.skipIf(!entitled)(
       // No-op redeploy keeps the same cluster.
       const noop = yield* stack.deploy(
         Cloudflare.DNS.Firewall("UpdateCluster", {
-          name: "alchemy-dnsfw-update",
+          name: testName("alchemy-dnsfw-update"),
           upstreamIps: ["192.0.2.1", "192.0.2.2"],
           ratelimit: 600,
           minimumCacheTtl: 120,
@@ -167,7 +168,7 @@ test.provider.skipIf(!entitled)(
       // cluster replaces the old one.
       const renamed = yield* stack.deploy(
         Cloudflare.DNS.Firewall("UpdateCluster", {
-          name: "alchemy-dnsfw-update-v2",
+          name: testName("alchemy-dnsfw-update-v2"),
           upstreamIps: ["192.0.2.1", "192.0.2.2"],
           ratelimit: 600,
           minimumCacheTtl: 120,
@@ -175,7 +176,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
       expect(renamed.dnsFirewallId).not.toEqual(initial.dnsFirewallId);
-      expect(renamed.name).toEqual("alchemy-dnsfw-update-v2");
+      expect(renamed.name).toEqual(testName("alchemy-dnsfw-update-v2"));
 
       yield* expectGone(accountId, initial.dnsFirewallId);
 
@@ -217,7 +218,7 @@ test.provider.skipIf(!entitled)(
 
       const deployed = yield* stack.deploy(
         Cloudflare.DNS.Firewall("ListCluster", {
-          name: "alchemy-dnsfw-list",
+          name: testName("alchemy-dnsfw-list"),
           upstreamIps: ["192.0.2.1"],
         }),
       );
@@ -227,7 +228,7 @@ test.provider.skipIf(!entitled)(
 
       const found = all.find((c) => c.dnsFirewallId === deployed.dnsFirewallId);
       expect(found).toBeTruthy();
-      expect(found?.name).toEqual("alchemy-dnsfw-list");
+      expect(found?.name).toEqual(testName("alchemy-dnsfw-list"));
       expect(found?.accountId).toEqual(deployed.accountId);
 
       yield* stack.destroy();

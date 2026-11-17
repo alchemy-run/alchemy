@@ -37,6 +37,7 @@ function PlanDecision<Value>(props: {
       footer={
         <PromptFrame
           message={message}
+          blocked="permission"
           keys={[
             [keys.upDown, "scroll plan"],
             [keys.leftRight, "choose"],

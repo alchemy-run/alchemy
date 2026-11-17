@@ -2,6 +2,7 @@ import * as Actions from "@distilled.cloud/github/actions";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
@@ -205,7 +206,7 @@ export const SecretProvider = () =>
       // key, so we re-encrypt and re-upload on every reconcile (Redacted
       // values can't be diffed across runs anyway).
       yield* upsertSecret(news);
-      return { updatedAt: new Date().toISOString() };
+      return { updatedAt: DateTime.formatIso(yield* DateTime.now) };
     }),
 
     delete: Effect.fn(function* ({ olds }) {

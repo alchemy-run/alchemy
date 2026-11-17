@@ -4,6 +4,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -53,7 +54,26 @@ export type AppAttributes = {
   updatedBy: string;
 };
 
-export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
+export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers, AppLookup>;
+
+/**
+ * Props for {@link App.lookup}: find a Flagship app this stack doesn't
+ * manage, by its id or its name.
+ */
+export type AppLookup =
+  | {
+      /**
+       * The id of the existing app.
+       */
+      appId: string;
+    }
+  | {
+      /**
+       * The name of the existing app. Names are not unique; the oldest app
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Flagship app — a container for feature flags.
@@ -185,6 +205,24 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * }).pipe(Alchemy.remote());
  * ```
  *
+ * ### Looking up an existing app
+ * `App.lookup` references an app Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `appId` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ * Cloudflare lists a new app about ten seconds after creating it, so a
+ * lookup by `name` right after creation can miss it; `appId` never does.
+ *
+ * **Example:** Add a flag to an existing app
+ * ```typescript
+ * const app = Cloudflare.Flagship.App.lookup({ name: "storefront" });
+ * yield* Cloudflare.Flagship.Flag("NewCheckout", {
+ *   appId: app.appId,
+ *   key: "new-checkout",
+ *   defaultVariation: "off",
+ *   variations: { off: false, on: true },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/flagship/
  * @see https://developers.cloudflare.com/api/resources/flagship/
  *
@@ -209,6 +247,14 @@ export const AppProviderLive = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "appId" in props
+          ? yield* getApp(accountId, props.appId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -225,7 +271,7 @@ export const AppProviderLive = () =>
       const match = yield* findByName(acct, name);
       return match ? toAttributes(match, acct) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 
@@ -303,8 +349,8 @@ export const AppProviderLocal = () =>
       // Purely virtual — the persisted state row is the source of truth.
       return output ?? undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
-      const now = yield* Effect.sync(() => new Date().toISOString());
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const now = DateTime.formatIso(yield* DateTime.now);
       return {
         appId: output?.appId ?? generateLocalId(),
         accountId: output?.accountId ?? (yield* localAccountId),

@@ -116,8 +116,20 @@ export interface IntegrationType extends Resource<
     contentHandlingStrategy: agw2.ContentHandlingStrategy | undefined;
   },
   never,
-  Providers
+  Providers,
+  IntegrationTypeLookup
 > {}
+
+/**
+ * Props for {@link IntegrationType.lookup}: find an integration type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface IntegrationTypeLookup {
+  /** The id of the api it belongs to. */
+  apiId: string;
+  /** The id of the existing integration type. */
+  integrationId: string;
+}
 
 /**
  * An API Gateway v2 Integration — the backend target a Route forwards to.
@@ -146,6 +158,16 @@ export interface IntegrationType extends Resource<
  *   integrationMethod: "ANY",
  *   payloadFormatVersion: "1.0",
  * });
+ * ```
+ *
+ * ### Looking up an existing integration type
+ * `IntegrationType.lookup` references an integration type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` and `integrationId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing integration type
+ * ```typescript
+ * const existing = AWS.ApiGatewayV2.IntegrationType.lookup({ apiId: "...", integrationId: "..." });
  * ```
  *
  * @resource
@@ -262,6 +284,12 @@ export const IntegrationProvider = () =>
             );
             return perApi.flat();
           }),
+
+        lookup: Effect.fn(function* ({ apiId, integrationId }) {
+          const integ = yield* getIntegrationSafe(apiId, integrationId);
+          if (!integ?.IntegrationId) return undefined;
+          return snapshotFromIntegration(apiId, integ);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.apiId || !output.integrationId) return undefined;

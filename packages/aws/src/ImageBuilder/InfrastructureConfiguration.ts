@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -107,8 +108,18 @@ export interface InfrastructureConfiguration extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InfrastructureConfigurationLookup
 > {}
+
+/**
+ * Props for {@link InfrastructureConfiguration.lookup}: find an infrastructure configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface InfrastructureConfigurationLookup {
+  /** The infrastructure configuration arn of the existing infrastructure configuration. */
+  infrastructureConfigurationArn: string;
+}
 
 /**
  * An EC2 Image Builder infrastructure configuration — the environment
@@ -139,6 +150,16 @@ export interface InfrastructureConfiguration extends Resource<
  *   instanceTypes: ["t3.micro"],
  *   terminateInstanceOnFailure: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing infrastructure configuration
+ * `InfrastructureConfiguration.lookup` references an infrastructure configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `infrastructureConfigurationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing infrastructure configuration
+ * ```typescript
+ * const existing = AWS.ImageBuilder.InfrastructureConfiguration.lookup({ infrastructureConfigurationArn: "my-infrastructure-configuration" });
  * ```
  *
  * @resource
@@ -230,6 +251,12 @@ export const InfrastructureConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ infrastructureConfigurationArn: arn }) {
+          const config = yield* getConfiguration(arn);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.infrastructureConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));
@@ -243,7 +270,8 @@ export const InfrastructureConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.infrastructureConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

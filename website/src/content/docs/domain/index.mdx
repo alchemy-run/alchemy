@@ -1,13 +1,14 @@
 ---
 title: Domain
-description: A domain-driven design framework for Effect. Model your business as commands, aggregates, events, views, projections and policies, test it in memory, and run it on Cloudflare Durable Objects.
+description: A domain-driven design framework for Effect. Model your business as commands, aggregates, decisions, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
 ---
 
 import DAG from "../../../components/DAG.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
-`@alchemy.run/domain` models your business in its own terms. Commands ask for changes, aggregates decide them, and events record what happened. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
+`@alchemy.run/domain` models your business in its own terms. Commands ask for changes. Each is decided once, by the aggregate it concerns or by a decision over the several it concerns, and events record what happened. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
 
-The same model runs in memory for tests and on Cloudflare Durable Objects in production, with one ordered partition per key.
+The same model runs in memory for tests and, in production, on [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) or [Effect Cluster](/domain/effect-cluster), with one ordered partition per key.
 
 <DAG
   nodes={[
@@ -25,7 +26,7 @@ The same model runs in memory for tests and on Cloudflare Durable Objects in pro
   ]}
 />
 
-## A taste
+## A quick example
 
 A command declares what it asks for and every way it can end:
 
@@ -36,8 +37,7 @@ export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 }) {}
 
 export class DepositMoney extends Domain.Command("DepositMoney", {
-  target: AccountId,
-  input: { amount: Schema.Int },
+  input: { accountId: AccountId, amount: Schema.Int },
   events: [MoneyDeposited],
   rejects: [NotOpen],
   reply: { balance: Schema.Int },
@@ -47,10 +47,12 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 The account aggregate decides it against its current state:
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+decide: {
+  DepositMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+},
 ```
 
 And a story tests it in memory, in the business's own words: given this history, when this command, then these events.
@@ -59,7 +61,7 @@ And a story tests it in memory, in the business's own words: given this history,
 it.effect("deposits into an open account and replies with the balance", () =>
   story(
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new DepositMoney({ amount: 100 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
     Story.then(account, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     Story.replied({ balance: 100 }),
   ),
@@ -72,18 +74,13 @@ The `alchemy-domain` skill teaches a coding agent how to turn requirements into 
 
 Ship it with your dependencies, so the skill always matches the alchemy version you have installed:
 
-```sh
-bun add -d skills-npm
-bunx skills-npm setup
-```
+<PackageManagers dev="skills-npm" run="skills-npm setup" />
 
 `setup` adds a `prepare` script. Every install then links the skills your packages ship into each coding agent's skills folder.
 
 Or install it from GitHub, for any agent:
 
-```sh
-npx skills add alchemy-run/alchemy --skill alchemy-domain
-```
+<PackageManagers script={`{dlx} skills add alchemy-run/alchemy --skill alchemy-domain`} />
 
 In Claude Code, it's also a plugin:
 
@@ -99,4 +96,4 @@ A skill installed from GitHub follows the repository's main branch, so update it
 
 **Want to build one?** The [tutorial](/domain/tutorial/part-1) builds a bank step by step, from a single account on your machine to an Api deployed on Cloudflare with a browser app.
 
-**Want the whole picture?** The concepts read as a manual, one building block per chapter, starting with [Domain Model](/domain/model) and ending with [Story](/domain/story). Each chapter explains the idea, how to find it in your business, and how to write it: [Command](/domain/command), [Event](/domain/event), [Aggregate](/domain/aggregate), [View](/domain/view), [Projection](/domain/projection), [Stream](/domain/stream), [Policy](/domain/policy), [Saga](/domain/saga), [External System](/domain/external-system) and [Api](/domain/api).
+**Want the whole picture?** The concepts read as a manual, one building block per chapter, starting with [Domain Model](/domain/model) and ending with [Story](/domain/story). Each chapter explains the idea, how to find it in your business, and how to write it: [Command](/domain/command), [Event](/domain/event), [Aggregate](/domain/aggregate), [Decision](/domain/decision), [View](/domain/view), [Projection](/domain/projection), [Stream](/domain/stream), [Policy](/domain/policy), [Saga](/domain/saga), [External System](/domain/external-system) and [Api](/domain/api).

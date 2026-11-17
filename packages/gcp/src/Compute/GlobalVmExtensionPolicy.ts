@@ -4,11 +4,13 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -83,8 +85,26 @@ export type GlobalVmExtensionPolicy = Resource<
     scopedResourceStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlobalVmExtensionPolicyLookup
 >;
+
+/**
+ * Props for {@link GlobalVmExtensionPolicy.lookup}: find a global vm
+ * extension policy this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface GlobalVmExtensionPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 chars).
+   */
+  policyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-level Compute Engine VM extension policy.
@@ -113,6 +133,19 @@ export type GlobalVmExtensionPolicy = Resource<
  *     { labelSelector: { inclusionLabels: { role: "web" } } },
  *   ],
  *   priority: 100,
+ * });
+ * ```
+ *
+ * ### Looking up an existing global vm extension policy
+ * `GlobalVmExtensionPolicy.lookup` references a global vm extension policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared global vm extension policy.
+ *
+ * **Example:** Reference an existing global vm extension policy
+ * ```typescript
+ * const globalVmExtensionPolicy = GCP.Compute.GlobalVmExtensionPolicy.lookup({
+ *   policyName: "my-policy",
  * });
  * ```
  *
@@ -294,6 +327,13 @@ export const GlobalVmExtensionPolicyProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ policyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, policyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const policyName = yield* toName(id, olds?.policyName, output?.policyName);
@@ -399,7 +439,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (observed === undefined) return;
       const retryUuid =
         observed.scopedResourceStatus === "SCOPED_RESOURCE_STATUS_DELETING"
-          ? yield* Effect.sync(() => crypto.randomUUID())
+          ? yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))
           : undefined;
       yield* requestDelete(retryUuid);
       // Deletion is itself a rollout; the policy stays readable until the

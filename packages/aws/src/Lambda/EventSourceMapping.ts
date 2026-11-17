@@ -22,6 +22,35 @@ class MappingNotSettled extends Data.TaggedError("MappingNotSettled")<{
   readonly state: string | undefined;
 }> {}
 
+/**
+ * An SQS queue's visibility timeout is shorter than the function's Lambda
+ * timeout, which AWS refuses for an SQS event source. Lambda's timeout is the
+ * function's `timeout` plus its `timeoutMargin` (1 second by default).
+ */
+export class QueueVisibilityTimeoutBelowFunctionTimeout extends Data.TaggedError(
+  "QueueVisibilityTimeoutBelowFunctionTimeout",
+)<{
+  readonly functionName: string;
+  readonly eventSourceArn: string;
+  readonly message: string;
+}> {}
+
+/** AWS's rejection, restated with the setting to change. */
+const visibilityTimeoutError = (
+  functionName: string,
+  eventSourceArn: string,
+  error: lambda.QueueVisibilityTimeoutTooShort,
+) =>
+  new QueueVisibilityTimeoutBelowFunctionTimeout({
+    functionName,
+    eventSourceArn,
+    message:
+      `${error.message ?? "Queue visibility timeout is less than Function timeout"}. ` +
+      "Lambda runs the function for its `timeout` plus `timeoutMargin` (1 second by " +
+      "default), so set the queue's `visibilityTimeout` to at least that sum (AWS " +
+      "recommends six times the function timeout), or lower the function's `timeout`.",
+  });
+
 export type FunctionResponseType = "ReportBatchItemFailures";
 
 export interface EventSourceMappingProps {
@@ -874,6 +903,9 @@ export const EventSourceMappingProvider = () =>
                 }),
                 retryPermissionsPropagation,
                 retryTransient,
+                Effect.catchTag("QueueVisibilityTimeoutTooShort", (error) =>
+                  Effect.fail(visibilityTimeoutError(functionName, eventSourceArn, error)),
+                ),
               );
           }
 
@@ -901,6 +933,9 @@ export const EventSourceMappingProvider = () =>
             }),
             retryPermissionsPropagation,
             retryTransient,
+            Effect.catchTag("QueueVisibilityTimeoutTooShort", (error) =>
+              Effect.fail(visibilityTimeoutError(functionName, eventSourceArn, error)),
+            ),
           );
 
           // Wait for the mapping to settle into its desired terminal state.

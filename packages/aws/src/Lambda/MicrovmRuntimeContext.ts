@@ -53,6 +53,7 @@ export const makeMicrovmRuntimeContext = (id: string): ProcessContext => {
     get: <T>(key: string) =>
       // Read straight from `process.env` — see `unpackEnvValue` for why
       // this must never resolve through `Config.String`.
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values and recurse (see unpackEnvValue)
       Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
     run: ((effect: Effect.Effect<void, never, any>) =>
       Effect.sync(() => {

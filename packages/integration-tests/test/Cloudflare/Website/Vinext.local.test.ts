@@ -24,7 +24,9 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
  */
 describe.concurrent(
   "Vinext dev",
-  { tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website"] },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website", "local"],
+  },
   () => {
     test.provider(
       "Vinext dev: local dev server renders SSR and serves public files through ASSETS",
@@ -78,7 +80,7 @@ describe.concurrent(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:website", "local"] },
     );
 
     // alchemy-run/alchemy#2231: tail consumers were dropped on the source
@@ -146,7 +148,7 @@ describe.concurrent(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:website", "local"] },
     );
   },
 );

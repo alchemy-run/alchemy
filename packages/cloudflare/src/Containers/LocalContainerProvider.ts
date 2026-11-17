@@ -1,11 +1,12 @@
+import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Artifacts from "alchemy/Artifacts";
-import { hashDirectory } from "alchemy/Command/Memo";
 import { isResolved } from "alchemy/Diff";
 import * as RpcProvider from "alchemy/Local/RpcProvider";
 import type { ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -125,19 +126,18 @@ export const LocalContainerProvider = () =>
           const dockerfile = news.dockerfile
             ? yield* fs.realPath(news.dockerfile)
             : path.join(context, "Dockerfile");
-          const contextHash = yield* hashDirectory({ cwd: context });
-          const dockerfileContent = yield* fs.readFileString(dockerfile);
+          // Hash what Docker receives, like the live provider: the context
+          // `.dockerignore` keeps (never a lockfile above it) and the Dockerfile.
           return {
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: path.relative(context, dockerfile),
               buildArgs: news.build?.args,
             } as DevContainerImage,
-            hash: yield* sha256Object({
-              contextHash,
-              dockerfile: dockerfileContent,
-              buildArgs: news.build?.args,
-            }),
+            hash: yield* hashDockerBuildInputs(
+              { context, dockerfile, platform: "local", buildArgs: news.build?.args },
+              "effective",
+            ),
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
 
@@ -233,7 +233,7 @@ export const LocalContainerProvider = () =>
             applicationId: output?.applicationId ?? generateLocalId(),
             applicationName: yield* createContainerApplicationName(id, undefined),
             accountId,
-            createdAt: output?.createdAt ?? new Date().toISOString(),
+            createdAt: output?.createdAt ?? DateTime.formatIso(yield* DateTime.now),
             observability: news.observability,
           });
           if (!hasImageSource(news)) return attributes;
@@ -260,7 +260,7 @@ export const LocalContainerProvider = () =>
           affinities: news.affinities,
           configuration: placeholderConfiguration(news, env),
           durableObjects: undefined,
-          createdAt: new Date().toISOString(),
+          createdAt: DateTime.formatIso(yield* DateTime.now),
           version: 1,
           dev: { ...withBuildSecrets(dev, news), env },
           hash: { image: hash },

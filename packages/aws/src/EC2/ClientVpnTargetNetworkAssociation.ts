@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -214,7 +215,8 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
           let associationId = network?.AssociationId;
           if (!network) {
             // Do not replay a completed create token after out-of-band deletion.
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             const created = yield* ec2
               .associateClientVpnTargetNetwork({
                 ClientVpnEndpointId: news.clientVpnEndpointId,

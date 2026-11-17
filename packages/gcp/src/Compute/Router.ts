@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -220,8 +221,31 @@ export type Router = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RouterLookup
 >;
+
+/**
+ * Props for {@link Router.lookup}: find a router this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RouterLookup {
+  /**
+   * Router name (RFC1035, 1-63 chars).
+   */
+  routerName: string;
+  /**
+   * Region the router lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud Router.
@@ -294,6 +318,16 @@ export type Router = Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing router
+ * `Router.lookup` references a router Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared router.
+ *
+ * **Example:** Reference an existing router
+ * ```typescript
+ * const router = GCP.Compute.Router.lookup({ routerName: "my-router" });
  * ```
  *
  * @resource
@@ -708,6 +742,14 @@ export const RouterProvider = () =>
           nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ routerName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, routerName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

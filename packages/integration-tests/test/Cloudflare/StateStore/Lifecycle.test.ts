@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { readStoreCredentials } from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
 import {
   bootstrap,
   loginWithCloudflare,
@@ -15,6 +16,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Alchemist from "alchemy/Alchemist";
+import { CredentialsStore } from "alchemy/Auth/Credentials";
 import { currentProfileName } from "alchemy/Auth/Profile";
 import { checkHttpStateStoreAuth } from "alchemy/State/HttpStateStore";
 import { State } from "alchemy/State/State";
@@ -61,9 +63,9 @@ test.provider(
       const environment = yield* yield* CloudflareEnvironment;
       const { accountId } = environment;
       // Never the default store, which every other run on the account uses.
-      const name = "lifecycle";
       const worker = "alchemy-state-store-lifecycle";
-      const target = { type: "provider", backend: "cloudflare", name } as const;
+      // `--name` is the store's full Worker name.
+      const target = { type: "provider", backend: "cloudflare", name: worker } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
         Effect.flatMap(
@@ -139,7 +141,7 @@ test.provider(
       // deleted Worker's workers.dev URL can keep serving for a few seconds,
       // so retry until the edge reports it gone.
       expect(environment.type).toBe("apiToken");
-      const expected = `Run 'alchemy state bootstrap --backend cloudflare --name ${name}`;
+      const expected = `Run 'alchemy state bootstrap --backend cloudflare --name ${worker}`;
       const inCi = yield* inCI(
         environment.type === "apiToken"
           ? {
@@ -309,6 +311,23 @@ test.provider(
       expect(yield* adopted.get({ stack: "domain", stage: "test", fqn: "domain/a" })).toEqual(
         record,
       );
+
+      // A command without the stack's config (`alchemy state --backend
+      // cloudflare --name <worker> --domain <domain>`) reaches the store on its
+      // domain and keeps the credentials cached for it instead of re-minting
+      // them on workers.dev.
+      const configless = yield* Alchemist.State.store({
+        type: "provider",
+        backend: "cloudflare",
+        name: workerName,
+        domain,
+      }).pipe(Effect.provide(Alchemist.layer()));
+      expect(yield* configless.get({ stack: "domain", stage: "test", fqn: "domain/a" })).toEqual(
+        record,
+      );
+      const credentialsStore = yield* CredentialsStore;
+      const cached = yield* readStoreCredentials(credentialsStore, profile, workerName);
+      expect(cached?.url).toBe(`https://${domain}`);
 
       yield* teardownStateStore({ workerName });
       expect(yield* scriptExists(accountId, workerName)).toBe(false);

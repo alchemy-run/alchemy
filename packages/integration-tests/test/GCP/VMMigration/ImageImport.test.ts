@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as vmmigration from "@distilled.cloud/gcp/vmmigration_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -55,6 +56,13 @@ test.provider.skipIf(!imageUri)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.VMMigration.ImageImport.lookup({
+          imageImportId: created.imageImportId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.imageImportId).toEqual(expect.any(String));

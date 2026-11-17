@@ -63,8 +63,8 @@ const account = Account.ref("a-1");
 it.effect("the summary follows the balance", () =>
   story(
     Story.given(account, new AccountOpened({ owner: "sam" })),
-    Story.when(account, new DepositMoney({ amount: 100 })),
-    Story.when(account, new WithdrawMoney({ amount: 30 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
     Story.view(AccountSummary, account, { owner: "sam", balance: 70 }),
   ),
 );
@@ -104,7 +104,7 @@ import { AccountOpened } from "../src/OpenAccount.command.ts";
 -import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 +import { MoneyWithdrawn, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 // ...
-    Story.when(account, new WithdrawMoney({ amount: 30 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
 +    Story.then(
 +      account,
 +      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
@@ -190,8 +190,8 @@ import { MoneyWithdrawn, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 +it.effect("the statement has one line per movement", () =>
 +  story(
 +    Story.given(account, new AccountOpened({ owner: "sam" })),
-+    Story.when(account, new DepositMoney({ amount: 100 })),
-+    Story.when(account, new WithdrawMoney({ amount: 30 })),
++    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
++    Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
 +    Story.then(
 +      account,
 +      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),

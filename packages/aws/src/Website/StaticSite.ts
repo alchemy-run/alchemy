@@ -729,6 +729,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
           // pinned.
           dns.alias(`AliasRecord${index + 1}`, {
             name,
+            ipv6: true,
             target: {
               hostname: dist.domainName,
               route53Alias: { hostedZoneId: dist.hostedZoneId },

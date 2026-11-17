@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -166,8 +167,33 @@ export type WasmPlugin = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WasmPluginLookup
 >;
+
+/**
+ * Props for {@link WasmPlugin.lookup}: find a wasm plugin this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface WasmPluginLookup {
+  /**
+   * WasmPlugin id (the `{wasmPlugin}` segment of
+   * `projects/{project}/locations/{location}/wasmPlugins/{wasmPlugin}`).
+   * Must be 1-63 characters and not start with a number.
+   */
+  wasmPluginId: string;
+  /**
+   * Location. Wasm plugins live in `global`. `GLOBAL` is accepted and
+   * normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Services WasmPlugin — a Service Extensions plugin that
@@ -206,6 +232,19 @@ export type WasmPlugin = Resource<
  *       imageUri: "us-central1-docker.pkg.dev/my-project/plugins/edge:v1",
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing wasm plugin
+ * `WasmPlugin.lookup` references a wasm plugin Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * wasm plugin.
+ *
+ * **Example:** Reference an existing wasm plugin
+ * ```typescript
+ * const wasmPlugin = GCP.NetworkServices.WasmPlugin.lookup({
+ *   wasmPluginId: "my-wasm-plugin",
  * });
  * ```
  *
@@ -370,6 +409,15 @@ export const WasmPluginProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ wasmPluginId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, wasmPluginId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

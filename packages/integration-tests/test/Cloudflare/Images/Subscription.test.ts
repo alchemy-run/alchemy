@@ -51,7 +51,6 @@ test.provider.skipIf(!canUpload)(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const cleanup = makeSubscriptionCleanup();
       const variant = Cloudflare.Images.Variant("Variant", {
-        name: "alchemySubscriptionUpload",
         fit: "contain",
         width: 100,
         height: 100,

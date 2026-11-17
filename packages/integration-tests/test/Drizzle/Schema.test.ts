@@ -168,6 +168,32 @@ test.provider(
 );
 
 test.provider(
+  "generate options pass through to drizzle-kit generate",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(DRIFTED_SCHEMA_SOURCE);
+
+      yield* stack.deploy(
+        Drizzle.Schema("app-schema", {
+          schema: ws.schemaPath,
+          out: ws.out,
+          generate: { breakpoints: false },
+        }),
+      );
+
+      const dirs = yield* readMigrationDirs(ws.out);
+      expect(dirs).toHaveLength(1);
+      const sql = yield* fs.readFileString(path.join(ws.out, dirs[0]!, "migration.sql"));
+      expect(sql).toContain('CREATE TABLE "users"');
+      expect(sql).toContain('CREATE TABLE "posts"');
+      expect(sql).not.toContain("statement-breakpoint");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
   "repeated deploys with no schema drift produce noop, not update (regression: forced update cascaded into Neon.Branch)",
   (stack) =>
     Effect.gen(function* () {
@@ -736,6 +762,47 @@ test.provider(
       expect(yield* Effect.sync(() => process.exit)).toBe(exit);
     }),
   { tags: ["unit", "local"] },
+);
+
+// #2981: plan diffs a deployed resource twice when a downstream resource
+// resolves its outputs, and the second diff waited forever on the first
+// one's failed `detectDrift`.
+test.provider(
+  "a failing diff of a deployed schema fails the plan instead of hanging",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+      const schemas = (schema: string) =>
+        Effect.gen(function* () {
+          const upstream = yield* Drizzle.Schema("upstream", {
+            dialect: "sqlite",
+            schema,
+            out: ws.out,
+          });
+          // Resolving `upstream.out` diffs `upstream` a second time.
+          yield* Drizzle.Schema("downstream", {
+            dialect: "sqlite",
+            schema: ws.schemaPath,
+            out: upstream.out,
+          });
+        });
+      yield* stack.deploy(schemas(ws.schemaPath));
+
+      const invalidPath = path.join(ws.root, "invalid.ts");
+      yield* fs.writeFileString(
+        invalidPath,
+        SQLITE_SCHEMA_SOURCE.replace('name: text("name")', 'name: text("id")'),
+      );
+      const result = yield* Effect.result(stack.deploy(schemas(invalidPath)));
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("found errors in the schema");
+      }
+    }),
+  { tags: ["unit", "local"], timeout: 30_000 },
 );
 
 test.provider(

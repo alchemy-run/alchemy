@@ -89,7 +89,8 @@ the differential tests ignore until the installed release catches up.
 | `X-Forwarded-Host`, `X-Forwarded-Proto` (case-insensitive), `ctx.access` from `dev.access` | Matched | `forwarded-host.test.ts`, `ViteRuntime.test.ts` (headers, Access) |
 | The Worker's response status text (dev and preview) | Matched (upstream `main`, after 1.65.0) | `dev-proxy.test.ts` |
 | Repeated `Set-Cookie` request headers reach the Worker as separate values | Matched (upstream `main`, after 1.65.0) | `dev-proxy.test.ts` |
-| Outbound `fetch`: `CF-Worker`, no `CF-Connecting-IP`, `cf.image` | Matched | `ViteRuntime.test.ts` (CF-Worker, cf.image) |
+| Outbound `fetch`: no `CF-Connecting-IP`, `cf.image` | Matched | `Runtime.test.ts` (outbound), `ViteRuntime.test.ts` (cf.image) |
+| Outbound `fetch`: `CF-Worker` | Different: not added; Cloudflare-fronted sites answer 403 to one sent from a developer machine (#2965) | `ViteRuntime.test.ts` (CF-Worker), `Runtime.test.ts` (outbound) |
 | Restart after a workerd crash | Matched | `ViteRuntime.test.ts` (workerd crashes) |
 | Containers built from a Dockerfile | Matched | `ViteRuntime.test.ts` (containers) |
 | Alchemy's runtime variables (`ALCHEMY_*`) in `env` and `process.env` | Different: Alchemy's runtime reads them; documented on `env` | `ViteNodeCompat.test.ts` (process-populated-env) |

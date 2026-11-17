@@ -7,6 +7,8 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -77,6 +79,13 @@ test.provider.skipIf(!runLifecycle)(
           return { instance, table, view };
         }),
       );
+      yield* expectFound(
+        GCP.Bigtable.InstancesLogicalView.lookup({
+          logicalViewId: created.view.logicalViewId,
+          instance: created.view.instance,
+        }),
+        created.view,
+      );
 
       expect(created.view.name).toContain("/logicalViews/");
       expect(created.view.logicalViewId).toEqual(expect.any(String));
@@ -127,6 +136,40 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(refetched.deletionProtection).toEqual(true);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Active",
+        tag: "GCP.Bigtable.LogicalViewDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Bigtable.Instance("Data", {
+            instanceId: created.instance.instanceId,
+            displayName: "alchemy-test-bt-logical",
+            type: "PRODUCTION",
+            clusters: {
+              cluster: {
+                location: "us-central1-b",
+                serveNodes: 1,
+                defaultStorageType: "HDD",
+              },
+            },
+          });
+          const table = yield* GCP.Bigtable.Table("Users", {
+            instance: instance.name,
+            tableId: "users",
+            columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
+          });
+          const view = yield* GCP.Bigtable.InstancesLogicalView("Active", {
+            instance: instance.name,
+            logicalViewId: created.view.logicalViewId,
+            query: Output.interpolate`SELECT _key, cf FROM \`${table.tableId}\``,
+            deletionProtection: false,
+          });
+          return { instance, table, view };
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.view.name);

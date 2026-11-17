@@ -426,6 +426,7 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
               // is pinned.
               dns.alias(`AliasRecord${index + 1}`, {
                 name,
+                ipv6: true,
                 target: {
                   hostname: distribution.domainName,
                   route53Alias: { hostedZoneId: distribution.hostedZoneId },

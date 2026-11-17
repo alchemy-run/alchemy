@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -85,8 +86,31 @@ export type DataStoresSession = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataStoresSessionLookup
 >;
+
+/**
+ * Props for {@link DataStoresSession.lookup}: find a data stores session
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DataStoresSessionLookup {
+  /**
+   * Session id (1-63 characters, lowercase alphanumeric).
+   */
+  sessionId: string;
+  /**
+   * Parent Data Store resource name
+   * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Search Session attached to a Data Store.
@@ -112,6 +136,20 @@ export type DataStoresSession = Resource<
  *   dataStore: dataStore.name,
  *   displayName: "vip-support",
  *   isPinned: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing data stores session
+ * `DataStoresSession.lookup` references a data stores session Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared data stores session.
+ *
+ * **Example:** Reference an existing data stores session
+ * ```typescript
+ * const dataStoresSession = GCP.DiscoveryEngine.DataStoresSession.lookup({
+ *   sessionId: "my-session",
+ *   dataStore: "my-data-store",
  * });
  * ```
  *
@@ -208,7 +246,16 @@ export const DataStoresSessionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ sessionId, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = dataStore ? expandDataStore(dataStore, env.project, "global") : undefined;
+      const name = parent ? resourceName(parent, sessionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const sessionId = yield* toPhysical(id, olds?.sessionId, output?.sessionId, sessionIdOf);
       const parent = olds?.dataStore
@@ -220,7 +267,7 @@ export const DataStoresSessionProvider = () =>
       const attrs = toAttrs(existing, env.project);
       return (yield* hasAlchemyLabels(id, alchemyLabelsOf(existing.labels)))
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

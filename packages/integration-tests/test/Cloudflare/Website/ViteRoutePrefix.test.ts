@@ -28,6 +28,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { stageSuffix } from "../../names.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -41,7 +42,7 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const zoneName = process.env.CLOUDFLARE_TEST_WORKER_ROUTE_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-user path prefix on the zone apex (never Date.now()).
-const routePrefix = `alchemy-vite-route-repro-${process.env.PULL_REQUEST ?? process.env.USER}`;
+const routePrefix = `alchemy-vite-route-repro-${stageSuffix()}`;
 const basePath = `/${routePrefix}/app`;
 const routePattern = `${zoneName}${basePath}*`;
 const routePageUrl = `https://${zoneName}${basePath}/`;

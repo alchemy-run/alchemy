@@ -26,7 +26,6 @@ describe(
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
               const tunnel = yield* Cloudflare.Tunnel.Tunnel("ListTunnel", {
-                name: "alchemy-tunnel-config-list-test",
                 configSrc: "cloudflare",
               });
               const config = yield* Cloudflare.Tunnel.Configuration("ListConfig", {

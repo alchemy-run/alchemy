@@ -3,11 +3,14 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   backupName,
@@ -132,8 +135,34 @@ export type InstancesBackup = Resource<
     minimumRestorableEdition: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesBackupLookup
 >;
+
+/**
+ * Props for {@link InstancesBackup.lookup}: find an instances backup this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InstancesBackupLookup {
+  /**
+   * Backup id (the `{backup}` segment of
+   * `projects/{project}/instances/{instance}/backups/{backup}`). Must match
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–60 characters).
+   */
+  backupId: string;
+  /**
+   * Parent instance id or full name
+   * (`projects/{project}/instances/{instance}`). Must be the instance that
+   * owns `database`.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Spanner backup of a database, stored on the parent instance.
@@ -163,6 +192,20 @@ export type InstancesBackup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances backup
+ * `InstancesBackup.lookup` references an instances backup Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * instances backup.
+ *
+ * **Example:** Reference an existing instances backup
+ * ```typescript
+ * const instancesBackup = GCP.Spanner.InstancesBackup.lookup({
+ *   backupId: "my-backup",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Spanner
  */
@@ -185,7 +228,9 @@ const toId = (id: string, backupId: string | undefined, existing?: string) =>
   toPhysicalId(id, backupId, existing, MAX_BACKUP_ID_LENGTH);
 
 const defaultExpireTime = () =>
-  Effect.sync(() => new Date(Date.now() + DEFAULT_EXPIRE_MS).toISOString());
+  Effect.map(Clock.currentTimeMillis, (now) =>
+    DateTime.formatIso(DateTime.makeUnsafe(now + DEFAULT_EXPIRE_MS)),
+  );
 
 const encryptionKey = (config: BackupEncryptionConfig | undefined) =>
   JSON.stringify({
@@ -328,6 +373,16 @@ export const InstancesBackupProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ backupId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = backupName(env.project, instanceId, backupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

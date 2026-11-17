@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -73,8 +74,26 @@ export type TargetHttpProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetHttpProxyLookup
 >;
+
+/**
+ * Props for {@link TargetHttpProxy.lookup}: find a target http proxy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetHttpProxyLookup {
+  /**
+   * TargetHttpProxy name (RFC1035, 1-63 characters).
+   */
+  targetHttpProxyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine target HTTP proxy.
@@ -107,6 +126,19 @@ export type TargetHttpProxy = Resource<
  *   targetHttpProxyName: "app-http",
  *   description: "public http frontend",
  *   urlMap: map.selfLink,
+ * });
+ * ```
+ *
+ * ### Looking up an existing target http proxy
+ * `TargetHttpProxy.lookup` references a target http proxy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target http proxy.
+ *
+ * **Example:** Reference an existing target http proxy
+ * ```typescript
+ * const targetHttpProxy = GCP.Compute.TargetHttpProxy.lookup({
+ *   targetHttpProxyName: "my-target-http-proxy",
  * });
  * ```
  *
@@ -219,7 +251,14 @@ export const TargetHttpProxyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ targetHttpProxyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, targetHttpProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const targetHttpProxyName = yield* toName(
         id,
@@ -230,7 +269,9 @@ export const TargetHttpProxyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "targetHttpProxyName");
     }),
 
     list: () =>

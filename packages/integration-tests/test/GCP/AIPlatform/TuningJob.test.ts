@@ -64,7 +64,8 @@ test.provider(
             location: "us-central1",
             baseModel: "gemini-2.5-flash",
             supervisedTuningSpec: {
-              trainingDatasetUri: "gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl",
+              trainingDatasetUri:
+                "gs://cloud-samples-data/ai-platform/generative_ai/gemini/text/sft_train_data.jsonl",
             },
           });
         }),

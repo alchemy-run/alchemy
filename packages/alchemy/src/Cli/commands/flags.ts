@@ -4,6 +4,7 @@ import * as Flag from "effect/cli/Flag";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -245,8 +246,9 @@ export const parseSince = (value: string) =>
               ? Duration.hours(num)
               : Duration.days(num);
       const now = yield* Clock.currentTimeMillis;
-      return new Date(now - Duration.toMillis(duration));
+      return DateTime.toDateUtc(DateTime.makeUnsafe(now - Duration.toMillis(duration)));
     }
+    // oxlint-disable-next-line effecttsgo/global-date-in-effect -- zoneless ISO input must parse as local time, DateTime.make would read it as UTC
     const parsed = new Date(value);
     if (isNaN(parsed.getTime())) {
       return yield* new UserInputError({

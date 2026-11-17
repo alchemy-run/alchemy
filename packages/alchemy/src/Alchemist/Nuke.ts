@@ -16,7 +16,7 @@ export interface ScanOptions extends ConfigOptions {
   readonly exclude?: ReadonlyArray<string>;
   /** Providers scanned in parallel. @default 16 */
   readonly concurrency?: number | "unbounded";
-  /** Timeout for each provider's `list`. @default 120 */
+  /** Timeout for each provider's `list`. @default 60 */
   readonly providerTimeoutSeconds?: number;
 }
 

@@ -3,7 +3,6 @@ import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
@@ -33,7 +32,7 @@ import {
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
 import { havePropsChanged, isResolved, stripEffects, stripUnresolved } from "./Diff.ts";
-import { captureEmit, type ApplyEvent, type ApplyStatus } from "./Events.ts";
+import { captureEmit, failureMessage, type ApplyEvent, type ApplyStatus } from "./Events.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -579,38 +578,6 @@ interface LifecycleFailure {
   cause: Cause.Cause<unknown>;
 }
 
-/**
- * First human-readable line of a lifecycle failure, for the per-resource
- * `fail` status event. The full cause is still aggregated and raised when
- * the whole apply settles — this exists so a failed row explains itself the
- * moment it fails instead of only after every sibling has finished.
- * `undefined` for interrupt-only causes (nothing failed, the run was
- * cancelled).
- */
-const failureMessage = (cause: Cause.Cause<unknown>): string | undefined => {
-  for (const reason of cause.reasons) {
-    const error = Cause.isFailReason(reason)
-      ? reason.error
-      : Cause.isDieReason(reason)
-        ? reason.defect
-        : undefined;
-    if (error === undefined) continue;
-    const tag =
-      Predicate.hasProperty(error, "_tag") && typeof error._tag === "string"
-        ? error._tag
-        : undefined;
-    const message =
-      Predicate.hasProperty(error, "message") && typeof error.message === "string"
-        ? error.message
-        : typeof error === "string"
-          ? error
-          : Formatter.format(error);
-    const line = message.split("\n", 1)[0]!;
-    return tag !== undefined && !line.includes(tag) ? `${tag}: ${line}` : line;
-  }
-  return undefined;
-};
-
 const executeNode = (
   fqn: string,
   node: Apply,
@@ -1103,6 +1070,7 @@ const executeNode = (
             ...node.state,
             attr: node.state.attr,
             props: news,
+            removalPolicy: node.resource.RemovalPolicy,
             providerMode: node.mode,
           })
         : commit<UpdatingReourceState>({
@@ -1160,6 +1128,7 @@ const executeNode = (
           props: news,
           // Resolved payload, not raw `node.bindings` — see create commit.
           bindings: bindingOutputs,
+          removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
         });
       } else {
@@ -1212,6 +1181,14 @@ const executeNode = (
       if (node.state.status === "replaced" && !node.restart) {
         // The replacement already exists; this pass only needs GC to clean up
         // older generations, so expose the current replacement and stop here.
+        // Like the noop branch, persist a changed removal policy: this is the
+        // only pass that sees it, and GC reads the row's policy.
+        if (node.state.removalPolicy !== node.resource.RemovalPolicy) {
+          yield* commit<ReplacedResourceState>({
+            ...node.state,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        }
         track(tracker, outputs, fqn, {
           output: node.state.attr,
           props: node.state.props,
@@ -2162,13 +2139,14 @@ const collectGarbage = Effect.fn(function* (plan: Plan, reportEvent: Reporter) {
             } as S,
           });
 
-        const report = (status: ApplyStatus) =>
+        const report = (status: ApplyStatus, message?: string) =>
           reportEvent({
             type: "apply.resource.status",
             fqn,
             id: logicalId,
             resourceType,
             status,
+            message,
             providerMode,
           });
 
@@ -2229,7 +2207,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, reportEvent: Reporter) {
                 Effect.gen(function* () {
                   unresolved.add(fqn);
                   failures.push({ fqn, logicalId, resourceType, cause });
-                  yield* report("fail");
+                  yield* report("fail", failureMessage(cause));
                   return "failed" as const;
                 }),
               ),

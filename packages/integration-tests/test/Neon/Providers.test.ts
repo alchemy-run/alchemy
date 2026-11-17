@@ -12,6 +12,7 @@ import * as Interaction from "alchemy/Interaction";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -58,6 +59,7 @@ it.live(
           ),
           Layer.sync(ArtifactStore, createArtifactStore),
           NodeServices.layer,
+          SecureRandom.layerWebCrypto,
           FetchHttpClient.layer,
           Interaction.layerNonInteractive(),
         ),

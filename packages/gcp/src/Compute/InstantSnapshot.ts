@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -86,8 +87,35 @@ export type InstantSnapshot = Resource<
     architecture: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstantSnapshotLookup
 >;
+
+/**
+ * Props for {@link InstantSnapshot.lookup}: find an instant snapshot this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InstantSnapshotLookup {
+  /**
+   * Instant snapshot name (RFC1035, 1-63 characters).
+   */
+  instantSnapshotName: string;
+  /**
+   * Source disk URL or relative path
+   * (`projects/{project}/zones/{zone}/disks/{disk}`).
+   */
+  sourceDisk: string;
+  /**
+   * Zone of the snapshot and its source disk (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine instant snapshot.
@@ -118,6 +146,20 @@ export type InstantSnapshot = Resource<
  *   zone: "us-central1-a",
  *   sourceDisk: "zones/us-central1-a/disks/app-data",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing instant snapshot
+ * `InstantSnapshot.lookup` references an instant snapshot Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * instant snapshot.
+ *
+ * **Example:** Reference an existing instant snapshot
+ * ```typescript
+ * const instantSnapshot = GCP.Compute.InstantSnapshot.lookup({
+ *   instantSnapshotName: "my-instant-snapshot",
+ *   sourceDisk: "my-source-disk",
  * });
  * ```
  *
@@ -311,6 +353,14 @@ export const InstantSnapshotProvider = () =>
           previousZone === nextZone,
       };
     }),
+
+    lookup: Effect.fn(function* ({ instantSnapshotName, sourceDisk, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone) ?? zoneFromDisk(sourceDisk) ?? DEFAULT_ZONE;
+      const existing = yield* getByName(env.project, zone, instantSnapshotName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

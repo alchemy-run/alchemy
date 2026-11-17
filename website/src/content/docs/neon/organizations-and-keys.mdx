@@ -1,0 +1,64 @@
+---
+title: Organizations and keys
+description: How a Neon organization holds your projects and their branches, how an API key and orgId decide where Alchemy deploys, and why apps connect with their own credentials.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything on Neon belongs to an **organization** or to your personal account: its projects, each project's branches, its members, and its bill. Two kinds of credential are kept apart. A **management API key** lets Alchemy create and change projects. A branch's own credentials let your app reach its database.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization" },
+    { id: "app", label: "my-app", type: "project · orgId: org-…", parent: "org" },
+    { id: "main", label: "main", type: "branch", parent: "app", tone: "accent" },
+    { id: "pr", label: "pr-42", type: "branch", parent: "app" },
+    { id: "reports", label: "reports", type: "project", parent: "org" },
+    { id: "rmain", label: "main", type: "branch", parent: "reports" },
+  ]}
+  scopes={[
+    { on: "org", label: "organization key" },
+    { on: "app", label: "project-restricted key" },
+  ]}
+  caption="An organization holds projects, and a project holds branches. An organization key reaches every project in it, while a project-restricted key reaches only one."
+/>
+
+## Sign in with a profile
+
+Alchemy deploys with a management API key from the [Neon Console](https://console.neon.tech). Store it in a [profile](/environments/profiles):
+
+```sh
+alchemy profile edit --add Neon
+```
+
+See [Setup](/neon/setup) for which kind of key to create.
+
+## orgId decides the organization
+
+A personal key acts with your own access, and creates projects in your personal account. To create one in an organization, pass its id, from **Organization Settings → General information**:
+
+```typescript
+const project = yield* Neon.Project("Application", { orgId: "org-example" });
+```
+
+`orgId` can't change once the project exists. Choose it before you store data.
+
+## One profile per organization
+
+A [stage](/environments/stages) decides what you deploy. A profile decides where. If production lives in its own organization, give it its own key and profile:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add Neon
+alchemy deploy --stage prod --profile prod
+```
+
+Within one project, stages get their own [branches](/neon/data/branching), so a pull request never touches production's data.
+
+## Apps don't hold the API key
+
+The management key changes projects. An app connects to one branch's database, with a [role](/neon/data/roles) and a [connection string](/neon/data/connections) for that branch. Functions and storage get branch credentials from Neon. Never put the management key in an app's environment.
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads `NEON_API_KEY` from the environment. See [CI](/environments/ci).

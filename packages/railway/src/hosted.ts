@@ -185,6 +185,7 @@ import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -193,7 +194,7 @@ globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 const tag = Context.Service(${JSON.stringify(Self.key)});
 const layer = makeEntrypointLayer(tag, entrypoint);
-const platform = FetchHttpClient.layer;
+const platform = Layer.mergeAll(FetchHttpClient.layer, SecureRandom.layerWebCrypto);
 const stack = Layer.effect(
   Stack,
   Effect.all([

@@ -5,6 +5,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -35,6 +36,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.Logging.Metric.lookup({ metricId: created.metricId }), created);
 
       expect(created.metricId).toEqual(expect.any(String));
       expect(created.name).toContain("/metrics/");

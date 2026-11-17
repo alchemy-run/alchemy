@@ -18,6 +18,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -25,6 +27,18 @@ import {
 import type { Providers } from "./Providers.ts";
 
 export type FloatingIpType = "ipv4" | "ipv6";
+
+/**
+ * Deletion was refused because the Floating IP has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class FloatingIpDeleteProtected extends Data.TaggedError(
+  "Hetzner.FloatingIpDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface FloatingIpProps {
   /**
@@ -115,8 +129,18 @@ export type FloatingIp = Resource<
     serverId: number | null;
   },
   never,
-  Providers
+  Providers,
+  FloatingIpLookup
 >;
+
+/**
+ * Props for {@link FloatingIp.lookup}: find a Floating IP this stack
+ * doesn't manage by its name.
+ */
+export interface FloatingIpLookup {
+  /** Floating IP name (unique in the project). */
+  name: string;
+}
 
 /**
  * An unassigned Hetzner Cloud Floating IP. Provide `type` and a
@@ -158,6 +182,16 @@ export type FloatingIp = Resource<
  *   description: "production frontend",
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing Floating IP
+ * `FloatingIp.lookup` references a Floating IP Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Floating IP
+ * ```typescript
+ * const ip = Hetzner.FloatingIp.lookup({ name: "ingress" });
  * ```
  *
  * @resource
@@ -288,17 +322,32 @@ export const FloatingIpProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.type !== output.type) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameHomeLocation(news.homeLocation, output)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
@@ -383,10 +432,18 @@ export const FloatingIpProvider = () =>
 
       return toAttrs(yield* refresh(current.id));
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new FloatingIpDeleteProtected({
+            id: current.id,
+            message: `Hetzner Floating IP '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
       if (current.server !== null) {

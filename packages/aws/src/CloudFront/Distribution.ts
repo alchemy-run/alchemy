@@ -548,8 +548,18 @@ export interface Distribution extends Resource<
     tags: Record<string, string>;
   },
   DistributionBinding,
-  Providers
+  Providers,
+  DistributionLookup
 > {}
+
+/**
+ * Props for {@link Distribution.lookup}: find a distribution this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface DistributionLookup {
+  /** The id of the existing distribution. */
+  distributionId: string;
+}
 
 const DistributionResource = Resource<Distribution>("AWS.CloudFront.Distribution");
 
@@ -793,6 +803,17 @@ const withWebFunctionOrigins = (
  * To purge at runtime from a Lambda Function, bind
  * `CloudFront.CreateInvalidation(distribution)` instead.
  *
+ * ### Looking up an existing distribution
+ * `Distribution.lookup` references a distribution Alchemy doesn't manage (created in the
+ * console or by another stack), found by `distributionId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Point a DNS record at an existing distribution
+ * ```typescript
+ * const cdn = AWS.CloudFront.Distribution.lookup({ distributionId: "E2ABCDEF123456" });
+ * const domainName = cdn.domainName;
+ * ```
+ *
  * @resource
  */
 export const Distribution: typeof DistributionResource = Object.assign(
@@ -995,6 +1016,16 @@ export const DistributionProvider = () =>
           if ((olds?.staging ?? false) !== (news.staging ?? false)) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ distributionId }) {
+          const current = yield* getCurrent(distributionId);
+          if (!current) return undefined;
+          return toAttrs(
+            current.distribution,
+            current.etag,
+            current.tags,
+            yield* resolveUrl(current.distribution),
+          );
         }),
         read: Effect.fn(function* ({ instanceId, output }) {
           // Without cached attributes, fall back to the deterministic

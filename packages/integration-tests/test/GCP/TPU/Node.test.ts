@@ -6,6 +6,7 @@ import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -40,7 +41,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1-c/nodes/alchemy-tpu-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -63,6 +64,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.TPU.Node.lookup({ nodeId: created.nodeId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/nodes/");

@@ -91,8 +91,18 @@ export interface Stage extends Resource<
     rtmpsEndpoint: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  StageLookup
 > {}
+
+/**
+ * Props for {@link Stage.lookup}: find a stage this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface StageLookup {
+  /** The ARN of the existing stage. */
+  stageArn: string;
+}
 
 /**
  * An Amazon IVS Real-Time stage — a virtual space where participants
@@ -115,6 +125,16 @@ export interface Stage extends Resource<
  *   stageName: "my-video-room",
  *   tags: { team: "media" },
  * });
+ * ```
+ *
+ * ### Looking up an existing stage
+ * `Stage.lookup` references a stage Alchemy doesn't manage (created in the
+ * console or by another stack), found by `stageArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing stage
+ * ```typescript
+ * const existing = AWS.IVSRealtime.Stage.lookup({ stageArn: "..." });
  * ```
  *
  * @resource
@@ -225,6 +245,13 @@ export const StageProvider = () =>
 
       return {
         stables: ["stageArn"],
+
+        lookup: Effect.fn(function* ({ stageArn }) {
+          const stage = yield* getByArn(stageArn);
+          if (stage === undefined) return undefined;
+          const attrs = yield* toAttrs(stage);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const stage = output?.stageArn

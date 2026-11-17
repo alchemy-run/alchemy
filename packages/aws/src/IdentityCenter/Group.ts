@@ -50,8 +50,27 @@ export interface Group extends Resource<
     updatedAt: Date | undefined;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't
+ * manage, in an Identity Center identity store.
+ */
+export type GroupLookup =
+  | {
+      /** The identity store the group belongs to. */
+      identityStoreId: string;
+      /** The id of the existing group. */
+      groupId: string;
+    }
+  | {
+      /** The identity store the group belongs to. */
+      identityStoreId: string;
+      /** The display name of the existing group. */
+      displayName: string;
+    };
 
 /**
  * A group in the IAM Identity Center identity store.
@@ -62,6 +81,17 @@ export interface Group extends Resource<
  *   displayName: "platform-engineers",
  *   description: "Platform engineering team",
  * });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `identityStoreId` with `groupId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const engineers = AWS.IdentityCenter.Group.lookup({ identityStoreId, displayName: "Engineers" });
+ * const groupId = engineers.groupId;
  * ```
  *
  * @resource
@@ -96,6 +126,14 @@ export const GroupProvider = () =>
           if (olds?.identityStoreId !== news.identityStoreId) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          return "groupId" in props
+            ? yield* readGroupById(props.identityStoreId, props.groupId)
+            : yield* readGroupByDisplayName({
+                identityStoreId: props.identityStoreId,
+                displayName: props.displayName,
+              });
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (output?.groupId && output.identityStoreId) {

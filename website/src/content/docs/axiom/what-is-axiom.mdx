@@ -1,0 +1,101 @@
+---
+title: What is Axiom?
+description: The concepts behind Axiom — organizations, datasets, OpenTelemetry ingest, API tokens, APL queries, monitors, notifiers, dashboards, views and annotations — and how @alchemy.run/axiom models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Axiom stores the events your systems emit, logs, traces and metrics, and lets you query them fast and cheaply, however many there are. You send it OpenTelemetry, which Effect already produces, and query it with **APL**. On top of the data, **monitors** alert you, and **dashboards** show you what's happening.
+
+Take one setup: a Worker sending its traces and logs to Axiom, with a monitor that pages you on panics. The Worker sends telemetry with an ingest token. Axiom stores it in datasets. A monitor queries a dataset every minute and notifies Slack when it matches.
+
+<Tree
+  nodes={[
+    { id: "worker", label: "Worker", type: "ingest token", icon: "square-function" },
+    {
+      id: "org", label: "acme", type: "organization", icon: "brand:axiom", colGap: 3,
+      areas: ["traces dash", "logs monitor", "logs slack"],
+      phoneAreas: ["slack slack", "dash monitor", "traces logs"],
+    },
+    { id: "traces", label: "app-traces", type: "dataset", parent: "org", tone: "accent", icon: "database" },
+    { id: "logs", label: "app-logs", type: "dataset", parent: "org", tone: "accent", icon: "database" },
+    { id: "dash", label: "app", type: "dashboard", parent: "org", icon: "layout-dashboard" },
+    { id: "monitor", label: "panics", type: "monitor", parent: "org", icon: "bell" },
+    { id: "slack", label: "ops-slack", type: "notifier", parent: "org", icon: "send" },
+  ]}
+  areas={["worker org"]}
+  phoneAreas={["org", "worker"]}
+  colGap={3}
+  links={[
+    { from: "worker", to: "traces", label: "sends" },
+    { from: "worker", to: "logs", label: "sends" },
+    { from: "dash", to: "traces", label: "APL" },
+    { from: "monitor", to: "logs", label: "APL" },
+    { from: "monitor", to: "slack", label: "alerts" },
+  ]}
+  caption="Everything lives in an organization. A Worker with an ingest token sends its traces and logs to datasets. Dashboards and monitors query them with APL, and a monitor alerts you through a notifier."
+/>
+
+## Organizations and tokens
+
+An **organization** holds your datasets, monitors and dashboards, and your bill. An **API token** grants specific capabilities: ingest into one dataset, query another, manage monitors. A **personal token** acts as you, and is what Alchemy deploys with.
+
+Connect it once, in [Setup](/axiom/setup).
+
+## Datasets
+
+A **dataset** is a collection of events, the unit you send to and query from. An OpenTelemetry dataset has a **kind**, one per signal: traces, logs or metrics. It exposes the endpoint to send that signal to.
+
+```typescript title="alchemy.run.ts"
+const traces = yield* Axiom.Dataset("traces", { name: "app-traces", kind: "otel:traces:v1" });
+```
+
+Renaming a dataset or changing its kind replaces it, and its events go with it.
+
+See [Datasets & ingest](/axiom/data/ingest).
+
+## Ingest
+
+Your app sends events over **OTLP**, OpenTelemetry's protocol, to a dataset's endpoint, with a token that may ingest into it. Effect's tracer and logger already speak OpenTelemetry, so connecting them to Axiom is configuration, not code.
+
+Give your runtime a token that can only ingest, and only into its own datasets:
+
+```typescript title="alchemy.run.ts"
+const ingest = yield* Axiom.ApiToken("ingest", {
+  name: "prod-ingest",
+  datasetCapabilities: { "app-traces": { ingest: ["create"] } },
+});
+```
+
+See [Observability](/testing/observability) for exporting from Effect.
+
+## APL: querying events
+
+**APL**, Axiom's query language, filters, aggregates and charts events, in a pipeline that reads left to right:
+
+```text
+['app-logs'] | where message contains "panic:" | summarize count() by bin(_time, 1m)
+```
+
+Every monitor, dashboard chart and view is an APL query.
+
+## Monitors and notifiers
+
+A **monitor** runs a query on a schedule and fires when its result crosses a line: a count over a threshold, a value outside its usual range, or any event matching at all. A **notifier** is where it sends the alert: Slack, email, PagerDuty, a webhook.
+
+See [Monitors & alerting](/axiom/guides/alerting).
+
+## Dashboards, views and annotations
+
+A **dashboard** is a set of charts, each a query. A **view** saves a query as a virtual dataset, so others can query its results by name. An **annotation** marks a moment on your charts, like a deploy, so you can see what changed when.
+
+See [Dashboards as code](/axiom/guides/dashboards) and [Annotations](/axiom/guides/annotations).
+
+## How @alchemy.run/axiom models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your token picks the organization, and `Axiom.providers()` deploys into it. Datasets, tokens, monitors, notifiers, dashboards, views and annotations are resources, in the same Stack as the Workers and Functions they observe. A dataset's endpoints and a token's value are outputs you pass to your runtime's environment. So a new alert, or a changed threshold, is a reviewed change in a pull request.
+
+Next, follow [Observability with Axiom](/cloudflare/observability/axiom-observability) for a complete setup on Cloudflare.

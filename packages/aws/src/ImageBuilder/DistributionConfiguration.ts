@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -59,8 +60,18 @@ export interface DistributionConfiguration extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DistributionConfigurationLookup
 > {}
+
+/**
+ * Props for {@link DistributionConfiguration.lookup}: find a distribution configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DistributionConfigurationLookup {
+  /** The distribution configuration arn of the existing distribution configuration. */
+  distributionConfigurationArn: string;
+}
 
 /**
  * An EC2 Image Builder distribution configuration — defines where and how
@@ -88,6 +99,16 @@ export interface DistributionConfiguration extends Resource<
  *   infrastructureConfigurationArn: infra.infrastructureConfigurationArn,
  *   distributionConfigurationArn: distribution.distributionConfigurationArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing distribution configuration
+ * `DistributionConfiguration.lookup` references a distribution configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `distributionConfigurationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing distribution configuration
+ * ```typescript
+ * const existing = AWS.ImageBuilder.DistributionConfiguration.lookup({ distributionConfigurationArn: "my-distribution-configuration" });
  * ```
  *
  * @resource
@@ -139,6 +160,12 @@ export const DistributionConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ distributionConfigurationArn: arn }) {
+          const config = yield* getConfiguration(arn);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.distributionConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));
@@ -152,7 +179,8 @@ export const DistributionConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.distributionConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

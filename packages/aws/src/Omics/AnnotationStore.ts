@@ -96,8 +96,18 @@ export interface AnnotationStore extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  AnnotationStoreLookup
 > {}
+
+/**
+ * Props for {@link AnnotationStore.lookup}: find an annotation store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AnnotationStoreLookup {
+  /** The name of the existing annotation store. */
+  name: string;
+}
 
 /**
  * An Amazon HealthOmics annotation store — a container for genome annotation
@@ -128,6 +138,16 @@ export interface AnnotationStore extends Resource<
  *     tsvStoreOptions: { annotationType: "GENERIC" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing annotation store
+ * `AnnotationStore.lookup` references an annotation store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing annotation store
+ * ```typescript
+ * const existing = AWS.Omics.AnnotationStore.lookup({ name: "my-annotation-store" });
  * ```
  *
  * @resource
@@ -170,6 +190,19 @@ export const AnnotationStoreProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),
+        lookup: Effect.fn(function* ({ name }) {
+          const found = yield* omics
+            .getAnnotationStore({ name })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = {
+            annotationStoreId: found.id,
+            annotationStoreArn: found.storeArn,
+            name: found.name,
+            status: found.status,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const found = yield* omics

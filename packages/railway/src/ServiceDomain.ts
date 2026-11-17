@@ -1,5 +1,6 @@
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import { Railway, type ServiceDomain as RailwayServiceDomain } from "@distilled.cloud/railway";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -221,7 +222,8 @@ const listedOrUndefined = (input: {
  */
 const createViaEnvironmentPatch = (input: { environmentId: string; serviceId: string }) =>
   Effect.gen(function* () {
-    const domainKey = yield* Effect.sync(() => crypto.randomUUID());
+    const random = yield* SecureRandom.SecureRandom;
+    const domainKey = yield* random.uuidV4();
     yield* withEnvironmentConfigLock(
       input.environmentId,
       environmentPatchCommit({

@@ -1,0 +1,80 @@
+---
+title: Snapshots & forks
+description: Start sandboxes from a warm base, snapshot a running sandbox, and fork one into copies.
+---
+
+import BranchGraph from "../../../components/diagrams/BranchGraph.astro";
+
+A **snapshot** saves a sandbox, memory and disk, as a template of its own. Sandboxes from it start where the original was: a repository cloned, its dependencies installed, a server listening. A **fork** snapshots a running sandbox and starts copies of it at once, while the original keeps running. Each copy changes on its own from then on.
+
+## Copies start where the original was
+
+<BranchGraph
+  end={10}
+  branches={[
+    { id: "template", label: "MyTemplate", type: "template" },
+    { id: "warm", label: "Warm", type: "snapshot", from: { branch: "template", at: 1 } },
+    { id: "s42", label: "user-42", type: "sandbox", from: { branch: "warm", at: 3 }, tone: "accent" },
+    { id: "f1", label: "fork 1", type: "sandbox", from: { branch: "s42", at: 6 }, until: 9 },
+    { id: "f2", label: "fork 2", type: "sandbox", from: { branch: "s42", at: 6 }, until: 9 },
+  ]}
+  points={[
+    { branch: "warm", at: 2, label: "npm ci" },
+    { branch: "s42", at: 4.5, label: "edit files" },
+    { branch: "f1", at: 7.5, label: "test shard 1" },
+    { branch: "f2", at: 7.5, label: "test shard 2" },
+  ]}
+  caption="Warm is MyTemplate after npm ci. user-42 starts from Warm, and two forks copy user-42 as it is, edits included, to run test shards side by side."
+/>
+
+## Build a warm base at deploy
+
+```typescript title="alchemy.run.ts"
+const warm = yield* E2B.Snapshot("Warm", {
+  template: MyTemplate,
+  run: [
+    "git clone https://github.com/my-org/app /home/user/app",
+    "cd /home/user/app && npm ci",
+  ],
+});
+```
+
+Alchemy boots the template, runs the commands, snapshots the sandbox with its memory, and kills it. A command that exits non-zero fails the deploy with `SnapshotSetupFailed`. A deploy runs the setup again only when the template or the commands change.
+
+## Start sandboxes from a snapshot
+
+```typescript
+const sandboxes = yield* E2B.CreateSandbox(Warm);
+const sandbox = yield* sandboxes.create({ timeout: 600 });
+yield* sandbox.exec("cd app && npm test");
+```
+
+## Snapshot a running sandbox
+
+```typescript
+const snapshot = yield* sandbox.snapshot({ name: `session-${id}` });
+const restored = yield* sandboxes.create({ templateID: snapshot.snapshotID });
+```
+
+Pass `memory: false` to keep only the filesystem; sandboxes from it boot fresh.
+
+## Fork a running sandbox
+
+```typescript
+const results = yield* sandbox.fork({ count: 3 });
+for (const result of results) {
+  if (result._tag === "Forked") yield* result.sandbox.exec("npm test -- --shard");
+}
+```
+
+E2B checkpoints the sandbox (it keeps running) and starts copies of it. Each fork succeeds or fails on its own.
+
+## Take snapshots while your app runs
+
+```typescript
+const snapshots = yield* E2B.CreateSnapshot();
+const info = yield* snapshots.create(`warm-${slug}`, { template: "node-22", run: ["npm ci"] });
+yield* snapshots.delete(`warm-${slug}`);
+```
+
+Runtime snapshots are not deleted when you destroy the Worker.

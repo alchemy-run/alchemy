@@ -280,8 +280,18 @@ export interface Database extends Resource<
     logicalId: string | null;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 > {}
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack
+ * doesn't manage by its id.
+ */
+export interface DatabaseLookup {
+  /** Prisma database id. */
+  databaseId: string;
+}
 
 /**
  * A Prisma Postgres database inside a Prisma project.
@@ -308,6 +318,20 @@ export interface Database extends Resource<
  *   project,
  *   branchId: preview.branchId,
  * });
+ * ```
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Prisma returns connection strings only when it creates a database, so a
+ * looked-up one has none; declare a `Prisma.Connection` on it to mint
+ * credentials.
+ *
+ * **Example:** Connect to an existing database
+ * ```typescript
+ * const db = Prisma.Database.lookup({ databaseId: "db_cmabc123def456ghi789jkl0" });
+ * const connection = yield* Prisma.Connection("App", { database: db });
  * ```
  *
  * @resource
@@ -395,16 +419,21 @@ const findDatabaseByLogicalId = Effect.fn(function* (
   );
 });
 
+export class PrismaDatabaseLogicalIdTaken extends Data.TaggedError("PrismaDatabaseLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (
   logicalId: string,
   branchId: string | null,
   projectId: string,
   cause: unknown,
 ) =>
-  new Error(
-    `Prisma database logical ID '${logicalId}' is already used by another database on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other database.`,
-    { cause },
-  );
+  new PrismaDatabaseLogicalIdTaken({
+    message: `Prisma database logical ID '${logicalId}' is already used by another database on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other database.`,
+    cause,
+  });
 
 class GeneratedDatabaseNotVisible extends Data.TaggedError("GeneratedDatabaseNotVisible")<{
   readonly message: string;
@@ -666,7 +695,15 @@ const ProviderLive = () =>
             (desiredIsDefault !== undefined && desiredIsDefault !== observedIsDefault) ||
             (isResolved(news.source) && !desiredSourcesMatch(news.source, olds.source))
           ) {
-            return { action: "replace" } as const;
+            // A stable explicit name in the same project collides with the
+            // old generation, so it must go before the replacement is created.
+            const deleteFirst =
+              !concreteIdsChanged(oldProjectId, newProjectId) &&
+              (isResolved(news.name)
+                ? news.name !== undefined &&
+                  (!output || (yield* createName(id, news.name)) === output.databaseName)
+                : true);
+            return { action: "replace", deleteFirst } as const;
           }
           if (
             isResolved(news.logicalId) &&
@@ -698,7 +735,15 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ id, fqn, output, olds }) {
+        lookup: Effect.fn(function* ({ databaseId }) {
+          const database = yield* getDatabase({ databaseId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return database ? attrsFrom(database, {}) : undefined;
+        }),
+
+        read: Effect.fn(function* ({ id, fqn, output, olds, previous }) {
           const databaseId = isPrismaDevId(output?.databaseId) ? undefined : output?.databaseId;
           let generatedIdentityMatch = false;
           let database = databaseId
@@ -746,7 +791,12 @@ const ProviderLive = () =>
             password: cachedSecrets?.password,
           });
           // Only a declaration assigns a logical ID, so a match is this database.
-          return databaseId === undefined && !generatedIdentityMatch ? Unowned(attrs) : attrs;
+          // The generation a replacement is replacing is ours too.
+          return databaseId === undefined &&
+            !generatedIdentityMatch &&
+            database.id !== previous?.databaseId
+            ? Unowned(attrs)
+            : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, fqn, news, olds, output }) {
           yield* validateDatabaseProps(news);
@@ -821,9 +871,7 @@ const ProviderLive = () =>
                       ? undefined
                       : yield* findDatabaseByLogicalId(projectId, createLogicalId, createAttach);
                   if (taken) {
-                    return yield* Effect.fail(
-                      logicalIdTaken(logicalId, taken.branchId, projectId, conflict),
-                    );
+                    return yield* logicalIdTaken(logicalId, taken.branchId, projectId, conflict);
                   }
                   if (news.logicalId !== undefined) {
                     return yield* new DatabaseConflict({

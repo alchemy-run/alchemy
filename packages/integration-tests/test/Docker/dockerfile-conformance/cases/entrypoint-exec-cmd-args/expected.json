@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENTRYPOINT",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "/bin/app"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "--help"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

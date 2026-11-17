@@ -20,6 +20,16 @@ import type { Providers } from "../Providers.ts";
 import { runDsqlMigrations } from "./Migrations.ts";
 import { validateDsqlMigrations } from "./MigrationSql.ts";
 
+/**
+ * Deletion was refused because the Aurora DSQL cluster has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class DSQLClusterDeletionProtected extends Data.TaggedError("DSQLClusterDeletionProtected")<{
+  readonly clusterId: string;
+  readonly message: string;
+}> {}
+
 export class DSQLClusterNotReady extends Data.TaggedError("DSQLClusterNotReady")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -34,12 +44,18 @@ export interface ClusterProps {
    * CREATE INDEX is adapted to ASYNC and awaited. Explicit transaction
    * control and serial columns are rejected. Use UUIDs or bigint identity
    * columns with an explicit CACHE. Applied migration files are immutable.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
-   * Enables deletion protection. While enabled the cluster cannot be deleted;
-   * the provider automatically disables it during delete so `stack.destroy()`
-   * always succeeds.
+   * Enables deletion protection. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deletionProtectionEnabled?: boolean;
@@ -81,8 +97,18 @@ export interface Cluster extends Resource<
     deletionProtectionEnabled: boolean;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The id of the existing cluster. */
+  clusterId: string;
+}
 
 /**
  * An Amazon Aurora DSQL cluster — a serverless, distributed SQL database with
@@ -141,6 +167,17 @@ export interface Cluster extends Resource<
  * Automatic conversion of a different tool's existing history is refused
  * because DSQL cannot atomically combine the table DDL and history copy.
  * Convert that history explicitly before adopting an already-migrated database.
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing cluster
+ * ```typescript
+ * const db = AWS.DSQL.Cluster.lookup({ clusterId: "abcdefghijklmnopqrstuvwxyz" });
+ * const endpoint = db.endpoint;
+ * ```
  *
  * @resource
  */
@@ -235,6 +272,13 @@ export const ClusterProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ clusterId }) {
+          const { region } = yield* AWSEnvironment.current;
+          const cluster = yield* readCluster(clusterId);
+          if (cluster === undefined || cluster.status === "DELETED") return undefined;
+          return { ...toAttrs(cluster, region), migrationsHashes: {} };
+        }),
+
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const { region } = yield* AWSEnvironment.current;
           const cluster = output?.clusterId
@@ -326,12 +370,19 @@ export const ClusterProvider = () =>
           return { ...attrs, ...migrationsAttrs({ input, run, output }) };
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
           const identifier = output.clusterId;
           const existing = yield* readCluster(identifier);
           if (existing === undefined) return;
-          // Deletion protection blocks delete — disable it first.
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
           if (existing.deletionProtectionEnabled) {
+            if (force !== true) {
+              return yield* new DSQLClusterDeletionProtected({
+                clusterId: identifier,
+                message: `Aurora DSQL cluster '${identifier}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* dsql
               .updateCluster({
                 identifier,

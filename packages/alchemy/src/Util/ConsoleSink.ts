@@ -6,7 +6,7 @@ import type * as LogLevel from "effect/LogLevel";
 import { LogAnnotation } from "./LogAnnotation.ts";
 import { recordOf, safeStringify, severities } from "./LogRecord.ts";
 import { formatResourceTag } from "./ResourceOutput.ts";
-import { ansiFg, ANSI_RESET, colorsEnabled } from "./Terminal.ts";
+import { colorsEnabled, terminalStyle } from "./Terminal.ts";
 import { theme } from "./Theme.ts";
 
 export interface PrettyLoggerOptions {
@@ -43,11 +43,12 @@ export const prettyLine = (options: {
   readonly resource?: string;
   readonly colors?: boolean;
 }): string => {
-  const colors = options.colors ?? colorsEnabled();
+  // Detect the color level unless the caller decided.
+  const style = terminalStyle(options.colors === undefined ? {} : { colors: options.colors });
   const paint = (color: string | undefined, text: string) =>
-    colors && color !== undefined ? `${ansiFg(color)}${text}${ANSI_RESET}` : text;
+    color === undefined ? text : style.hex(color)(text);
   const tag =
-    options.resource === undefined ? "" : `${formatResourceTag(options.resource, colors)} `;
+    options.resource === undefined ? "" : `${formatResourceTag(options.resource, options.colors)} `;
   return `${paint(theme.color.muted, `[${clock(options.date)}]`)} ${paint(levelColor[options.level], options.level.toUpperCase())}: ${tag}${options.text}`;
 };
 
@@ -57,7 +58,8 @@ export const prettyLine = (options: {
  * comes from the record, so producers log plain text and never format it.
  */
 export const makePlainConsoleSink = (options: PrettyLoggerOptions = {}) => {
-  const colors = options.colors ?? colorsEnabled();
+  const explicitColors = options.colors;
+  const colors = explicitColors ?? colorsEnabled();
   return Logger.make<unknown, void>((options) => {
     const record = recordOf(options);
     if (record.kind !== "log" && record.kind !== "output") return;
@@ -70,7 +72,7 @@ export const makePlainConsoleSink = (options: PrettyLoggerOptions = {}) => {
         level: severities[record.level],
         text: colors ? text : stripVTControlCharacters(text),
         resource: typeof fqn === "string" ? fqn : undefined,
-        colors,
+        colors: explicitColors,
       }),
     );
     for (const [key, value] of Object.entries(attributes)) {

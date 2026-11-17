@@ -10,6 +10,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -68,7 +69,7 @@ describe.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
         const token = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
-              name: "alchemy-test-user-update-initial",
+              name: testName("alchemy-test-user-update-initial"),
               policies: [
                 {
                   effect: "allow",
@@ -80,13 +81,13 @@ describe.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
           }),
         );
 
-        expect(token.name).toEqual("alchemy-test-user-update-initial");
+        expect(token.name).toEqual(testName("alchemy-test-user-update-initial"));
         const initialValue = Redacted.value(token.value);
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
-              name: "alchemy-test-user-update-renamed",
+              name: testName("alchemy-test-user-update-renamed"),
               policies: [
                 {
                   effect: "allow",
@@ -99,11 +100,11 @@ describe.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
         );
 
         expect(updated.tokenId).toEqual(token.tokenId);
-        expect(updated.name).toEqual("alchemy-test-user-update-renamed");
+        expect(updated.name).toEqual(testName("alchemy-test-user-update-renamed"));
         expect(Redacted.value(updated.value)).toEqual(initialValue);
 
         const actual = yield* user.getToken({ tokenId: updated.tokenId });
-        expect(actual.name).toEqual("alchemy-test-user-update-renamed");
+        expect(actual.name).toEqual(testName("alchemy-test-user-update-renamed"));
         expect(actual.policies?.[0]?.permissionGroups.length).toEqual(2);
 
         yield* stack.destroy();

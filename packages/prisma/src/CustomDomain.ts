@@ -155,10 +155,16 @@ const normalizeHostname = (hostname: string) => hostname.trim().replace(/\.$/, "
 const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
+export class PrismaCustomDomainAdoptionRequired extends Data.TaggedError(
+  "PrismaCustomDomainAdoptionRequired",
+)<{
+  readonly message: string;
+}> {}
+
 const adoptionRequiredError = (hostname: string, appId: string, detail: string) =>
-  new Error(
-    `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
-  );
+  new PrismaCustomDomainAdoptionRequired({
+    message: `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+  });
 
 const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
 
@@ -202,6 +208,7 @@ interface NodeDns {
   readonly Resolver: new () => {
     setServers(servers: string[]): void;
     resolveCname(name: string): Promise<string[]>;
+    cancel(): void;
   };
 }
 
@@ -215,9 +222,9 @@ interface NodeDns {
  */
 const waitForAuthoritativeCname = (hostname: string) =>
   Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(
-      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
-    ).pipe(Effect.orElseSucceed(() => undefined));
+    const dns = yield* Effect.tryPromise((): Promise<NodeDns> => import("node:dns/promises")).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
     if (dns === undefined || typeof dns.Resolver !== "function") return;
     const labels = hostname.split(".");
     let servers: string[] = [];
@@ -243,7 +250,10 @@ const waitForAuthoritativeCname = (hostname: string) =>
           instance.setServers([server]);
           return instance;
         });
-        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname));
+        // A timed-out query keeps retrying in c-ares unless cancelled.
+        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname)).pipe(
+          Effect.onInterrupt(() => Effect.sync(() => resolver.cancel())),
+        );
         return answers.length > 0;
       }).pipe(
         Effect.timeout("3 seconds"),
@@ -345,7 +355,7 @@ const ProviderLive = () =>
             });
           }
           if (domain && customDomainId === undefined) {
-            return yield* Effect.fail(adoptionRequiredError(hostname, appId, "already exists"));
+            return yield* adoptionRequiredError(hostname, appId, "already exists");
           }
           if (!domain) {
             yield* waitForAuthoritativeCname(hostname);

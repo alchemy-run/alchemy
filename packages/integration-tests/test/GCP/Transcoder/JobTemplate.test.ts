@@ -6,6 +6,7 @@ import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -114,6 +115,13 @@ test.provider(
             config: sdConfig,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Transcoder.JobTemplate.lookup({
+          jobTemplateId: created.jobTemplateId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.jobTemplateId).toEqual(expect.any(String));

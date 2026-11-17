@@ -31,7 +31,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
 import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
-import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
+import {
+  LambdaLiveTailError,
+  type FunctionBuildOptions,
+  type FunctionZipProps,
+} from "./Function.ts";
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
 import type { NetworkConnectorProps } from "./NetworkConnector.ts";
 import { createConnector, getConnector, syncConnector } from "./NetworkConnectorLifecycle.ts";
@@ -1038,17 +1042,14 @@ export const WebFunctionProvider = () =>
             Effect.map((policy): unknown => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
             Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
+        const readTags = LambdaWeb.listTags({ resource: functionArn }).pipe(
+          Effect.map((r) => tagRecord(r.tags)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed({} as Record<string, string>),
+          ),
+        );
         const [tags, bindingPolicy, guardPolicy] = yield* Effect.all(
-          [
-            LambdaWeb.listTags({ resource: functionArn }).pipe(
-              Effect.map((r) => tagRecord(r.tags)),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed({} as Record<string, string>),
-              ),
-            ),
-            readInlinePolicy(policyName),
-            readInlinePolicy(LOG_GROUP_GUARD_POLICY),
-          ],
+          [readTags, readInlinePolicy(policyName), readInlinePolicy(LOG_GROUP_GUARD_POLICY)],
           { concurrency: "unbounded" },
         );
         return {
@@ -1508,6 +1509,7 @@ export const WebFunctionProvider = () =>
                     )
                   : Stream.empty,
               ),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
           return Stream.unwrap(session).pipe(Stream.retry(Schedule.spaced("1 second")));

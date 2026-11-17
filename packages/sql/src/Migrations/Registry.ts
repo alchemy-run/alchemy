@@ -25,6 +25,13 @@ import { readMigrationRecords } from "./Records.ts";
  * is copied into Alchemy's table once and the foreign table is left frozen
  * (never written, never dropped). From then on Alchemy's table is the only
  * bookkeeping.
+ *
+ * History is forward-only and linear. An edited or deleted applied file
+ * fails with `RewrittenMigrationHistoryError`, and a pending file that
+ * sorts before an applied one fails with `NonLinearMigrationHistoryError`.
+ * An applied file renamed with unchanged contents keeps its row under the
+ * new name, so renaming a late file to sort last fixes the order without
+ * rerunning it anywhere.
  */
 export type MigrationsInput =
   | string
@@ -166,7 +173,8 @@ export const runMigrations = <E, R>(options: {
 /**
  * Prior migration files whose contents changed or that disappeared from
  * the directory, relative to the hashes persisted on the last deploy.
- * Additive files (new names) are not rewritten history.
+ * Additive files (new names) are not rewritten history, and neither is a
+ * file renamed with its contents unchanged.
  */
 export const rewrittenMigrationHistory = (
   previous: Record<string, string> | undefined,
@@ -175,10 +183,14 @@ export const rewrittenMigrationHistory = (
   if (previous === undefined) return undefined;
   const changed: string[] = [];
   const removed: string[] = [];
+  const added = Object.keys(next).filter((name) => previous[name] === undefined);
   for (const name of Object.keys(previous)) {
     const hash = next[name];
-    if (hash === undefined) removed.push(name);
-    else if (hash !== previous[name]) changed.push(name);
+    if (hash === undefined) {
+      const renamed = added.findIndex((other) => next[other] === previous[name]);
+      if (renamed === -1) removed.push(name);
+      else added.splice(renamed, 1);
+    } else if (hash !== previous[name]) changed.push(name);
   }
   changed.sort();
   removed.sort();
@@ -199,7 +211,8 @@ export type MigrationHistoryChange =
  * Classify the migration half of a provider `diff`:
  * - `none` — hashes and bookkeeping table are unchanged
  * - `pending` — new files and/or a table rename; apply in place
- * - `rewritten` — an already-applied file was edited or removed
+ * - `rewritten` — an already-applied file was edited or removed (a rename
+ *   with unchanged contents is neither)
  */
 export const classifyMigrationHistory = (options: {
   news: { migrations?: MigrationsInput };

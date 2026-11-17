@@ -84,8 +84,18 @@ export interface Vehicle extends Resource<
     attributes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  VehicleLookup
 > {}
+
+/**
+ * Props for {@link Vehicle.lookup}: find a vehicle this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VehicleLookup {
+  /** The vehicle name of the existing vehicle. */
+  vehicleName: string;
+}
 
 /**
  * An AWS IoT FleetWise vehicle — the digital twin of a physical vehicle,
@@ -108,6 +118,16 @@ export interface Vehicle extends Resource<
  *   attributes: { "Vehicle.VIN": "1HGBH41JXMN109186" },
  *   tags: { plant: "fremont" },
  * });
+ * ```
+ *
+ * ### Looking up an existing vehicle
+ * `Vehicle.lookup` references a vehicle Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vehicleName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing vehicle
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.Vehicle.lookup({ vehicleName: "my-vehicle" });
  * ```
  *
  * @resource
@@ -174,6 +194,13 @@ export const VehicleProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ vehicleName: name }) {
+          const found = yield* readVehicle(name);
+          if (found?.arn === undefined) return undefined;
+          const attrs = yield* toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

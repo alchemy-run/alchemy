@@ -25,8 +25,18 @@ export interface Graph extends Resource<
     createdTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GraphLookup
 > {}
+
+/**
+ * Props for {@link Graph.lookup}: find a graph this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GraphLookup {
+  /** The ARN of the existing graph. */
+  graphArn: string;
+}
 
 /**
  * A Detective behavior graph — the account/region singleton that enables Amazon
@@ -45,6 +55,16 @@ export interface Graph extends Resource<
  * const graph = yield* Detective.Graph("Graph", {
  *   tags: { team: "security" },
  * });
+ * ```
+ *
+ * ### Looking up an existing graph
+ * `Graph.lookup` references a graph Alchemy doesn't manage (created in the
+ * console or by another stack), found by `graphArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing graph
+ * ```typescript
+ * const existing = AWS.Detective.Graph.lookup({ graphArn: "..." });
  * ```
  */
 const GraphResource = Resource<Graph>("AWS.Detective.Graph");
@@ -71,6 +91,15 @@ export const GraphProvider = () =>
         );
 
       return {
+        lookup: Effect.fn(function* ({ graphArn }) {
+          const graph = yield* firstGraph;
+          if (!graph?.Arn) return undefined;
+          if (graphArn !== graph.Arn) {
+            return undefined;
+          }
+          const attrs = buildAttrs(graph);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           const graph = yield* firstGraph;
           if (!graph?.Arn) return undefined;

@@ -98,8 +98,24 @@ export interface RuleGroup extends Resource<
     capacity: number;
   },
   never,
-  Providers
+  Providers,
+  RuleGroupLookup
 > {}
+
+/**
+ * Props for {@link RuleGroup.lookup}: find a rule group this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface RuleGroupLookup {
+  /** The name of the existing rule group. */
+  ruleGroupName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 rule group — a reusable, capacity-bounded collection of rules
@@ -155,6 +171,17 @@ export interface RuleGroup extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing rule group
+ * `RuleGroup.lookup` references a rule group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleGroupName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule group
+ * ```typescript
+ * const shared = AWS.WAFv2.RuleGroup.lookup({ ruleGroupName: "shared-rules" });
+ * const ruleGroupArn = shared.ruleGroupArn;
  * ```
  *
  * @resource
@@ -292,6 +319,11 @@ export const RuleGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ ruleGroupName, scope = defaultScope }) {
+          const found = yield* findRuleGroup(scope, ruleGroupName, undefined);
+          return found?.RuleGroup ? toAttrs(found.RuleGroup, scope) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

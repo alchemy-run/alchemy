@@ -101,8 +101,23 @@ export interface Flow extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FlowLookup
 > {}
+
+/**
+ * Props for {@link Flow.lookup}: find a flow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FlowLookup =
+  | {
+      /** The ARN of the existing flow. */
+      flowArn: string;
+    }
+  | {
+      /** The name of the existing flow. */
+      flowName: string;
+    };
 
 /**
  * An AWS Elemental MediaConnect flow — a reliable live-video transport
@@ -152,6 +167,16 @@ export interface Flow extends Resource<
  *   source: { Protocol: "rtp", WhitelistCidr: "10.0.0.0/8", IngestPort: 5000 },
  *   tags: { team: "live-video" },
  * });
+ * ```
+ *
+ * ### Looking up an existing flow
+ * `Flow.lookup` references a flow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `flowArn` or `flowName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing flow
+ * ```typescript
+ * const existing = AWS.MediaConnect.Flow.lookup({ flowName: "..." });
  * ```
  *
  * @resource
@@ -306,6 +331,12 @@ export const FlowProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn = "flowArn" in props ? props.flowArn : yield* findFlowArnByName(props.flowName);
+          if (arn === undefined) return undefined;
+          const flow = yield* readFlow(arn);
+          return flow === undefined ? undefined : yield* toAttrs(flow);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.flowName ?? (yield* toName(id, olds ?? {}));
           const arn = output?.flowArn ?? (yield* findFlowArnByName(name));

@@ -29,13 +29,21 @@ export const buildHostRedirectInjection = ({
   to: string | undefined;
   /** Exact redirect hostnames. */
   hosts: string[];
-  /** Also redirect the distribution's default `*.cloudfront.net` domain. */
+  /**
+   * Also redirect the distribution's default domain: `*.cloudfront.net`, or
+   * `*.cloudfront.localhost.floci.io` on the local emulator.
+   */
   cloudfrontDefault: boolean;
 }): string => {
   if (!to || (hosts.length === 0 && !cloudfrontDefault)) return "";
   const conditions = [
     ...(hosts.length > 0 ? [`${JSON.stringify(hosts)}.indexOf(redirectHost) !== -1`] : []),
-    ...(cloudfrontDefault ? [`redirectHost.endsWith(".cloudfront.net")`] : []),
+    ...(cloudfrontDefault
+      ? [
+          `redirectHost.endsWith(".cloudfront.net")`,
+          `redirectHost.endsWith(".cloudfront.localhost.floci.io")`,
+        ]
+      : []),
   ];
   return `
   var redirectHost = event.request.headers.host.value;

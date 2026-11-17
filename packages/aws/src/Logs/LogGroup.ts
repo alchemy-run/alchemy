@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, tagRecord } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -20,6 +21,16 @@ export type LogGroupName = string;
 export type LogGroupArn =
   `arn:${Partition}:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
 export type LogGroupClass = logs.LogGroupClass;
+
+/**
+ * Deletion was refused because the log group has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and
+ * deploy (or turn it off in the console) before deleting it.
+ */
+export class LogGroupDeletionProtected extends Data.TaggedError("LogGroupDeletionProtected")<{
+  readonly logGroupName: string;
+  readonly message: string;
+}> {}
 
 export interface LogGroupProps {
   /**
@@ -67,8 +78,18 @@ export interface LogGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  LogGroupLookup
 > {}
+
+/**
+ * Props for {@link LogGroup.lookup}: find a log group this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface LogGroupLookup {
+  /** The name of the existing log group. */
+  logGroupName: string;
+}
 
 /**
  * A CloudWatch Logs log group — the container for log streams and the unit
@@ -140,6 +161,22 @@ export interface LogGroup extends Resource<
  *     metricNamespace: "MyApp",
  *     metricValue: "1",
  *   }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing log group
+ * `LogGroup.lookup` references a log group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `logGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Stream an existing log group to a function
+ * ```typescript
+ * const logs = AWS.Logs.LogGroup.lookup({ logGroupName: "/ecs/web" });
+ *
+ * yield* AWS.Logs.SubscriptionFilter("ToProcessor", {
+ *   logGroupName: logs.logGroupName,
+ *   filterPattern: "ERROR",
+ *   destinationArn: processor.functionArn,
  * });
  * ```
  *
@@ -230,6 +267,28 @@ export const LogGroupProvider = () =>
           if (toLogGroupClass(olds ?? {}) !== toLogGroupClass(news ?? {})) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ logGroupName }) {
+          const match = yield* observe(logGroupName);
+          if (!match?.arn) {
+            return undefined;
+          }
+          return {
+            logGroupName,
+            logGroupArn: normalizeLogGroupArn(match.arn),
+            retentionInDays: match.retentionInDays,
+            kmsKeyId: match.kmsKeyId,
+            logGroupClass: match.logGroupClass ?? "STANDARD",
+            deletionProtectionEnabled: match.deletionProtectionEnabled ?? false,
+            tags: yield* logs
+              .listTagsForResource({ resourceArn: normalizeLogGroupArn(match.arn) })
+              .pipe(
+                Effect.map((r) => tagRecord(r.tags)),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed({} as Record<string, string>),
+                ),
+              ),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const logGroupName = output?.logGroupName ?? (yield* toLogGroupName(id, olds ?? {}));
@@ -375,22 +434,34 @@ export const LogGroupProvider = () =>
             tags: desiredTags,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* logs
-            .putLogGroupDeletionProtection({
-              logGroupIdentifier: output.logGroupName,
-              deletionProtectionEnabled: false,
-            })
-            .pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "OperationAbortedException" ||
-                  error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
-                times: 8,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+        delete: Effect.fn(function* ({ output, force }) {
+          const observed = yield* observe(output.logGroupName);
+          if (observed === undefined) return;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
+          if (observed.deletionProtectionEnabled === true) {
+            if (force !== true) {
+              return yield* new LogGroupDeletionProtected({
+                logGroupName: output.logGroupName,
+                message: `Log group '${output.logGroupName}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
+            yield* logs
+              .putLogGroupDeletionProtection({
+                logGroupIdentifier: output.logGroupName,
+                deletionProtectionEnabled: false,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "OperationAbortedException" ||
+                    error._tag === "ServiceUnavailableException",
+                  schedule: Schedule.exponential(100),
+                  times: 8,
+                }),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+          }
           yield* logs
             .deleteLogGroup({
               logGroupName: output.logGroupName,

@@ -1,3 +1,7 @@
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -11,20 +15,25 @@ import { type Routed, targetId } from "./CatchUp.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
+  type DecisionResult,
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
   hostedModels,
+  inRange,
   Platform,
   type Json,
   type ModelHost,
+  type RecordInput,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
   type StreamMeta,
   type ViewEntry,
   type ViewSnapshot,
+  RunWait,
 } from "./Platform.ts";
+import { serveSocket } from "./Watch.ts";
 
 /**
  * Options for {@link make}.
@@ -38,6 +47,17 @@ export interface Options {
   readonly manual?: boolean;
   /** Clock used to time-stamp commands. Defaults to `Date.now`. */
   readonly now?: () => number;
+  /**
+   * With `manual`: pick which ready writer (a policy delivery, a saga run or a
+   * saga's next step) runs next, by its index in `ready`. Called only when
+   * more than one is ready. Defaults to the first, in the order they were queued.
+   */
+  readonly choose?: (ready: ReadonlyArray<string>) => number;
+  /**
+   * With `manual`: called after each queued item has run (until every run it
+   * started is finished or waiting), with the streams it committed to.
+   */
+  readonly ran?: (label: string, wrote: ReadonlyArray<string>) => void;
 }
 
 /**
@@ -51,7 +71,11 @@ export interface Control {
   readonly drain: Effect.Effect<void>;
   /** `true` when nothing is queued and every running policy is suspended. */
   readonly idle: Effect.Effect<boolean>;
-  /** Mark the current policy run as suspended while `effect` runs (story external systems). */
+  /**
+   * Mark the current run as waiting while `effect` runs: on a story's
+   * external system, a lock, or its turn to run. With `manual`, `drain` runs
+   * one queued item at a time, until every run is finished or waiting.
+   */
   readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   /** Defects raised by policy and projection runs. */
   readonly failures: ReadonlyArray<unknown>;
@@ -73,11 +97,37 @@ export interface Control {
   }>;
 }
 
+/** A queued item: what it runs, a name for reports, and its lane (writers only). */
+interface Work {
+  readonly run: Effect.Effect<void>;
+  readonly label: string;
+  /** Items in one lane run in queue order; reads have none and run first. */
+  readonly lane: string | undefined;
+}
+
+/** A scheduled command's latest arming: the id it commits with, when it is due, and whether it was cancelled. */
+interface Armed {
+  readonly commandId: string;
+  readonly at: number;
+  readonly cancelled: boolean;
+}
+
 /** A scheduled command: when it is due, and how to send it. */
 interface Timer {
   readonly at: number;
   readonly fire: Effect.Effect<void>;
 }
+
+/** A forked run, and how many of its waits and polls are in progress. */
+interface Run {
+  waits: number;
+  polls: number;
+}
+
+/** The run the current fiber belongs to, so its waits count once for it. */
+const CurrentRun = Context.Reference<Run | undefined>("alchemy/Domain/InMemory/CurrentRun", {
+  defaultValue: () => undefined,
+});
 
 /** A function that builds each value once per argument. */
 const memo = <A>(make: (key: string) => A) => {
@@ -95,15 +145,111 @@ const memo = <A>(make: (key: string) => A) => {
 export const make = (
   options: Options = {},
 ): {
-  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine>;
+  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>;
   readonly control: Control;
 } => {
   const now = options.now ?? (() => Date.now());
   // Deliveries and saga runs, in the order they were queued.
-  const pending: Array<Effect.Effect<void>> = [];
+  const pending: Array<Work> = [];
   let draining = false;
+  // Forked runs, how many of them are waiting (on an external call, a lock,
+  // or their turn, or polling for another run's work), and how many of those
+  // are polling. A run counts once, however many of its fibers wait at once.
+  // Every change wakes `quiet`.
   let running = 0;
-  let suspended = 0;
+  let waitingRuns = 0;
+  let pollingRuns = 0;
+  let changed = Deferred.makeUnsafe<void>();
+  const notify = () => {
+    const was = changed;
+    changed = Deferred.makeUnsafe<void>();
+    Deferred.doneUnsafe(was, Effect.void);
+  };
+  // This platform's runs, so a run of another platform never counts here.
+  const runs = new WeakSet<Run>();
+  /** Count `effect` as a run from now until it ends; its waits count once for it. */
+  const tracked = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    const run: Run = { waits: 0, polls: 0 };
+    runs.add(run);
+    running++;
+    notify();
+    return effect.pipe(
+      Effect.provideService(CurrentRun, run),
+      Effect.ensuring(
+        Effect.sync(() => {
+          running--;
+          notify();
+        }),
+      ),
+    );
+  };
+  /** Count the current run as waiting (or polling) while `effect` runs. */
+  const hold =
+    (kind: keyof Run) =>
+    <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      Effect.flatMap(Effect.service(CurrentRun), (current) =>
+        Effect.suspend(() => {
+          // A wait outside any run of this platform counts on its own.
+          const run = current && runs.has(current) ? current : { waits: 0, polls: 0 };
+          const recount = (change: () => void) => {
+            const waited = run.waits + run.polls > 0;
+            const polled = run.polls > 0;
+            change();
+            waitingRuns += Number(run.waits + run.polls > 0) - Number(waited);
+            pollingRuns += Number(run.polls > 0) - Number(polled);
+            notify();
+          };
+          recount(() => run[kind]++);
+          return effect.pipe(Effect.ensuring(Effect.sync(() => recount(() => run[kind]--))));
+        }),
+      );
+  const waiting = hold("waits");
+  /**
+   * A poll for another run's work. The queue goes on while it polls (`quiet`),
+   * so the run it waits for can start; the platform is not `idle` until it
+   * ends. Each pause between its tries ends at the next change of the platform
+   * (a run that starts, waits or ends), so it sees the work at once.
+   */
+  const poll = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.clockWith((clock) =>
+      hold("polls")(
+        Effect.provideService(effect, Clock.Clock, {
+          currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+          currentTimeMillis: clock.currentTimeMillis,
+          currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+          currentTimeNanos: clock.currentTimeNanos,
+          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: clock.monotonicTimeNanos,
+          sleep: (duration) =>
+            Effect.suspend(() => Effect.raceFirst(clock.sleep(duration), Deferred.await(changed))),
+        }),
+      ),
+    );
+  /**
+   * With `manual`: a run that polls for another run's work (a read `atLeast` a
+   * write) waits, so the queue goes on and the run it waits for can start.
+   */
+  const pollsWait = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    options.manual ? Effect.provideService(effect, RunWait, poll) : effect;
+  /** Run `effect` holding `lock`, counted as waiting while another run holds it. */
+  const exclusively =
+    (lock: Semaphore.Semaphore) =>
+    <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Effect.acquireUseRelease(
+        acquire(lock),
+        () => effect,
+        () => lock.release(1),
+      );
+  /** Take `lock`, counted as waiting only when it is held. */
+  const acquire = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
+    lock
+      .takeIfAvailable(1)
+      .pipe(Effect.flatMap((taken) => (taken ? Effect.void : waiting(lock.take(1)))));
+  /** Wait until every forked run is finished or waiting. */
+  const quiet: Effect.Effect<void> = Effect.suspend(function wait(): Effect.Effect<void> {
+    if (running === waitingRuns) return Effect.void;
+    return Deferred.await(changed).pipe(Effect.flatMap(wait));
+  });
   const failures: Array<unknown> = [];
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
   const commits: Array<{ aggregate: string; id: string; index: number }> = [];
@@ -122,12 +268,66 @@ export const make = (
       return Effect.void;
     }
     draining = true;
-    return next.pipe(Effect.flatMap(loop));
+    return next.run.pipe(Effect.flatMap(loop));
   });
 
-  const drain: Effect.Effect<void> = fireDue.pipe(Effect.andThen(deliverAll));
+  /**
+   * Start the next queued item, if any. A read (view, projection, backfill job)
+   * at the head runs next; otherwise `choose` picks among the writers queued
+   * before the first read, each the first in its lane, so reads and writers
+   * keep their queue order and each (source, target) delivers in order.
+   */
+  const startNext: Effect.Effect<string | undefined> = Effect.suspend(() => {
+    if (pending.length === 0) return Effect.succeed(undefined);
+    const ready: Array<number> = [];
+    const seen = new Set<string>();
+    for (const [i, work] of pending.entries()) {
+      if (work.lane === undefined) break;
+      if (seen.has(work.lane)) continue;
+      seen.add(work.lane);
+      ready.push(i);
+    }
+    const choice =
+      ready.length > 1 && options.choose ? options.choose(ready.map((i) => pending[i]!.label)) : 0;
+    const [work] = pending.splice(ready[choice] ?? 0, 1);
+    return work!.run.pipe(Effect.as(work!.label));
+  });
 
-  const enqueueWork = (work: ReadonlyArray<Effect.Effect<void>>) =>
+  /** One item at a time, each until every run it started is finished or waiting. */
+  const drainManual: Effect.Effect<void> = Effect.suspend(function loop(): Effect.Effect<void> {
+    return quiet.pipe(
+      Effect.andThen(fireDue),
+      Effect.andThen(quiet),
+      Effect.andThen(
+        Effect.suspend(() => {
+          const from = commits.length;
+          return startNext.pipe(
+            Effect.flatMap((label) =>
+              label === undefined
+                ? Effect.void
+                : quiet.pipe(
+                    Effect.andThen(
+                      Effect.sync(() =>
+                        options.ran?.(
+                          label,
+                          commits.slice(from).map(({ aggregate, id }) => `${aggregate}/${id}`),
+                        ),
+                      ),
+                    ),
+                    Effect.andThen(loop()),
+                  ),
+            ),
+          );
+        }),
+      ),
+    );
+  });
+
+  const drain: Effect.Effect<void> = options.manual
+    ? drainManual
+    : fireDue.pipe(Effect.andThen(deliverAll));
+
+  const enqueueWork = (work: ReadonlyArray<Work>) =>
     Effect.suspend(() => {
       pending.push(...work);
       if (options.manual || draining || pending.length === 0) return Effect.void;
@@ -138,7 +338,18 @@ export const make = (
   const enqueue = (
     deliveries: ReadonlyArray<Delivery>,
     deliver: (d: Delivery) => Effect.Effect<void>,
-  ) => enqueueWork(deliveries.map((delivery) => deliver(delivery)));
+  ) =>
+    enqueueWork(
+      deliveries.map((delivery) => ({
+        run: deliver(delivery),
+        label: `${delivery.target.kind} ${delivery.target.name} ← ${delivery.tag} (${delivery.source}#${delivery.seq})`,
+        // Only policies write; views and projections keep their queue order.
+        lane:
+          delivery.target.kind === "policy"
+            ? `${delivery.source}→${delivery.target.name}`
+            : undefined,
+      })),
+    );
 
   /**
    * Fire `fire` at `at` while it is still the timer under `key` (not
@@ -165,24 +376,45 @@ export const make = (
       };
       timers.set(key, armed);
       if (options.manual) return Effect.void;
-      return Effect.forkDetach(
-        Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
-      ).pipe(Effect.asVoid);
+      // The sleep can end before the platform's clock reaches `at` (Node
+      // rounds and coalesces timers, and `now` may be a different clock), so
+      // each wake sleeps again for what is left until this timer is due,
+      // fired, cancelled or replaced.
+      const wait: Effect.Effect<void> = Effect.suspend(() => {
+        if (timers.get(key) !== armed) return Effect.void;
+        const left = at - now();
+        return left > 0 ? Effect.sleep(left).pipe(Effect.andThen(wait)) : fireDue;
+      });
+      return Effect.forkDetach(wait).pipe(Effect.asVoid);
     });
 
   const workflows = InMemoryWorkflows.make({
     now,
     // A run is forked like a policy run, so one waiting on an external system
     // doesn't hold up the queue.
-    enqueue: (run) =>
+    enqueue: (run, key) =>
       enqueueWork([
-        Effect.suspend(() => {
-          running++;
-          return Effect.forkDetach(run.pipe(Effect.ensuring(Effect.sync(() => running--)))).pipe(
-            Effect.asVoid,
-          );
-        }),
+        {
+          run: Effect.suspend(() => run.pipe(pollsWait, tracked, Effect.forkDetach, Effect.asVoid)),
+          label: `saga ${key}`,
+          lane: `saga:${key}`,
+        },
       ]),
+    // With `manual`, a run's next Activity waits for its turn in the queue, so
+    // a story decides whether it runs before the policies its last step triggered.
+    turn: options.manual
+      ? (key, activity) =>
+          Effect.suspend(() => {
+            const turn = Deferred.makeUnsafe<void>();
+            pending.push({
+              run: Deferred.succeed(turn, undefined).pipe(Effect.asVoid),
+              label: `saga ${key} → ${activity}`,
+              lane: `saga:${key}`,
+            });
+            return Deferred.await(turn).pipe(waiting);
+          })
+      : undefined,
+    acquire,
     timer,
     failed: (cause) => void failures.push(cause),
     died: (saga, executionId, defect) => void deaths.push({ saga, executionId, defect }),
@@ -190,12 +422,10 @@ export const make = (
 
   const control: Control = {
     drain,
-    idle: Effect.sync(() => pending.length === 0 && !draining && running === suspended),
-    suspended: (effect) =>
-      Effect.suspend(() => {
-        suspended++;
-        return effect.pipe(Effect.ensuring(Effect.sync(() => suspended--)));
-      }),
+    idle: Effect.sync(
+      () => pending.length === 0 && !draining && running === waitingRuns - pollingRuns,
+    ),
+    suspended: waiting,
     failures,
     deaths,
     commits,
@@ -258,12 +488,16 @@ export const make = (
           if (scheduled.has(key)) return Effect.void;
           scheduled.add(key);
           return enqueueWork([
-            Effect.suspend(() => {
-              scheduled.delete(key);
-              return run(id).pipe(
-                Effect.catchCause((cause) => Effect.sync(() => failures.push(cause))),
-              );
-            }),
+            {
+              run: Effect.suspend(() => {
+                scheduled.delete(key);
+                return run(id).pipe(
+                  Effect.catchCause((cause) => Effect.sync(() => failures.push(cause))),
+                );
+              }),
+              label: `backfill ${key}`,
+              lane: undefined,
+            },
           ]);
         }),
     });
@@ -290,6 +524,19 @@ export const make = (
     const limits: Backfill.Limits = { ...Backfill.defaultLimits, pollMillis: 0 };
     // The source and consumer parts of each hosted entity, as of the latest build.
     const sourceRoles = new Map<string, (id: string) => Backfill.Source>();
+    /** What a decision needs of each aggregate type: its lock, its instances, and how to record on one. */
+    const recorders = new Map<
+      string,
+      {
+        readonly lock: Semaphore.Semaphore;
+        readonly read: (id: string) => { readonly state: Json; readonly version: number };
+        /** Callers hold `lock`. */
+        readonly record: (
+          id: string,
+          input: Omit<RecordInput, "id" | "state" | "version">,
+        ) => Effect.Effect<void>;
+      }
+    >();
     const consumerRoles = new Map<string, (key: string) => Backfill.Consumer>();
     const consumerRole = (target: string, key: string) => {
       const { kind, name } = Backfill.consumerOf(target);
@@ -409,8 +656,8 @@ export const make = (
                 state: Json;
                 version: number;
                 readonly receipts: Map<string, SendResult>;
-                /** Ids cancelled and not scheduled again since. */
-                readonly cancelled: Set<string>;
+                /** The latest arming of each scheduled command, by its name. */
+                readonly scheduled: Map<string, Armed>;
                 readonly events: Array<StoredEvent>;
                 /** How far its events were routed to each view and projection. */
                 routed: Routed | undefined;
@@ -442,7 +689,7 @@ export const make = (
                   state: null,
                   version: 0,
                   receipts: new Map(),
-                  cancelled: new Set(),
+                  scheduled: new Map(),
                   events: [],
                   routed: undefined,
                 }),
@@ -458,6 +705,7 @@ export const make = (
               {
                 ref: { source: kit.name, id },
                 model: () => model,
+                targets: () => kit.targets,
                 singleSource: (target) => planOf(target)?.singleSource === true,
                 log: (after, limit) =>
                   Effect.sync(() =>
@@ -528,35 +776,69 @@ export const make = (
             });
           const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             lock.withPermits(1)(commit(id, command, meta));
-          const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
+          recorders.set(kit.name, {
+            lock,
+            read: (id) => ({ state: instance(id).state, version: instance(id).version }),
+            record: (id, input) =>
+              Effect.gen(function* () {
+                const current = instance(id);
+                const result = yield* kit.record({
+                  ...input,
+                  id,
+                  state: current.state,
+                  version: current.version,
+                });
+                if (current.version === 0) yield* register({ source: kit.name, id });
+                const live = yield* Backfill.routeCommit(
+                  sourceRole(id),
+                  kit.targets,
+                  current.routed,
+                  current.version,
+                  result.version,
+                  result.deliveries,
+                );
+                current.routed = live.routed;
+                current.state = result.state;
+                current.version = result.version;
+                for (let i = 0; i < result.events.length; i++)
+                  commits.push({ aggregate: kit.name, id, index: current.events.length + i });
+                current.events.push(...result.events);
+                yield* announce(id);
+                yield* enqueue(live.send, kit.deliver);
+              }),
+          });
           return {
             send,
-            schedule: (id, command, meta, due) =>
+            schedule: (id, name, command, meta, due) =>
               lock.withPermits(1)(
                 Effect.suspend(() => {
-                  const fields = { aggregate: kit.name, id, commandId: meta.commandId };
-                  if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
-                  instance(id).cancelled.delete(meta.commandId);
+                  const { scheduled } = instance(id);
+                  // The same arming again (a policy or step ran again): leave it as it is.
+                  const armed = scheduled.get(name);
+                  if (armed?.commandId === meta.commandId) return Effect.succeed(armed.at);
                   const at = "at" in due ? due.at : now() + due.afterMillis;
+                  scheduled.set(name, { commandId: meta.commandId, at, cancelled: false });
                   return timer(
-                    `${modelName}/${kit.name}/${id}/${meta.commandId}`,
+                    `${modelName}/${kit.name}/${id}/${name}`,
                     at,
                     commit(id, command, meta).pipe(Effect.asVoid),
                     lock.withPermits(1),
                   ).pipe(Effect.as(at));
                 }),
               ),
-            unschedule: (id, commandId) =>
+            unschedule: (id, name) =>
               lock.withPermits(1)(
                 Effect.suspend(
                   (): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-                    const fields = { aggregate: kit.name, id, commandId };
-                    if (executed(id, commandId)) return Effect.fail(new AlreadyExecuted(fields));
-                    const { cancelled } = instance(id);
-                    if (cancelled.has(commandId)) return Effect.fail(new AlreadyCancelled(fields));
-                    if (!timers.delete(`${modelName}/${kit.name}/${id}/${commandId}`))
-                      return Effect.fail(new NotScheduled(fields));
-                    cancelled.add(commandId);
+                    const fields = { aggregate: kit.name, id, commandId: name };
+                    const current = instance(id);
+                    const armed = current.scheduled.get(name);
+                    if (!armed) return Effect.fail(new NotScheduled(fields));
+                    if (current.receipts.has(armed.commandId))
+                      return Effect.fail(new AlreadyExecuted(fields));
+                    if (armed.cancelled) return Effect.fail(new AlreadyCancelled(fields));
+                    timers.delete(`${modelName}/${kit.name}/${id}/${name}`);
+                    current.scheduled.set(name, { ...armed, cancelled: true });
                     return Effect.void;
                   },
                 ),
@@ -624,6 +906,59 @@ export const make = (
           };
         }),
 
+      // One process: a decision holds the lock of every aggregate type it
+      // reads (taken in name order, so two decisions never deadlock), decides,
+      // and records on each instance before it lets go.
+      decision: (_decision, kit) =>
+        Effect.sync(() => {
+          const { receipts } = stored(`decision:${kit.name}`, () => ({
+            receipts: new Map<string, DecisionResult>(),
+          }));
+          return {
+            send: (command, meta) =>
+              Effect.gen(function* () {
+                const reads = yield* kit.reads(command);
+                const types = [...new Set(reads.map((read) => read.aggregate))].sort();
+                const decide = Effect.gen(function* () {
+                  const duplicate = receipts.get(meta.commandId);
+                  if (duplicate) return duplicate;
+                  const at = now();
+                  const result = yield* kit.decide({
+                    command,
+                    commandId: meta.commandId,
+                    context: meta.context,
+                    now: at,
+                    correlationId: meta.correlationId,
+                    trace: meta.trace,
+                    link: meta.link,
+                    states: reads.map((read) => ({
+                      ...read,
+                      ...recorders.get(read.aggregate)!.read(read.id),
+                    })),
+                  });
+                  if (result._tag === "Rejected") return result satisfies DecisionResult;
+                  for (const write of result.writes) {
+                    if (write.events.length === 0) continue;
+                    yield* recorders.get(write.aggregate)!.record(write.id, {
+                      events: write.events,
+                      commandId: meta.commandId,
+                      now: at,
+                      correlationId: result.correlationId,
+                      trace: result.trace,
+                    });
+                  }
+                  const sent: DecisionResult = { _tag: "Accepted", receipt: result.receipt };
+                  receipts.set(meta.commandId, sent);
+                  return sent;
+                });
+                return yield* types.reduceRight(
+                  (held, type) => recorders.get(type)!.lock.withPermits(1)(held),
+                  decide,
+                );
+              }),
+          };
+        }),
+
       view: (_view, kit) =>
         Effect.sync(() => {
           const stash = stored(`view:${kit.name}`, () => ({
@@ -664,11 +999,7 @@ export const make = (
                 Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
               );
             });
-          const target = targetId({
-            kind: "view",
-            name: kit.name,
-            ...(kit.generation > 0 ? { generation: kit.generation } : {}),
-          });
+          const target = kit.target;
           /** Apply deliveries to a key and route what it emits. Callers hold `lock`. */
           const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
             Effect.gen(function* () {
@@ -733,6 +1064,7 @@ export const make = (
               {
                 ref: { source: kit.name, id: key },
                 model: () => model,
+                targets: () => kit.targets,
                 singleSource: (target) => planOf(target)?.singleSource === true,
                 log: (after, limit) =>
                   Effect.map(entries, (all) =>
@@ -753,7 +1085,42 @@ export const make = (
             );
             return role;
           });
-          sourceRoles.set(kit.name, sourceRole);
+          // A key of a view keyed by its one aggregate reads its history from that
+          // instance before it answers anything, the first time: when the view is
+          // lazy, or rebuilt in place. After that, it is read like any other.
+          const caughtUp = new Set<string>();
+          const ready = (key: string): Effect.Effect<void> =>
+            Effect.suspend(() => {
+              const catchUp = kit.catchUp;
+              if (catchUp === undefined || caughtUp.has(key)) return Effect.void;
+              const ref = { source: catchUp.source, id: key };
+              return consumer(key)
+                .start(target, ref, 5_000)
+                .pipe(
+                  Effect.repeat({ until: (started) => started === "settled", times: 20 }),
+                  Effect.tap((started) =>
+                    Effect.sync(() => {
+                      if (started === "settled") caughtUp.add(key);
+                    }),
+                  ),
+                  Effect.asVoid,
+                );
+            });
+          // Read as a source (by a view or projection catching up), a key has its
+          // own history first: what reads it never sees a key still filling.
+          sourceRoles.set(kit.name, (key) => {
+            const role = sourceRole(key);
+            const first = ready(key);
+            return {
+              ...role,
+              log: (after, limit) => Effect.andThen(first, role.log(after, limit)),
+              cursor: (target) => Effect.andThen(first, role.cursor(target)),
+              read: (target, at, after, limit) =>
+                Effect.andThen(first, role.read(target, at, after, limit)),
+              handoff: (target, at, through) =>
+                Effect.andThen(first, role.handoff(target, at, through)),
+            };
+          });
           return {
             receive: (key, deliveries) =>
               Effect.gen(function* () {
@@ -763,16 +1130,46 @@ export const make = (
                   yield* lock.withPermits(1)(apply(key, deliveries));
               }),
             read: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.snapshot)),
+              ),
             changes: (key) =>
               Stream.unwrap(
-                get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.snapshot))),
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
+                  Effect.map((current) => SubscriptionRef.changes(current.snapshot)),
+                ),
               ),
-            list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+            // A live read's WebSocket is served here, pushed on every commit.
+            connect: (key, subscription) =>
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) =>
+                  serveSocket(
+                    subscription,
+                    (latest) =>
+                      Effect.flatMap(
+                        Effect.all([
+                          SubscriptionRef.get(current.snapshot),
+                          SubscriptionRef.get(current.entries),
+                        ]),
+                        ([snapshot, entries]) => kit.push(key, latest, snapshot, entries),
+                      ),
+                    SubscriptionRef.changes(current.snapshot).pipe(Stream.drop(1)),
+                  ),
+                ),
+              ),
+            list: (key, range) =>
+              ready(key).pipe(
+                Effect.andThen(get(key)),
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+                Effect.map((entries) => inRange(entries, range)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
-                get(key).pipe(
+                ready(key).pipe(
+                  Effect.andThen(get(key)),
                   Effect.map((current) => {
                     let last = after;
                     return SubscriptionRef.changes(current.entries).pipe(
@@ -831,7 +1228,7 @@ export const make = (
           const process = (key: string, flush: boolean): Effect.Effect<void> =>
             Effect.suspend(() => {
               const p = partition(key);
-              return p.lock.withPermits(1)(
+              return exclusively(p.lock)(
                 Effect.gen(function* () {
                   while (p.processed < p.log.length) {
                     const pending = p.log.length - p.processed;
@@ -846,23 +1243,21 @@ export const make = (
                     ) {
                       if (!p.timer) {
                         p.timer = true;
-                        running++;
-                        yield* Effect.forkDetach(
-                          Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
-                            Effect.andThen(
-                              Effect.sync(() => {
-                                p.timer = false;
-                              }),
-                            ),
-                            Effect.andThen(process(key, true)),
-                            Effect.ensuring(Effect.sync(() => running--)),
+                        yield* Effect.sleep(batch.waitMillis - (now() - oldest.at)).pipe(
+                          Effect.andThen(
+                            Effect.sync(() => {
+                              p.timer = false;
+                            }),
                           ),
+                          Effect.andThen(process(key, true)),
+                          tracked,
+                          Effect.forkDetach,
                         );
                       }
                       return;
                     }
                     const run = p.log.slice(p.processed, p.processed + size);
-                    yield* kit.run(key, run);
+                    yield* kit.run(key, run).pipe(pollsWait);
                     p.processed += run.length;
                     for (const { delivery } of run) {
                       p.checkpoints[delivery.source] = Math.max(
@@ -883,17 +1278,16 @@ export const make = (
               if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
               p.intake[delivery.source] = delivery.seq;
               p.log.push({ position: p.log.length + 1, delivery, at: now() });
-              running++;
-              return Effect.forkDetach(
-                process(delivery.key, false).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.sync(() => failures.push(cause)).pipe(
-                      Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
-                    ),
+              return process(delivery.key, false).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.sync(() => failures.push(cause)).pipe(
+                    Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
                   ),
-                  Effect.ensuring(Effect.sync(() => running--)),
                 ),
-              ).pipe(Effect.asVoid);
+                tracked,
+                Effect.forkDetach,
+                Effect.asVoid,
+              );
             });
           const target = targetId({
             kind: "projection",
@@ -933,9 +1327,9 @@ export const make = (
           };
         }),
 
-      stream: (_stream, _kit) =>
+      stream: (_stream, kit) =>
         Effect.sync(() => {
-          const { keys, lock } = stored(`stream:${_kit.name}`, () => ({
+          const { keys, lock } = stored(`stream:${kit.name}`, () => ({
             keys: new Map<
               string,
               {
@@ -968,7 +1362,7 @@ export const make = (
                       event,
                       envelope: {
                         id: key,
-                        stream: `${_kit.name}/${key}`,
+                        stream: `${kit.name}/${key}`,
                         seq,
                         at: write.at,
                         commandId: write.commandId,
@@ -1008,8 +1402,29 @@ export const make = (
               Stream.unwrap(
                 get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.meta))),
               ),
-            list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+            // A live read's WebSocket is served here, pushed on every append.
+            connect: (key, subscription) =>
+              get(key).pipe(
+                Effect.flatMap((current) =>
+                  serveSocket(
+                    subscription,
+                    (latest) =>
+                      Effect.flatMap(
+                        Effect.all([
+                          SubscriptionRef.get(current.meta),
+                          SubscriptionRef.get(current.entries),
+                        ]),
+                        ([meta, entries]) => kit.push(key, latest, meta, entries, entries.at(-1)),
+                      ),
+                    SubscriptionRef.changes(current.meta).pipe(Stream.drop(1)),
+                  ),
+                ),
+              ),
+            list: (key, range) =>
+              get(key).pipe(
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+                Effect.map((entries) => inRange(entries, range)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
                 get(key).pipe(
@@ -1038,31 +1453,28 @@ export const make = (
           };
           return {
             receive: (delivery) =>
-              Effect.suspend(() => {
-                running++;
-                return lockFor(delivery.key)
-                  .withPermits(1)(kit.run(delivery))
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                      ),
+              Effect.suspend(() =>
+                exclusively(lockFor(delivery.key))(kit.run(delivery).pipe(pollsWait)).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
-                    Effect.ensuring(Effect.sync(() => running--)),
-                    Effect.forkDetach,
-                    Effect.asVoid,
-                  );
-              }),
+                  ),
+                  tracked,
+                  Effect.forkDetach,
+                  Effect.asVoid,
+                ),
+              ),
           };
         }),
 
       // A deploy that adds consumers starts their runs.
-      start: (targets, plans) =>
+      start: (targets, plans, backfill) =>
         Effect.suspend(() => {
           model = targets;
           planOf = plans;
           return Effect.forEach(
-            targets,
+            backfill,
             (target) => {
               const plan = plans(target);
               if (plan === undefined) return Effect.void;
@@ -1094,6 +1506,7 @@ export const make = (
     layer: Layer.mergeAll(
       Layer.succeed(Platform, platform),
       Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
+      SecureRandom.layerWebCrypto,
     ),
     control,
   };
@@ -1118,9 +1531,9 @@ export const make = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const InMemory: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine> = Layer.suspend(
-  () => make().layer,
-);
+export const InMemory: Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom
+> = Layer.suspend(() => make().layer);
 
 /** Is a stream write's origin after the last one applied? @internal */
 export const isAfter = (

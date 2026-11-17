@@ -19,6 +19,18 @@ export class EMRClusterOperationFailed extends Data.TaggedError("EMRClusterOpera
   readonly cause?: unknown;
 }> {}
 
+/**
+ * Termination was refused because the cluster has termination protection on,
+ * set through `terminationProtected` or outside the stack. Turn it off and
+ * deploy (or turn it off in the console) before deleting it.
+ */
+export class EMRClusterTerminationProtected extends Data.TaggedError(
+  "EMRClusterTerminationProtected",
+)<{
+  readonly clusterId: string;
+  readonly message: string;
+}> {}
+
 export class EMRClusterNotReady extends Data.TaggedError("EMRClusterNotReady")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -72,8 +84,8 @@ export interface ClusterInstancesConfig {
   keepJobFlowAliveWhenNoSteps?: boolean;
   /**
    * Whether the cluster's EC2 instances are locked against termination by
-   * API calls or user intervention. Updateable in place (and always lifted
-   * before the provider terminates the cluster on destroy).
+   * API calls or user intervention. Updateable in place. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   terminationProtected?: boolean;
@@ -213,8 +225,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The id of the existing cluster. */
+  clusterId: string;
+}
 
 /**
  * A provisioned Amazon EMR cluster (job flow) running open-source big-data
@@ -271,6 +293,16 @@ export interface Cluster extends Resource<
  *   jobFlowRole: instanceProfile.instanceProfileName,
  *   securityConfiguration: config.securityConfigurationName,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.EMR.Cluster.lookup({ clusterId: "..." });
  * ```
  *
  * @resource
@@ -476,6 +508,13 @@ export const ClusterProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ clusterId }) {
+          const cluster = yield* readCluster(clusterId);
+          if (!cluster) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const cluster = output?.clusterId
             ? yield* readCluster(output.clusterId)
@@ -664,13 +703,20 @@ export const ClusterProvider = () =>
           return yield* toAttrs(final ?? observed);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
           const clusterId = output.clusterId;
           // A cluster that is already terminal (or gone) is success.
           const observed = yield* readCluster(clusterId);
           if (observed === undefined) return;
-          // Lift termination protection so TerminateJobFlows succeeds.
+          // Termination protection, set by this stack or outside it, refuses
+          // the delete. Only an account-wide nuke (`force`) lifts it.
           if (observed.TerminationProtected === true) {
+            if (force !== true) {
+              return yield* new EMRClusterTerminationProtected({
+                clusterId,
+                message: `EMR cluster '${clusterId}' has termination protection on. Set \`terminationProtected: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* emr
               .setTerminationProtection({
                 JobFlowIds: [clusterId],

@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
   createInternalLabels,
@@ -115,8 +116,35 @@ export type LocationsSecret = Resource<
     versionDestroyTtl: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsSecretLookup
 >;
+
+/**
+ * Props for {@link LocationsSecret.lookup}: find a locations secret this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LocationsSecretLookup {
+  /**
+   * Secret id (the `{secret}` segment of
+   * `projects/{project}/locations/{location}/secrets/{secret}`). Max 255
+   * characters; letters, numbers, hyphens, and underscores.
+   */
+  secretId: string;
+  /**
+   * Secret Manager location (`us-central1`, `us-east1`, …). `US-CENTRAL1`
+   * is accepted and normalized to `us-central1`. Regional secrets live only
+   * in this location (use {@link Secret} for automatic/user-managed
+   * replication).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Google Cloud Secret Manager secret. Payloads stay in one
@@ -148,6 +176,19 @@ export type LocationsSecret = Resource<
  * yield* addVersion({ payload: { data: btoa("hello") } });
  * const access = yield* GCP.SecretManager.AccessSecretVersion(secret);
  * const { payload } = yield* access();
+ * ```
+ *
+ * ### Looking up an existing locations secret
+ * `LocationsSecret.lookup` references a locations secret Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * locations secret.
+ *
+ * **Example:** Reference an existing locations secret
+ * ```typescript
+ * const locationsSecret = GCP.SecretManager.LocationsSecret.lookup({
+ *   secretId: "my-secret",
+ * });
  * ```
  *
  * @resource
@@ -330,6 +371,15 @@ export const LocationsSecretProvider = () =>
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ secretId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, secretId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -162,8 +163,37 @@ export type ConversionWorkspacesMappingRule = Resource<
     revisionCreateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConversionWorkspacesMappingRuleLookup
 >;
+
+/**
+ * Props for {@link ConversionWorkspacesMappingRule.lookup}: find a
+ * conversion workspaces mapping rule this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface ConversionWorkspacesMappingRuleLookup {
+  /**
+   * Mapping rule id (the `{mappingRule}` segment).
+   */
+  mappingRuleId: string;
+  /**
+   * Region used when `conversionWorkspace` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent conversion workspace. Full name
+   * `projects/{project}/locations/{lo
+   * cation}/conversionWorkspaces/{conversionWorkspace}` or the workspace id
+   * (combined with `location`).
+   */
+  conversionWorkspace: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A mapping rule attached to a Database Migration Service conversion
@@ -186,6 +216,20 @@ export type ConversionWorkspacesMappingRule = Resource<
  *   ruleScope: "DATABASE_ENTITY_TYPE_SCHEMA",
  *   filter: { entities: ["src_schema"] },
  *   singleEntityRename: { newName: "dst_schema" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing conversion workspaces mapping rule
+ * `ConversionWorkspacesMappingRule.lookup` references a conversion
+ * workspaces mapping rule Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared conversion workspaces mapping rule.
+ *
+ * **Example:** Reference an existing conversion workspaces mapping rule
+ * ```typescript
+ * const conversionWorkspacesMappingRule = GCP.DataMigration.ConversionWorkspacesMappingRule.lookup({
+ *   mappingRuleId: "my-mapping-rule",
+ *   conversionWorkspace: "my-conversion-workspace",
  * });
  * ```
  *
@@ -344,6 +388,25 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
           (olds !== undefined || output !== undefined) && ruleBody(news) !== ruleBody(previous),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      mappingRuleId,
+      location: lookupLocation,
+      conversionWorkspace: lookupConversionWorkspace,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const conversionWorkspace = conversionWorkspaceOf(
+        lookupConversionWorkspace ?? "",
+        env.project,
+        location,
+      );
+      const name =
+        conversionWorkspace.length > 0 ? resourceName(conversionWorkspace, mappingRuleId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, name);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

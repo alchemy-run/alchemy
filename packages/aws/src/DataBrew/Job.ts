@@ -243,8 +243,18 @@ export interface Job extends Resource<
     type: string;
   },
   {},
-  Providers
+  Providers,
+  JobLookup
 > {}
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface JobLookup {
+  /** The name of the existing job. */
+  jobName: string;
+}
 
 /**
  * An AWS Glue DataBrew job definition — either a `PROFILE` job that analyzes
@@ -282,6 +292,16 @@ export interface Job extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const existing = AWS.DataBrew.Job.lookup({ jobName: "..." });
  * ```
  *
  * @resource
@@ -441,6 +461,19 @@ export const JobProvider = () =>
                 type: j.Type ?? "RECIPE",
               }));
           }),
+
+        lookup: Effect.fn(function* ({ jobName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const job = yield* observe(name);
+          if (job === undefined) return undefined;
+          const arn = job.ResourceArn ?? databrewArn(region, accountId, "job", name);
+          const attrs = {
+            jobName: name,
+            jobArn: arn,
+            type: job.Type ?? "RECIPE",
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

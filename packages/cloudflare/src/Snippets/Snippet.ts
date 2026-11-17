@@ -64,8 +64,24 @@ export type Snippet = Resource<
   SnippetProps,
   SnippetAttributes,
   never,
-  Providers
+  Providers,
+  SnippetLookup
 >;
+
+/**
+ * Props for {@link Snippet.lookup}: find a snippet this stack doesn't manage,
+ * by its zone and name.
+ */
+export interface SnippetLookup {
+  /**
+   * The zone the existing snippet belongs to.
+   */
+  zoneId: string;
+  /**
+   * The name of the existing snippet.
+   */
+  name: string;
+}
 
 /**
  * A Cloudflare Snippet — a lightweight JavaScript module that runs on
@@ -108,6 +124,23 @@ export type Snippet = Resource<
  *       expression: 'http.request.uri.path wildcard "/api/*"',
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing snippet
+ * `Snippet.lookup` references a snippet Alchemy doesn't manage (uploaded in
+ * the dashboard or by another stack), found by its zone and `name`. It is
+ * read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Route traffic through an existing snippet
+ * ```typescript
+ * const headers = Cloudflare.Snippets.Snippet.lookup({
+ *   zoneId: zone.zoneId,
+ *   name: "security_headers",
+ * });
+ * yield* Cloudflare.Snippets.SnippetRules("Rules", {
+ *   zoneId: zone.zoneId,
+ *   rules: [{ snippetName: headers.name, expression: "true" }],
  * });
  * ```
  *
@@ -177,6 +210,11 @@ export const SnippetProvider = () =>
       if (typeof n.zoneId === "string" && oldZoneId !== undefined && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
+    }),
+
+    lookup: Effect.fn(function* ({ zoneId, name }) {
+      const observed = yield* getSnippetOrUndefined(zoneId, name);
+      return observed ? toAttributes(observed, zoneId, DEFAULT_MAIN_MODULE) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

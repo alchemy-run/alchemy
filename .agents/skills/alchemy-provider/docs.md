@@ -98,6 +98,11 @@ Everything else gets, at minimum:
 
 ## The hub
 
+The full procedure and voice for hub pages live in the
+[write-docs skill](../write-docs/SKILL.md). Follow it for the hub, the
+"What is <P>?" page, Accounts & access, and every concept page. This
+section is the summary.
+
 The hub copies the AWS hub (`website/src/content/docs/aws/`), not the
 order the provider was built in. GCP's first hub was four long "guides"
 that walked the examples end to end. It had no tutorial, no per-service
@@ -110,17 +115,17 @@ page with its AWS sibling before you write it.
 
 ```
 <P>
-├─ Overview · Setup
-├─ Tutorial       Part 1–5: first resource → first runtime → Testing → Stages → CI/CD
-├─ Compute        Choosing a runtime · one page per runtime
-├─ Frontend       Overview (websites) + one page per framework
-├─ APIs           Effect HTTP · Effect RPC
-├─ Data           one page per database / storage service
-├─ AI             one page per AI service
-├─ Messaging      one page per queue / topic / event source
-├─ Security       IAM & bindings · secrets and keys
-├─ Observability  logging and monitoring
-└─ Networking     networks, private services, custom domains
+├─ Overview · What is <P>? · Setup
+├─ Tutorial            Part 1–5: first resource → first runtime → Testing → Stages → CI/CD
+├─ Accounts & access   accounts/regions or orgs/tokens · IAM & bindings · secrets
+├─ Compute             Choosing a runtime · one page per runtime
+├─ Storage & databases one page per database / storage service
+├─ Messaging & events  one page per queue / topic / event source
+├─ Networking & edge   networks, private services, custom domains
+├─ Observability       logging and monitoring
+├─ Frontend            Overview (websites) + one page per framework
+├─ APIs                Effect HTTP · Effect RPC
+└─ AI                  one page per AI service
 ```
 
 Leave out a section only when the provider has nothing for it, and pick
@@ -131,7 +136,8 @@ There is no `guides/` directory.
 
 | Path | Content |
 | --- | --- |
-| `index.mdx` | Overview: one sentence on what the user gets, one complete runtime-plus-binding snippet, links to Setup and the tutorial, then a link list per section |
+| `index.mdx` | Overview: what the platform is (not what the package does), "A quick example" snippets, where to start, then `<HubMap />`. No diagram: the What is page draws the platform |
+| `what-is-<provider>.mdx` | the platform's concepts once each, in the order a newcomer meets them, each mapped to Alchemy |
 | `setup.mdx` | credentials, the profile command, CI env vars |
 | `tutorial/part-1.mdx` … `part-5.mdx` | the same five parts as AWS: "Your First Stack" (one storage resource), "Add a <Runtime>" (bind it, GET/PUT routes), "Testing", "Stages", "CI/CD" (the cloud's keyless CI auth, e.g. OIDC or Workload Identity Federation) |
 | `compute/choosing-a-runtime.mdx` | one line per runtime, then a table comparing entry point, triggers, cost, packaging, and deploy time |

@@ -23,7 +23,7 @@ import { run } from "../src/Runner.ts";
 
 const api = new URL("../src/index.ts", import.meta.url).href;
 const registry = new URL("../src/Registry.ts", import.meta.url).href;
-const effect = new URL("../../../node_modules/effect/dist/Effect.js", import.meta.url).href;
+const effect = import.meta.resolve("effect/Effect");
 
 const setup = Effect.fn(function* (files: Record<string, string>) {
   const fs = yield* FileSystem.FileSystem;

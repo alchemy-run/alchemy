@@ -119,8 +119,35 @@ export type ChannelPartnerLinksCustomer = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ChannelPartnerLinksCustomerLookup
 >;
+
+/**
+ * Props for {@link ChannelPartnerLinksCustomer.lookup}: find a channel
+ * partner links customer this stack doesn't manage by its identifiers.
+ */
+export interface ChannelPartnerLinksCustomerLookup {
+  /**
+   * Primary domain. Must match `primaryContactInfo.email`'s domain.
+   */
+  domain: string;
+  /**
+   * Channel partner link that owns the customer. Full name
+   * `accounts/{account}/channelPartnerLinks/{channelPartner}` or the
+   * partner id (combined with `account`).
+   */
+  parent: string;
+  /**
+   * Reseller account used when `parent` is a bare partner id.
+   */
+  account?: string;
+  /**
+   * Customer id (last segment of
+   * `accounts/{account}/customers/{customer}`).
+   */
+  customerId?: string;
+}
 
 /**
  * A Cloud Channel customer created under a channel partner link.
@@ -160,6 +187,20 @@ export type ChannelPartnerLinksCustomer = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing channel partner links customer
+ * `ChannelPartnerLinksCustomer.lookup` references a channel partner links
+ * customer Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared channel partner links customer.
+ *
+ * **Example:** Reference an existing channel partner links customer
+ * ```typescript
+ * const channelPartnerLinksCustomer = GCP.CloudChannel.ChannelPartnerLinksCustomer.lookup({
+ *   domain: "my-domain",
+ *   parent: "my-parent",
+ * });
+ * ```
+ *
  * @resource
  * @category CloudChannel
  */
@@ -190,6 +231,17 @@ export const ChannelPartnerLinksCustomerProvider = () =>
         previousParent,
         nextParent,
       });
+    }),
+
+    lookup: Effect.fn(function* ({ domain, parent: lookupParent, account, customerId }) {
+      const parent = resolveParent(lookupParent ?? "", account);
+      const name = toCustomerName(parent, customerId);
+      let existing = yield* getPartnerCustomer(name);
+      if (existing === undefined) {
+        existing = yield* findCustomerByDomain(parent, domain, listPartnerCustomers);
+      }
+      if (existing === undefined) return undefined;
+      return toCustomerAttrs(existing, parent);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

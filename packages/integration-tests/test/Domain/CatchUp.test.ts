@@ -12,8 +12,7 @@ import * as Schema from "effect/Schema";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 class Account extends Domain.Aggregate("Account", {
@@ -21,14 +20,14 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
+  keyOf: (command) => command.id,
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 
 class Logged extends Domain.Event("Logged", { note: Schema.String }) {}
 class Log extends Domain.Command("Log", {
-  target: Schema.String,
-  input: { note: Schema.String },
+  input: { id: Schema.String, note: Schema.String },
   events: [Logged],
 }) {}
 class Journal extends Domain.Aggregate("Journal", {
@@ -36,6 +35,7 @@ class Journal extends Domain.Aggregate("Journal", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Log],
+  keyOf: (command) => command.id,
   decide: { Log: (_, cmd) => [new Logged({ note: cmd.note })] },
   evolve: { Logged: (s) => s },
 }) {}
@@ -120,6 +120,14 @@ class WideActivity extends Domain.View("Activity", {
   },
 }) {}
 
+/** The views again, each at version 1: what bumping a version deploys. */
+class DepositsV1 extends Domain.View("Deposits", { ...Deposits.definition, version: 1 }) {}
+class DoubledDepositsV1 extends Domain.View("Deposits", {
+  ...DoubledDeposits.definition,
+  version: 1,
+}) {}
+class WideActivityV1 extends Domain.View("Activity", { ...WideActivity.definition, version: 1 }) {}
+
 // ---------------------------------------------------------------- one model, three deploys
 
 class Before extends Domain.Model("Bank", { aggregates: [Account, Journal] }) {}
@@ -144,6 +152,18 @@ class WithActivity extends Domain.Model("Bank", {
 class WithWideActivity extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   views: [WideActivity],
+}) {}
+class WithWideActivityV1 extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  views: [WideActivityV1],
+}) {}
+class WithViewV1 extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  views: [DepositsV1],
+}) {}
+class RedefinedV1 extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  views: [DoubledDepositsV1],
 }) {}
 
 const HOUR = 60 * 60 * 1000;
@@ -189,16 +209,16 @@ const platform = () => {
 const deposit = (id: string, amount: number) =>
   Effect.gen(function* () {
     const accounts = yield* Account;
-    yield* accounts.send(Account.ref(id), new Deposit({ amount }));
+    yield* accounts.send(new Deposit({ id: Account.ref(id).id, amount }));
   });
 
 const amounts = (id: string) =>
   Effect.gen(function* () {
     const view = yield* Deposits;
-    return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+    return Option.getOrUndefined(yield* view.get(Account.ref(id)))?.amounts;
   });
 
-describe("Domain catch-up", () => {
+describe("Domain catch-up", { tags: ["unit", "local"] }, () => {
   it.live(
     "a view that reads more sources without a version bump fails the deploy; with one, it is rebuilt from all of them",
     () =>
@@ -210,7 +230,7 @@ describe("Domain catch-up", () => {
           Effect.gen(function* () {
             yield* deposit("a-1", 10);
             const journals = yield* Journal;
-            yield* journals.send(Journal.ref("j-1"), new Log({ note: "opened" }));
+            yield* journals.send(new Log({ id: Journal.ref("j-1").id, note: "opened" }));
           }),
         );
         yield* bank.deploy(WithActivity, Layer.empty, bank.settle);
@@ -222,14 +242,13 @@ describe("Domain catch-up", () => {
         expect(refused).toContain("BackfillPlanChanged");
         expect(refused).toContain("Bump its version");
         const entries = yield* bank.deploy(
-          WithWideActivity,
+          WithWideActivityV1,
           Layer.empty,
           Effect.gen(function* () {
             yield* bank.settle;
-            const view = yield* WideActivity;
-            return Option.getOrUndefined(yield* view.query("all"))?.entries;
+            const view = yield* WideActivityV1;
+            return Option.getOrUndefined(yield* view.get("all"))?.entries;
           }),
-          { versions: { Activity: 1 } },
         );
         expect([...(entries ?? [])].sort()).toEqual(["deposit 10", "log opened"]);
       }).pipe(Effect.provide(platform().services)),
@@ -300,10 +319,16 @@ describe("Domain catch-up", () => {
       yield* bank.deploy(WithView, OnDepositLive, deposit("a-1", 1));
       yield* bank.deploy(Before, Layer.empty, deposit("a-1", 2));
       const result = yield* bank.deploy(
-        WithView,
-        OnDepositLive,
-        bank.settle.pipe(Effect.andThen(amounts("a-1"))),
-        { versions: { Deposits: 1 } },
+        WithViewV1,
+        Layer.empty,
+        bank.settle.pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const view = yield* DepositsV1;
+              return Option.getOrUndefined(yield* view.get(Account.ref("a-1")))?.amounts;
+            }),
+          ),
+        ),
       );
       expect(result).toEqual([1, 2]);
     }).pipe(Effect.provide(platform().services)),
@@ -332,7 +357,7 @@ describe("Domain catch-up", () => {
         }).pipe(Effect.andThen(effect));
       const log = (id: string, note: string) =>
         Effect.gen(function* () {
-          yield* (yield* Journal).send(Journal.ref(id), new Log({ note }));
+          yield* (yield* Journal).send(new Log({ id: Journal.ref(id).id, note }));
         });
       yield* bank.deploy(
         Before,
@@ -422,7 +447,7 @@ describe("Domain catch-up", () => {
       const doubled = (id: string) =>
         Effect.gen(function* () {
           const view = yield* DoubledDeposits;
-          return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+          return Option.getOrUndefined(yield* view.get(Account.ref(id)))?.amounts;
         });
       // Redefined but not rebuilt: only new deposits are doubled, after the old state.
       const stale = yield* bank.deploy(
@@ -431,19 +456,20 @@ describe("Domain catch-up", () => {
         deposit("a-1", 3).pipe(Effect.andThen(bank.settle), Effect.andThen(doubled("a-1"))),
       );
       expect(stale).toEqual([1, 2, 6]);
+      // Keyed by its account: rebuilt in place. Nothing to wait for; each key
+      // reads its account's events again before it answers.
       const rebuilt = yield* bank.deploy(
-        Redefined,
+        RedefinedV1,
         Layer.empty,
         Effect.gen(function* () {
-          const view = yield* DoubledDeposits;
-          expect((yield* view.history).complete).toBe(false);
-          yield* bank.settle;
+          const view = yield* DoubledDepositsV1;
           expect((yield* view.history).complete).toBe(true);
+          const first = Option.getOrUndefined(yield* view.get(Account.ref("a-1")))?.amounts;
+          expect(first).toEqual([2, 4, 6]);
           yield* deposit("a-1", 4);
           yield* bank.settle;
-          return yield* doubled("a-1");
+          return Option.getOrUndefined(yield* view.get(Account.ref("a-1")))?.amounts;
         }),
-        { versions: { Deposits: 1 } },
       );
       expect(rebuilt).toEqual([2, 4, 6, 8]);
       // A policy on the old view acted on the first two deposits only, never on the rebuild.

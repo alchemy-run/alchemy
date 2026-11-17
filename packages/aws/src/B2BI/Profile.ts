@@ -1,6 +1,6 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -68,8 +68,18 @@ export interface Profile extends Resource<
     logGroupName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProfileLookup
 > {}
+
+/**
+ * Props for {@link Profile.lookup}: find a profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProfileLookup {
+  /** The id of the existing profile. */
+  profileId: string;
+}
 
 /**
  * An AWS B2B Data Interchange (B2BI) customer profile. A profile is the
@@ -96,6 +106,16 @@ export interface Profile extends Resource<
  *   phone: "+15555550100",
  *   logging: "DISABLED",
  * });
+ * ```
+ *
+ * ### Looking up an existing profile
+ * `Profile.lookup` references a profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `profileId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing profile
+ * ```typescript
+ * const existing = AWS.B2BI.Profile.lookup({ profileId: "..." });
  * ```
  *
  * @resource
@@ -141,7 +161,16 @@ export const ProfileProvider = () =>
           }
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ profileId }) {
+          const found = yield* b2bi
+            .getProfile({ profileId: profileId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const found = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
@@ -150,7 +179,9 @@ export const ProfileProvider = () =>
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* readB2biTags(attrs.profileArn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "profileId");
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

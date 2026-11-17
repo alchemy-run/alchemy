@@ -10,6 +10,7 @@ import { AuthProviders, getAuthProvider } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
 import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -22,6 +23,7 @@ const testLayer = (config: Record<string, string> = {}) => {
   const authRegistry = Layer.succeed(AuthProviders, authProviders);
   const base = Layer.mergeAll(
     NodeServices.layer,
+    SecureRandom.layerWebCrypto,
     authRegistry,
     Layer.succeed(ProfileStore, fakeProfile),
     ConfigProvider.layer(ConfigProvider.fromUnknown(config)),

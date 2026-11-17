@@ -1,14 +1,18 @@
 import * as Fly from "@alchemy.run/fly";
-import { expect } from "@alchemy.run/test";
+import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import TokenReader, { VAULT_SECRET_NAME, Vault, VaultSecret } from "./fixtures/token-reader.ts";
+import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -43,185 +47,258 @@ const waitAppGone = (appName: string) =>
     }),
   );
 
-test.provider(
-  "create, update, and delete a secret",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+// Every case deploys its own stack, so they run concurrently; the flyApi limit
+// caps the load on Fly.
+describe.concurrent("Secret", () => {
+  test.provider(
+    "create, update, and delete a secret",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("Site");
-          const secret = yield* Fly.Secret("DbUrl", {
-            app,
-            value: VALUE_A,
-          });
-          return { app, secret };
-        }),
-      );
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("Site");
+            const secret = yield* Fly.Secret("DbUrl", {
+              app,
+              value: VALUE_A,
+            });
+            return { app, secret };
+          }),
+        );
+        yield* expectFound(
+          Fly.Secret.lookup({ appName: created.secret.appName, name: created.secret.name }),
+          created.secret,
+        );
 
-      expect(created.secret.appName).toEqual(created.app.appName);
-      expect(created.secret.name).toEqual(expect.any(String));
-      expect(created.secret.name.length).toBeGreaterThan(0);
-      expect(created.secret.digest).toEqual(expect.any(String));
+        expect(created.secret.appName).toEqual(created.app.appName);
+        expect(created.secret.name).toEqual(expect.any(String));
+        expect(created.secret.name.length).toBeGreaterThan(0);
+        expect(created.secret.digest).toEqual(expect.any(String));
 
-      const fetched = yield* machines.getSecret({
-        app_name: created.secret.appName,
-        secret_name: created.secret.name,
-        show_secrets: false,
-      });
-      expect(fetched.name).toEqual(created.secret.name);
-      expect(fetched.digest).toEqual(created.secret.digest);
-      expect(fetched.value).toBeUndefined();
+        const fetched = yield* machines.getSecret({
+          app_name: created.secret.appName,
+          secret_name: created.secret.name,
+          show_secrets: false,
+        });
+        expect(fetched.name).toEqual(created.secret.name);
+        expect(fetched.digest).toEqual(created.secret.digest);
+        expect(fetched.value).toBeUndefined();
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("Site");
-          const secret = yield* Fly.Secret("DbUrl", {
-            app,
-            value: VALUE_B,
-          });
-          return { app, secret };
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("Site");
+            const secret = yield* Fly.Secret("DbUrl", {
+              app,
+              value: VALUE_B,
+            });
+            return { app, secret };
+          }),
+        );
 
-      expect(updated.secret.appName).toEqual(created.secret.appName);
-      expect(updated.secret.name).toEqual(created.secret.name);
-      expect(updated.secret.digest).toEqual(expect.any(String));
-      expect(updated.secret.digest).not.toEqual(created.secret.digest);
+        expect(updated.secret.appName).toEqual(created.secret.appName);
+        expect(updated.secret.name).toEqual(created.secret.name);
+        expect(updated.secret.digest).toEqual(expect.any(String));
+        expect(updated.secret.digest).not.toEqual(created.secret.digest);
 
-      const refetched = yield* machines.getSecret({
-        app_name: updated.secret.appName,
-        secret_name: updated.secret.name,
-        show_secrets: false,
-      });
-      expect(refetched.name).toEqual(updated.secret.name);
-      expect(refetched.digest).toEqual(updated.secret.digest);
-      expect(refetched.digest).not.toEqual(created.secret.digest);
-      expect(refetched.value).toBeUndefined();
+        const refetched = yield* machines.getSecret({
+          app_name: updated.secret.appName,
+          secret_name: updated.secret.name,
+          show_secrets: false,
+        });
+        expect(refetched.name).toEqual(updated.secret.name);
+        expect(refetched.digest).toEqual(updated.secret.digest);
+        expect(refetched.digest).not.toEqual(created.secret.digest);
+        expect(refetched.value).toBeUndefined();
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const secretGone = yield* waitUntilGone(created.secret.appName, created.secret.name);
-      expect(secretGone).toEqual("gone");
-      const appGone = yield* waitAppGone(created.app.appName);
-      expect(appGone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:machine",
-      "provider:fly:secret",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const secretGone = yield* waitUntilGone(created.secret.appName, created.secret.name);
+        expect(secretGone).toEqual("gone");
+        const appGone = yield* waitAppGone(created.app.appName);
+        expect(appGone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:machine",
+        "provider:fly:secret",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
 
-test.provider(
-  "replace when name changes",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider(
+    "replace when name changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("Site");
-          const secret = yield* Fly.Secret("ReplaceSecret", {
-            app,
-            value: VALUE_A,
-          });
-          return { app, secret };
-        }),
-      );
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("Site");
+            const secret = yield* Fly.Secret("ReplaceSecret", {
+              app,
+              value: VALUE_A,
+            });
+            return { app, secret };
+          }),
+        );
 
-      const nextName =
-        created.secret.name.slice(0, -1) + (created.secret.name.endsWith("z") ? "y" : "z");
+        const nextName =
+          created.secret.name.slice(0, -1) + (created.secret.name.endsWith("z") ? "y" : "z");
 
-      const replaced = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("Site");
-          const secret = yield* Fly.Secret("ReplaceSecret", {
-            app,
-            name: nextName,
-            value: VALUE_A,
-          });
-          return { app, secret };
-        }),
-      );
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("Site");
+            const secret = yield* Fly.Secret("ReplaceSecret", {
+              app,
+              name: nextName,
+              value: VALUE_A,
+            });
+            return { app, secret };
+          }),
+        );
 
-      expect(replaced.secret.name).toEqual(nextName);
-      expect(replaced.secret.name).not.toEqual(created.secret.name);
-      expect(replaced.secret.appName).toEqual(created.secret.appName);
+        expect(replaced.secret.name).toEqual(nextName);
+        expect(replaced.secret.name).not.toEqual(created.secret.name);
+        expect(replaced.secret.appName).toEqual(created.secret.appName);
 
-      const fetched = yield* machines.getSecret({
-        app_name: replaced.secret.appName,
-        secret_name: replaced.secret.name,
-        show_secrets: false,
-      });
-      expect(fetched.name).toEqual(replaced.secret.name);
-      expect(fetched.value).toBeUndefined();
+        const fetched = yield* machines.getSecret({
+          app_name: replaced.secret.appName,
+          secret_name: replaced.secret.name,
+          show_secrets: false,
+        });
+        expect(fetched.name).toEqual(replaced.secret.name);
+        expect(fetched.value).toBeUndefined();
 
-      const oldGone = yield* waitUntilGone(created.secret.appName, created.secret.name);
-      expect(oldGone).toEqual("gone");
+        const oldGone = yield* waitUntilGone(created.secret.appName, created.secret.name);
+        expect(oldGone).toEqual("gone");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(replaced.secret.appName, replaced.secret.name);
-      expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:machine",
-      "provider:fly:secret",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const gone = yield* waitUntilGone(replaced.secret.appName, replaced.secret.name);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:machine",
+        "provider:fly:secret",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
 
-test.provider(
-  "list enumerates the deployed secret",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+  test.provider(
+    "list enumerates the deployed secret",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* Fly.App("Site");
-          const secret = yield* Fly.Secret("ListSecret", {
-            app,
-            value: VALUE_A,
-          });
-          return { app, secret };
-        }),
-      );
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("Site");
+            const secret = yield* Fly.Secret("ListSecret", {
+              app,
+              value: VALUE_A,
+            });
+            return { app, secret };
+          }),
+        );
 
-      const provider = yield* Provider.findProvider(Fly.Secret);
-      const all = yield* provider.list();
-      const found = all.find(
-        (secret) =>
-          secret.appName === deployed.secret.appName && secret.name === deployed.secret.name,
-      );
-      expect(found).toBeDefined();
-      expect(found?.digest).toEqual(deployed.secret.digest);
+        const provider = yield* Provider.findProvider(Fly.Secret);
+        const all = yield* provider.list();
+        const found = all.find(
+          (secret) =>
+            secret.appName === deployed.secret.appName && secret.name === deployed.secret.name,
+        );
+        expect(found).toBeDefined();
+        expect(found?.digest).toEqual(deployed.secret.digest);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(deployed.secret.appName, deployed.secret.name);
-      expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:machine",
-      "provider:fly:secret",
-      "live",
-    ],
-    timeout: 120_000,
-  },
-);
+        const gone = yield* waitUntilGone(deployed.secret.appName, deployed.secret.name);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:machine",
+        "provider:fly:secret",
+        "live",
+      ],
+      timeout: 120_000,
+    },
+  );
+
+  test.provider(
+    "a Service in its own App keeps the org token in an App secret",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const vault = yield* Vault;
+            const secret = yield* VaultSecret;
+            const reader = yield* TokenReader;
+            return { vault, secret, reader };
+          }),
+        );
+        const { reader } = deployed;
+
+        // The token is an App secret on the reader's App under the Service's
+        // scoped name, mapped back to FLY_API_TOKEN; it is not Machine env.
+        const tokenSecret = reader.secrets?.FLY_API_TOKEN?.name;
+        expect(tokenSecret).toMatch(/^ALCHEMY_[0-9A-F]{8}_FLY_API_TOKEN$/);
+        const listed = yield* machines.listSecrets({
+          app_name: reader.appName,
+          show_secrets: false,
+        });
+        expect((listed.secrets ?? []).map((secret) => secret.name)).toContain(tokenSecret);
+        const machine = yield* machines.getMachine({
+          app_name: reader.appName,
+          machine_id: reader.machineId,
+        });
+        expect(machine.config?.env?.FLY_API_TOKEN).toBeUndefined();
+        expect(machine.config?.processes?.[0]?.secrets).toEqual(
+          expect.arrayContaining([{ env_var: "FLY_API_TOKEN", name: tokenSecret }]),
+        );
+
+        // The Machine still authenticates with it: it lists the Vault's secrets.
+        const client = yield* HttpClient.HttpClient;
+        const body = yield* client.get(`${reader.url}/secret`).pipe(
+          Effect.flatMap((response) => response.json),
+          // Fresh fly.dev hosts answer 502 or non-JSON while the Machine boots.
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (json) =>
+              ((json as { names?: string[] }).names ?? []).includes(VAULT_SECRET_NAME),
+            times: 15,
+          }),
+        );
+        expect((body as { names: string[] }).names).toContain(VAULT_SECRET_NAME);
+
+        yield* stack.destroy();
+        const gone = yield* waitUntilGone(deployed.secret.appName, deployed.secret.name);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:secret",
+        "provider:fly:service",
+        "live",
+      ],
+      timeout: 300_000,
+    },
+  );
+});

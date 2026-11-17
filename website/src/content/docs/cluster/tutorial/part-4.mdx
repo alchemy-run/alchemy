@@ -1,0 +1,83 @@
+---
+title: "Part 4: Run It on AWS"
+description: Move the chat rooms from Docker to AWS by swapping the database, the pool and the API's host.
+sidebar:
+  order: 4
+---
+
+The rooms, the middleware and the invitations don't know where they run. In this part, they move to AWS: Postgres on RDS, runners on ECS Fargate, and the API on Lambda.
+
+Finish [AWS setup](/aws/setup) and install `@alchemy.run/aws`.
+
+## Swap the database and the pool
+
+```diff lang="typescript"
+// src/Cluster.ts
+-import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
++import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+-export const Database = ClusterDocker.Database("Cluster");
++export const Database = ClusterAWS.Database("Cluster");
+
+-export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
++export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+The database is now an RDS instance in a VPC of its own, and the pool an ECS service in that VPC, behind a load balancer that serves its gateway.
+
+## Serve the API from Lambda
+
+```diff lang="typescript"
+// src/Api.ts
+-import * as Cluster from "@alchemy.run/effect-cluster";
+-import * as Docker from "@alchemy.run/docker";
++import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as Effect from "effect/Effect";
+-import { Database } from "./Cluster.ts";
+
+-export default class Api extends Docker.Service<Api>()(
++export default class Api extends Lambda.Function<Api>()(
+  "Api",
+-  Effect.gen(function* () {
+-    const database = yield* Cluster.Database.Database;
+-    return {
+-      main: import.meta.url,
+-      port: 3000,
+-      ports: [{ external: 8080, internal: 3000 }],
+-      networks: database.network?.kind === "docker" ? [{ name: database.network.name }] : [],
+-    };
+-  }).pipe(Effect.provide(Database)),
++  { main: import.meta.url, functionUrl: true },
+```
+
+The Lambda function isn't in the VPC: it calls the rooms through the gateway's load balancer, with the token Alchemy binds into it.
+
+## Swap the providers
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
++import * as AWS from "@alchemy.run/aws";
+import * as Cluster from "@alchemy.run/effect-cluster";
+-import * as Docker from "@alchemy.run/docker";
+
+-  { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) },
++  { providers: Layer.mergeAll(AWS.providers(), Cluster.providers()) },
+  Effect.gen(function* () {
+    const api = yield* Api;
+-    return { api: api.name };
++    return { url: api.functionUrl };
+```
+
+```sh
+alchemy deploy
+curl -H "x-member: sam" https://<function-url>/lobby
+# {"members":1}
+```
+
+The first deploy takes a while: a new RDS instance takes 10 to 15 minutes. After that, deploys only replace what changed.
+
+That's the whole app on AWS. To run on another cloud, swap `ClusterAWS` for `ClusterGCP`, `ClusterFly`, `ClusterHetzner`, `ClusterKubernetes` or `ClusterCloudflare`; see the [platform pages](/cluster/docker).

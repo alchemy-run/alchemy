@@ -58,8 +58,18 @@ export interface LocationS3 extends Resource<
     locationUri: string;
   },
   {},
-  Providers
+  Providers,
+  LocationS3Lookup
 > {}
+
+/**
+ * Props for {@link LocationS3.lookup}: find a location S3 this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface LocationS3Lookup {
+  /** The location arn of the existing location S3. */
+  locationArn: string;
+}
 
 /**
  * A DataSync location backed by an Amazon S3 bucket. Locations are the
@@ -89,6 +99,16 @@ export interface LocationS3 extends Resource<
  *   subdirectory: "/archive",
  *   s3StorageClass: "STANDARD_IA",
  * });
+ * ```
+ *
+ * ### Looking up an existing location S3
+ * `LocationS3.lookup` references a location S3 Alchemy doesn't manage (created in the
+ * console or by another stack), found by `locationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing location S3
+ * ```typescript
+ * const existing = AWS.DataSync.LocationS3.lookup({ locationArn: "my-location-s3" });
  * ```
  *
  * @resource
@@ -130,6 +150,16 @@ export const LocationS3Provider = () =>
                 })),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ locationArn: arn }) {
+          if (arn === undefined) return undefined;
+          const loc = yield* describe(arn);
+          if (loc === undefined) return undefined;
+          return {
+            locationArn: loc.LocationArn!,
+            locationUri: loc.LocationUri!,
+          };
+        }),
 
         read: Effect.fn(function* ({ olds, output }) {
           const arn = output?.locationArn ?? (yield* findLocationArnByUri(expectedUriOf(olds)));

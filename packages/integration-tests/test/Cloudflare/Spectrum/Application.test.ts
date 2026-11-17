@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -100,7 +101,7 @@ test.provider(
       const error = yield* spectrum
         .createApp({
           zoneId,
-          dns: { type: "CNAME", name: `alchemy-spectrum-gate.${zoneName}` },
+          dns: { type: "CNAME", name: `${testName("alchemy-spectrum-gate")}.${zoneName}` },
           protocol: "tcp/22",
           originDirect: ["tcp://192.0.2.1:22"],
         })
@@ -132,7 +133,7 @@ test.provider.skipIf(!entitledZoneId)(
     Effect.gen(function* () {
       const zoneId = entitledZoneId!;
       const entitledZoneName = yield* resolveEntitledZoneName(zoneId);
-      const dnsName = `alchemy-spectrum-lifecycle.${entitledZoneName}`;
+      const dnsName = `${testName("alchemy-spectrum-lifecycle")}.${entitledZoneName}`;
 
       yield* stack.destroy();
       yield* purgeApps(zoneId, dnsName, "tcp/22");
@@ -206,7 +207,7 @@ test.provider.skipIf(!entitledZoneId)(
     Effect.gen(function* () {
       const zoneId = entitledZoneId!;
       const entitledZoneName = yield* resolveEntitledZoneName(zoneId);
-      const dnsName = `alchemy-spectrum-adopt.${entitledZoneName}`;
+      const dnsName = `${testName("alchemy-spectrum-adopt")}.${entitledZoneName}`;
 
       yield* stack.destroy();
       yield* purgeApps(zoneId, dnsName, "tcp/22");
@@ -321,7 +322,7 @@ test.provider.skipIf(!entitledZoneId)(
     Effect.gen(function* () {
       const zoneId = entitledZoneId!;
       const entitledZoneName = yield* resolveEntitledZoneName(zoneId);
-      const dnsName = `alchemy-spectrum-list.${entitledZoneName}`;
+      const dnsName = `${testName("alchemy-spectrum-list")}.${entitledZoneName}`;
 
       yield* stack.destroy();
       yield* purgeApps(zoneId, dnsName, "tcp/22");

@@ -193,15 +193,16 @@ export const PrincipalPortfolioAssociationProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (yield* isAssociated(output.portfolioId, output.principalArn)) {
-            yield* servicecatalog
-              .disassociatePrincipalFromPortfolio({
-                PortfolioId: output.portfolioId,
-                PrincipalARN: output.principalArn,
-                PrincipalType: output.principalType,
-              })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-          }
+          // Always disassociate: the association list is eventually
+          // consistent, so a fresh association can be missing from it, and
+          // skipping the call would leave the portfolio undeletable.
+          yield* servicecatalog
+            .disassociatePrincipalFromPortfolio({
+              PortfolioId: output.portfolioId,
+              PrincipalARN: output.principalArn,
+              PrincipalType: output.principalType,
+            })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

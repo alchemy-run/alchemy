@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: invalid name for build stage: \"1stage\", name can't start with a number or contain symbols"
+}

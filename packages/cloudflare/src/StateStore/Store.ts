@@ -3,6 +3,7 @@ import { encodeState } from "alchemy/State/StateEncoding";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
@@ -58,26 +59,31 @@ export default class Store extends DurableObject<Store>()(
         }).pipe(Effect.orDie);
 
       const decryptEntry = (entry: string) =>
-        Effect.tryPromise(async () => {
+        Effect.gen(function* () {
           const framed = Buffer.from(entry, "base64");
           const counter = framed.subarray(0, NONCE_BYTES);
           const ciphertext = framed.subarray(NONCE_BYTES);
-          let pt;
-          try {
-            pt = await crypto.subtle.decrypt(
-              { name: "AES-CTR", counter, length: 64 },
-              cryptoKey,
-              ciphertext,
-            );
-          } catch (error) {
+          const pt = yield* Effect.result(
+            Effect.tryPromise(() =>
+              crypto.subtle.decrypt(
+                { name: "AES-CTR", counter, length: 64 },
+                cryptoKey,
+                ciphertext,
+              ),
+            ),
+          );
+          if (Result.isFailure(pt)) {
             // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
             // So, we catch a decryption error here and return undefined instead.
             // The engine should reconcile, hopefully, but users may lose some data
-            console.error("Error decrypting entry. Returning undefined instead.", error);
+            yield* Effect.logError(
+              "Error decrypting entry. Returning undefined instead.",
+              pt.failure,
+            );
             return undefined;
           }
-          return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
-        }).pipe(Effect.orDie);
+          return JSON.parse(new TextDecoder().decode(pt.success)) as ResourceState;
+        });
 
       return {
         // -- Root DO methods -----------------------------------------

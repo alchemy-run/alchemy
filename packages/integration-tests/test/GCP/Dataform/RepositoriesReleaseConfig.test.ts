@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataform from "@distilled.cloud/gcp/dataform_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, testServiceAccount, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -48,6 +49,21 @@ test.provider(
           });
           return { repo, release };
         }),
+      );
+      yield* expectFound(
+        GCP.Dataform.RepositoriesReleaseConfig.lookup({
+          releaseConfigId: created.release.releaseConfigId,
+          location: created.release.location,
+          repository: created.release.repository,
+        }),
+        created.release,
+      );
+      yield* expectFound(
+        GCP.Dataform.Repository.lookup({
+          repositoryId: created.repo.repositoryId,
+          location: created.repo.location,
+        }),
+        created.repo,
       );
 
       expect(created.release.name).toContain("/releaseConfigs/");

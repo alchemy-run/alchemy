@@ -187,10 +187,11 @@ export interface DnsAdapter<R = never> {
    * A (possibly empty) set of hostnames pointed at a hostname target that
    * other composites extend by binding `{ names }` onto it (used by
    * `AWS.Website.Router`, whose attached sites add their hostnames).
+   * `ipv6` publishes IPv6 for every name in the set, as on {@link alias}.
    */
   aliasSet(
     id: string,
-    args: DnsZone & { names?: string[]; target: DnsHostnameTarget },
+    args: DnsZone & { names?: string[]; target: DnsHostnameTarget; ipv6?: boolean },
   ): Effect.Effect<DnsAliasSet, never, R>;
   /**
    * Publish explicit records whose values come from another resource

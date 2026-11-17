@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as biglake from "@distilled.cloud/gcp/biglake_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -63,6 +64,15 @@ test.provider(
           });
           return { catalog, database, table };
         }),
+      );
+      yield* expectFound(
+        GCP.BigLake.CatalogsDatabasesTable.lookup({
+          tableId: created.table.tableId,
+          location: created.table.location,
+          database: created.table.database,
+          catalog: created.table.catalog,
+        }),
+        created.table,
       );
 
       expect(created.table.name).toContain("/tables/");

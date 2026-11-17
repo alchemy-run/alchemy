@@ -282,7 +282,10 @@
       }
       [...subs.values()].forEach((ids, i) => {
         if (i === 0) out.push({ color: grp.color, ids });
-        else (out.push({ color: next.n++, ids }), moved.push(...ids));
+        else {
+          out.push({ color: next.n++, ids });
+          moved.push(...ids);
+        }
       });
     }
     return { p: out, moved };
@@ -356,7 +359,11 @@
         });
         return b;
       });
-      for (const [c, b] of block) if (!used.has(c)) (b.remove(), block.delete(c));
+      for (const [c, b] of block) {
+        if (used.has(c)) continue;
+        b.remove();
+        block.delete(c);
+      }
       blocks.forEach((b, i) => {
         if (stage.children[i] !== b) stage.insertBefore(b, stage.children[i] ?? null);
       });

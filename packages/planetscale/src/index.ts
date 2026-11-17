@@ -11,4 +11,5 @@ export * from "./Database.ts";
 export * from "./MySQL/index.ts";
 export * from "./Postgres/index.ts";
 export * from "./Providers.ts";
+export * from "./ServiceToken.ts";
 export * from "./Util.ts";

@@ -1,5 +1,5 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -77,8 +77,18 @@ export interface Transformer extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  TransformerLookup
 > {}
+
+/**
+ * Props for {@link Transformer.lookup}: find a transformer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TransformerLookup {
+  /** The id of the existing transformer. */
+  transformerId: string;
+}
 
 /**
  * An AWS B2B Data Interchange (B2BI) transformer. A transformer describes
@@ -104,6 +114,16 @@ export interface Transformer extends Resource<
  *     template: "{ \"orderId\": transactionSets[0].St.transactionSetControlNumber }",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing transformer
+ * `Transformer.lookup` references a transformer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `transformerId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing transformer
+ * ```typescript
+ * const existing = AWS.B2BI.Transformer.lookup({ transformerId: "..." });
  * ```
  *
  * @resource
@@ -172,7 +192,16 @@ export const TransformerProvider = () =>
           }
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ transformerId }) {
+          const found = yield* b2bi
+            .getTransformer({ transformerId: transformerId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const found = output?.transformerId
             ? yield* b2bi
                 .getTransformer({ transformerId: output.transformerId })
@@ -181,7 +210,9 @@ export const TransformerProvider = () =>
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* readB2biTags(attrs.transformerArn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "transformerId");
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {

@@ -7,6 +7,7 @@ import {
   readFlatRecords,
   type SqlExecutor,
 } from "@alchemy.run/sql/Migrations";
+import { applyPendingAlchemyFormat } from "@alchemy.run/sql/Migrations/AlchemyFormat";
 import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -301,6 +302,181 @@ describe("alchemy format", (it) => {
           expect(result.failure._tag).toBe("RewrittenMigrationHistoryError");
           expect(result.failure.message).toContain("0001_users.sql");
         }
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  // #2912: a file that sorts before an applied one would run in a different
+  // order here than on every fresh database.
+  it.effect(
+    "fails when a pending migration sorts before an applied one",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [posts],
+        });
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: [users, posts],
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("NonLinearMigrationHistoryError");
+          expect(result.failure.message).toContain("0001_users.sql");
+          expect(result.failure.message).toContain("0002_posts.sql");
+        }
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0002_posts.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "applies an out-of-order migration once it is renamed to sort last",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [posts],
+        });
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [posts, { ...users, name: "0003_users.sql" }],
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0002_posts.sql", "0003_users.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  // Renaming is how an out-of-order file is fixed, and a database that
+  // already ran the file under its old name must not fail or run it again.
+  it.effect(
+    "keeps an applied migration applied when its file is renamed",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+        // Re-running 0001 would fail: its table already exists.
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [posts, { ...users, name: "0003_users.sql" }],
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0003_users.sql", "0002_posts.sql"]);
+        expect(migrationRows(db).map((r) => r.hash)).toEqual([users.hash, posts.hash]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "keeps a renamed migration applied on the runtime apply path",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyPendingAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+        yield* applyPendingAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [{ ...users, name: "0000_users.sql" }, posts],
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0000_users.sql", "0002_posts.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "pairs each applied row with at most one renamed file",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records: [users] });
+        // Both files carry 0001's hash; only the first takes its row, the
+        // other is new and runs.
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records: [
+            { ...users, name: "0003_users.sql" },
+            { ...posts, name: "0004_posts.sql", hash: users.hash },
+          ],
+        });
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0003_users.sql", "0004_posts.sql"]);
+        expect(tableNames(db)).toContain("posts");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  // A database that ran the file under its old name, but not a file that
+  // now sorts before its new name, ran them out of order.
+  it.effect(
+    "fails when a renamed migration now sorts after one this database never ran",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records: [users] });
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: [posts, { ...users, name: "0003_users.sql" }],
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("NonLinearMigrationHistoryError");
+        }
+        expect(tableNames(db)).not.toContain("posts");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "fails when a renamed migration's contents also changed",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        const [users, posts] = records;
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+        const result = yield* Effect.result(
+          applyAlchemyFormat({
+            executor,
+            table: "__alchemy_migrations",
+            records: [posts, { ...users, name: "0003_users.sql", hash: "a".repeat(64) }],
+          }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("RewrittenMigrationHistoryError");
+        }
+        expect(migrationRows(db).map((r) => r.name)).toEqual(["0001_users.sql", "0002_posts.sql"]);
       }),
     { tags: ["unit", "local"] },
   );

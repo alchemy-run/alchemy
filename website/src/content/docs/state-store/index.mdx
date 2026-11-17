@@ -129,24 +129,17 @@ needs to be persisted to disk.
 ### More than one store per account
 
 By default the state-store Worker is named `alchemy-state-store`. Pass
-`name` for a separate store, for example one per team. It gets its own
-Worker, its own secrets in the Secrets Store, and its own cached
-credentials:
+`workerName` for a separate store, for example one per team. It gets its own
+Worker, its own secrets in the Secrets Store, and its own cached credentials:
 
 ```typescript
-state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
+state: Cloudflare.state({ workerName: "team-a-state" }),
 ```
 
-Pass `workerName` instead to choose the full Worker name yourself:
-
-```typescript
-state: Cloudflare.state({ workerName: "acme-state" }),
-```
-
-Address a named store from the CLI with `--name`:
+Address it from the CLI with `--name`, which takes the Worker name:
 
 ```sh
-alchemy state list --backend cloudflare --name team-a
+alchemy state list --backend cloudflare --name team-a-state
 ```
 
 `AWS.state({ name })` does the same with a separate DynamoDB table,
@@ -171,6 +164,13 @@ attaches it to the store's Worker as a custom domain and uses it from then on:
 
 ```typescript
 state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
+```
+
+Commands that don't load the stack file take the same hostname as
+`--domain`, so they reach the store where deploys do:
+
+```sh
+alchemy state list --backend cloudflare --domain alchemy-state.example.com
 ```
 
 ## AWS state store
@@ -313,13 +313,24 @@ const program = Effect.gen(function* () {
 ```
 
 `Alchemist.State.layer(source)` provides the same store as a `State` layer.
-The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Pass `name`
-for a [named store](#more-than-one-store-per-account).
+The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Next to
+it go the store's options, for what the profile can't tell it, the same ones
+the CLI takes as flags: `name` for a [named store](#more-than-one-store-per-account),
+and `domain` for a Cloudflare store on a
+[custom domain](#serve-it-on-your-own-domain):
 
-Only the profile and `name` pick the store this way. Options set in the stack
-file, such as a [pinned account](#pin-the-account) or a
-[custom domain](#serve-it-on-your-own-domain), aren't read; use the
-`configured` source (the CLI default, without `--backend`) when they matter.
+```typescript
+const source = {
+  type: "provider",
+  backend: "cloudflare",
+  name: "team-a-state",
+  domain: "alchemy-state.example.com",
+} as const;
+```
+
+Options set in the stack file aren't read, such as a
+[pinned account](#pin-the-account); use the `configured` source (the CLI
+default, without `--backend`) when they matter.
 
 ## Writing your own state store
 

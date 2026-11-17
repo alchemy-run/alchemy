@@ -3,6 +3,7 @@ import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
@@ -184,7 +185,7 @@ export const VariableProvider = () =>
       // Ensure — POST creates the variable.
       if (observed === undefined) {
         yield* createVariable(news);
-        return { updatedAt: new Date().toISOString() };
+        return { updatedAt: DateTime.formatIso(yield* DateTime.now) };
       }
 
       // Sync — PATCH the value if it drifted; skip the call when the
@@ -192,7 +193,7 @@ export const VariableProvider = () =>
       if (observed.value !== news.value) {
         yield* updateVariable(news);
       }
-      return { updatedAt: new Date().toISOString() };
+      return { updatedAt: DateTime.formatIso(yield* DateTime.now) };
     }),
 
     // Enumerate every Actions variable visible to the authenticated token.

@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -16,13 +18,12 @@ import {
  * Typed structurally so the package carries no dependency on vite — the
  * *project's* install is always the one loaded.
  *
- * `build` (not `createBuilder`) is the entry point: React Router v7's
- * `@react-router/dev` plugin drives a two-pass build — `vite build` for the
- * `client` environment, then `vite build` with `build.ssr` for the server
- * environment — which is exactly what `react-router build` runs. (The
- * Vite Environment API path exists only behind the framework's
- * `future.v8_viteEnvironmentApi` flag and for RSC; see the module doc on
- * {@link make}.)
+ * `build` (not `createBuilder`) is the entry point: the integration drives a
+ * two-pass build — `vite build` for the `client` environment, then `vite
+ * build` with `build.ssr` for the server environment — which is what
+ * `react-router build` runs. React Router 8 always builds through the Vite
+ * Environment API, so the server pass's overrides are declared on the `ssr`
+ * environment as well (see {@link inlineServerBuildConfig}).
  */
 export interface ReactRouterViteModule {
   readonly version?: string;
@@ -267,7 +268,15 @@ export const inlineServerBuildConfig = (
     rollupOptions: { input: SERVER_ENTRY_ID },
   },
   ssr: { noExternal: true },
-  environments: { ssr: { resolve: { noExternal: true } } },
+  // React Router 8 always builds through the Vite Environment API: its SSR
+  // environment reads its own `build.rollupOptions.input`, not the top-level
+  // one, so the wrapper input is declared there too.
+  environments: {
+    ssr: {
+      build: { rollupOptions: { input: SERVER_ENTRY_ID } },
+      resolve: { noExternal: true },
+    },
+  },
   plugins,
 });
 
@@ -292,7 +301,7 @@ export const inlineServerBuildConfig = (
  *   scoped — closing the Scope closes the server.
  *
  * NOT supported: React Server Components / multi-environment builds (React
- * Router's `unstable` RSC plugin, or `future.v8_viteEnvironmentApi`). Those
+ * Router's `unstable` RSC plugin). Those
  * emit more than one server environment, which this two-pass build does not
  * assemble; the build fails with an actionable error when no single server
  * entry is produced.
@@ -451,13 +460,13 @@ export const make: (
 
       // Bounded readiness probe: any HTTP response counts (vite serves
       // lazily; we only need the listener to answer).
-      yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { redirect: "manual" });
-          await response.arrayBuffer().catch(() => {});
-        },
-        catch: (error) => fail("The dev server did not become reachable", error),
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+      yield* HttpClient.get(url).pipe(
+        Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.mapError((error) => fail("The dev server did not become reachable", error)),
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
 
       return { url };
     });

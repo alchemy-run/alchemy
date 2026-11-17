@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * INTERNAL — the "image source changed" trigger stream shared by the floci
  * dev providers that rebuild a Docker image on file change

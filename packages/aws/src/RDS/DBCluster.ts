@@ -392,8 +392,18 @@ export interface DBCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterLookup
 > {}
+
+/**
+ * Props for {@link DBCluster.lookup}: find a DB cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterLookup {
+  /** The db cluster identifier of the existing DB cluster. */
+  dbClusterIdentifier: string;
+}
 
 /**
  * An Aurora DB cluster.
@@ -433,6 +443,17 @@ export interface DBCluster extends Resource<
  *   monitoringInterval: "60 seconds",
  *   monitoringRoleArn: monitoringRole.roleArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing DB cluster
+ * `DBCluster.lookup` references a DB cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB cluster
+ * ```typescript
+ * const existing = AWS.RDS.DBCluster.lookup({ dbClusterIdentifier: "my-db-cluster" });
+ * const endpoint = existing.endpoint;
  * ```
  *
  * @resource
@@ -648,6 +669,16 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbClusterIdentifier: identifier }) {
+          const cluster = yield* readCluster(identifier);
+          if (!cluster?.DBClusterArn) {
+            return undefined;
+          }
+          return toAttrs({
+            cluster,
+            tags: toTagRecord(cluster.TagList),
+          });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -195,7 +196,8 @@ export const writeFlag = Effect.fn("Flagship.writeFlag")(function* (
   const path = yield* Path.Path;
   const file = yield* flagFile(store, flagKey);
   yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-  const temp = `${file}.${yield* Effect.sync(() => crypto.randomUUID())}.tmp`;
+  const random = yield* SecureRandom.SecureRandom;
+  const temp = `${file}.${yield* random.uuidV4()}.tmp`;
   yield* fs.writeFileString(temp, JSON.stringify(definition));
   yield* fs.rename(temp, file);
 });

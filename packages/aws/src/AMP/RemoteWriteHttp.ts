@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeAmpWorkspaceHttpBinding } from "./BindingHttp.ts";
@@ -11,8 +12,8 @@ export const RemoteWriteHttp = Layer.effect(
     iamActions: ["aps:RemoteWrite"],
     makeClient: (send) => (request: RemoteWriteRequest) =>
       Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
         const body = yield* Effect.sync(() => {
-          const now = Date.now();
           const timeseries: EncodableSeries[] = request.timeseries.map((series) => ({
             labels: { ...series.labels, __name__: series.name },
             samples: series.samples.map((sample) => ({

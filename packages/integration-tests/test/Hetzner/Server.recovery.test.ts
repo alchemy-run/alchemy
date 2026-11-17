@@ -5,8 +5,9 @@ import * as servers from "@distilled.cloud/hetzner/servers";
 import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
+import { hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
   test.provider(
@@ -63,7 +64,6 @@ for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
     {
       tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
       timeout: 120_000,
-      exclusive: "hetzner",
     },
   );
 }

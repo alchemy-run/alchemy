@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -470,7 +472,7 @@ export const make: (
       );
     });
 
-    const devInProcess: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+    const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
       const root = devOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
       // Resolve the project's kit before anything expensive: a root without
@@ -582,39 +584,16 @@ export const make: (
 
       // Bounded readiness probe: any HTTP response counts (vite serves
       // lazily; we only need the listener to answer).
-      yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { redirect: "manual" });
-          await response.arrayBuffer().catch(() => {});
-        },
-        catch: (error) => fail("The dev server did not become reachable", error),
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+      yield* HttpClient.get(url).pipe(
+        Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.mapError((error) => fail("The dev server did not become reachable", error)),
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
 
       return { url };
     });
-
-    // Nuxt's kit/module caches and Nitro dev runtime are shared within a
-    // process. Concurrent projects can report readiness while serving a
-    // different project's build, so give each dev server its own process.
-    const dev: Framework["Service"]["dev"] = (devOptions) => {
-      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
-        return devInProcess(devOptions);
-      }
-      const root = devOptions?.root ?? baseRoot;
-      const port = devOptions?.port ?? options?.dev?.port;
-      return FrameworkCore.runDevChild({
-        framework: "nuxt",
-        module: "@alchemy.run/frontend-frameworks/nuxt",
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: {
-          root,
-          ...(port !== undefined ? { port } : {}),
-          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
-        },
-      });
-    };
 
     return Framework.of({ build, dev });
   });

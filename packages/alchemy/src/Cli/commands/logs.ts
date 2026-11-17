@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as Alchemist from "../../Alchemist/index.ts";
-import { paint } from "../../Util/Terminal.ts";
+import { terminalStyle } from "../../Util/Terminal.ts";
 import { formatLocalTimestamp, TAIL_COLORS } from "../Format.ts";
 import { config, envFile, parseSince, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
@@ -64,10 +64,11 @@ const runLogs = Effect.fn(function* ({
   // Colors are assigned as each resource first appears, so the command
   // builds the stack once instead of listing resources up front.
   const colors = new Map<string, (typeof TAIL_COLORS)[number]>();
+  const style = terminalStyle();
   const format = (entry: Alchemist.Logs.LogEntry) => {
     const fqn = entry.resource.fqn;
     if (!colors.has(fqn)) colors.set(fqn, TAIL_COLORS[colors.size % TAIL_COLORS.length]!);
-    return `${paint(colors.get(fqn)!, `${formatLocalTimestamp(entry.timestamp)} [${fqn}]`)} ${entry.message}`;
+    return `${style.hex(colors.get(fqn)!)(`${formatLocalTimestamp(entry.timestamp)} [${fqn}]`)} ${entry.message}`;
   };
 
   if (tail) {

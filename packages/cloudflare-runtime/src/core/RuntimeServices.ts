@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
@@ -118,4 +119,6 @@ export const layerRuntime = (config: RuntimeConfig) =>
     Layer.provide(Paths.PathsLive),
     Layer.provide(Docker.DockerLive),
     Layer.provide(Workerd.WorkerdLive),
+    // Docker, the loopback server and the registry proxy draw UUIDs from it.
+    Layer.provideMerge(SecureRandom.layerWebCrypto),
   );

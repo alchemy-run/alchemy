@@ -150,7 +150,32 @@ export type Props = {
   vanityNameServers?: string[];
 };
 
-export type Zone = Resource<"Cloudflare.Zone.Zone", Props, Attributes, never, Providers>;
+/**
+ * Props for {@link Zone.lookup}: find a zone this stack doesn't manage, by
+ * its id or its name.
+ */
+export type ZoneLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing zone.
+       */
+      zoneId: string;
+    }
+  | {
+      /**
+       * The fully-qualified name of the existing zone (e.g. `example.com`).
+       */
+      name: string;
+    };
+
+export type Zone = Resource<
+  "Cloudflare.Zone.Zone",
+  Props,
+  Attributes,
+  never,
+  Providers,
+  ZoneLookup
+>;
 
 /**
  * A Cloudflare Zone (DNS domain) managed by Alchemy.
@@ -183,6 +208,23 @@ export type Zone = Resource<"Cloudflare.Zone.Zone", Props, Attributes, never, Pr
  *   name: "example.com",
  * }).pipe(adopt(true));
  * // zone.zoneId, zone.nameServers, zone.accountId, ...
+ * ```
+ *
+ * ### Looking up an existing Zone
+ * `Zone.lookup` reads a zone Alchemy doesn't manage, found by `zoneId` or
+ * `name`, so other resources can reference it. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** A DNS record in an existing zone
+ * ```typescript
+ * const zone = Cloudflare.Zone.Zone.lookup({ name: "example.com" });
+ * yield* Cloudflare.DNS.Record("Www", {
+ *   zoneId: zone.zoneId,
+ *   name: "www.example.com",
+ *   type: "CNAME",
+ *   content: "app.example.workers.dev",
+ *   proxied: true,
+ * });
  * ```
  *
  * @resource
@@ -222,6 +264,18 @@ export const ZoneProvider = () =>
             return { action: "update" } as const;
           }
           return undefined;
+        }),
+        lookup: Effect.fn(function* (props) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const zoneId =
+            "zoneId" in props
+              ? props.zoneId
+              : (yield* findZoneByName({ accountId, name: props.name }))?.id;
+          if (!zoneId) return undefined;
+          const zone = yield* zones
+            .getZone({ zoneId })
+            .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
+          return zone ? toZoneAttributes(zone, accountId) : undefined;
         }),
         read: Effect.fn(function* ({ output, olds }) {
           const { accountId } = yield* yield* CloudflareEnvironment;

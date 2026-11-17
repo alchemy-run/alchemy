@@ -487,6 +487,20 @@ layer(services, { excludeTestServices: true })((it) => {
     }),
   );
 
+  // A supervisor restarting a stage in the same process (#3188).
+  it.effect("serves on the same strict port again right after the previous proxy closes", () =>
+    Effect.gen(function* () {
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const port = yield* PortHelpers.find(0);
+      const serveOnce = Effect.scoped(
+        proxy.serve({ port, strictPort: true }).pipe(Effect.map((instance) => instance.url.port)),
+      );
+
+      expect(yield* serveOnce).toBe(String(port));
+      expect(yield* serveOnce).toBe(String(port));
+    }),
+  );
+
   it.effect("owns its port on the IPv6 loopback so localhost cannot be shadowed", () =>
     Effect.gen(function* () {
       const proxy = yield* WorkerProxy.WorkerProxy;
@@ -544,7 +558,9 @@ layer(services, { excludeTestServices: true })((it) => {
       // base + 2 probes free.
       const tryBind = (port: number) =>
         Effect.callback<NodeNet.Server | undefined>((resume) => {
-          const server = NodeNet.createServer();
+          // Drop accepted connections: a local tool's keep-alive probe would
+          // otherwise keep `server.close` from completing (see `occupy`).
+          const server = NodeNet.createServer((socket) => socket.destroy());
           server.once("error", () => resume(Effect.succeed(undefined)));
           server.listen({ port, exclusive: true }, () => resume(Effect.succeed(server)));
           return Effect.sync(() => server.close());

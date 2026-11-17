@@ -1,8 +1,10 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
+import type { MountCapability } from "alchemy/Mount";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
 import type { ProcessServices } from "alchemy/Runtime/Process";
@@ -242,12 +244,9 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      * instance; an explicit repository allows cross-stage reuse.
      *
      * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
-     * tag and an inline layer-cache tag, then deploys an immutable manifest
-     * digest. The build hash and manifest digest are different identifiers.
-     * Builds targeting this repository import reusable layers from its shared
-     * `:buildcache` tag, even when their full input hashes differ. The tag points
-     * to the latest exported inline cache, not an aggregate of all historical
-     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
+     * tag, then deploys an immutable manifest digest. The build hash and
+     * manifest digest are different identifiers. With `build.cache: true`,
+     * builds also keep their layers at this repository's `:buildcache` tag.
      *
      * Applications and stages in the same account can share `"web"`. Matching
      * build inputs reuse the published image; changed inputs produce another
@@ -269,8 +268,6 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      *
      * // Published build:
      * // registry.cloudflare.com/<account-id>/web:<build-hash>
-     * // Shared build-layer cache:
-     * // registry.cloudflare.com/<account-id>/web:buildcache
      * // Deployed image (app.configuration.image):
      * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
      * ```
@@ -357,9 +354,10 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * Bundler configuration for {@link main}. Unused code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
-   * `pure.packages`, or disable with `pure: false`.
+   * `pure.packages`, or disable with `pure: false`. `cache: true` keeps the
+   * image build's layers in the repository's `:buildcache` tag.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
 }
 
 /**
@@ -394,6 +392,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
    *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
@@ -453,6 +457,12 @@ export interface DurableObjectContainerProps
    * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
    * Omit every image source to contribute no image: `start()` then uses the
    * managed `cloudflare/debian-trixie` image unless given another.
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
    */
   image?: string;
   /**
@@ -462,7 +472,7 @@ export interface DurableObjectContainerProps
   context?: string;
   /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
   dockerfile?: string | InlineDockerfile;
-  /** Image publication and build-cache configuration. */
+  /** Image publication configuration. */
   publish?: ContainerApplicationPropsBase["publish"];
   /**
    * Maximum wait for Cloudflare to prepare the published image, including API calls.
@@ -500,6 +510,11 @@ export interface AnyContainerApplicationProps extends Omit<
   ssh?: ContainerSshConfiguration;
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   imagePreparationTimeout?: Duration.Input;
+  /**
+   * @internal Dockerfile lines contributed by mount bindings, folded in from
+   * the bindings by the provider before the image is computed.
+   */
+  imageInstall?: ReadonlyArray<string>;
   main?: string;
   image?: string;
   context?: string;
@@ -508,7 +523,7 @@ export interface AnyContainerApplicationProps extends Omit<
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
-  /** Bundler config for `main`; Docker build args and secrets for `context`. */
+  /** Bundler config for `main`; Docker build args and secrets for `context`; the layer cache for both. */
   build?: Bundle.BundleConfig & DockerfileBuild;
 }
 
@@ -940,6 +955,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Environment variables injected into the container runtime via the binding.
      */
     env?: Record<string, any>;
+    /**
+     * Filesystem clients bound by mount bindings (e.g. `Archil.MountDisk`):
+     * installed into the generated image so the program can mount at run
+     * time. Cloudflare Containers provide FUSE by default.
+     */
+    mounts?: ReadonlyArray<MountCapability>;
   },
   Providers
 > {

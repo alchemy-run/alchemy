@@ -293,6 +293,37 @@ resources) return an empty array. Providers can opt out of nuke
 with `nuke.singleton` (delete only resets always-present config)
 or `nuke.skip` (the resource can never actually be deleted).
 
+### `lookup`
+
+Optional. Finds a resource this stack does not manage and returns its
+`Attributes`, or `undefined` when nothing matches. It backs
+[`Resource.lookup`](/infrastructure-as-code/references#look-up-a-resource-alchemy-doesnt-manage).
+The resource type declares what `lookup` takes as its sixth type
+parameter, because the key differs per resource: a Worker is found by
+its script name, a VPC service by its id or name.
+
+```typescript
+export type Worker = Resource<
+  "Cloudflare.Worker",
+  WorkerProps,
+  WorkerAttributes,
+  WorkerBinding,
+  Providers,
+  { name: string }
+>;
+
+lookup: Effect.fn(function* ({ name }) {
+  const script = yield* getScript(name).pipe(
+    Effect.catchTag("WorkerNotFound", () => Effect.undefined),
+  );
+  return script ? toAttributes(script) : undefined;
+}),
+```
+
+`lookup` is read-only and always runs on the live provider, even
+under `alchemy dev`. The engine never writes a state row for a
+looked-up resource, so `destroy` cannot touch it.
+
 ### `tail` / `logs`
 
 Optional. Powers `alchemy logs --tail` (live log streaming) and

@@ -66,53 +66,34 @@ export type CloudflareStateOptions = {
    * attaches it to the store's Worker as a custom domain.
    */
   readonly domain?: string;
-} & (
-  | {
-      /**
-       * A store other than the account's default `alchemy-state-store`, by
-       * logical name: its Worker is `alchemy-state-store-<name>`.
-       */
-      readonly name?: string;
-      readonly workerName?: never;
-    }
-  | {
-      /**
-       * The store's full Worker name, instead of deriving it from `name`:
-       * 1-63 lowercase letters, digits, `-` and `_`, starting with a letter or
-       * digit. Its secrets are named after it, e.g. `acme-state` keeps its
-       * token in `AlchemyStateStoreToken_acme_state`.
-       */
-      readonly workerName: string;
-      readonly name?: never;
-    }
-);
-
-/** The state-store Worker of a store: the default's, or `alchemy-state-store-<name>`. */
-export const stateStoreScriptName = (name: string | undefined) =>
-  name === undefined ? STATE_STORE_SCRIPT_NAME : `${STATE_STORE_SCRIPT_NAME}-${name}`;
+  /**
+   * The store's Worker name, for a store other than the account's default
+   * `alchemy-state-store`: 1-54 lowercase letters, digits, `-` and `_`,
+   * starting with a letter or digit. Its secrets are named after it, e.g.
+   * `acme-state` keeps its token in `AlchemyStateStoreToken_acme_state`.
+   * @default "alchemy-state-store"
+   */
+  readonly workerName?: string;
+};
 
 export const state = (options: CloudflareStateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const { name, domain } = options;
-      const scriptName = options.workerName ?? stateStoreScriptName(name);
+      const { workerName, domain } = options;
+      const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
       const profileName = yield* currentProfileName;
       const credStore = yield* CredentialsStore;
       const context = yield* Effect.context<Effect.Services<typeof init>>();
       const store: Provisioning.StoreRef = {
         backend: "cloudflare",
-        name,
+        flags: { name: workerName, domain },
         label: `Cloudflare State Store '${scriptName}'`,
-        configured:
-          options.workerName !== undefined ||
-          options.accountId !== undefined ||
-          domain !== undefined,
+        configured: options.accountId !== undefined,
       };
 
       const init = Effect.gen(function* () {
-        if (name !== undefined) yield* Provisioning.storeName(name);
         yield* validateStateStoreWorkerName(scriptName);
         const accountId = yield* resolveAccountId(options.accountId);
         const deployMissing = Provisioning.deployMissing(

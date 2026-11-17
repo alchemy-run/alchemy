@@ -1,0 +1,87 @@
+---
+title: Teams, projects and tokens
+description: How a DigitalOcean team holds your resources and billing, how a personal access token decides where Alchemy deploys, how to keep production in its own team, and the narrower keys bindings create for your runtimes.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you create on DigitalOcean belongs to a **team**: its Apps, Droplets, clusters, buckets and agents, its one Container Registry, and its bill. Every account starts with a personal team, and a company creates more and invites its members.
+
+A team is the boundary for access. A **personal access token** is created for one team and reaches everything in it, so the token decides where a deploy goes. The runtimes you deploy get narrower keys: each binding gives its runtime a key that reaches one resource.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 5,
+      areas: ["api uploads", "api fns", "api agent"],
+      phoneAreas: ["uploads fns agent", "api api api"],
+    },
+    {
+      id: "api", label: "Api", type: "App · service", parent: "team", tone: "accent", icon: "server",
+      areas: ["spaceskey", "fnkey", "agentkey"],
+      phoneAreas: ["spaceskey fnkey agentkey"],
+    },
+    { id: "spaceskey", label: "Uploads", type: "Spaces key · read", parent: "api", icon: "key-round" },
+    { id: "fnkey", label: "fns", type: "Functions key", parent: "api", icon: "key-round" },
+    { id: "agentkey", label: "Support", type: "agent key", parent: "api", icon: "key-round" },
+    { id: "uploads", label: "Uploads", type: "Spaces bucket", parent: "team", icon: "archive" },
+    { id: "fns", label: "fns", type: "Functions namespace", parent: "team", icon: "square-function" },
+    { id: "agent", label: "Support", type: "GenAI agent", parent: "team", icon: "bot" },
+  ]}
+  links={[
+    { from: "spaceskey", to: "uploads", label: "reads" },
+    { from: "fnkey", to: "fns", label: "invokes" },
+    { from: "agentkey", to: "agent", label: "calls" },
+  ]}
+  scopes={[{ on: "team", label: "token: acme" }]}
+  caption="The team token reaches everything in the team. The Api holds only the keys its bindings created, as secrets, and each key reaches one resource."
+/>
+
+## Projects group, teams isolate
+
+A **project** groups resources inside a team for the control panel: new resources land in the default project, and you can move them. Projects don't separate access or billing. Use separate teams for that.
+
+```typescript title="src/project.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Shop = DigitalOcean.Project("Shop", { description: "The shop's resources" });
+```
+
+## Sign in with a token
+
+Create a personal access token in the control panel under **API → Tokens → Generate New Token**. Choose **Full Access**, since a Stack creates many kinds of resources. DigitalOcean shows the token once.
+
+Then store it in a [profile](/environments/profiles):
+
+<PackageManagers run="alchemy profile edit --add DigitalOcean" />
+
+The profile also takes an optional Spaces access key pair. Without one, each deploy creates a temporary Spaces key, uses it for its bucket changes, and deletes it when the deploy ends. See [Setup](/digitalocean/setup).
+
+## One team per environment
+
+A [stage](/environments/stages) decides what you deploy. The profile's token decides where. Give production its own team, so its members, its registry and its bill are separate, and its own profile:
+
+<PackageManagers script={`{run} alchemy profile create prod
+{run} alchemy profile edit --profile prod --add DigitalOcean
+{run} alchemy deploy --stage prod --profile prod`} />
+
+Many stages can share a development team, each with its own resources.
+
+## Keys your runtimes get
+
+DigitalOcean signs no identity for a running App or Function, so a runtime can't exchange one for access. Instead each binding creates a key that reaches only its resource and gives it to the runtime as a secret:
+
+- `DigitalOcean.Spaces.GetObject(Uploads)` creates a **Spaces key** with `read` access to that one bucket, and `PutObject` one with `readwrite`.
+- `DigitalOcean.Functions.InvokeFunction(Resize)` creates a **Functions access key** for that function's namespace.
+- `DigitalOcean.GenAI.InvokeAgent(Support)` creates an **agent API key** for that agent.
+
+A few services can't create narrower keys through the API: Serverless Inference takes a model access key you create in the control panel, and Sandboxes and Harness Runtime sessions take a token you pass. Those bindings take the value as `Config.Redacted(...)`. See [Secrets](/digitalocean/security/secrets).
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads the token from `DIGITALOCEAN_TOKEN` (or `DIGITALOCEAN_ACCESS_TOKEN`, then `DIGITALOCEAN_API_KEY`), and an optional Spaces key pair from `SPACES_ACCESS_KEY_ID` and `SPACES_SECRET_ACCESS_KEY`. Use a separate token for CI, so you can delete it without touching yours. See [CI](/environments/ci).
+
+## Next
+
+Values your runtimes read while they run, like a third-party API key, are covered in [Secrets](/digitalocean/security/secrets).

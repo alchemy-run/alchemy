@@ -123,6 +123,8 @@ export interface Website {
 
 /** Internal framework-to-Node-target wiring. */
 export interface FrameworkSiteConfig {
+  /** The framework's default JS runtime for its dev server; `dev.runtime` overrides it. @default the engine's runtime */
+  runtime?: "node" | "bun";
   /** Framework integration module. */
   framework: string;
   /** Existing Node deploy-target module. */
@@ -185,7 +187,7 @@ export const deployWebsite = Effect.fn(function* (
       ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
           name: domainName,
           target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget) as unknown as string,
+            hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
           },
         })
       : undefined;
@@ -195,10 +197,7 @@ export const deployWebsite = Effect.fn(function* (
         hostname:
           routing === undefined
             ? domainName
-            : (Output.map(
-                Output.of(routing as ResourceLike),
-                () => domainName,
-              ) as unknown as string),
+            : Output.map(Output.of(routing as ResourceLike), () => domainName),
       })
     : undefined;
   return {
@@ -226,6 +225,7 @@ export const makeFrameworkSite = Effect.fn(function* (
   const build = yield* Server("Build", {
     framework: config.framework,
     target: config.target,
+    runtime: config.runtime,
     root: props.rootDir,
     env: websiteBuildEnv(props.env),
     options: { ...config.options, ...targetConfig, targetConfig },

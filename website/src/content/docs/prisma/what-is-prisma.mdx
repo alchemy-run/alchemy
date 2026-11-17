@@ -1,0 +1,107 @@
+---
+title: What is Prisma?
+description: The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute apps, deployments and buckets — and how @alchemy.run/prisma models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Prisma's data platform runs two things for you: **Prisma Postgres**, a serverless Postgres database, and **Prisma Compute**, a runtime for the apps that use it. A **project** holds both, so an app and its database are deployed side by side, and the app finds its database without any configuration.
+
+Take one small app: an API on Compute with a Postgres database, and a branch per preview. A workspace holds the project. Each branch of the project has its own database and app, and the app receives its database's `DATABASE_URL`.
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:prisma" },
+    { id: "project", label: "app", type: "project · us-east-1", parent: "ws", dashed: true, icon: "folder" },
+    { id: "main", label: "main", type: "branch · production", parent: "project", dashed: true, icon: "git-branch", areas: ["app db"], colGap: 5.5 },
+    { id: "app", label: "api", type: "Compute app", parent: "main", tone: "accent", icon: "server" },
+    { id: "db", label: "db", type: "Prisma Postgres", parent: "main", icon: "brand:postgresql" },
+    { id: "pr", label: "pr-42", type: "branch · preview", parent: "project", dashed: true, icon: "git-branch", areas: ["app2 db2"], colGap: 5.5 },
+    { id: "app2", label: "api", type: "Compute app", parent: "pr", icon: "server" },
+    { id: "db2", label: "db", type: "Prisma Postgres", parent: "pr", icon: "brand:postgresql" },
+  ]}
+  links={[
+    { from: "app", to: "db", label: "DATABASE_URL" },
+    { from: "app2", to: "db2", label: "DATABASE_URL" },
+  ]}
+  caption="A workspace holds projects, and a service token deploys into one workspace. Each branch of a project groups a database and the apps that use it. The first branch is production, the rest are previews."
+/>
+
+## Workspaces and tokens
+
+A **workspace** holds your projects, members and bill. A **service token** belongs to a workspace, and Alchemy deploys into the workspace your token belongs to.
+
+Connect it once, in [Setup](/prisma/setup).
+
+## Projects
+
+A **project** groups a database and the apps that use it. By default, creating one creates a Prisma Postgres database too, in the region you choose:
+
+```typescript title="alchemy.run.ts"
+const project = yield* Prisma.Project("app", { region: "us-east-1" });
+```
+
+Apps in the project receive that database's `DATABASE_URL` without any setup.
+
+## Prisma Postgres
+
+**Prisma Postgres** is serverless Postgres: there's no instance to size, and you pay for what you use. Declare a database on its own when it needs a lifecycle separate from the project's:
+
+```typescript title="alchemy.run.ts"
+const postgres = yield* Prisma.Postgres("db", { project });
+```
+
+See [Postgres](/prisma/data/postgres).
+
+## Connections
+
+A **connection** is a set of credentials for one database. It gives you a ready-made `databaseUrl`, direct and pooled connection strings, and the parts of the URL separately, for poolers like Cloudflare Hyperdrive. Give each app its own.
+
+```typescript title="alchemy.run.ts"
+const connection = yield* Prisma.Connection("api", { database: postgres });
+```
+
+See [Connections](/prisma/data/connections).
+
+## Branches
+
+A **branch** groups databases and apps under a git-style name. The project's first branch has the **production** role. Every other branch is a **preview**, so apps on it get preview settings. Give each preview stage a branch, and its database and app are kept apart from production.
+
+See [Branches](/prisma/data/branches).
+
+## Compute apps
+
+**Prisma Compute** runs your app on Bun, next to its database. Point it at a directory, and Alchemy builds the app, uploads it, and starts it. Or define it inline, as an Effect program:
+
+```typescript title="alchemy.run.ts"
+const app = yield* Prisma.Compute("api", { project, path: "./app", build: "auto" });
+```
+
+The app listens on `PORT`, which Compute sets. There's no Docker image and no registry.
+
+See [Apps](/prisma/compute/apps).
+
+## Deployments
+
+Each change to an app becomes a **deployment**. The new deployment starts next to the old one, must pass its **health check**, and only then takes traffic. If it fails after taking over, Alchemy restores the one before.
+
+See [Deployments](/prisma/compute/deployments).
+
+## Buckets
+
+A **bucket** stores files next to the database, through an S3-compatible API.
+
+See [Buckets](/prisma/data/buckets).
+
+## Local development
+
+Under `alchemy dev`, the same Stack runs against a local Postgres, started for you with nothing to create in the cloud, and each app runs its framework's own dev server.
+
+## How @alchemy.run/prisma models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your token picks the workspace, and `Prisma.providers()` deploys into it. A project, its databases, connections and branches are declarations. A Compute app is built and deployed from a directory or an Effect program. Inside any runtime, a Compute app, a Lambda Function or a Cloudflare Worker, `Prisma.Connect` turns a connection into a database URL for Prisma ORM, Effect SQL or Drizzle.
+
+Next, build one: the [tutorial](/prisma/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Postgres](/prisma/data/postgres).

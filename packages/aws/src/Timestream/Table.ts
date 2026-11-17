@@ -113,8 +113,20 @@ export interface Table extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TableLookup {
+  /** The database the table belongs to. */
+  databaseName: string;
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon Timestream for LiveAnalytics table — a time-series store inside a
@@ -176,6 +188,16 @@ export interface Table extends Resource<
  *     return HttpServerResponse.text("ok");
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `databaseName` and `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const metrics = AWS.Timestream.Table.lookup({ databaseName: "telemetry", tableName: "metrics" });
  * ```
  *
  * @resource
@@ -270,6 +292,7 @@ export const TableProvider = () =>
             );
             return hydrated.filter((attrs): attrs is Table["Attributes"] => attrs !== undefined);
           }),
+        lookup: ({ databaseName, tableName }) => readTable(databaseName, tableName),
         read: Effect.fn(function* ({ id, olds, output }) {
           const databaseName = output?.databaseName ?? olds?.databaseName;
           if (!databaseName) return undefined;

@@ -1,0 +1,122 @@
+---
+title: Lifecycle events
+description: Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
+---
+
+import Fanout from "../../../../components/diagrams/Fanout.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
+
+A **webhook** is an HTTPS endpoint of yours that Boat calls with each event you subscribe to. Every event is about one sandbox.
+
+## Each event is a sandbox changing state
+
+A sandbox fires an event as it becomes ready, gets its files back, stops, fails, or drops out of reach:
+
+<StateMachine
+  states={[
+    { id: "ready", label: "sandbox.ready", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "hydrated", label: "sandbox.hydrated", type: "files restored", col: 1, row: 0 },
+    { id: "degraded", label: "sandbox.degraded", type: "unreachable", col: 0, row: 1, tone: "warn" },
+    { id: "archived", label: "sandbox.archived", type: "stopped", col: 1, row: 1, end: true },
+    { id: "recovered", label: "sandbox.recovered", col: 0, row: 2 },
+    { id: "error", label: "sandbox.error", type: "failed", col: 1, row: 2, end: true, tone: "danger" },
+  ]}
+  transitions={[
+    { from: "ready", to: "error" },
+    { from: "ready", to: "hydrated", label: "resumed, forked" },
+    { from: "hydrated", to: "archived", label: "stop" },
+    { from: "ready", to: "degraded" },
+    { from: "degraded", to: "recovered" },
+  ]}
+  caption="sandbox.ready fires when a sandbox can take commands, and sandbox.hydrated once a resumed or forked sandbox has all its files back. sandbox.archived fires when it stops, and sandbox.error when it fails. A sandbox Boat can't reach fires sandbox.degraded, then sandbox.recovered."
+/>
+
+## Subscribe a Worker to events
+
+Subscribe a Worker to the events it needs, with a handler for each one:
+
+```typescript title="src/Api.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Boat.consumeSandboxEvents({ events: ["sandbox.ready", "sandbox.archived"] }, (event) =>
+      Effect.log(`${event.data.sandbox.id} is ${event.data.state}`),
+    );
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }).pipe(Effect.provide(Boat.SandboxEventsLive)),
+) {}
+```
+
+At deploy, Alchemy registers a webhook pointing at the Worker's `/__alchemy/boat/events`, and gives the Worker its signing secret as a Cloudflare secret. Boat retries a delivery that fails, so make the handler safe to repeat, keyed on `event.id`. Destroying the Worker removes the webhook.
+
+## The Worker checks every delivery
+
+Boat signs each delivery with the webhook's secret:
+
+```http
+POST /__alchemy/boat/events
+X-Ascii-Delivery: dlv_8a2c
+X-Ascii-Timestamp: 1762531200
+X-Ascii-Signature: v1=<HMAC-SHA256 of delivery.timestamp.body>
+```
+
+The Worker checks every request before your handler runs. It refuses, with 401, a request without Boat's signature, one signed with another secret, one whose body was changed after signing, and one more than five minutes old, so a captured delivery can't be replayed later. The signature covers the delivery id, the timestamp and the body, and the event's `id` must be the signed delivery id. Requests over 1 MB are refused unread, and events you didn't subscribe to are acknowledged without running the handler.
+
+## The Worker holds two keys
+
+The Worker holds two keys, both deployed as Cloudflare secrets, never as plain-text variables:
+
+- **The signing secret** (`whsec_...`). Boat creates it with the webhook and signs every delivery with it; the Worker refuses anything not signed with it. Boat shows it only once, so Alchemy keeps it in state as a `Redacted` value. Destroying the Worker deletes the webhook, and the secret with it.
+- **A Boat API key** for the Worker alone, which can only read sandboxes (`sandbox.read`). The Worker uses it to look up which stack a sandbox belongs to. It reads any sandbox in the account, because Boat can't narrow a key by label; it can't create, change or delete anything. Destroying the Worker deletes it. With `scope: "account"` there is no lookup, and no key.
+
+The signing secret is what keeps others out: nothing reaches your handler without it.
+
+## Your handler sees only your stack's sandboxes
+
+Boat sends a webhook the events of every sandbox in the account. The event names only the sandbox's id, so the Worker reads its labels from Boat, with a key that can only read sandboxes, and hands your handler only the ones this stack and stage own: sandboxes the Stack declares, and the ones its bindings create.
+
+<Fanout
+  item={{ title: "event", lines: ['"type": "sandbox.archived"', '"sandbox": { "id": "bx_7f3k" }'] }}
+  group="Account acme · webhooks"
+  routes={[
+    { label: "scope: stack", condition: ["bx_7f3k's labels:", "my-app · prod"], target: { label: "Api", type: "Worker · prod" }, match: true },
+    { label: "scope: stack", condition: ["bx_7f3k's labels:", "my-app · staging"], target: { label: "Api", type: "Worker · staging" }, match: false },
+    { label: "scope: account", condition: ["any sandbox"], target: { label: "Audit", type: "Worker" }, match: true },
+  ]}
+  caption="bx_7f3k belongs to my-app's prod stage. Every webhook in the account receives its event: the prod Worker's handler gets it, the staging Worker acknowledges it and drops it, and a Worker with scope: account gets every sandbox's events."
+/>
+
+The event your handler gets carries the labels, so you can route by your own labels too:
+
+```typescript
+yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
+  event.data.sandbox.labels?.user === undefined
+    ? Effect.void
+    : Effect.log(`${event.data.sandbox.labels.user}'s sandbox stopped`),
+);
+```
+
+The scope is a filter, not an access boundary: anyone in your Boat account who can create sandboxes can label one with your stack's labels. To receive every sandbox's events, pass `scope: "account"`. The Worker then skips the lookup, and `labels` is undefined. A sandbox that was deleted before its event arrived can't be read, so `scope: "stack"` drops its events. When Boat can't be reached for the lookup, the Worker answers 503 and Boat delivers the event again.
+
+## An account holds 10 webhooks
+
+An account has at most 10 webhooks, and each Worker that consumes events, in each stage, uses one. Destroy stages you no longer use. Boat delivers only to public HTTPS URLs on port 443, so under `alchemy dev` no webhook is registered.
+
+## Point a webhook at any endpoint
+
+For an endpoint that isn't an Alchemy host, declare the webhook directly:
+
+```typescript title="alchemy.run.ts"
+const hook = yield* Boat.Webhook("Events", {
+  url: "https://example.com/boat",
+  events: ["sandbox.ready", "sandbox.archived"],
+});
+```
+
+`hook.secret` is the signing secret, as a `Redacted` value: Boat shows it only when the webhook is created, so Alchemy keeps it in state. Check each delivery's signature, as above, before acting on the event. Changing the URL or the events updates the webhook in place.

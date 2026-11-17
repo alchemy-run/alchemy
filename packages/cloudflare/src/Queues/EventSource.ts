@@ -275,6 +275,7 @@ export const EventSourceLive = Layer.effect(
           const queueName = yield* QueueName;
           if (batch.queue !== queueName) return;
 
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- handlers are user programs; failures retry the batch and their requirements are the Worker's
           yield* process(Stream.fromIterable(batch.messages)).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
@@ -282,17 +283,19 @@ export const EventSourceLive = Layer.effect(
               }),
             ),
             Effect.onError((cause) =>
-              Effect.sync(() => {
-                // Surface the failure so the operator sees what
-                // tripped the retry path; without this the only
-                // signal is the message reappearing on the next
-                // attempt.
-                console.error(
-                  `[EventSource] handler failed on queue ` +
-                    `"${queueName}": ${Cause.pretty(cause)}`,
-                );
-                for (const msg of batch.messages) msg.retry();
-              }),
+              // Surface the failure so the operator sees what
+              // tripped the retry path; without this the only
+              // signal is the message reappearing on the next
+              // attempt.
+              Effect.logError(
+                `[EventSource] handler failed on queue ` + `"${queueName}": ${Cause.pretty(cause)}`,
+              ).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    for (const msg of batch.messages) msg.retry();
+                  }),
+                ),
+              ),
             ),
             Effect.ignoreCause,
           );

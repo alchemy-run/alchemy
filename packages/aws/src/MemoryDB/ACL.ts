@@ -60,8 +60,18 @@ export interface ACL extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ACLLookup
 > {}
+
+/**
+ * Props for {@link ACL.lookup}: find an ACL this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ACLLookup {
+  /** The acl name of the existing ACL. */
+  aclName: string;
+}
 
 /**
  * A MemoryDB Access Control List (ACL) — a named collection of {@link User}s
@@ -79,6 +89,16 @@ export interface ACL extends Resource<
  * const acl = yield* ACL("AppAcl", {
  *   userNames: [appUser.userName],
  * });
+ * ```
+ *
+ * ### Looking up an existing ACL
+ * `ACL.lookup` references an ACL Alchemy doesn't manage (created in the
+ * console or by another stack), found by `aclName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing ACL
+ * ```typescript
+ * const existing = AWS.MemoryDB.ACL.lookup({ aclName: "my-acl" });
  * ```
  *
  * @resource
@@ -145,6 +165,13 @@ export const ACLProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ aclName: name }) {
+          const acl = yield* readAcl(name);
+          if (!acl?.ARN) return undefined;
+          const attrs = yield* toAttrs(acl);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

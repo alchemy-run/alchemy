@@ -33,11 +33,12 @@ type CommandResult = {
   readonly output: string;
 };
 
-const stage = "cli-example-test";
 // The summary line the CLI prints once a run converges. In non-TTY mode every
 // line carries a `[time] LEVEL (#fiber): ` prefix, so anchor on the text.
 const DONE = /Done: \d+ succeeded/;
-const timeoutMs = 4 * 60_000;
+// A Fly example that builds an image on a remote builder after provisioning
+// Postgres (fly-website-vite) takes ~4 minutes to converge.
+const timeoutMs = 6 * 60_000;
 
 const command = Command.make(
   "test-example-cli",
@@ -61,6 +62,10 @@ const command = Command.make(
     // alchemy's own, so the CLI's .tsx files are not transpiled with the
     // example's JSX settings (solid-js examples otherwise crash the CLI).
     const alchemyBin = path.join(repositoryRoot, "packages", "alchemy", "bin", "cli.js");
+    // `test:examples` passes its per-user, per-worktree stage; derive ours
+    // from it so concurrent runs from two checkouts never share deployments.
+    const testStage = yield* Config.String("ALCHEMY_TEST_STAGE").pipe(Config.withDefault(""));
+    const stage = testStage === "" ? "cli-example-test" : `${testStage}_cli`;
     const debug = (yield* Config.String("DEBUG").pipe(Config.withDefault(""))) !== "";
 
     // With a profile (`test:examples --profile testing`) the CLI must see the

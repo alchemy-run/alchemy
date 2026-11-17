@@ -7,6 +7,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { single } from "../internal/Lookup.ts";
 import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -84,8 +85,23 @@ export interface IdentityPool extends Resource<
     identityPoolName: string;
   },
   never,
-  Providers
+  Providers,
+  IdentityPoolLookup
 > {}
+
+/**
+ * Props for {@link IdentityPool.lookup}: find an identity pool this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type IdentityPoolLookup =
+  | {
+      /** The pool's id, e.g. `us-west-2:1a2b3c4d-...`. */
+      identityPoolId: string;
+    }
+  | {
+      /** The pool's name; fails when several pools share it. */
+      identityPoolName: string;
+    };
 
 /**
  * An Amazon Cognito identity pool (federated identities) — exchanges tokens
@@ -125,6 +141,17 @@ export interface IdentityPool extends Resource<
  *   identityPoolId: identities.identityPoolId,
  *   roles: { authenticated: role.roleArn },
  * });
+ * ```
+ *
+ * ### Looking up an existing identity pool
+ * `IdentityPool.lookup` references an identity pool Alchemy doesn't manage
+ * (created in the console or by another stack), found by `identityPoolId` or
+ * `identityPoolName`. It is read during plan/deploy and never created, updated
+ * or deleted.
+ *
+ * **Example:** Reference an existing identity pool
+ * ```typescript
+ * const pool = AWS.Cognito.IdentityPool.lookup({ identityPoolName: "app" });
  * ```
  *
  * @resource
@@ -260,6 +287,25 @@ export const IdentityPoolProvider = () =>
                 identityPoolName: pool.IdentityPoolName ?? "",
               }));
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const pool =
+            "identityPoolId" in props
+              ? yield* describePool(props.identityPoolId)
+              : yield* single(
+                  "AWS.Cognito.IdentityPool",
+                  props.identityPoolName,
+                  yield* findPoolsByName(props.identityPoolName),
+                  (pool) => pool.IdentityPoolId,
+                );
+          if (pool === undefined) return undefined;
+          return {
+            identityPoolId: pool.IdentityPoolId,
+            identityPoolArn: identityPoolArnOf(region, accountId, pool.IdentityPoolId),
+            identityPoolName: pool.IdentityPoolName,
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

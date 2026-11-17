@@ -167,7 +167,26 @@ export interface PoolAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Pool = Resource<TypeId, PoolProps, PoolAttributes, never, Providers>;
+/**
+ * Props for {@link Pool.lookup}: find a pool this stack doesn't manage, by
+ * its id or its name.
+ */
+export type PoolLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing pool.
+       */
+      poolId: string;
+    }
+  | {
+      /**
+       * The name of the existing pool. If several pools share it, the
+       * oldest is used.
+       */
+      name: string;
+    };
+
+export type Pool = Resource<TypeId, PoolProps, PoolAttributes, never, Providers, PoolLookup>;
 
 /**
  * A Cloudflare Load Balancing pool — an account-scoped group of origin
@@ -213,6 +232,23 @@ export type Pool = Resource<TypeId, PoolProps, PoolAttributes, never, Providers>
  * });
  * ```
  *
+ * ### Looking up an existing Pool
+ * `Pool.lookup` reads a pool Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `poolId` or `name`, so a load
+ * balancer can route to it. It is read during plan/deploy and never
+ * created, updated or deleted.
+ *
+ * **Example:** Route to an existing pool
+ * ```typescript
+ * const pool = Cloudflare.LoadBalancer.Pool.lookup({ name: "api-origins" });
+ * yield* Cloudflare.LoadBalancer.LoadBalancer("ApiLb", {
+ *   zoneId: zone.zoneId,
+ *   name: "api.example.com",
+ *   defaultPools: [pool.poolId],
+ *   fallbackPool: pool.poolId,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/load-balancing/pools/
  *
  * @resource
@@ -237,6 +273,15 @@ export const PoolProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const poolId =
+        "poolId" in props ? props.poolId : (yield* findByName(accountId, props.name))?.id;
+      if (!poolId) return undefined;
+      const observed = yield* getPool(accountId, poolId);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {

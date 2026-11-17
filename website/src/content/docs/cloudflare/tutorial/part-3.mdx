@@ -4,6 +4,7 @@ description: Write integration tests that deploy your stack and make HTTP reques
 sidebar:
   order: 3
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 In [Part 2](/cloudflare/tutorial/part-2) you deployed a Worker with R2 Bucket
 bindings. Now you'll write integration tests that deploy the stack,
@@ -13,9 +14,7 @@ hit the live Worker over HTTP, and verify it works.
 
 `Test.make` ships in `@alchemy.run/test`. Add it as a dev dependency:
 
-```sh
-bun add -d @alchemy.run/test
-```
+<PackageManagers dev="@alchemy.run/test" />
 
 ## Create the test file
 

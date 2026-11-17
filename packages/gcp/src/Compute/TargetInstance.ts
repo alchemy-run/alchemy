@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -96,8 +97,37 @@ export type TargetInstance = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetInstanceLookup
 >;
+
+/**
+ * Props for {@link TargetInstance.lookup}: find a target instance this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetInstanceLookup {
+  /**
+   * TargetInstance name (RFC1035, 1-63 characters).
+   */
+  targetInstanceName: string;
+  /**
+   * Zone the target instance lives in (e.g. `us-central1-a`). Must match
+   * the backend VM's zone.
+   */
+  zone?: string;
+  /**
+   * Backend VM that terminates traffic. Accepts an instance name, a
+   * `projects/{project}/zones/{zone}/instances/{instance}` path, or a
+   * self-link.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine target instance.
@@ -131,6 +161,20 @@ export type TargetInstance = Resource<
  *   zone: "us-central1-a",
  *   network: "default",
  *   natPolicy: "NO_NAT",
+ * });
+ * ```
+ *
+ * ### Looking up an existing target instance
+ * `TargetInstance.lookup` references a target instance Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target instance.
+ *
+ * **Example:** Reference an existing target instance
+ * ```typescript
+ * const targetInstance = GCP.Compute.TargetInstance.lookup({
+ *   targetInstanceName: "my-target-instance",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -341,6 +385,15 @@ export const TargetInstanceProvider = () =>
           previousName !== undefined && nextName !== undefined && previousName === nextName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ targetInstanceName, zone: lookupZone, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = resolveZone({ zone: lookupZone, instance: instance }, undefined);
+      const existing = yield* getByName(env.project, zone, targetInstanceName);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

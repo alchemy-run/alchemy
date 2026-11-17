@@ -9,6 +9,7 @@ import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { EMAIL_ROUTING_ZONE, emailRoutingScoped } from "./scope.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -83,7 +84,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
               const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
               return yield* Cloudflare.Email.CatchAll("CatchAll", {
                 zone: { zoneId: routing.zoneId },
-                name: "alchemy catch-all",
+                name: testName("alchemy catch-all"),
                 actions: [{ type: "drop" }],
               });
             }),
@@ -91,7 +92,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           expect(catchAll.zoneId).toEqual(zoneId);
           expect(catchAll.ruleId).not.toEqual("");
-          expect(catchAll.name).toEqual("alchemy catch-all");
+          expect(catchAll.name).toEqual(testName("alchemy catch-all"));
           expect(catchAll.enabled).toEqual(true);
           expect(catchAll.actions).toEqual([{ type: "drop" }]);
           // The pre-management state was captured for restore-on-destroy.
@@ -102,7 +103,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           // Out-of-band verification against the live API.
           const live = yield* getCatchAll(zoneId);
           expect(live.enabled).toEqual(true);
-          expect(live.name).toEqual("alchemy catch-all");
+          expect(live.name).toEqual(testName("alchemy catch-all"));
           expect(live.actions).toEqual([{ type: "drop" }]);
 
           yield* stack.destroy();
@@ -198,7 +199,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
                 return yield* Cloudflare.Email.CatchAll("CatchAll", {
                   // Output-valued zone reference — the #736 shape.
                   zone: { zoneId: routing.zoneId },
-                  name: "alchemy recovery test",
+                  name: testName("alchemy recovery test"),
                   actions: [{ type: "drop" }],
                 });
               }),
@@ -245,14 +246,14 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           const recovered = yield* deployCatchAll();
           expect(recovered.zoneId).toEqual(zoneId);
           expect(recovered.ruleId).toEqual(created.ruleId);
-          expect(recovered.name).toEqual("alchemy recovery test");
+          expect(recovered.name).toEqual(testName("alchemy recovery test"));
           expect(recovered.enabled).toEqual(true);
           expect(recovered.actions).toEqual([{ type: "drop" }]);
 
           // Out-of-band verification against the live API.
           const live = yield* getCatchAll(zoneId);
           expect(live.enabled).toEqual(true);
-          expect(live.name).toEqual("alchemy recovery test");
+          expect(live.name).toEqual(testName("alchemy recovery test"));
 
           yield* stack.destroy();
           // The recovery re-adopted the singleton with the managed state as

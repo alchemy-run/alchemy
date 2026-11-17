@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -57,7 +58,7 @@ test.provider(
             adopt: true,
           });
           const service = yield* Cloudflare.Connectivity.DirectoryService("PgService", {
-            name: "alchemy-connectivity-dirsvc-tcp",
+            name: testName("alchemy-connectivity-dirsvc-tcp"),
             type: "tcp",
             tcpPort: 5432,
             appProtocol: "postgresql",
@@ -69,7 +70,7 @@ test.provider(
 
       expect(service.serviceId).toBeDefined();
       expect(service.accountId).toEqual(accountId);
-      expect(service.name).toEqual("alchemy-connectivity-dirsvc-tcp");
+      expect(service.name).toEqual(testName("alchemy-connectivity-dirsvc-tcp"));
       expect(service.type).toEqual("tcp");
       expect(service.tcpPort).toEqual(5432);
       expect(service.appProtocol).toEqual("postgresql");
@@ -81,7 +82,7 @@ test.provider(
       // Out-of-band verify against the live API.
       const live = yield* getService(accountId, service.serviceId);
       expect(live.serviceId).toEqual(service.serviceId);
-      expect(live.name).toEqual("alchemy-connectivity-dirsvc-tcp");
+      expect(live.name).toEqual(testName("alchemy-connectivity-dirsvc-tcp"));
 
       // Update in place — new name and port, same serviceId.
       const updated = yield* stack.deploy(
@@ -91,7 +92,7 @@ test.provider(
             adopt: true,
           });
           return yield* Cloudflare.Connectivity.DirectoryService("PgService", {
-            name: "alchemy-connectivity-dirsvc-tcp-v2",
+            name: testName("alchemy-connectivity-dirsvc-tcp-v2"),
             type: "tcp",
             tcpPort: 5433,
             appProtocol: "postgresql",
@@ -101,11 +102,11 @@ test.provider(
       );
 
       expect(updated.serviceId).toEqual(service.serviceId);
-      expect(updated.name).toEqual("alchemy-connectivity-dirsvc-tcp-v2");
+      expect(updated.name).toEqual(testName("alchemy-connectivity-dirsvc-tcp-v2"));
       expect(updated.tcpPort).toEqual(5433);
 
       const liveUpdated = yield* getService(accountId, service.serviceId);
-      expect(liveUpdated.name).toEqual("alchemy-connectivity-dirsvc-tcp-v2");
+      expect(liveUpdated.name).toEqual(testName("alchemy-connectivity-dirsvc-tcp-v2"));
 
       // Switch the host variant (ipv4 -> hostname) — still an in-place
       // update, same serviceId. Keep the tunnel deployed across steps.
@@ -116,7 +117,7 @@ test.provider(
             adopt: true,
           });
           return yield* Cloudflare.Connectivity.DirectoryService("PgService", {
-            name: "alchemy-connectivity-dirsvc-tcp-v2",
+            name: testName("alchemy-connectivity-dirsvc-tcp-v2"),
             type: "tcp",
             tcpPort: 5433,
             appProtocol: "postgresql",
@@ -139,7 +140,7 @@ test.provider(
             adopt: true,
           });
           return yield* Cloudflare.Connectivity.DirectoryService("PgService", {
-            name: "alchemy-connectivity-dirsvc-tcp-v2",
+            name: testName("alchemy-connectivity-dirsvc-tcp-v2"),
             type: "tcp",
             tcpPort: 5433,
             appProtocol: "postgresql",
@@ -254,7 +255,7 @@ test.provider(
             adopt: true,
           });
           return yield* Cloudflare.Connectivity.DirectoryService("ListService", {
-            name: "alchemy-connectivity-dirsvc-list",
+            name: testName("alchemy-connectivity-dirsvc-list"),
             type: "tcp",
             tcpPort: 5432,
             host: { ipv4: "10.20.0.21", network: { tunnelId: tunnel.tunnelId } },
@@ -267,7 +268,7 @@ test.provider(
 
       expect(all.some((s) => s.serviceId === service.serviceId)).toBe(true);
       const found = all.find((s) => s.serviceId === service.serviceId)!;
-      expect(found.name).toEqual("alchemy-connectivity-dirsvc-list");
+      expect(found.name).toEqual(testName("alchemy-connectivity-dirsvc-list"));
       expect(found.type).toEqual("tcp");
 
       yield* stack.destroy();
@@ -298,7 +299,7 @@ test.provider(
             adopt: true,
           });
           return yield* Cloudflare.Connectivity.DirectoryService("HealService", {
-            name: "alchemy-connectivity-dirsvc-heal",
+            name: testName("alchemy-connectivity-dirsvc-heal"),
             type: "http",
             httpPort: 8080,
             host: { hostname: "heal.internal", resolverNetwork: { tunnelId: tunnel.tunnelId } },
@@ -323,7 +324,7 @@ test.provider(
             adopt: true,
           });
           return yield* Cloudflare.Connectivity.DirectoryService("HealService", {
-            name: "alchemy-connectivity-dirsvc-heal",
+            name: testName("alchemy-connectivity-dirsvc-heal"),
             type: "http",
             httpPort: 9090,
             host: { hostname: "heal.internal", resolverNetwork: { tunnelId: tunnel.tunnelId } },
@@ -334,7 +335,7 @@ test.provider(
       expect(healed.serviceId).not.toEqual(service.serviceId);
       expect(healed.httpPort).toEqual(9090);
       const live = yield* getService(accountId, healed.serviceId);
-      expect(live.name).toEqual("alchemy-connectivity-dirsvc-heal");
+      expect(live.name).toEqual(testName("alchemy-connectivity-dirsvc-heal"));
 
       yield* stack.destroy();
       yield* expectGone(accountId, healed.serviceId);

@@ -35,30 +35,27 @@ class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
 class NotAnOperator extends Domain.Rejection("NotAnOperator") {}
 
 class Open extends Domain.Command("Open", {
-  target: Schema.String,
-  input: { owner: Schema.String },
+  input: { id: Schema.String, owner: Schema.String },
   events: [Opened],
 }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 class Withdraw extends Domain.Command("Withdraw", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Withdrawn],
   rejects: [InsufficientFunds],
 }) {}
 // Reads the operator, so a client predicts it only with the operator in context.
 class Freeze extends Domain.Command("Freeze", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [Frozen],
   rejects: [NotAnOperator],
   middleware: [OperatorSession],
 }) {}
 // Records what decide is told about the command and the stream.
-class Stamp extends Domain.Command("Stamp", { target: Schema.String, events: [Stamped] }) {}
+class Stamp extends Domain.Command("Stamp", { input: { id: Schema.String }, events: [Stamped] }) {}
 
 const AccountState = Schema.Struct({
   owner: Schema.String,
@@ -71,19 +68,24 @@ class Account extends Domain.Aggregate("Account", {
   state: AccountState,
   initial: { owner: "", balance: 0, frozen: false },
   commands: [Open, Deposit, Withdraw, Freeze, Stamp],
+  keyOf: (command) => command.id,
   decide: {
-    Open: (_, { owner }, { now }) => [new Opened({ owner, at: DateTime.toEpochMillis(now) })],
+    Open: (_, { owner }, { now, commandId, stream, version }) => [
+      new Opened({ owner, at: DateTime.toEpochMillis(now) }),
+    ],
     Deposit: (_, { amount }) => [new Deposited({ amount })],
-    Withdraw: (s, { amount }) =>
-      amount > s.balance
-        ? new InsufficientFunds({ balance: s.balance, requested: amount })
+    Withdraw: (account, { amount }) =>
+      amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: amount })
         : [new Withdrawn({ amount })],
     Freeze: Effect.fn(function* () {
       const operator = yield* Operator;
       if (operator === "guest") return yield* new NotAnOperator();
       return [new Frozen({ by: operator })];
     }),
-    Stamp: (_, __, { commandId, stream, version }) => [new Stamped({ commandId, stream, version })],
+    Stamp: (_, __, { now, commandId, stream, version }) => [
+      new Stamped({ commandId, stream, version }),
+    ],
   },
   evolve: {
     Opened: (s, e) => ({ ...s, owner: e.owner }),
@@ -100,8 +102,7 @@ class Moved extends Domain.Event("Moved", {
   amount: Schema.Number,
 }) {}
 class Move extends Domain.Command("Move", {
-  target: Schema.String,
-  input: { from: Schema.String, to: Schema.String, amount: Schema.Number },
+  input: { id: Schema.String, from: Schema.String, to: Schema.String, amount: Schema.Number },
   events: [Moved],
 }) {}
 class Transfer extends Domain.Aggregate("Transfer", {
@@ -109,6 +110,7 @@ class Transfer extends Domain.Aggregate("Transfer", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Move],
+  keyOf: (command) => command.id,
   decide: { Move: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
   evolve: { Moved: (s) => s },
 }) {}
@@ -161,13 +163,14 @@ class Bank extends Domain.Model("Bank", {
 
 // A decide that waits on something asynchronous, and one that breaks its declaration.
 class Waited extends Domain.Event("Waited") {}
-class Wait extends Domain.Command("Wait", { target: Schema.String, events: [Waited] }) {}
-class Stray extends Domain.Command("Stray", { target: Schema.String, events: [Waited] }) {}
+class Wait extends Domain.Command("Wait", { input: { id: Schema.String }, events: [Waited] }) {}
+class Stray extends Domain.Command("Stray", { input: { id: Schema.String }, events: [Waited] }) {}
 class Later extends Domain.Aggregate("Later", {
   id: Schema.String,
   state: Schema.Struct({}),
   initial: {},
   commands: [Wait, Stray],
+  keyOf: (command) => command.id,
   decide: {
     Wait: () => Effect.promise(() => Promise.resolve([new Waited()])),
     Stray: () => [new Frozen({ by: "nobody" })] as never,
@@ -176,6 +179,35 @@ class Later extends Domain.Aggregate("Later", {
 }) {}
 
 class Strays extends Domain.Model("Strays", { aggregates: [Later] }) {}
+
+// A decide that builds its event and its rejection with `make` rather than `new`.
+// Both classes add a getter, so `make` must return the subclass, not the schema's data.
+class Shut extends Domain.Event("Shut", { by: Schema.String }) {
+  get who() {
+    return `shut by ${this.by}`;
+  }
+}
+class AlreadyShut extends Domain.Rejection("AlreadyShut", { by: Schema.String }) {
+  get who() {
+    return `already shut by ${this.by}`;
+  }
+}
+class Close extends Domain.Command("Close", {
+  input: { id: Schema.String, by: Schema.String },
+  events: [Shut],
+  rejects: [AlreadyShut],
+}) {}
+class Door extends Domain.Aggregate("Door", {
+  id: Schema.String,
+  state: Schema.Struct({ shut: Schema.Boolean, by: Schema.String }),
+  initial: { shut: false, by: "" },
+  commands: [Close],
+  keyOf: (command) => command.id,
+  decide: {
+    Close: (door, { by }) => (door.shut ? AlreadyShut.make({ by: door.by }) : [Shut.make({ by })]),
+  },
+  evolve: { Shut: (_, { by }) => ({ shut: true, by }) },
+}) {}
 
 const NOW = 1_800_000_000_000;
 const Hosted = Bank.layer(Layer.empty).pipe(
@@ -189,19 +221,19 @@ const serve = (command: Domain.Aggregate.CommandOf<typeof Account>, operator = "
   Effect.gen(function* () {
     const accounts = yield* Account;
     const result = yield* accounts
-      .send(a1, command, { commandId: `c-${command._tag}` })
+      .send(command, { commandId: `c-${command._tag}` })
       .pipe(Effect.provideService(Operator, operator), Effect.result);
-    return { result, state: yield* accounts.state(a1) };
+    return { result, state: yield* accounts.get(a1) };
   });
 
-describe("Domain Aggregate.predict", () => {
+describe("Domain Aggregate.predict", { tags: ["unit", "local"] }, () => {
   it.live("an accepted command: the same events and state as the server", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
-      yield* accounts.send(a1, new Open({ owner: "sam" }));
-      const before = yield* accounts.state(a1);
-      const command = new Deposit({ amount: 30 });
-      const local = Account.predict(before, command, { id: "a-1", now, version: 1 });
+      yield* accounts.send(new Open({ id: a1.id, owner: "sam" }));
+      const before = yield* accounts.get(a1);
+      const command = new Deposit({ id: "a-1", amount: 30 });
+      const local = Account.predict(before, command, { now, version: 1 });
       const remote = yield* serve(command);
 
       expect(local._tag).toBe("Accepted");
@@ -215,9 +247,9 @@ describe("Domain Aggregate.predict", () => {
   it.live("a rejected command: the same rejection as the server", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
-      const before = yield* accounts.state(a1);
-      const command = new Withdraw({ amount: 5 });
-      const local = Account.predict(before, command, { id: "a-1", now });
+      const before = yield* accounts.get(a1);
+      const command = new Withdraw({ id: "a-1", amount: 5 });
+      const local = Account.predict(before, command, { now });
       const remote = yield* serve(command);
 
       expect(local._tag).toBe("Rejected");
@@ -231,13 +263,48 @@ describe("Domain Aggregate.predict", () => {
     }).pipe(Effect.provide(Hosted)),
   );
 
+  it.effect("events and rejections built with make", () =>
+    Effect.gen(function* () {
+      const open = Door.predict(Door.definition.initial, new Close({ id: "d-1", by: "sam" }), {
+        now,
+      });
+      expect(open._tag).toBe("Accepted");
+      if (open._tag !== "Accepted") return;
+      expect(open.events[0]).toBeInstanceOf(Shut);
+      expect(open.events[0]?.who).toBe("shut by sam");
+
+      const shut = Door.predict({ shut: true, by: "sam" }, new Close({ id: "d-1", by: "ana" }), {
+        now,
+      });
+      expect(shut._tag).toBe("Rejected");
+      if (shut._tag !== "Rejected") return;
+      expect(shut.rejection).toBeInstanceOf(AlreadyShut);
+
+      // `make` is typed as the class it is called on, getters included.
+      const event: Shut = Shut.make({ by: "sam" });
+      const made: AlreadyShut = AlreadyShut.make({ by: "sam" });
+      expect(event.who).toBe("shut by sam");
+      expect(made.who).toBe("already shut by sam");
+      // A rejection built with `make` is yieldable, like one built with `new`.
+      const failure = yield* Effect.flip(
+        Effect.gen(function* () {
+          return yield* made;
+        }),
+      );
+      expect(failure).toEqual(shut.rejection);
+    }),
+  );
+
   it.effect("decide sees the id and time the caller gives", () =>
     Effect.sync(() => {
-      const local = Account.predict(Account.definition.initial, new Open({ owner: "sam" }), {
-        id: "a-1",
-        now,
-        commandId: "c-1",
-      });
+      const local = Account.predict(
+        Account.definition.initial,
+        new Open({ id: "a-1", owner: "sam" }),
+        {
+          now,
+          commandId: "c-1",
+        },
+      );
       expect(local).toMatchObject({
         _tag: "Accepted",
         events: [new Opened({ owner: "sam", at: NOW })],
@@ -249,8 +316,8 @@ describe("Domain Aggregate.predict", () => {
   it.live("the server's decide sees the command id, stream and version before it", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
-      yield* accounts.send(a1, new Open({ owner: "sam" }));
-      const remote = yield* serve(new Stamp());
+      yield* accounts.send(new Open({ id: a1.id, owner: "sam" }));
+      const remote = yield* serve(new Stamp({ id: "a-1" }));
 
       expect(remote.result._tag).toBe("Success");
       if (remote.result._tag !== "Success") return;
@@ -262,8 +329,7 @@ describe("Domain Aggregate.predict", () => {
 
   it.effect("decide sees the command id and version the caller gives", () =>
     Effect.sync(() => {
-      const local = Account.predict(Account.definition.initial, new Stamp(), {
-        id: "a-1",
+      const local = Account.predict(Account.definition.initial, new Stamp({ id: "a-1" }), {
         now,
         version: 1,
         commandId: "c-Stamp",
@@ -277,7 +343,7 @@ describe("Domain Aggregate.predict", () => {
 
   it.effect("decide sees version 0 and an empty command id when the caller gives none", () =>
     Effect.sync(() => {
-      const local = Account.predict(Account.definition.initial, new Stamp(), { id: "a-1", now });
+      const local = Account.predict(Account.definition.initial, new Stamp({ id: "a-1" }), { now });
       expect(local).toMatchObject({
         _tag: "Accepted",
         events: [new Stamped({ commandId: "", stream: "Account/a-1", version: 0 })],
@@ -289,19 +355,18 @@ describe("Domain Aggregate.predict", () => {
     Effect.sync(() => {
       const state = Account.definition.initial;
       // @ts-expect-error Freeze's middleware provides Operator: pass it as context
-      const unknown = Account.predict(state, new Freeze(), { id: "a-1", now });
+      const unknown = Account.predict(state, new Freeze({ id: "a-1" }), { now });
       expect(unknown._tag).toBe("Unpredictable");
 
       const operator = (name: string) => ({
-        id: "a-1",
         now,
         context: Context.make(Operator, name),
       });
-      expect(Account.predict(state, new Freeze(), operator("sam"))).toMatchObject({
+      expect(Account.predict(state, new Freeze({ id: "a-1" }), operator("sam"))).toMatchObject({
         _tag: "Accepted",
         events: [new Frozen({ by: "sam" })],
       });
-      const refused = Account.predict(state, new Freeze(), operator("guest"));
+      const refused = Account.predict(state, new Freeze({ id: "a-1" }), operator("guest"));
       expect(refused._tag).toBe("Rejected");
       if (refused._tag === "Rejected") expect(refused.rejection).toBeInstanceOf(NotAnOperator);
     }),
@@ -309,14 +374,14 @@ describe("Domain Aggregate.predict", () => {
 
   it.effect("a decide that suspends cannot be predicted, and does not hang", () =>
     Effect.sync(() => {
-      const local = Later.predict({}, new Wait(), { id: "l-1", now });
+      const local = Later.predict({}, new Wait({ id: "l-1" }), { now });
       expect(local._tag).toBe("Unpredictable");
     }),
   );
 
   it.effect("an undeclared event cannot be predicted: the cause holds a DefinitionError", () =>
     Effect.sync(() => {
-      const local = Later.predict({}, new Stray(), { id: "l-1", now });
+      const local = Later.predict({}, new Stray({ id: "l-1" }), { now });
       expect(local._tag).toBe("Unpredictable");
       if (local._tag !== "Unpredictable") return;
       expect(Cause.squash(local.cause)).toMatchObject({
@@ -329,7 +394,7 @@ describe("Domain Aggregate.predict", () => {
   it.live("the server dies on the same undeclared event", () =>
     Effect.gen(function* () {
       const later = yield* Later;
-      const exit = yield* later.send(Later.ref("l-1"), new Stray()).pipe(Effect.exit);
+      const exit = yield* later.send(new Stray({ id: Later.ref("l-1").id })).pipe(Effect.exit);
       expect(exit._tag).toBe("Failure");
       if (exit._tag !== "Failure") return;
       expect(Cause.hasDies(exit.cause)).toBe(true);
@@ -351,8 +416,7 @@ describe("Domain Aggregate.predict", () => {
       // The server's OperatorSession reads a header; the client knows who it is.
       const ClientSession = Layer.succeed(Operator, "sam");
       const context = yield* Layer.build(ClientSession);
-      const local = Account.predict(Account.definition.initial, new Freeze(), {
-        id: "a-1",
+      const local = Account.predict(Account.definition.initial, new Freeze({ id: "a-1" }), {
         now,
         context,
       });
@@ -361,17 +425,16 @@ describe("Domain Aggregate.predict", () => {
   );
 });
 
-describe("Domain View.evolve", () => {
+describe("Domain View.evolve", { tags: ["unit", "local"] }, () => {
   it.live("predicted events folded by the view give the server's view state", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
       const balances = yield* Balance;
-      yield* accounts.send(a1, new Deposit({ amount: 50 }));
-      const before = yield* accounts.state(a1);
-      const view = yield* balances.query(a1, { atLeast: { stream: "Account/a-1", version: 1 } });
+      yield* accounts.send(new Deposit({ id: a1.id, amount: 50 }));
+      const before = yield* accounts.get(a1);
+      const view = yield* balances.get(a1, { atLeast: { stream: "Account/a-1", version: 1 } });
 
-      const local = Account.predict(before, new Withdraw({ amount: 20 }), {
-        id: "a-1",
+      const local = Account.predict(before, new Withdraw({ id: "a-1", amount: 20 }), {
         now,
         version: 1,
       });
@@ -387,8 +450,8 @@ describe("Domain View.evolve", () => {
         Option.getOrNull(view),
       );
 
-      const receipt = yield* accounts.send(a1, new Withdraw({ amount: 20 }));
-      const server = yield* balances.query(a1, {
+      const receipt = yield* accounts.send(new Withdraw({ id: a1.id, amount: 20 }));
+      const server = yield* balances.get(a1, {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
       expect(predicted).toEqual({ balance: 30, lines: 2 });
@@ -400,8 +463,8 @@ describe("Domain View.evolve", () => {
     Effect.gen(function* () {
       const transfers = yield* Transfer;
       const flows = yield* Flows;
-      const command = new Move({ from: "a-1", to: "a-2", amount: 7 });
-      const local = Transfer.predict(Transfer.definition.initial, command, { id: "t-1", now });
+      const command = new Move({ id: "t-1", from: "a-1", to: "a-2", amount: 7 });
+      const local = Transfer.predict(Transfer.definition.initial, command, { now });
       if (local._tag !== "Accepted") return expect(local._tag).toBe("Accepted");
       const fold = (key: string) =>
         Flows.evolve(null, {
@@ -412,14 +475,14 @@ describe("Domain View.evolve", () => {
           key: Account.ref(key),
         });
 
-      const receipt = yield* transfers.send(Transfer.ref("t-1"), command);
+      const receipt = yield* transfers.send(command);
       const atLeast = { stream: receipt.stream, version: receipt.version };
       expect(fold("a-1")).toEqual({ net: -7 });
       expect(fold("a-2")).toEqual({ net: 7 });
       // A key no route reaches keeps its state.
       expect(fold("a-3")).toBeNull();
       const server = (key: string) =>
-        flows.query(Account.ref(key), { atLeast }).pipe(Effect.map(Option.getOrNull));
+        flows.get(Account.ref(key), { atLeast }).pipe(Effect.map(Option.getOrNull));
       expect(yield* server("a-1")).toEqual(fold("a-1"));
       expect(yield* server("a-2")).toEqual(fold("a-2"));
     }).pipe(Effect.provide(Hosted)),
@@ -429,8 +492,8 @@ describe("Domain View.evolve", () => {
     Effect.gen(function* () {
       const transfers = yield* Transfer;
       const sent = yield* Sent;
-      const command = new Move({ from: "a-1", to: "a-2", amount: 5 });
-      const local = Transfer.predict(Transfer.definition.initial, command, { id: "t-2", now });
+      const command = new Move({ id: "t-2", from: "a-1", to: "a-2", amount: 5 });
+      const local = Transfer.predict(Transfer.definition.initial, command, { now });
       if (local._tag !== "Accepted") return expect(local._tag).toBe("Accepted");
       const fold = (key: string) =>
         Sent.evolve(null, {
@@ -441,11 +504,11 @@ describe("Domain View.evolve", () => {
           key,
         });
 
-      const receipt = yield* transfers.send(Transfer.ref("t-2"), command);
+      const receipt = yield* transfers.send(command);
       const atLeast = { stream: receipt.stream, version: receipt.version };
       expect(fold("a-1")).toEqual({ total: 5 });
       expect(fold("a-2")).toBeNull();
-      expect(Option.getOrNull(yield* sent.query("a-1", { atLeast }))).toEqual(fold("a-1"));
+      expect(Option.getOrNull(yield* sent.get("a-1", { atLeast }))).toEqual(fold("a-1"));
     }).pipe(Effect.provide(Hosted)),
   );
 });

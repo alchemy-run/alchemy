@@ -226,7 +226,12 @@ const rawRequest = (host: string, request: string) =>
  * the handler has started, and return what the handler recorded within
  * `polls` seconds afterwards.
  */
-const disconnectMidRequest = (worker: { url: string | undefined }, polls: number) =>
+const disconnectMidRequest = (
+  worker: { url: string | undefined },
+  polls: number,
+  path = "/slow",
+  done = (events: ReadonlyArray<string>) => events.some((event) => event.startsWith("released:")),
+) =>
   Effect.gen(function* () {
     // `/ready` calls the journal Durable Object, whose first calls after a
     // deploy can fail with an opaque "internal error".
@@ -250,7 +255,7 @@ const disconnectMidRequest = (worker: { url: string | undefined }, polls: number
     const host = yield* Effect.sync(() => new URL(worker.url!).host);
     yield* Effect.scoped(
       Effect.gen(function* () {
-        yield* rawRequest(host, `GET /slow?id=${id} HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
+        yield* rawRequest(host, `GET ${path}?id=${id} HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
         yield* events.pipe(
           Effect.repeat({
             schedule: Schedule.spaced("500 millis"),
@@ -265,7 +270,7 @@ const disconnectMidRequest = (worker: { url: string | undefined }, polls: number
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         times: polls,
-        until: (events) => events.some((event) => event.startsWith("released:")),
+        until: done,
       }),
     );
   });
@@ -283,7 +288,24 @@ test.provider(
       expect(events).toEqual(["started", "released:interrupt"]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
+);
+
+// The interrupted handler's event still waits for its `waitUntil` work, which
+// can use the handler's resources after the client has gone.
+test.provider(
+  "a client disconnect keeps the event's scope open for waitUntil work",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const worker = yield* stack.deploy(RequestAbortWorker);
+      const events = yield* disconnectMidRequest(worker, 20, "/slow-background", (events) =>
+        events.includes("resource:released"),
+      );
+      expect(events).toEqual(["started", "background:open", "resource:released"]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
 );
 
 // Without `enable_request_signal`, Cloudflare cancels the request when the
@@ -298,5 +320,5 @@ test.provider(
       expect(events).toEqual(["started"]);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
 );

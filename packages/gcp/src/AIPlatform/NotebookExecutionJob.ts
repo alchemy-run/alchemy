@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -152,8 +153,30 @@ export type NotebookExecutionJob = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NotebookExecutionJobLookup
 >;
+
+/**
+ * Props for {@link NotebookExecutionJob.lookup}: find a notebook execution
+ * job this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface NotebookExecutionJobLookup {
+  /**
+   * Job id.
+   */
+  notebookExecutionJobId: string;
+  /**
+   * Vertex AI location.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI notebook execution job — runs an ipynb once against a
@@ -170,6 +193,19 @@ export type NotebookExecutionJob = Resource<
  *   notebookRuntimeTemplateResourceName: template.name,
  *   gcsNotebookSource: { uri: "gs://bucket/notebook.ipynb" },
  *   gcsOutputUri: "gs://bucket/output",
+ * });
+ * ```
+ *
+ * ### Looking up an existing notebook execution job
+ * `NotebookExecutionJob.lookup` references a notebook execution job Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared notebook execution job.
+ *
+ * **Example:** Reference an existing notebook execution job
+ * ```typescript
+ * const notebookExecutionJob = GCP.AIPlatform.NotebookExecutionJob.lookup({
+ *   notebookExecutionJobId: "my-notebook-execution-job",
  * });
  * ```
  *
@@ -268,6 +304,16 @@ export const NotebookExecutionJobProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ notebookExecutionJobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, notebookExecutionJobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

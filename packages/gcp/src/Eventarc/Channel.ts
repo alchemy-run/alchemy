@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -102,8 +103,33 @@ export type Channel = Resource<
     satisfiesPzs: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  ChannelLookup
 >;
+
+/**
+ * Props for {@link Channel.lookup}: find a channel this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ChannelLookup {
+  /**
+   * Channel id (the `{channel}` segment of
+   * `projects/{project}/locations/{location}/channels/{channel}`). Must
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  channelId: string;
+  /**
+   * Eventarc location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc channel representing a subscriber's intent to receive
@@ -146,6 +172,16 @@ export type Channel = Resource<
  *     "projects/my-project/locations/us-central1/keyRings/keys/cryptoKeys/events",
  *   labels: { env: "prod", role: "events" },
  * });
+ * ```
+ *
+ * ### Looking up an existing channel
+ * `Channel.lookup` references a channel Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared channel.
+ *
+ * **Example:** Reference an existing channel
+ * ```typescript
+ * const channel = GCP.Eventarc.Channel.lookup({ channelId: "my-channel" });
  * ```
  *
  * @resource
@@ -321,6 +357,15 @@ export const ChannelProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ channelId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, channelId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

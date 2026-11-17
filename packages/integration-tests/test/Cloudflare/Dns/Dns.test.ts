@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -46,7 +47,7 @@ test(
     // Date.now()/random). The fixture's /dns route deletes any leftover
     // record with this name before creating, so a crashed run self-heals
     // instead of leaking records into the zone.
-    const name = `alchemy-dns-test-crud.${zoneName}`;
+    const name = `${testName("alchemy-dns-test-crud")}.${zoneName}`;
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.get(`${effectUrl}/dns?name=${encodeURIComponent(name)}`).pipe(

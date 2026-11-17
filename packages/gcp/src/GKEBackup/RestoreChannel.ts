@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,8 +88,33 @@ export type RestoreChannel = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RestoreChannelLookup
 >;
+
+/**
+ * Props for {@link RestoreChannel.lookup}: find a restore channel this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RestoreChannelLookup {
+  /**
+   * Restore channel id (the `{restoreChannel}` segment of
+   * `projects/{project
+   * }/locations/{location}/restoreChannels/{restoreChannel}`).
+   */
+  restoreChannelId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Backup for GKE restore channel that authorizes restoring backups
@@ -122,6 +148,19 @@ export type RestoreChannel = Resource<
  *   destinationProject: "projects/my-restore-project",
  *   description: "cross-project restores v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing restore channel
+ * `RestoreChannel.lookup` references a restore channel Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * restore channel.
+ *
+ * **Example:** Reference an existing restore channel
+ * ```typescript
+ * const restoreChannel = GCP.GKEBackup.RestoreChannel.lookup({
+ *   restoreChannelId: "my-restore-channel",
  * });
  * ```
  *
@@ -193,6 +232,15 @@ export const RestoreChannelProvider = () =>
           previousDest !== `projects/${nextDest}`,
       });
     }),
+
+    lookup: Effect.fn(function* ({ restoreChannelId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, restoreChannelId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

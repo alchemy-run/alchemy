@@ -124,11 +124,109 @@ export type PostgresDatabase = Resource<
   PostgresDatabaseProps,
   PostgresDatabaseAttributes,
   never,
-  Providers
+  Providers,
+  PostgresDatabaseLookup
 >;
 
-/** @resource */
+/**
+ * Props for {@link PostgresDatabase.lookup}: find a Postgres database this
+ * stack doesn't manage by its name, in the credentialed organization.
+ */
+export interface PostgresDatabaseLookup {
+  /** Database name. */
+  name: string;
+}
+
+/**
+ * A PlanetScale Postgres database.
+ *
+ * ### Looking up an existing Postgres database
+ * `PostgresDatabase.lookup` references a Postgres database Alchemy doesn't manage (created in
+ * the PlanetScale dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Branch an existing database
+ * ```typescript
+ * const db = Planetscale.PostgresDatabase.lookup({ name: "app" });
+ * const preview = yield* Planetscale.PostgresBranch("Preview", {
+ *   database: db,
+ *   isProduction: false,
+ * });
+ * ```
+ *
+ * @resource
+ */
 export const PostgresDatabase = Resource<PostgresDatabase>("Planetscale.PostgresDatabase");
+
+/** Observe a database by name; `read` and `lookup` share it. */
+const readPostgresDatabase = Effect.fn(function* ({
+  id,
+  output,
+  olds,
+}: {
+  id: string;
+  output?: PostgresDatabase["Attributes"];
+  olds?: Partial<PostgresDatabaseProps>;
+}) {
+  const { organization } = yield* yield* Credentials;
+  const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
+
+  const data = yield* planetscale
+    .getDatabase({
+      organization,
+      database: databaseName,
+    })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+
+  if (!data) return undefined;
+
+  if (data.kind !== "postgresql") {
+    return yield* new PlanetscaleConflict({
+      message:
+        `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
+        `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
+        `or delete the existing database and retry.`,
+    });
+  }
+
+  const defaultBranch = data.default_branch ?? "main";
+
+  // Observe `arch` and `clusterSize` from the default branch rather
+  // than echoing input.
+  const branch = yield* planetscale
+    .getBranch({
+      organization,
+      database: data.name,
+      branch: defaultBranch,
+    })
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+
+  const arch = toPostgresClusterArch(branch!.cluster_architecture);
+  const clusterSize = branch!.cluster_name;
+
+  return {
+    id: data.id,
+    name: data.name,
+    organization,
+    state: data.state,
+    defaultBranch,
+    plan: data.plan ?? "hobby",
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    htmlUrl: data.html_url,
+    region: { slug: data.region.slug },
+    migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
+    migrationsTable: output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
+    migrationsHashes: output?.migrationsHashes ?? {},
+    importHashes: output?.importHashes ?? {},
+    clusterSize,
+    arch,
+    requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
+    restrictBranchRegion: data.restrict_branch_region ?? false,
+    productionBranchWebConsole: data.production_branch_web_console ?? false,
+    deletionProtection: data.deletion_protected ?? false,
+  };
+});
 
 export const PostgresDatabaseProvider = () =>
   Provider.succeed(PostgresDatabase, {
@@ -191,66 +289,9 @@ export const PostgresDatabaseProvider = () =>
       return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
-      const { organization } = yield* yield* Credentials;
-      const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
+    lookup: ({ name }) => readPostgresDatabase({ id: name, olds: { name } }),
 
-      const data = yield* planetscale
-        .getDatabase({
-          organization,
-          database: databaseName,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
-
-      if (!data) return undefined;
-
-      if (data.kind !== "postgresql") {
-        return yield* new PlanetscaleConflict({
-          message:
-            `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
-            `is a PostgresDatabase. Use Planetscale.${data.kind === "mysql" ? "MySQLDatabase" : data.kind}() instead, ` +
-            `or delete the existing database and retry.`,
-        });
-      }
-
-      const defaultBranch = data.default_branch ?? "main";
-
-      // Observe `arch` and `clusterSize` from the default branch rather
-      // than echoing input.
-      const branch = yield* planetscale
-        .getBranch({
-          organization,
-          database: data.name,
-          branch: defaultBranch,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
-
-      const arch = toPostgresClusterArch(branch!.cluster_architecture);
-      const clusterSize = branch!.cluster_name;
-
-      return {
-        id: data.id,
-        name: data.name,
-        organization,
-        state: data.state,
-        defaultBranch,
-        plan: data.plan ?? "hobby",
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-        htmlUrl: data.html_url,
-        region: { slug: data.region.slug },
-        migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
-        migrationsTable: output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
-        migrationsHashes: output?.migrationsHashes ?? {},
-        importHashes: output?.importHashes ?? {},
-        clusterSize,
-        arch,
-        requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
-        restrictBranchRegion: data.restrict_branch_region ?? false,
-        productionBranchWebConsole: data.production_branch_web_console ?? false,
-        deletionProtection: data.deletion_protected ?? false,
-      };
-    }),
+    read: readPostgresDatabase,
 
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const { organization } = yield* yield* Credentials;

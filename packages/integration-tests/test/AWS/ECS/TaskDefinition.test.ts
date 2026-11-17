@@ -298,3 +298,52 @@ test.provider(
     timeout: 420_000,
   },
 );
+
+// Nitro Sandbox isolation lives on the task definition: registering one needs
+// no capacity. The isolation mode round-trips through describeTaskDefinition,
+// a redeploy keeps the revision, and dropping it registers a SHARED revision.
+test.provider(
+  "registers a Nitro Sandbox isolation mode",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployTaskDefinition = (isolationMode?: "ISOLATED_SANDBOX") =>
+        stack.deploy(
+          TaskDefinition("IsolatedTaskDef", {
+            requiresCompatibilities: ["MANAGED_INSTANCES"],
+            networkMode: "awsvpc",
+            cpu: 1024,
+            memory: 2048,
+            trustedExecutionConfiguration: isolationMode ? { isolationMode } : undefined,
+            containerDefinitions: [
+              {
+                name: "app",
+                image: "public.ecr.aws/docker/library/busybox:stable",
+                essential: true,
+                command: ["sleep", "3600"],
+              },
+            ],
+          }),
+        );
+
+      const isolated = yield* deployTaskDefinition("ISOLATED_SANDBOX");
+      const observed = yield* describeActive(isolated.family);
+      expect(observed?.trustedExecutionConfiguration?.isolationMode).toBe("ISOLATED_SANDBOX");
+      expect(observed?.requiresCompatibilities).toContain("MANAGED_INSTANCES");
+
+      const redeployed = yield* deployTaskDefinition("ISOLATED_SANDBOX");
+      expect(redeployed.taskDefinitionArn).toBe(isolated.taskDefinitionArn);
+
+      const shared = yield* deployTaskDefinition();
+      expect(shared.revision).toBeGreaterThan(isolated.revision);
+      const observedShared = yield* describeActive(shared.family);
+      expect(observedShared?.trustedExecutionConfiguration?.isolationMode ?? "SHARED").toBe(
+        "SHARED",
+      );
+
+      yield* stack.destroy();
+      expect(yield* describeActive(shared.family)).toBeUndefined();
+    }),
+  { tags: ["provider:aws", "provider:aws:ecs", "live"] },
+);

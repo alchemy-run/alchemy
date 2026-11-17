@@ -202,8 +202,8 @@ const cases: Array<{ scenario: Scenario; entries: string[] }> = [
 ];
 
 describe.concurrent.each([
-  { dev: true, stage: "workflow-lifecycle-local" },
-  { dev: false, stage: "workflow-lifecycle-live" },
+  { dev: true, stage: `${Test.defaultStage()}-workflow-lifecycle-local` },
+  { dev: false, stage: `${Test.defaultStage()}-workflow-lifecycle-live` },
 ])(
   "Workflow lifecycle (dev: $dev)",
   ({ dev, stage }) => {

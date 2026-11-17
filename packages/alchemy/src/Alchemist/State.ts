@@ -2,7 +2,10 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Stream from "effect/Stream";
+import * as Struct from "effect/Struct";
 import { AuthProvidersLive } from "../Auth/Registry.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
 import * as Contributions from "../Contributions.ts";
@@ -38,9 +41,13 @@ export type StateSource =
   | ({
       readonly type: "provider";
       readonly backend: string;
-      /** A store other than the account's default. */
-      readonly name?: string;
-    } & Pick<Target, "profile" | "envFile">);
+    } & Pick<Target, "profile" | "envFile"> &
+      /**
+       * The store's own options alongside, such as `name` for a store other
+       * than the account's default or `domain` for where it is served. Each
+       * must be one the backend has a flag for.
+       */
+      Contributions.StateStoreOptions);
 
 /** What lifecycle operations act on. */
 export type ProviderSource = Extract<StateSource, { readonly type: "provider" }>;
@@ -57,6 +64,27 @@ const findBackend = Effect.fn(function* (backend: string) {
     });
   }
   return store;
+});
+
+/** The store options a source sets, failing on any its backend has no flag for. */
+const storeOptions = Effect.fn(function* (source: ProviderSource, store: Contributions.StateStore) {
+  const declared = store.flags ?? {};
+  const given = Record.filter(
+    Struct.omit(source, ["type", "backend", "profile", "envFile"]),
+    Predicate.isNotUndefined,
+  );
+  const unknown = Record.findFirst(given, (_, option) => !Record.has(declared, option));
+  if (Option.isSome(unknown)) {
+    const [option] = unknown.value;
+    return yield* new Contributions.ContributionError({
+      message: `Unknown option '${option}' for state backend '${source.backend}'. ${
+        Record.isEmptyRecord(declared)
+          ? "It doesn't have any options."
+          : `Available: ${Record.keys(declared).join(", ")}.`
+      }`,
+    });
+  }
+  return given;
 });
 
 /**
@@ -104,9 +132,10 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
       );
     case "provider": {
       const { provider, store } = yield* findBackend(source.backend);
+      const options = yield* storeOptions(source, store);
       const { layer } = yield* store.load;
       const context = yield* Layer.build(
-        layer({ name: source.name }).pipe(Layer.provide(yield* providerContext(provider, source))),
+        layer(options).pipe(Layer.provide(yield* providerContext(provider, source))),
       ).pipe(isolated);
       return yield* Effect.provide(Effect.flatten(State.State), context);
     }
@@ -151,6 +180,7 @@ const lifecycleOperation = Effect.fn(function* <K extends keyof Contributions.St
     });
   }
   const { provider, store } = yield* findBackend(source.backend);
+  const options = yield* storeOptions(source, store);
   const run = (yield* store.load).lifecycle?.[operation];
   if (run === undefined) {
     return yield* new Contributions.ContributionError({
@@ -159,19 +189,18 @@ const lifecycleOperation = Effect.fn(function* <K extends keyof Contributions.St
   }
   return {
     run,
+    options,
     context: yield* providerContext(provider, source),
   };
 });
 
 /** Provision (or adopt) a state store. */
-export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* (
-  source: ProviderSource & { readonly force?: boolean },
-) {
-  const { run, context } = yield* lifecycleOperation(source, "bootstrap");
-  return yield* run({ name: source.name, force: source.force }).pipe(
-    Effect.provide(context),
-    isolated,
-  );
+export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* ({
+  force,
+  ...source
+}: ProviderSource & { readonly force?: boolean }) {
+  const { run, options, context } = yield* lifecycleOperation(source, "bootstrap");
+  return yield* run({ ...options, force }).pipe(Effect.provide(context), isolated);
 });
 
 /**
@@ -197,8 +226,8 @@ export const bootstrapConfigured = Effect.fn("Alchemist.state.bootstrapConfigure
 
 /** Delete a state store and its backing resources. */
 export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source: ProviderSource) {
-  const { run, context } = yield* lifecycleOperation(source, "teardown");
-  return yield* run({ name: source.name }).pipe(Effect.provide(context), isolated);
+  const { run, options, context } = yield* lifecycleOperation(source, "teardown");
+  return yield* run(options).pipe(Effect.provide(context), isolated);
 });
 
 /**
@@ -224,21 +253,20 @@ export const migrate = Effect.fn("Alchemist.state.migrate")(function* (
 });
 
 /** Past log entries from a state store, oldest first. */
-export const logs = Effect.fn("Alchemist.state.logs")(function* (
-  source: ProviderSource & { readonly limit?: number; readonly since?: Date },
-) {
-  const { run, context } = yield* lifecycleOperation(source, "logs");
-  return yield* run({ name: source.name, limit: source.limit, since: source.since }).pipe(
-    Effect.provide(context),
-    isolated,
-  );
+export const logs = Effect.fn("Alchemist.state.logs")(function* ({
+  limit,
+  since,
+  ...source
+}: ProviderSource & { readonly limit?: number; readonly since?: Date }) {
+  const { run, options, context } = yield* lifecycleOperation(source, "logs");
+  return yield* run({ ...options, limit, since }).pipe(Effect.provide(context), isolated);
 });
 
 /** Live log entries from a state store. */
 export const tailLogs = (source: ProviderSource) =>
   Stream.unwrap(
-    Effect.map(lifecycleOperation(source, "tailLogs"), ({ run, context }) =>
-      run({ name: source.name }).pipe(
+    Effect.map(lifecycleOperation(source, "tailLogs"), ({ run, options, context }) =>
+      run(options).pipe(
         Stream.provide(context),
         Stream.provideServiceEffect(Layer.CurrentMemoMap, Layer.makeMemoMap),
       ),

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   AnalyticshubNotResolved,
@@ -125,8 +126,32 @@ export type DataExchange = Resource<
     listingCount: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataExchangeLookup
 >;
+
+/**
+ * Props for {@link DataExchange.lookup}: find a data exchange this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DataExchangeLookup {
+  /**
+   * Data exchange id (the `{dataExchange}` segment of
+   * `projects/{project}/locations/{location}/dataExchanges/{dataExchange}`).
+   * Must contain only letters, numbers, and underscores; max 100 bytes.
+   */
+  dataExchangeId: string;
+  /**
+   * BigQuery location (`us-central1`, `US`, `EU`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BigQuery Analytics Hub data exchange — a container for listings
@@ -166,6 +191,19 @@ export type DataExchange = Resource<
  * const dcr = yield* GCP.AnalyticsHub.DataExchange("CleanRoom", {
  *   displayName: "Clean Room",
  *   sharingEnvironmentConfig: { dcrExchangeConfig: {} },
+ * });
+ * ```
+ *
+ * ### Looking up an existing data exchange
+ * `DataExchange.lookup` references a data exchange Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * data exchange.
+ *
+ * **Example:** Reference an existing data exchange
+ * ```typescript
+ * const dataExchange = GCP.AnalyticsHub.DataExchange.lookup({
+ *   dataExchangeId: "my-data-exchange",
  * });
  * ```
  *
@@ -228,6 +266,15 @@ export const DataExchangeProvider = () =>
         extra: news.sharingEnvironmentConfig !== undefined && nextKind !== previousKind,
       });
     }),
+
+    lookup: Effect.fn(function* ({ dataExchangeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, dataExchangeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -8,9 +8,11 @@ import * as Core from "@alchemy.run/test/Core";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
+import { TelemetryDebug } from "@distilled.cloud/core/telemetry-debug";
 import * as Alchemy from "alchemy";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
@@ -449,7 +451,8 @@ test.provider(
             );
           });
           const result = yield* effect.pipe(
-            Effect.provide(Logger.layer([logger])),
+            // SDKs write their Debug lines only with TelemetryDebug provided.
+            Effect.provide(Layer.mergeAll(Logger.layer([logger]), TelemetryDebug.layer)),
             Effect.provideService(References.MinimumLogLevel, "Debug"),
           );
           return { result, logs: lines.join("\n") };

@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
@@ -144,8 +145,27 @@ export interface Budget extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  BudgetLookup
 > {}
+
+/**
+ * Props for {@link Budget.lookup}: find a budget this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type BudgetLookup =
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The id of the existing budget. */
+      budgetId: string;
+    }
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The display name of the existing budget. */
+      displayName: string;
+    };
 
 /**
  * An AWS Deadline Cloud budget — tracks a queue's approximate render spend
@@ -190,6 +210,16 @@ export interface Budget extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing budget
+ * `Budget.lookup` references a budget Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` with `budgetId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing budget
+ * ```typescript
+ * const existing = AWS.Deadline.Budget.lookup({ farmId, displayName: "main" });
  * ```
  *
  * @resource
@@ -268,6 +298,14 @@ export const BudgetProvider = () =>
         stables: ["farmId", "budgetId", "budgetArn", "queueId"],
         // Keyed by a parent farm — sub-resource list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "budgetId" in props
+              ? yield* readBudgetById(props.farmId, props.budgetId, arnOf)
+              : yield* findBudgetByDisplayName(props.farmId, props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const farmId = output?.farmId ?? olds?.farmId;
@@ -350,7 +388,7 @@ export const BudgetProvider = () =>
           // Deadline clamps a startTime in the past to the creation instant,
           // so a past desired startTime can never converge — only compare it
           // while it is still in the future.
-          const now = yield* Effect.sync(() => Date.now());
+          const now = yield* Clock.currentTimeMillis;
           const desiredStart = desiredSchedule.fixed.startTime.getTime();
           const scheduleDrifted =
             (desiredStart > now && observedSchedule.startTime.getTime() !== desiredStart) ||

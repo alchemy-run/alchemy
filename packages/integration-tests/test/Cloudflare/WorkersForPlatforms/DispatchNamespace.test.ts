@@ -10,6 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -83,40 +84,40 @@ test.provider(
 
       const namespace = yield* stack.deploy(
         Cloudflare.WorkersForPlatforms.DispatchNamespace("Namespace", {
-          name: "alchemy-wfp-test-ns",
+          name: testName("alchemy-wfp-test-ns"),
         }),
       );
 
       expect(namespace.namespaceId).toBeTruthy();
-      expect(namespace.name).toEqual("alchemy-wfp-test-ns");
+      expect(namespace.name).toEqual(testName("alchemy-wfp-test-ns"));
       expect(namespace.accountId).toEqual(accountId);
       expect(namespace.scriptCount).toEqual(0);
 
       // Read-after-create: a brand-new namespace can briefly 404 from the
       // out-of-band read under load — ride that out before asserting.
-      const live = yield* getNamespace(accountId, "alchemy-wfp-test-ns").pipe(
+      const live = yield* getNamespace(accountId, testName("alchemy-wfp-test-ns")).pipe(
         Effect.retry({
           while: (e) => e._tag === "DispatchNamespaceNotFound",
           schedule: Schedule.exponential("500 millis"),
           times: 8,
         }),
       );
-      expect(live.namespaceName).toEqual("alchemy-wfp-test-ns");
+      expect(live.namespaceName).toEqual(testName("alchemy-wfp-test-ns"));
       expect(live.namespaceId).toEqual(namespace.namespaceId);
 
       // The name is the namespace's identity — changing it must replace.
       const replaced = yield* stack.deploy(
         Cloudflare.WorkersForPlatforms.DispatchNamespace("Namespace", {
-          name: "alchemy-wfp-test-ns-v2",
+          name: testName("alchemy-wfp-test-ns-v2"),
         }),
       );
       expect(replaced.namespaceId).not.toEqual(namespace.namespaceId);
-      expect(replaced.name).toEqual("alchemy-wfp-test-ns-v2");
-      yield* expectNamespaceGone(accountId, "alchemy-wfp-test-ns");
+      expect(replaced.name).toEqual(testName("alchemy-wfp-test-ns-v2"));
+      yield* expectNamespaceGone(accountId, testName("alchemy-wfp-test-ns"));
 
       yield* stack.destroy();
 
-      yield* expectNamespaceGone(accountId, "alchemy-wfp-test-ns-v2");
+      yield* expectNamespaceGone(accountId, testName("alchemy-wfp-test-ns-v2"));
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:workersforplatforms", "live"],
@@ -124,8 +125,8 @@ test.provider(
   },
 );
 
-const namespaceName = "alchemy-wfp-test-script-ns";
-const scriptName = "alchemy-wfp-customer-a";
+const namespaceName = testName("alchemy-wfp-test-script-ns");
+const scriptName = testName("alchemy-wfp-customer-a");
 
 // One program deploying the namespace and a user script into it. The
 // script's props reference the namespace's output name, so the engine
@@ -166,7 +167,7 @@ test.provider(
   },
 );
 
-const assetsNamespaceName = "alchemy-wfp-assets-test-ns";
+const assetsNamespaceName = testName("alchemy-wfp-assets-test-ns");
 
 // Read-after-create: a just-uploaded script can briefly 404 (or come back
 // with `script: null`) from the out-of-band read — poll (bounded) until the
@@ -262,7 +263,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.WorkersForPlatforms.DispatchNamespace("ListNs", {
-          name: "alchemy-wfp-test-list-ns",
+          name: testName("alchemy-wfp-test-list-ns"),
         }),
       );
 
@@ -281,12 +282,12 @@ test.provider(
 
       const match = all.find((ns) => ns.namespaceId === deployed.namespaceId);
       expect(match).toBeDefined();
-      expect(match?.name).toEqual("alchemy-wfp-test-list-ns");
+      expect(match?.name).toEqual(testName("alchemy-wfp-test-list-ns"));
       expect(match?.accountId).toEqual(accountId);
 
       yield* stack.destroy();
 
-      yield* expectNamespaceGone(accountId, "alchemy-wfp-test-list-ns");
+      yield* expectNamespaceGone(accountId, testName("alchemy-wfp-test-list-ns"));
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:workersforplatforms", "live"],

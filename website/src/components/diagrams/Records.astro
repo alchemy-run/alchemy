@@ -1,0 +1,188 @@
+---
+/**
+ * `<Records />` — how data is laid out, and what a query reads. Rows as they're
+ * stored, in storage order, with the rows a query returns highlighted. Use it
+ * for key design: DynamoDB items grouped by partition key and sorted by sort
+ * key, S3 keys stored flat where a "folder" is only a shared prefix.
+ *
+ *   <Records
+ *     title="Orders · DynamoDB Table"
+ *     columns={["pk", "sk", "total"]}
+ *     keys={2}
+ *     group={0}
+ *     rows={[
+ *       ["user#ana", "profile", ""],
+ *       ["user#sam", "order#0104", "$20"],
+ *     ]}
+ *     query={{ label: 'Query pk = "user#sam"', rows: [1] }}
+ *   />
+ *
+ * `keys` is how many leading columns are keys (drawn in the key style).
+ * `group` bands rows that share that column's value. `prefix` underlines the
+ * part of the first column a prefix query matched.
+ */
+import "./diagram.css";
+
+interface Props {
+  title?: string;
+  columns: string[];
+  rows: string[][];
+  keys?: number;
+  group?: number;
+  query?: { label: string; rows: number[]; prefix?: string };
+  caption?: string;
+}
+
+const { title, columns, rows, keys = 1, group, query, caption } = Astro.props as Props;
+const hit = new Set(query?.rows ?? []);
+// Turn rows into cards on a phone only when the table wouldn't fit its width.
+const naturalWidth = columns.reduce((w, c, j) => w + Math.max(c.length, ...rows.map((r) => (r[j] ?? "").length)) * 7.3 + 24, 0);
+const cards = naturalWidth > 330;
+let band = 0;
+const bands = rows.map((r, i) => {
+  if (group !== undefined && i > 0 && r[group] !== rows[i - 1]![group]) band++;
+  return band % 2;
+});
+const groupStart = (i: number) => group !== undefined && i > 0 && rows[i]![group] !== rows[i - 1]![group];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  <div class="alc-rec">
+    {(title || query) && (
+      <div class="alc-rec__top">
+        {title && <span class="alc-rec__title">{title}</span>}
+        {query && <span class="alc-rec__query">{query.label}</span>}
+      </div>
+    )}
+    <table class:list={["alc-rec__table", cards && "alc-rec__table--cards"]}>
+      <thead>
+        <tr>{columns.map((c, i) => <th class:list={[i < keys && "alc-rec__key"]}>{c}</th>)}</tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((r, i) => (
+            <tr class:list={[bands[i] && "alc-rec__band", hit.has(i) && "alc-rec__hit", groupStart(i) && "alc-rec__group"]}>
+              {r.map((cell, j) => {
+                const p = j === 0 && query?.prefix && hit.has(i) && cell.startsWith(query.prefix) ? query.prefix : "";
+                return (
+                  <td class:list={[j < keys && "alc-rec__key"]} data-col={columns[j]}>
+                    {p && <span class="alc-rec__prefix">{p}</span>}
+                    {cell.slice(p.length) || (cell === "" ? "·" : "")}
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-rec {
+    max-width: 40rem;
+    margin-inline: auto;
+    font-family: var(--alc-font-mono);
+  }
+  .alc-rec__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .alc-rec__title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--alc-fg-2);
+  }
+  .alc-rec__query {
+    font-size: 11px;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--alc-accent);
+    color: var(--alc-fg-1);
+    background: var(--alc-accent-soft);
+  }
+  .alc-rec__table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .alc-rec__table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 10.5px;
+    color: var(--alc-fg-3);
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--alc-hairline-2);
+    background: var(--alc-bg-elev-2);
+  }
+  .alc-rec__table td {
+    padding: 0.35rem 0.75rem;
+    color: var(--alc-fg-2);
+  }
+  .alc-rec__table td.alc-rec__key {
+    color: var(--alc-fg-1);
+    white-space: nowrap;
+  }
+  .alc-rec__band td {
+    background: color-mix(in srgb, var(--alc-hairline) 60%, transparent);
+  }
+  .alc-rec__group td {
+    border-top: 1px solid var(--alc-hairline-3);
+  }
+  .alc-rec__hit td {
+    background: color-mix(in srgb, var(--alc-accent) 22%, transparent);
+  }
+  .alc-rec__hit td:first-child {
+    box-shadow: inset 3px 0 0 var(--alc-accent);
+  }
+  /* On a phone, a table too wide for the screen turns each row into a card:
+     one line per column, named, so nothing scrolls sideways. */
+  @media (max-width: 40rem) {
+    .alc-rec__table--cards,
+    .alc-rec__table--cards tbody,
+    .alc-rec__table--cards tr,
+    .alc-rec__table--cards td {
+      display: block;
+    }
+    .alc-rec__table--cards thead {
+      display: none;
+    }
+    .alc-rec__table--cards tr {
+      padding: 0.375rem 0;
+    }
+    .alc-rec__table--cards tr + tr {
+      border-top: 1px solid var(--alc-hairline-2);
+    }
+    .alc-rec__table--cards td {
+      display: grid;
+      grid-template-columns: minmax(6rem, 38%) 1fr;
+      gap: 0.75rem;
+      padding: 0.15rem 0.75rem;
+    }
+    .alc-rec__table--cards td::before {
+      content: attr(data-col);
+      font-size: 10.5px;
+      color: var(--alc-fg-3);
+    }
+    .alc-rec__table--cards td.alc-rec__key {
+      white-space: normal;
+    }
+  }
+  .alc-rec__prefix {
+    text-decoration: underline;
+    text-decoration-color: var(--alc-accent);
+    text-underline-offset: 3px;
+    font-weight: 600;
+  }
+</style>

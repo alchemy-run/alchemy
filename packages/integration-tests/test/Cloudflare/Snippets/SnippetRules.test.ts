@@ -10,6 +10,7 @@ import { poll } from "alchemy/Util/poll";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -18,8 +19,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic snippet names — same value on every run.
-const NAME_RULES_A = "alchemy_snippet_rules_a";
-const NAME_RULES_B = "alchemy_snippet_rules_b";
+const NAME_RULES_A = testName("alchemy_snippet_rules_a", "_");
+const NAME_RULES_B = testName("alchemy_snippet_rules_b", "_");
 
 const EXPRESSION_V1 = 'http.request.uri.path wildcard "/alchemy-snippet/*"';
 const EXPRESSION_V2 = 'http.request.uri.path wildcard "/alchemy-snippet-v2/*"';

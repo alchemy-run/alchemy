@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -170,7 +171,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
     // itself fails.
     const boot = (v: Variant) =>
       Effect.gen(function* () {
-        const start = yield* Effect.sync(() => Date.now());
+        const start = yield* Clock.currentTimeMillis;
         const vm = yield* v.run({
           idlePolicy: {
             maxIdleDurationSeconds: 900,
@@ -199,7 +200,7 @@ export default class Orchestrator extends AWS.Lambda.Function<Orchestrator>()(
               times: 14,
             }),
           );
-          const readyMs = (yield* Effect.sync(() => Date.now())) - start;
+          const readyMs = (yield* Clock.currentTimeMillis) - start;
           return yield* HttpServerResponse.json({ id: vm.microvmId, readyMs });
         }).pipe(
           Effect.onError(() => v.term({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore)),

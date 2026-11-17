@@ -1,6 +1,7 @@
 import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -72,6 +73,7 @@ const makeTestLayer = (config: Record<string, unknown> = {}) =>
         // demand seam under test.
         ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
         NodeServices.layer,
+        SecureRandom.layerWebCrypto,
       ),
     ),
   );
@@ -105,7 +107,11 @@ const withTempHome = <A, E, R>(
         }),
     );
     return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    Effect.provide(SecureRandom.layerWebCrypto),
+  );
 
 const configureProbe = Effect.gen(function* () {
   const profile = yield* ProfileStore;

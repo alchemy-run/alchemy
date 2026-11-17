@@ -132,8 +132,18 @@ export interface RecordingConfiguration extends Resource<
     state: string;
   },
   never,
-  Providers
+  Providers,
+  RecordingConfigurationLookup
 > {}
+
+/**
+ * Props for {@link RecordingConfiguration.lookup}: find a recording configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RecordingConfigurationLookup {
+  /** The ARN of the existing recording configuration. */
+  recordingConfigurationArn: string;
+}
 
 /**
  * An Amazon IVS recording configuration, enabling automatic recording of
@@ -168,6 +178,16 @@ export interface RecordingConfiguration extends Resource<
  *     targetInterval: "30 seconds",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing recording configuration
+ * `RecordingConfiguration.lookup` references a recording configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `recordingConfigurationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing recording configuration
+ * ```typescript
+ * const existing = AWS.IVS.RecordingConfiguration.lookup({ recordingConfigurationArn: "..." });
  * ```
  *
  * @resource
@@ -258,6 +278,12 @@ export const RecordingConfigurationProvider = () =>
       return {
         stables: ["recordingConfigurationArn"],
 
+        lookup: Effect.fn(function* ({ recordingConfigurationArn }) {
+          const config = yield* getByArn(recordingConfigurationArn);
+          if (config === undefined) return undefined;
+          const attrs = toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const config = output?.recordingConfigurationArn
             ? yield* getByArn(output.recordingConfigurationArn)

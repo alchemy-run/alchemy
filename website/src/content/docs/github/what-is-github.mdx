@@ -1,0 +1,96 @@
+---
+title: What is GitHub?
+description: The concepts behind GitHub as infrastructure — accounts and organizations, repositories, Actions workflows, secrets, variables and environments, OIDC, webhooks and pull request comments — and how @alchemy.run/github models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+GitHub hosts your code, and it's also part of how your code reaches production. **Actions** builds, tests and deploys on every push. Its **secrets** hold the credentials those deploys use. **Webhooks** tell your services when something happens in a repository. All of that is configuration, and Alchemy lets you declare it in the same Stack as the infrastructure it deploys.
+
+Take one setup: a repository whose Actions workflow deploys to a cloud with a credential the Stack created, and comments each preview's URL on its pull request. The Stack stores a cloud role in the repository's Actions secrets. A workflow run uses it to deploy, a production environment keeps its own secret for production jobs, and the run comments on the pull request.
+
+<Tree
+  nodes={[
+    { id: "org", label: "my-org", type: "organization", icon: "brand:github" },
+    { id: "repo", label: "my-org/api", type: "repository", parent: "org", wide: true, dashed: true, icon: "book-marked" },
+    { id: "secret", label: "DEPLOY_ROLE", type: "Actions secret · every job", parent: "repo", icon: "key-round" },
+    { id: "run", label: "workflow run", type: "on push or pull request", parent: "repo", tone: "accent", icon: "play", specs: [["comments on", "the pull request"]] },
+    { id: "env", label: "production", type: "environment", parent: "repo", wide: true, dashed: true, icon: "shield-check" },
+    { id: "envSecret", label: "PROD_ROLE", type: "environment secret · deploy job only", parent: "env", icon: "key-round" },
+  ]}
+  caption="An organization holds repositories, and your Stack sets their secrets. A repository's secrets reach every workflow job, and an environment's secrets reach only the jobs that deploy to it."
+/>
+
+## Accounts and organizations
+
+Repositories belong to an **account**: a person, or an **organization** that many people share, with teams and permissions. Alchemy acts as whoever its GitHub token belongs to, so the token decides which repositories it can change.
+
+Connect a token once, in [Setup](/github/setup).
+
+## Repositories
+
+A **repository** holds code and its history, and settings: visibility, the default branch, which merge strategies are allowed, and who may push. In Alchemy, a repository is a resource that converges those settings on every deploy:
+
+```typescript title="alchemy.run.ts"
+const repo = yield* GitHub.Repository("api", { owner: "my-org", name: "api", autoInit: true });
+```
+
+Destroying the Stack keeps the repository by default. Its history is worth more than any one deploy.
+
+See [Repositories](/github/repository).
+
+## Actions: workflows that run on events
+
+**GitHub Actions** runs **workflows**, YAML files in `.github/workflows`, when something happens: a push, a pull request, a schedule, a manual trigger. Each run executes on a **runner**, a fresh machine GitHub provides, and a typical one installs dependencies, runs the tests and runs `alchemy deploy`.
+
+See [CI](/environments/ci) for the workflows Alchemy projects use.
+
+## Secrets, variables and environments
+
+A workflow reads its configuration from **variables** and its credentials from **secrets**, set on the repository or the organization. Secrets are encrypted and hidden in logs. An **environment**, like `production`, groups its own secrets and variables behind protection rules, such as a required reviewer before a deploy runs.
+
+Alchemy sets them from values your Stack produces, so a credential goes from the cloud to CI without anyone copying it:
+
+```typescript title="alchemy.run.ts"
+yield* GitHub.Variables({
+  owner: "my-org",
+  repository: "api",
+  variables: { AWS_ROLE_ARN: role.roleArn },
+});
+```
+
+See [Actions secrets & variables](/github/actions-config).
+
+## OIDC: credentials without secrets
+
+A workflow can prove which repository and branch it's running for with an **OIDC token** GitHub signs. A cloud that trusts GitHub's tokens, like an AWS role with GitHub as its identity provider, hands that one repository short-lived credentials. Nothing long-lived is stored anywhere.
+
+The [AWS CI tutorial](/aws/tutorial/part-5) sets this up as code.
+
+## Webhooks
+
+A **webhook** sends an HTTP request to a URL whenever an event happens in a repository: a push, a pull request opened, an issue commented on. Each request is signed with a secret, so the receiver can tell it came from GitHub.
+
+In Alchemy, a Worker can subscribe to a repository's events directly, and receive each one typed:
+
+```typescript title="src/worker.ts"
+yield* GitHub.consumeRepositoryEvents(
+  { owner: "my-org", repository: "api", events: ["push", "pull_request"], secret },
+  (event) => Effect.log(`received ${event.name}`),
+);
+```
+
+See [Webhooks & events](/github/events).
+
+## Pull request comments
+
+A **comment** on a pull request is how CI reports back: the preview URL, a plan, a test summary. Alchemy's `Comment` is created on the first deploy and updated on every deploy after, so each pull request has one comment that's always current, rather than a new one per push.
+
+## How @alchemy.run/github models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your token picks the account, and `GitHub.providers()` acts as it. Repositories, environments, secrets, variables, webhooks and comments are resources, and their values can be outputs of any other resource in the Stack. A Worker subscribes to repository events with a binding. So the path from your cloud's credentials to the workflow that uses them is code, reviewed like the rest.
+
+Next, read the concepts in depth, starting with [Repositories](/github/repository).

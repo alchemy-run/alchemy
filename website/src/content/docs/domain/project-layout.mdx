@@ -12,11 +12,13 @@ Every file holds one building block, and its name is the block's name followed b
 ```text
 WithdrawMoney.command.ts
 Account.aggregate.ts
+Registration.decision.ts
 AccountSummary.view.ts
 TransferExecution.policy.ts
 ExecuteTransfer.saga.ts
 Ledger.projection.ts
 AccountCard.stream.ts
+AccountLedger.query.ts
 FraudCheck.external.ts
 CustomerApi.api.ts
 Bank.model.ts
@@ -59,7 +61,7 @@ Each folder is one part of the business, holding its aggregates and everything a
 ```text
 src/
   Account/      Account.aggregate.ts, WithdrawMoney.command.ts, Statement.view.ts, ...
-  Customer/     Customer.aggregate.ts, RegisterCustomer.command.ts, UsernameReservation.policy.ts, ...
+  Customer/     Customer.aggregate.ts, RegisterCustomer.command.ts, Registration.decision.ts, ...
   Transfer/     Transfer.aggregate.ts, ExecuteTransfer.saga.ts, TransferExecution.policy.ts, ...
   Fraud/        FraudCheck.external.ts, DailyOutflow.view.ts, FraudReview.policy.ts
   Bank.model.ts

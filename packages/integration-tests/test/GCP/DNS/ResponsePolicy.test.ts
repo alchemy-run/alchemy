@@ -5,6 +5,7 @@ import * as dns from "@distilled.cloud/gcp/dns_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -64,6 +65,17 @@ test.provider(
           });
           return { vpc, policy, rule };
         }),
+      );
+      yield* expectFound(
+        GCP.DNS.ResponsePolicy.lookup({ responsePolicyName: created.policy.responsePolicyName }),
+        created.policy,
+      );
+      yield* expectFound(
+        GCP.DNS.ResponsePolicyRule.lookup({
+          ruleName: created.rule.ruleName,
+          responsePolicy: created.rule.responsePolicy,
+        }),
+        created.rule,
       );
 
       expect(created.policy.responsePolicyName).toEqual(expect.any(String));

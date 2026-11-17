@@ -9,6 +9,7 @@ import {
   ProfileStoreLive,
 } from "alchemy/Auth/Profile";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -24,6 +25,7 @@ const testLayer = () =>
         AuthProvidersLive,
         ConfigProvider.layer(ConfigProvider.fromUnknown({})),
         NodeServices.layer,
+        SecureRandom.layerWebCrypto,
       ),
     ),
   );
@@ -58,7 +60,11 @@ const withFixtureHome = <A, E, R>(
         }),
     );
     return yield* effect(dir).pipe(Effect.provide(testLayer()));
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    Effect.provide(SecureRandom.layerWebCrypto),
+  );
 
 it.live(
   "migrates a full v0 store: entries kept, credentials dropped into a backup",

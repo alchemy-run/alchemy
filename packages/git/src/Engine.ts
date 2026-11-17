@@ -1,5 +1,6 @@
 import { RuntimeContext } from "alchemy/RuntimeContext";
 /** Git operations without HTTP requests, user services, or authorization callbacks. */
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -132,7 +133,7 @@ const make = Effect.gen(function* () {
       );
       if (Option.isNone(acquired))
         return yield* StoreError.make({ reason: "push admission timed out" });
-      const started = Date.now();
+      const started = yield* Clock.currentTimeMillis;
       const stageGate = yield* Semaphore.make(6);
       const bases = new Map<string, Effect.Success<ReturnType<typeof stub.readPushBase>>>();
       const store: IngestStore = {
@@ -201,7 +202,7 @@ const make = Effect.gen(function* () {
         stats: {
           objects: ingest?.objectCount ?? 0,
           bytes: hasPack ? received.total - packStart : 0,
-          ingestMs: Date.now() - started,
+          ingestMs: (yield* Clock.currentTimeMillis) - started,
           stageMs: ingest?.stageMs ?? 0,
           phases: ingest?.phases,
         },

@@ -61,8 +61,18 @@ export interface InstanceProfile extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  InstanceProfileLookup
 > {}
+
+/**
+ * Props for {@link InstanceProfile.lookup}: find an instance profile this
+ * stack doesn't manage, in the ambient account, by its name.
+ */
+export interface InstanceProfileLookup {
+  /** The name of the existing instance profile. */
+  instanceProfileName: string;
+}
 
 /**
  * An IAM instance profile that can present a role to EC2 instances.
@@ -85,6 +95,20 @@ export interface InstanceProfile extends Resource<
  *
  * const profile = yield* InstanceProfile("WebProfile", {
  *   roleName: role.roleName,
+ * });
+ * ```
+ *
+ * ### Looking up an existing instance profile
+ * `InstanceProfile.lookup` references an instance profile Alchemy doesn't manage (created in the console or by another stack), found by `instanceProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Launch an instance with an existing profile
+ * ```typescript
+ * const profile = AWS.IAM.InstanceProfile.lookup({ instanceProfileName: "web" });
+ *
+ * const instance = yield* AWS.EC2.Instance("Web", {
+ *   imageId,
+ *   instanceProfileName: profile.instanceProfileName,
  * });
  * ```
  *
@@ -167,6 +191,20 @@ export const InstanceProfileProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ instanceProfileName: name }) {
+          const profile = yield* readInstanceProfile(name);
+          if (!profile?.Arn || !profile.InstanceProfileName) {
+            return undefined;
+          }
+          return {
+            instanceProfileArn: profile.Arn,
+            instanceProfileName: profile.InstanceProfileName,
+            instanceProfileId: profile.InstanceProfileId,
+            path: profile.Path,
+            roleName: profile.Roles?.[0]?.RoleName,
+            tags: toTagRecord(profile.Tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.instanceProfileName ??

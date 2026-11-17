@@ -16,10 +16,21 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
 
     yield* Stripe.consumeEvents(
       "Events",
-      { events: [Stripe.CustomerCreated] },
+      // A snapshot event and a thin one: they arrive on separate destinations.
+      { events: [Stripe.CustomerCreated, Stripe.EventDestinationPing] },
       Effect.fn(function* (event) {
-        yield* kv.put(event.object.id, "1").pipe(Effect.orDie);
-        yield* kv.put("lastCustomerId", event.object.id).pipe(Effect.orDie);
+        switch (event.type) {
+          case "customer.created":
+            yield* kv.put(event.object.id, "1").pipe(Effect.orDie);
+            yield* kv.put("lastCustomerId", event.object.id).pipe(Effect.orDie);
+            return;
+          case "v2.core.event_destination.ping":
+            // The thin event was fetched: record its id and what it was about.
+            yield* kv
+              .put(event.object.id, event.object.relatedObject?.id ?? "unknown")
+              .pipe(Effect.orDie);
+            return;
+        }
       }),
     ).pipe(Effect.orDie);
 
@@ -31,6 +42,7 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
           const seen = yield* kv.get(id).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             id: seen === "1" ? id : null,
+            value: seen ?? null,
           });
         }
         if (request.url.startsWith("/last")) {

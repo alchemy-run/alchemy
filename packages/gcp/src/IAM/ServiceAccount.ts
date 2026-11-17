@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { revokeHostIam, syncHostIam, type AppliedIamGrant, type GcpIamGrant } from "../Host.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { encodeOwnedDescription, hasOwnedDescription, parseOwnedDescription } from "./internal.ts";
@@ -62,8 +63,27 @@ export type ServiceAccount = Resource<
     iamGrants?: AppliedIamGrant[];
   },
   ServiceAccountBinding,
-  Providers
+  Providers,
+  ServiceAccountLookup
 >;
+
+/**
+ * Props for {@link ServiceAccount.lookup}: find a service account this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ServiceAccountLookup {
+  /**
+   * Account id used as the email prefix: 6-30 lowercase letters, digits, or
+   * hyphens.
+   */
+  accountId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /** What a binding grants a {@link ServiceAccount}. */
 export type ServiceAccountBinding = {
@@ -103,6 +123,19 @@ export type ServiceAccountBinding = {
  *   name: account.project,
  *   role: "roles/logging.logWriter",
  *   member: Output.interpolate`serviceAccount:${account.email}`,
+ * });
+ * ```
+ *
+ * ### Looking up an existing service account
+ * `ServiceAccount.lookup` references a service account Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * service account.
+ *
+ * **Example:** Reference an existing service account
+ * ```typescript
+ * const serviceAccount = GCP.IAM.ServiceAccount.lookup({
+ *   accountId: "my-account",
  * });
  * ```
  *
@@ -171,6 +204,14 @@ export const ServiceAccountProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ accountId }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      const existing = yield* getByName(nameOf(project, accountId));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

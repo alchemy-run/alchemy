@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "3\u003c\u003cEMPTY2"
+          },
+          "heredocs": [
+            {
+              "name": "EMPTY2",
+              "content": "",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

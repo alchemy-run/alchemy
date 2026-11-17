@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "COPY",
+          "line": 2,
+          "flags": [],
+          "heredocs": [
+            {
+              "name": "X",
+              "content": "Y\n",
+              "stripTabs": false,
+              "quoted": false
+            },
+            {
+              "name": "Y",
+              "content": "X\n",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ],
+          "sources": [
+            "\u003c\u003cX",
+            "\u003c\u003cY"
+          ],
+          "destination": "/dest"
+        }
+      ]
+    }
+  ]
+}

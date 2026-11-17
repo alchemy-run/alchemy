@@ -222,8 +222,18 @@ export interface DBCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterLookup
 > {}
+
+/**
+ * Props for {@link DBCluster.lookup}: find a Neptune cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterLookup {
+  /** The db cluster identifier of the existing Neptune cluster. */
+  dbClusterIdentifier: string;
+}
 
 /**
  * An Amazon Neptune graph database cluster.
@@ -260,6 +270,16 @@ export interface DBCluster extends Resource<
  *     maxCapacity: 2.5,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune cluster
+ * `DBCluster.lookup` references a Neptune cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune cluster
+ * ```typescript
+ * const existing = AWS.Neptune.DBCluster.lookup({ dbClusterIdentifier: "my-neptune-cluster" });
  * ```
  *
  * @resource
@@ -444,6 +464,14 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbClusterIdentifier: identifier }) {
+          const cluster = yield* readCluster(identifier);
+          if (!cluster?.DBClusterArn) {
+            return undefined;
+          }
+          const tags = yield* readTags(cluster.DBClusterArn);
+          return toAttrs({ cluster, tags });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

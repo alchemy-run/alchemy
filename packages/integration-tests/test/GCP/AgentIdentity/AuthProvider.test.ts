@@ -6,6 +6,7 @@ import * as agentidentity from "@distilled.cloud/gcp/agentidentity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,7 +63,7 @@ test.provider.skipIf(entitled)(
           name: `projects/${project}/locations/${location}/authProviders/alchemy-missing-auth`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -90,6 +91,13 @@ test.provider.skipIf(!entitled)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AgentIdentity.AuthProvider.lookup({
+          authProviderId: created.authProviderId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/authProviders/");

@@ -6,6 +6,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -38,6 +39,14 @@ test.provider(
             description: "error query",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Logging.FolderSavedQuery.lookup({
+          savedQueryId: created.savedQueryId,
+          folderId: created.folderId as string,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.savedQueryId).toEqual(expect.any(String));

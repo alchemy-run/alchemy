@@ -14,6 +14,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -22,13 +23,13 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // Deterministic identifiers — the server id is the API identity, so reruns
 // converge on the same server instead of leaking. The cases run concurrently,
 // so each MUST use a distinct server id.
-const SERVER_ID = "alchemy-test-mcp-server";
-const RECREATE_SERVER_ID = "alchemy-test-mcp-server-recreate";
-const REPLACE_SERVER_ID = "alchemy-test-mcp-server-replace";
-const REPLACE_SERVER_ID_V2 = "alchemy-test-mcp-replaced";
-const SYNC_SERVER_ID = "alchemy-test-mcp-server-sync";
-const DEFERRED_SYNC_SERVER_ID = "alchemy-test-mcp-deferred-sync";
-const TOKEN_SERVER_ID = "alchemy-test-mcp-service-token";
+const SERVER_ID = testName("alc-mcp-server");
+const RECREATE_SERVER_ID = testName("alc-mcp-recreate");
+const REPLACE_SERVER_ID = testName("alc-mcp-replace");
+const REPLACE_SERVER_ID_V2 = testName("alc-mcp-replaced");
+const SYNC_SERVER_ID = testName("alc-mcp-sync");
+const DEFERRED_SYNC_SERVER_ID = testName("alc-mcp-deferred-sync");
+const TOKEN_SERVER_ID = testName("alc-mcp-service-token");
 
 // Placeholder upstreams on the standing test zone. These cases opt out of
 // Alchemy's explicit capability sync; Cloudflare may still discover in the background.
@@ -251,7 +252,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.McpServer("Upstream", {
             serverId: SERVER_ID,
-            name: "Alchemy MCP Server",
+            name: testName("Alchemy MCP Server"),
             hostname: HOSTNAME,
             authType: "bearer",
             authCredentials: Redacted.make("alchemy-test-token-v2"),
@@ -266,7 +267,7 @@ test.provider(
         }),
       );
       expect(updated.serverId).toEqual(SERVER_ID);
-      expect(updated.name).toEqual("Alchemy MCP Server");
+      expect(updated.name).toEqual(testName("Alchemy MCP Server"));
       expect(updated.description).toEqual("alchemy mcp server v2");
       expect(updated.secureWebGateway).toEqual(true);
       expect(updated.updatedTools).toHaveLength(2);
@@ -274,7 +275,7 @@ test.provider(
       expect(updated.updatedTools.find((tool) => tool.name === "fetch")?.alias).toEqual("get_page");
 
       const liveUpdated = yield* getLiveServer(accountId, SERVER_ID);
-      expect(liveUpdated?.name).toEqual("Alchemy MCP Server");
+      expect(liveUpdated?.name).toEqual(testName("Alchemy MCP Server"));
       expect(liveUpdated?.secureWebGateway).toEqual(true);
 
       // No-op redeploy keeps the same server without drift.
@@ -282,7 +283,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.McpServer("Upstream", {
             serverId: SERVER_ID,
-            name: "Alchemy MCP Server",
+            name: testName("Alchemy MCP Server"),
             hostname: HOSTNAME,
             authType: "bearer",
             authCredentials: Redacted.make("alchemy-test-token-v2"),
@@ -519,7 +520,7 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       yield* stack.destroy();
-      const serverId = "alchemy-test-mcp-adoption";
+      const serverId = testName("alchemy-test-mcp-adoption");
       const external = yield* zeroTrust.createAccessAiControlMcpServer({
         accountId,
         id: serverId,
@@ -532,7 +533,7 @@ test.provider(
           serverId,
           hostname: HOSTNAME,
           authType: "unauthenticated",
-          name: "Adopted MCP server",
+          name: testName("Adopted MCP server"),
           sync: false,
         });
       yield* Effect.gen(function* () {
@@ -553,7 +554,9 @@ test.provider(
         const adopted = yield* stack.deploy(resource().pipe(adopt(true)));
         expect(adopted.serverId).toEqual(external.id);
         expect(adopted.createdAt).toEqual(external.createdAt);
-        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual("Adopted MCP server");
+        expect((yield* getLiveServer(accountId, serverId))?.name).toEqual(
+          testName("Adopted MCP server"),
+        );
         yield* stack.destroy();
         expect(yield* getLiveServer(accountId, serverId)).toBeUndefined();
       }).pipe(

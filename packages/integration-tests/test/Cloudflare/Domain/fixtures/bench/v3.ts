@@ -1,14 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Deposits } from "../catch-up/ledger.ts";
-import { After, benchWorker, hosted } from "./worker.ts";
+import { AfterV1, benchWorker, DepositsV1, hosted } from "./worker.ts";
 
-/** The view at version 1: rebuilt from the history. */
+/** The view at version 1: keyed by account, so rebuilt in place. */
 export default class DomainBenchWorker extends Cloudflare.Worker<DomainBenchWorker>()(
   "DomainBenchWorker",
   { main: import.meta.url },
-  benchWorker("v3", { kind: "deposits", view: Deposits }).pipe(
-    Effect.provide(hosted(After.layer(Layer.empty, { versions: { Deposits: 1 } }))),
+  benchWorker("v3", { kind: "deposits", view: DepositsV1 }).pipe(
+    Effect.provide(hosted(AfterV1.layer(Layer.empty))),
   ),
 ) {}

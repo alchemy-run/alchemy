@@ -6,6 +6,7 @@ import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -65,6 +66,14 @@ test.provider(
             inspectJob: hybridInspect,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DLP.LocationsDlpJob.lookup({
+          jobId: created.jobId,
+          location: created.location,
+          riskJob: created.riskJob,
+        }),
+        created,
       );
 
       expect(created.jobId.startsWith("i-")).toEqual(true);

@@ -61,8 +61,18 @@ export interface Queue extends Resource<
     pricingPlan: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QueueLookup
 > {}
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface QueueLookup {
+  /** The queue name of the existing queue. */
+  queueName: string;
+}
 
 /**
  * An AWS Elemental MediaConvert queue — the pool that submitted transcode jobs
@@ -97,6 +107,16 @@ export interface Queue extends Resource<
  *     ReservedSlots: 1,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack), found by `queueName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing queue
+ * ```typescript
+ * const existing = AWS.MediaConvert.Queue.lookup({ queueName: "my-queue" });
  * ```
  *
  * @resource
@@ -140,6 +160,13 @@ export const QueueProvider = () =>
           if ((olds.pricingPlan ?? "ON_DEMAND") !== (news.pricingPlan ?? "ON_DEMAND")) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ queueName: name }) {
+          const queue = yield* getQueue(name);
+          if (queue === undefined) return undefined;
+          const attrs = toAttrs(queue);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

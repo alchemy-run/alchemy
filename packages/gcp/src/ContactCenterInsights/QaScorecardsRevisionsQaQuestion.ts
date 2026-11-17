@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -151,8 +152,33 @@ export type QaScorecardsRevisionsQaQuestion = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QaScorecardsRevisionsQaQuestionLookup
 >;
+
+/**
+ * Props for {@link QaScorecardsRevisionsQaQuestion.lookup}: find a qa
+ * scorecards revisions qa question this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface QaScorecardsRevisionsQaQuestionLookup {
+  /**
+   * Question id (the `{qa_question}` segment). Must match
+   * `^[a-z0-9-]{4,64}$`.
+   */
+  qaQuestionId: string;
+  /**
+   * Parent QaScorecardRevision resource name
+   * (`projects/{project}/locations/
+   * {location}/qaScorecards/{qa_scorecard}/revisions/{revision}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A question on a Contact Center AI Insights QA scorecard revision.
@@ -177,6 +203,21 @@ export type QaScorecardsRevisionsQaQuestion = Resource<
  *     ],
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing qa scorecards revisions qa question
+ * `QaScorecardsRevisionsQaQuestion.lookup` references a qa scorecards
+ * revisions qa question Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared qa scorecards revisions qa
+ * question.
+ *
+ * **Example:** Reference an existing qa scorecards revisions qa question
+ * ```typescript
+ * const qaScorecardsRevisionsQaQuestion = GCP.ContactCenterInsights.QaScorecardsRevisionsQaQuestion.lookup({
+ *   qaQuestionId: "my-qa-question",
+ *   parent: "my-parent",
+ * });
  * ```
  *
  * @resource
@@ -294,7 +335,15 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ qaQuestionId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, qaQuestionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const qaQuestionId = yield* toResourceId(id, olds?.qaQuestionId, output?.qaQuestionId);
       const name =
@@ -302,7 +351,9 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.answerInstructions)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.answerInstructions))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

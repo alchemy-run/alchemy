@@ -8,6 +8,7 @@ import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import { TEST_CSR } from "./fixtures/csr.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -54,7 +55,7 @@ test.provider(
   "issue, verify, and revoke a certificate",
   (stack) =>
     Effect.gen(function* () {
-      const hostname = `originissue.${zoneName}`;
+      const hostname = `${testName("originissue")}.${zoneName}`;
       yield* stack.destroy();
 
       const cert = yield* stack.deploy(
@@ -104,7 +105,7 @@ test.provider(
   "list enumerates issued certificates",
   (stack) =>
     Effect.gen(function* () {
-      const hostname = `originlist.${zoneName}`;
+      const hostname = `${testName("originlist")}.${zoneName}`;
       yield* stack.destroy();
 
       const cert = yield* stack.deploy(
@@ -158,7 +159,7 @@ test.provider(
   "recovers a creating-state row whose Output-valued hostnames were lost (#736)",
   (stack) =>
     Effect.gen(function* () {
-      const hostname = `originwedged.${zoneName}`;
+      const hostname = `${testName("originwedged")}.${zoneName}`;
       yield* stack.destroy();
 
       const deployCert = () =>
@@ -261,7 +262,7 @@ test.provider(
   "replacement on requestedValidity change",
   (stack) =>
     Effect.gen(function* () {
-      const hostname = `originvalidity.${zoneName}`;
+      const hostname = `${testName("originvalidity")}.${zoneName}`;
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(
@@ -302,8 +303,8 @@ test.provider(
   "replacement on hostnames change",
   (stack) =>
     Effect.gen(function* () {
-      const hostname = `originhostsa.${zoneName}`;
-      const altHostname = `originhostsb.${zoneName}`;
+      const hostname = `${testName("originhostsa")}.${zoneName}`;
+      const altHostname = `${testName("originhostsb")}.${zoneName}`;
       yield* stack.destroy();
 
       const initial = yield* stack.deploy(

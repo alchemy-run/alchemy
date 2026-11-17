@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as speech from "@distilled.cloud/gcp/speech_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentParent, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -53,6 +54,13 @@ test.provider(
             boost: 5,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Speech.PhraseSet.lookup({
+          phraseSetId: created.phraseSetId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toMatch(new RegExp(`^projects/[^/]+/locations/${location}/phraseSets/`));

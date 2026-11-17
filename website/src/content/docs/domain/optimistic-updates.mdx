@@ -5,7 +5,7 @@ description: Show pending intent, confirm it by commandId from a View feed, and 
 
 Show a deposit when the customer clicks. Confirm it when the bank's event arrives. A successful command reply means the write committed. The line waits for the feed before it becomes confirmed.
 
-This guide uses `Bank = DomainFoldkit.make(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
+The examples use `Bank = DomainFoldkit.make(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
 
 ## Track each intent
 
@@ -25,7 +25,7 @@ const Line = Schema.Struct({
 type Line = typeof Line.Type;
 ```
 
-Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ target, input, commandId })` through `Command.mapMessage`.
+Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ input, commandId })` through `Command.mapMessage`.
 
 The command and its pending line share one id. Each event caused by the command carries that id in `entry.envelope.commandId`.
 

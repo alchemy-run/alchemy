@@ -16,6 +16,7 @@ import { Provider } from "alchemy/Provider";
 import { ResourceContext } from "alchemy/ResourceContext";
 import { Stack, type StackSpec } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -80,6 +81,7 @@ const env = Layer.mergeAll(
   ),
   NodeServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
 );
 
 const diffInput = <Olds, News, Output>(id: string, olds: Olds, news: News, output: Output) => ({

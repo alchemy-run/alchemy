@@ -3,6 +3,7 @@ import {
   createServicePromote,
   createServiceRollback,
 } from "@distilled.cloud/prisma/management";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -11,6 +12,23 @@ import * as Result from "effect/Result";
 
 export class AppPromotionInvalidProps extends Data.TaggedError("AppPromotionInvalidProps")<{
   readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/** The App never reported the deployment as its latest before the wait timed out. */
+export class AppDeploymentTargetTimeout extends Data.TaggedError("AppDeploymentTargetTimeout")<{
+  readonly message: string;
+  readonly errors: readonly unknown[];
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * Promotion of a deployment did not converge (and recovery, if attempted,
+ * also failed). The deployment is preserved because commit state is ambiguous.
+ */
+export class AppPromotionNotConverged extends Data.TaggedError("AppPromotionNotConverged")<{
+  readonly message: string;
+  readonly errors: readonly unknown[];
   readonly cause?: unknown;
 }> {}
 
@@ -41,12 +59,12 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
   }
 
   const timeoutMs = timeoutSeconds * 1_000;
-  const deadline = yield* Effect.sync(() => Date.now() + timeoutMs);
+  const deadline = (yield* Clock.currentTimeMillis) + timeoutMs;
   let lastLatestDeploymentId: string | null | undefined;
   let lastError: unknown;
 
   while (true) {
-    const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
+    const remainingBeforeObservation = deadline - (yield* Clock.currentTimeMillis);
     if (remainingBeforeObservation <= 0) break;
 
     const observationOption = yield* getService({ serviceId: appId }).pipe(
@@ -66,17 +84,16 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
       lastError = observation.failure;
     }
 
-    const remainingAfterObservation = yield* Effect.sync(() => deadline - Date.now());
+    const remainingAfterObservation = deadline - (yield* Clock.currentTimeMillis);
     if (remainingAfterObservation <= 0) break;
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, remainingAfterObservation)));
   }
 
-  return yield* Effect.fail(
-    new AggregateError(
-      lastError === undefined ? [] : [lastError],
-      `Timed out waiting for Prisma App '${appId}' to report deployment '${deploymentId}' as latest (last observed latest deployment: '${lastLatestDeploymentId ?? "none"}').`,
-    ),
-  );
+  return yield* new AppDeploymentTargetTimeout({
+    message: `Timed out waiting for Prisma App '${appId}' to report deployment '${deploymentId}' as latest (last observed latest deployment: '${lastLatestDeploymentId ?? "none"}').`,
+    errors: lastError === undefined ? [] : [lastError],
+    cause: lastError,
+  });
 });
 
 /**
@@ -105,12 +122,11 @@ export const promoteAppObserved = Effect.fn(function* (
       Effect.result,
     );
     if (Result.isFailure(observation)) {
-      return yield* Effect.fail(
-        new AggregateError(
-          [observation.failure],
-          `Prisma App '${appId}' promotion returned success for deployment '${deploymentId}', but the App did not converge to that target. The deployment was preserved because promotion commit state is ambiguous.`,
-        ),
-      );
+      return yield* new AppPromotionNotConverged({
+        message: `Prisma App '${appId}' promotion returned success for deployment '${deploymentId}', but the App did not converge to that target. The deployment was preserved because promotion commit state is ambiguous.`,
+        errors: [observation.failure],
+        cause: observation.failure,
+      });
     }
     return {
       ...promoted.success,
@@ -158,21 +174,20 @@ export const promoteAppObserved = Effect.fn(function* (
           reassignedDomains: 0,
         };
   }
-  return yield* Effect.fail(
-    new AggregateError(
-      [
-        promoted.failure,
-        ...(Result.isFailure(observation) ? [observation.failure] : []),
-        ...(Result.isFailure(repaired) ? [repaired.failure] : []),
-        ...(Result.isFailure(repairedObservation)
-          ? [repairedObservation.failure]
-          : [
-              new Error(
-                `Prisma App '${appId}' still reports deployment '${repairedObservation.success.latestDeploymentId ?? "none"}' as latest after canonical recovery targeted '${deploymentId}'.`,
-              ),
-            ]),
-      ],
-      `Prisma App '${appId}' promotion of deployment '${deploymentId}' failed and canonical recovery also failed. The deployment was not deleted because endpoint commit state is ambiguous.`,
-    ),
-  );
+  return yield* new AppPromotionNotConverged({
+    cause: promoted.failure,
+    errors: [
+      promoted.failure,
+      ...(Result.isFailure(observation) ? [observation.failure] : []),
+      ...(Result.isFailure(repaired) ? [repaired.failure] : []),
+      ...(Result.isFailure(repairedObservation)
+        ? [repairedObservation.failure]
+        : [
+            new Error(
+              `Prisma App '${appId}' still reports deployment '${repairedObservation.success.latestDeploymentId ?? "none"}' as latest after canonical recovery targeted '${deploymentId}'.`,
+            ),
+          ]),
+    ],
+    message: `Prisma App '${appId}' promotion of deployment '${deploymentId}' failed and canonical recovery also failed. The deployment was not deleted because endpoint commit state is ambiguous.`,
+  });
 });

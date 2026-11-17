@@ -75,8 +75,18 @@ export interface ServerCertificate extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServerCertificateLookup
 > {}
+
+/**
+ * Props for {@link ServerCertificate.lookup}: find a server certificate this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServerCertificateLookup {
+  /** The server certificate name of the existing server certificate. */
+  serverCertificateName: string;
+}
 
 /**
  * An IAM server certificate.
@@ -94,6 +104,16 @@ export interface ServerCertificate extends Resource<
  *   ),
  *   certificateChain: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
  * });
+ * ```
+ *
+ * ### Looking up an existing server certificate
+ * `ServerCertificate.lookup` references a server certificate Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serverCertificateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing server certificate
+ * ```typescript
+ * const existing = AWS.IAM.ServerCertificate.lookup({ serverCertificateName: "my-server-certificate" });
  * ```
  *
  * @resource
@@ -131,6 +151,26 @@ export const ServerCertificateProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ serverCertificateName: name }) {
+          const cert = yield* readCertificate(name);
+          if (!cert?.ServerCertificateMetadata?.Arn) {
+            return undefined;
+          }
+          const tags = yield* iam.listServerCertificateTags({
+            ServerCertificateName: name,
+          });
+          return {
+            serverCertificateArn: cert.ServerCertificateMetadata.Arn,
+            serverCertificateName: cert.ServerCertificateMetadata.ServerCertificateName,
+            serverCertificateId: cert.ServerCertificateMetadata.ServerCertificateId,
+            path: cert.ServerCertificateMetadata.Path,
+            certificateBody: cert.CertificateBody,
+            certificateChain: cert.CertificateChain,
+            uploadDate: cert.ServerCertificateMetadata.UploadDate,
+            expiration: cert.ServerCertificateMetadata.Expiration,
+            tags: toTagRecord(tags.Tags),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

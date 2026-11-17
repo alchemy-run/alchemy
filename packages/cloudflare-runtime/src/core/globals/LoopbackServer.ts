@@ -1,6 +1,7 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as HttpServerError from "effect/http/HttpServerError";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
@@ -41,7 +42,9 @@ export const LoopbackServerLive = Layer.effect(
   LoopbackServer,
   Effect.gen(function* () {
     const routes = MutableHashMap.empty<string, RawHandler>();
-    const secret = crypto.randomUUID();
+    const secret = yield* SecureRandom.SecureRandom.pipe(
+      Effect.flatMap((random) => random.uuidV4()),
+    );
     const server = yield* Effect.sync(() =>
       NodeHttp.createServer(async (req, res) => {
         const secretHeader = req.headers[LoopbackServerHeaders.SECRET] as string | undefined;
@@ -137,7 +140,8 @@ export const LoopbackServerLive = Layer.effect(
       secret,
       route: (name, handler) =>
         Effect.isEffect(handler)
-          ? makeHandler(handler, { scope }).pipe(
+          ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- loopback routes accept any handler Effect from workerd globals
+            makeHandler(handler, { scope }).pipe(
               Effect.map((handler) => {
                 MutableHashMap.set(routes, name, handler);
               }),

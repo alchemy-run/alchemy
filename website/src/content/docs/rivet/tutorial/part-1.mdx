@@ -1,0 +1,192 @@
+---
+title: "Part 1: Your First Durable Object"
+description: Run a Rivet control plane and pool on Docker, and deploy a chat room that counts its visitors.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build chat rooms in four parts, starting with a room that counts its visitors. Each room is a Durable Object: later parts give it messages and an alarm, then move it to Hetzner. This part runs on your machine: no cloud account needed yet.
+
+If Rivet is new to you, read [What is Rivet?](/rivet/what-is-rivet) first. The finished code is in [`examples/rivet-rooms`](https://github.com/alchemy-run/alchemy/tree/main/examples/rivet-rooms).
+
+## Prerequisites
+
+Finish [Rivet setup](/rivet/setup), including `docker swarm init`. Install `@alchemy.run/rivet`, `@alchemy.run/docker`, `alchemy` and `effect`.
+
+## Run a control plane
+
+```diff lang="typescript"
++// src/cluster.ts
++import * as RivetDocker from "@alchemy.run/rivet/Docker";
++
++export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+```
+
+The control plane keeps every room's data and routes each call to the right room. This one runs on your Docker swarm, on `localhost:6420`.
+
+## Add a pool
+
+```diff lang="typescript"
+// src/cluster.ts
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
++import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
++
++export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
+```
+
+A pool is the group of nodes that run your code. `Layer.provide(Cluster)` tells it which control plane to join.
+
+## Write the room
+
+```diff lang="typescript"
++// src/room.ts
++import * as Rivet from "@alchemy.run/rivet";
++import * as Effect from "effect/Effect";
++import { Default } from "./cluster.ts";
++
++export default class Room extends Rivet.DurableObject<Room>()(
++  "Room",
++  { main: import.meta.url },
++  Effect.gen(function* () {
++    return Effect.gen(function* () {
++      return {};
++    });
++  }).pipe(Effect.provide(Default)),
++) {}
+```
+
+A Durable Object's code runs in two phases. The outer Effect runs once on each node; the inner Effect runs once per room, on its first call, and returns what the room can do. Providing `Default` puts the class on that pool.
+
+## Count visitors
+
+```diff lang="typescript"
+// src/room.ts
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+-      return {};
++      const state = yield* Rivet.DurableObjectState;
++
++      return {
++        join: () =>
++          Effect.gen(function* () {
++            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
++            yield* state.storage.put("visitors", visitors);
++            return visitors;
++          }),
++      };
+    });
+  }).pipe(Effect.provide(Default)),
+```
+
+`state` is this room's own. A key that was never set reads as `undefined`, so a new room starts at zero, and every room keeps its own `visitors` count.
+
+## Serve an API
+
+```diff lang="typescript"
++// src/api.ts
++import * as Docker from "@alchemy.run/docker";
++import * as Rivet from "@alchemy.run/rivet";
++import * as Effect from "effect/Effect";
++import * as HttpServerRequest from "effect/http/HttpServerRequest";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import { Cluster } from "./cluster.ts";
++import Room from "./room.ts";
++
++export default class Api extends Docker.Service<Api>()(
++  "Api",
++  Effect.gen(function* () {
++    const cluster = yield* Rivet.Cluster;
++    return {
++      main: import.meta.url,
++      port: 3000,
++      ports: [{ external: 3000, internal: 3000 }],
++      networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
++    };
++  }).pipe(Effect.provide(Cluster)),
++  Effect.gen(function* () {
++    return {
++      fetch: Effect.succeed(HttpServerResponse.empty({ status: 404 })),
++    };
++  }),
++) {}
+```
+
+The Api is a Docker service on port 3000. It joins the control plane's Docker network, which is how it reaches the control plane.
+
+## Call the room
+
+```diff lang="typescript"
+// src/api.ts
+  Effect.gen(function* () {
++    const rooms = yield* Room;
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.empty({ status: 404 })),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest.HttpServerRequest;
++        const [, name, action] = new URL(request.url, "http://api").pathname.split("/");
++        const room = rooms.getByName(name ?? "lobby");
++        if (action === "join") {
++          return yield* HttpServerResponse.json({ visitors: yield* room.join() });
++        }
++        return HttpServerResponse.empty({ status: 404 });
++      }),
+    };
+  }),
+```
+
+`yield* Room` gives the Api every room. `getByName` names one, and the first call to a name starts that room.
+
+## Add the Stack
+
+```diff lang="typescript"
++// alchemy.run.ts
++import * as Docker from "@alchemy.run/docker";
++import * as Rivet from "@alchemy.run/rivet";
++import * as Alchemy from "alchemy";
++import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
++import Api from "./src/api.ts";
++
++export default Alchemy.Stack(
++  "RivetRooms",
++  {
++    providers: Layer.mergeAll(Docker.providers(), Rivet.providers()),
++    state: Alchemy.localState(),
++  },
++  Effect.gen(function* () {
++    const api = yield* Api;
++    return { url: "http://localhost:3000", service: api.name };
++  }),
++);
+```
+
+The Stack only names the Api. The room comes with it, because the Api calls it, and the pool and the control plane come with the room.
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+The first deploy builds the node image and takes about a minute.
+
+## Join a room
+
+```sh
+curl -X POST localhost:3000/lobby/join
+# {"visitors":1}
+curl -X POST localhost:3000/lobby/join
+# {"visitors":2}
+curl -X POST localhost:3000/kitchen/join
+# {"visitors":1}
+```
+
+Each room counts on its own. The first request can take a few seconds while the pool starts.
+
+You have rooms that anyone can join by name, each counting its own visitors.
+
+:::note
+Next, give each room its messages in [Part 2](/rivet/tutorial/part-2). How a class is written is in [Durable Object](/rivet/durable-objects).
+:::

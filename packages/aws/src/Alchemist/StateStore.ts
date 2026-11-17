@@ -54,12 +54,18 @@ export const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (na
 /** The AWS environment of the profile core runs the operation under. */
 const environment = stateEnvironment();
 
+/** The S3 state store's options. */
+export interface S3StateStoreOptions {
+  /** A store other than the default, by name. */
+  readonly name?: string;
+}
+
 /**
  * The S3 state store's lifecycle, for `Alchemist.State` and `alchemy state`.
  * The store also creates its bucket on first use, so bootstrapping is only
  * needed to provision it ahead of time. S3 keeps no log stream to show.
  */
-export const lifecycle: StateStoreLifecycle = {
+export const lifecycle: StateStoreLifecycle<S3StateStoreOptions> = {
   bootstrap: ({ name }) =>
     bootstrapStateBucket(name).pipe(
       Effect.map(({ bucketName, accountId, region, existed }) => ({
@@ -77,7 +83,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The S3 state store AWS contributes, as `--backend aws-s3`. */
-export const s3StateStore: StateStoreImpl = {
-  layer: (options) => s3State(options),
+export const s3StateStore: StateStoreImpl<S3StateStoreOptions> = {
+  layer: (options) => s3State({ name: options?.name }),
   lifecycle,
 };

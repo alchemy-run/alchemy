@@ -52,13 +52,13 @@ export const makeReadR2HttpClient = (
     ),
     head: (key: string) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           authorize(
             r2.getObject({
               accountId,
               bucketName,
               objectName: key,
-              cfR2Jurisdiction,
+              jurisdiction,
             }),
           ),
         ),
@@ -78,13 +78,13 @@ export const makeReadR2HttpClient = (
       ),
     get: ((key: string, _options?: GetOptions) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           authorize(
             r2.getObject({
               accountId,
               bucketName,
               objectName: key,
-              cfR2Jurisdiction,
+              jurisdiction,
             }),
           ),
         ),
@@ -95,12 +95,12 @@ export const makeReadR2HttpClient = (
       )) as any,
     list: (options?: ListOptions) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           authorize(
             r2.listObjects({
               accountId,
               bucketName,
-              cfR2Jurisdiction,
+              jurisdiction,
               prefix: options?.prefix,
               delimiter: options?.delimiter,
               cursor: options?.cursor,

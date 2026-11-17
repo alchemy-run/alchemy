@@ -6,6 +6,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -44,6 +45,21 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { bucket, link };
         }),
+      );
+      yield* expectFound(
+        GCP.Logging.BucketsLink.lookup({
+          linkId: created.link.linkId,
+          location: created.link.location,
+          bucket: created.link.bucket,
+        }),
+        created.link,
+      );
+      yield* expectFound(
+        GCP.Logging.LogBucket.lookup({
+          bucketId: created.bucket.bucketId,
+          location: created.bucket.location,
+        }),
+        created.bucket,
       );
 
       expect(created.link.linkId).toEqual(expect.any(String));

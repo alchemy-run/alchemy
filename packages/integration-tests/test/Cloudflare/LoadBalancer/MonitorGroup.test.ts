@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -20,9 +21,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const monitorGroupsEnabled = !!process.env.CLOUDFLARE_LB_MONITOR_GROUPS_ENABLED;
 
 // Deterministic per-test physical names — reused on every run.
-const NAME_ENTITLEMENT = "alchemy-lb-monitorgroup-entitlement-probe";
-const NAME_LIFECYCLE = "alchemy-lb-monitorgroup-lifecycle";
-const NAME_MONITOR = "alchemy-lb-monitorgroup-lifecycle-monitor";
+const NAME_ENTITLEMENT = testName("alchemy-lb-monitorgroup-entitlement-probe");
+const NAME_LIFECYCLE = testName("alchemy-lb-monitorgroup-lifecycle");
+const NAME_MONITOR = testName("alchemy-lb-monitorgroup-lifecycle-monitor");
 
 // Freshly minted scoped tokens propagate eventually-consistently across
 // Cloudflare's edge — retry the typed `Forbidden` blips on out-of-band calls.

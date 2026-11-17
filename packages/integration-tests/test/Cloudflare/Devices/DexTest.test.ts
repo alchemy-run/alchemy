@@ -6,6 +6,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -20,7 +21,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_DEX;
 
-const TEST_NAME = "alchemy-test-dex";
+const TEST_NAME = testName("alchemy-test-dex");
 
 test.provider.skipIf(entitled)(
   "unentitled accounts surface the typed Forbidden entitlement error",

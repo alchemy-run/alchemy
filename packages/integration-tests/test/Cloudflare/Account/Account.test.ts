@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -128,12 +129,12 @@ test.provider.skipIf(!tenantEntitled)(
       // Rename + settings update happen in place (same account id).
       const updated = yield* stack.deploy(
         Cloudflare.Account.Account("TestSubaccount", {
-          name: "alchemy-test-subaccount-renamed",
+          name: testName("alchemy-test-subaccount-renamed"),
           enforceTwofactor: true,
         }),
       );
       expect(updated.accountId).toEqual(account.accountId);
-      expect(updated.name).toEqual("alchemy-test-subaccount-renamed");
+      expect(updated.name).toEqual(testName("alchemy-test-subaccount-renamed"));
       expect(updated.enforceTwofactor).toEqual(true);
 
       yield* stack.destroy();

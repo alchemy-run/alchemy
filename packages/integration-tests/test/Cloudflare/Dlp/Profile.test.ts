@@ -55,7 +55,6 @@ test.provider.skipIf(!entitled)(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Dlp.Profile("ListResource", {
-            name: "alchemy-test-dlp-list",
             description: "list coverage",
             entries: [
               {

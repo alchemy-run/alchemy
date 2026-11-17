@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Docker, DockerLive } from "../Docker.ts";
@@ -36,7 +37,33 @@ it.live(
           Effect.andThen(Effect.ignore(docker("rmi", image))),
         ),
       ),
-      Effect.provide(Layer.provide(DockerLive, NodeServices.layer)),
+      Effect.provide(
+        Layer.provide(DockerLive, Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto)),
+      ),
+    );
+  },
+  60_000,
+);
+
+it.live(
+  "uses a user image that exists only in the local Docker without pulling it",
+  () => {
+    // A tag no registry holds, as with an image built or `docker load`ed locally.
+    const image = "alchemy-test.invalid/local-only:dev";
+    const tag = `alchemy-local-only-${crypto.randomUUID()}:latest`;
+    return Effect.gen(function* () {
+      yield* docker("pull", "--platform", "linux/amd64", "alpine:3.21");
+      yield* docker("tag", "alpine:3.21", image);
+      yield* (yield* Docker).pull(tag, { imageUri: image });
+      const id = yield* docker("image", "inspect", tag, "--format", "{{.Id}}");
+      expect(id.trim()).not.toBe("");
+    }).pipe(
+      Effect.ensuring(
+        Effect.ignore(docker("rmi", tag)).pipe(Effect.andThen(Effect.ignore(docker("rmi", image)))),
+      ),
+      Effect.provide(
+        Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SecureRandom.layerWebCrypto)),
+      ),
     );
   },
   60_000,

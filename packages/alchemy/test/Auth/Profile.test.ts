@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -172,6 +173,7 @@ const makeTestLayer = (config: Record<string, unknown> = {}) =>
         AuthProvidersLive,
         ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
         NodeServices.layer,
+        SecureRandom.layerWebCrypto,
       ),
     ),
   );
@@ -201,7 +203,11 @@ const withTempHome = <A, E, R>(
         }),
     );
     return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    Effect.provide(SecureRandom.layerWebCrypto),
+  );
 
 it.live(
   "loadProviderConfig requires profiles to be explicitly created",

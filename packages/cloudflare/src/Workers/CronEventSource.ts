@@ -5,6 +5,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Scope from "effect/Scope";
 import { isWorkerEvent, Worker } from "./Worker.ts";
 
 /**
@@ -199,16 +200,16 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * @product Workers
  * @category Workers & Compute
  */
-export const cron = <Req = never>(
+export const cron = <Req = never, E = never>(
   expression: string,
-  process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
-): Effect.Effect<void, never, CronEventSource | Exclude<Req, RuntimeContext>> =>
+  process: (controller: cf.ScheduledController) => Effect.Effect<void, E, Req>,
+): Effect.Effect<void, never, CronEventSource | Exclude<Req, RuntimeContext | Scope.Scope>> =>
   CronEventSource.use((source) => source(expression, process));
 
-export type CronEventSourceService = <Req = never>(
+export type CronEventSourceService = <Req = never, E = never>(
   expression: string,
-  process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
-) => Effect.Effect<void, never, Exclude<Req, RuntimeContext>>;
+  process: (controller: cf.ScheduledController) => Effect.Effect<void, E, Req>,
+) => Effect.Effect<void, never, Exclude<Req, RuntimeContext | Scope.Scope>>;
 
 export class CronEventSource extends Context.Service<CronEventSource, CronEventSourceService>()(
   "Cloudflare.Workers.CronEventSource",
@@ -218,9 +219,9 @@ export const CronEventSourceLive = Layer.effect(
   CronEventSource,
   Effect.gen(function* () {
     const host = yield* Worker;
-    return Effect.fn(function* <Req>(
+    return Effect.fn(function* <Req, E>(
       expression: string,
-      process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
+      process: (controller: cf.ScheduledController) => Effect.Effect<void, E, Req>,
     ) {
       // Deploy-time: attach the cron expression to the host Worker. Skipped once
       // running inside the deployed Worker (the global guard), where the only

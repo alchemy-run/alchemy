@@ -3,10 +3,13 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   clusterIdOf,
@@ -107,8 +110,38 @@ export type InstancesClustersBackup = Resource<
     encryptionInfo: bigtable.EncryptionInfo | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesClustersBackupLookup
 >;
+
+/**
+ * Props for {@link InstancesClustersBackup.lookup}: find an instances
+ * clusters backup this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InstancesClustersBackupLookup {
+  /**
+   * Backup id (the `{backup}` segment of
+   * `.../clusters/{cluster}/backups/{backup}`). Must be 1-50 characters.
+   */
+  backupId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Cluster that stores the backup. Full name
+   * `projects/{project}/instances/{instance}/clusters/{cluster}` or the
+   * cluster id.
+   */
+  cluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable backup of a table, stored on one cluster.
@@ -144,6 +177,21 @@ export type InstancesClustersBackup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances clusters backup
+ * `InstancesClustersBackup.lookup` references an instances clusters backup
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared instances clusters backup.
+ *
+ * **Example:** Reference an existing instances clusters backup
+ * ```typescript
+ * const instancesClustersBackup = GCP.Bigtable.InstancesClustersBackup.lookup({
+ *   backupId: "my-backup",
+ *   instance: "my-instance",
+ *   cluster: "my-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
@@ -173,7 +221,9 @@ const normalizeType = (value: string | undefined) => {
 };
 
 const defaultExpireTime = () =>
-  Effect.sync(() => new Date(Date.now() + DEFAULT_EXPIRE_MS).toISOString());
+  Effect.map(Clock.currentTimeMillis, (now) =>
+    DateTime.formatIso(DateTime.makeUnsafe(now + DEFAULT_EXPIRE_MS)),
+  );
 
 const toAttrs = (backup: bigtable.Backup, project: string) => {
   const name = backup.name ?? "";
@@ -306,6 +356,18 @@ export const InstancesClustersBackupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ backupId, instance, cluster }) {
+      const env = yield* GcpEnvironment.current;
+      const name =
+        instance && cluster
+          ? `${clusterNameOf(env.project, instance, cluster)}/backups/${backupId}`
+          : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

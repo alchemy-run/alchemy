@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -47,7 +48,7 @@ test.provider(
 
       const rule = yield* stack.deploy(
         Cloudflare.Devices.DevicePostureRule("WindowsOsVersion", {
-          name: "alchemy-test-posture-os",
+          name: testName("alchemy-test-posture-os"),
           type: "os_version",
           description: "Require Windows 10.0.19045+",
           match: [{ platform: "windows" }],
@@ -58,19 +59,19 @@ test.provider(
 
       expect(rule.postureRuleId).toBeTruthy();
       expect(rule.accountId).toEqual(accountId);
-      expect(rule.name).toEqual("alchemy-test-posture-os");
+      expect(rule.name).toEqual(testName("alchemy-test-posture-os"));
       expect(rule.type).toEqual("os_version");
       expect(rule.description).toEqual("Require Windows 10.0.19045+");
 
       // Out-of-band verify against the live API.
       const live = yield* getRule(accountId, rule.postureRuleId);
-      expect(live.name).toEqual("alchemy-test-posture-os");
+      expect(live.name).toEqual(testName("alchemy-test-posture-os"));
       expect(live.type).toEqual("os_version");
 
       // Update mutable props in place — same rule id.
       const updated = yield* stack.deploy(
         Cloudflare.Devices.DevicePostureRule("WindowsOsVersion", {
-          name: "alchemy-test-posture-os",
+          name: testName("alchemy-test-posture-os"),
           type: "os_version",
           description: "Require Windows 10.0.22631+",
           match: [{ platform: "windows" }],
@@ -102,7 +103,7 @@ test.provider(
 
       const original = yield* stack.deploy(
         Cloudflare.Devices.DevicePostureRule("Replace", {
-          name: "alchemy-test-posture-replace",
+          name: testName("alchemy-test-posture-replace"),
           type: "firewall",
           match: [{ platform: "mac" }],
           schedule: "5m",
@@ -114,7 +115,7 @@ test.provider(
       // `type` is immutable — diff must request a replacement.
       const replaced = yield* stack.deploy(
         Cloudflare.Devices.DevicePostureRule("Replace", {
-          name: "alchemy-test-posture-replace",
+          name: testName("alchemy-test-posture-replace"),
           type: "disk_encryption",
           match: [{ platform: "mac" }],
           schedule: "5m",
@@ -143,7 +144,6 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.Devices.DevicePostureRule("ListRule", {
-          name: "alchemy-test-posture-list",
           type: "os_version",
           match: [{ platform: "windows" }],
           schedule: "5m",

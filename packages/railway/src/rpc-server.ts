@@ -1,4 +1,5 @@
 import type { HttpEffect } from "alchemy/Http";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -74,7 +75,7 @@ export const serveRailwayRpc = <Req = never>(
             }
           });
     const forwarded = header(headers, "x-forwarded-host");
-    const expected = yield* Effect.sync(() => process.env[RPC_TOKEN_ENV] ?? "");
+    const expected = yield* Config.String(RPC_TOKEN_ENV).pipe(Effect.orElseSucceed(() => ""));
     const provided = header(headers, RPC_TOKEN_HEADER);
     if (
       !isPrivateMesh(host) ||
@@ -91,7 +92,8 @@ export const serveRailwayRpc = <Req = never>(
     if (queryAt !== -1) name = name.slice(0, queryAt);
     name = decodeURIComponent(name);
 
-    const method = shape[name];
+    // Never `Object.prototype` members (`constructor`, `__proto__`, ...).
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,
@@ -114,7 +116,7 @@ export const serveRailwayRpc = <Req = never>(
     if (!Effect.isEffect(invoked)) {
       return yield* HttpServerResponse.json(invoked ?? null);
     }
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RPC methods are pre-provided service Effects
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- RPC methods are pre-provided service Effects of any shape
     const result = yield* Effect.result(invoked as Effect.Effect<unknown, unknown>);
     if (Result.isSuccess(result)) {
       return yield* HttpServerResponse.json(result.success ?? null);

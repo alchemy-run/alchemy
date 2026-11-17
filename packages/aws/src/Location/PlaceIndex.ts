@@ -61,8 +61,18 @@ export interface PlaceIndex extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PlaceIndexLookup
 > {}
+
+/**
+ * Props for {@link PlaceIndex.lookup}: find a place index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PlaceIndexLookup {
+  /** The index name of the existing place index. */
+  indexName: string;
+}
 
 /**
  * An Amazon Location Service place index. A place index geocodes text and
@@ -86,6 +96,16 @@ export interface PlaceIndex extends Resource<
  *   intendedUse: "Storage",
  *   description: "Cacheable geocoding index",
  * });
+ * ```
+ *
+ * ### Looking up an existing place index
+ * `PlaceIndex.lookup` references a place index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `indexName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing place index
+ * ```typescript
+ * const existing = AWS.Location.PlaceIndex.lookup({ indexName: "my-place-index" });
  * ```
  *
  * @resource
@@ -136,6 +156,11 @@ export const PlaceIndexProvider = () =>
               (attrs): attrs is PlaceIndex["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ indexName }) {
+          const state = yield* readIndex(indexName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const indexName = output?.indexName ?? (yield* createIndexName(id, olds ?? {}));
           const state = yield* readIndex(indexName);

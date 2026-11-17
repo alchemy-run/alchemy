@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import type { ResourceBinding } from "alchemy/Resource";
 import * as AlchemyTelemetry from "alchemy/Telemetry";
@@ -53,13 +54,66 @@ export interface CloudflareTelemetryProps {
    * Pass `false` to export-only (no dashboard persist).
    */
   persist?: boolean;
+  /**
+   * Workers Logs settings for the host Worker. Logs are on by default;
+   * pass `{ enabled: false }` to turn them off. Merged field by field
+   * with `observability.logs` on the Worker's props; a field set to
+   * different values in both fails the deploy.
+   * @default { enabled: true, invocationLogs: true }
+   */
+  logs?: CloudflareTelemetryLogsProps;
 }
 
-const tracesFromProps = (props: CloudflareTelemetryProps) => ({
-  enabled: props.enabled ?? true,
-  ...(props.headSamplingRate !== undefined ? { headSamplingRate: props.headSamplingRate } : {}),
-  ...(props.persist !== undefined ? { persist: props.persist } : {}),
-});
+export interface CloudflareTelemetryLogsProps {
+  /**
+   * Enable Workers Logs on the host Worker.
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Record an invocation log for every request.
+   * @default true
+   */
+  invocationLogs?: boolean;
+  /**
+   * Head-based sampling rate for Workers Logs (`0`–`1`).
+   * Omitted unless set — Cloudflare's default applies.
+   */
+  headSamplingRate?: number;
+  /**
+   * Persist logs in the Cloudflare dashboard. Omitted unless set.
+   * Pass `false` to export-only (no dashboard persist).
+   */
+  persist?: boolean;
+  /**
+   * Slugs of `Cloudflare.Workers.ObservabilityDestination`s
+   * (`logpushDataset: "opentelemetry-logs"`) to export logs to.
+   */
+  destinations?: Input<string>[];
+}
+
+const defined = <T extends object>(fields: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+
+// Only the fields the caller set: the Worker fills in the defaults, and
+// merges these with its own `observability` props field by field.
+const tracesFromProps = (props: CloudflareTelemetryProps) =>
+  defined({
+    enabled: props.enabled,
+    headSamplingRate: props.headSamplingRate,
+    persist: props.persist,
+  });
+
+const logsFromProps = ({ logs = {} }: CloudflareTelemetryProps) =>
+  defined({
+    enabled: logs.enabled,
+    invocationLogs: logs.invocationLogs,
+    headSamplingRate: logs.headSamplingRate,
+    persist: logs.persist,
+    destinations: logs.destinations,
+  });
 
 /**
  * Fail deploy when `Cloudflare.Telemetry()` is bound and the Worker's
@@ -86,8 +140,8 @@ export const assertCloudflareTelemetryCompatibility = (
 /**
  * Mirror Effect spans into Cloudflare Workers Observability.
  *
- * A binding layer: at deploy time it turns on `observability.traces` on the
- * host Worker (the same path as `Cloudflare.cache()`) and registers a
+ * A binding layer: at deploy time it turns on `observability.traces` and
+ * `observability.logs` on the host Worker (the same path as `Cloudflare.cache()`) and registers a
  * per-event Effect Tracer. Cloudflare auto-instruments fetch/KV/R2/D1;
  * `Effect.withSpan` / `Effect.fn` frames nest in that waterfall. Cloudflare
  * owns sampling and export — no OTLP URL, flush, or Wrangler block.
@@ -126,6 +180,26 @@ export const assertCloudflareTelemetryCompatibility = (
  * );
  * ```
  *
+ * ### Configuring Workers Logs
+ * **Example:** Export logs to an OTLP collector without dashboard persist
+ * ```typescript
+ * const logs = yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
+ *   url: "https://otel.example.com/v1/logs",
+ *   logpushDataset: "opentelemetry-logs",
+ * });
+ *
+ * Effect.provide(
+ *   Cloudflare.Telemetry({
+ *     logs: { persist: false, destinations: [logs.slug] },
+ *   }),
+ * )
+ * ```
+ *
+ * **Example:** Traces only, with Workers Logs off
+ * ```typescript
+ * Effect.provide(Cloudflare.Telemetry({ logs: { enabled: false } }))
+ * ```
+ *
  * ### Combining with other exporters
  * **Example:** Native traces plus another exporter's logs and metrics
  * ```typescript
@@ -157,7 +231,7 @@ export const Telemetry = (
         yield* Namespace.push(
           host.LogicalId,
           host.bind("Cloudflare.Telemetry", {
-            observability: { traces: tracesFromProps(props) },
+            observability: { traces: tracesFromProps(props), logs: logsFromProps(props) },
           }),
         );
       }

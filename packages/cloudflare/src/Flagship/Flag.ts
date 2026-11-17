@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
@@ -510,7 +511,7 @@ export const FlagProviderLocal = () =>
         ...definition,
         description: news.description,
         type: news.type ?? inferFlagType(news.variations),
-        updatedAt: yield* Effect.sync(() => new Date().toISOString()),
+        updatedAt: DateTime.formatIso(yield* DateTime.now),
         updatedBy: "local",
       };
     }),

@@ -148,6 +148,7 @@ export * as SQL from "./SQL/index.ts";
 export * as Spanner from "./Spanner/index.ts";
 export * as Speech from "./Speech/index.ts";
 export * as Storage from "./Storage/index.ts";
+export * as StorageInsights from "./StorageInsights/index.ts";
 export * as StorageTransfer from "./StorageTransfer/index.ts";
 export * as Translate from "./Translate/index.ts";
 export * as TPU from "./TPU/index.ts";

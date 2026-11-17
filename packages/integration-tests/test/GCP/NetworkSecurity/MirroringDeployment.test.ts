@@ -6,6 +6,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -94,6 +95,21 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { vpc, subnet, health, backend, rule, collectors, deployment };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.MirroringDeployment.lookup({
+          mirroringDeploymentId: created.deployment.mirroringDeploymentId,
+          location: created.deployment.location,
+        }),
+        created.deployment,
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.MirroringDeploymentGroup.lookup({
+          mirroringDeploymentGroupId: created.collectors.mirroringDeploymentGroupId,
+          location: created.collectors.location,
+        }),
+        created.collectors,
+        { ignore: ["locations"] },
       );
 
       expect(created.deployment.name).toContain("/mirroringDeployments/");

@@ -42,6 +42,10 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
   "OtelWorker",
   Alchemy.Stack.useSync(({ stage }) => ({
     main: import.meta.url,
+    // The prod Worker was first deployed (2026-05-21) into a state store
+    // that has since been replaced; pinning its generated name lets the
+    // current store adopt it instead of creating a second Worker.
+    name: stage === "prod" ? "alchemyotel-otelworker-prod-kqnztkgnqozwsgw5" : undefined,
     observability: { enabled: true },
     domain:
       stage === "prod"
@@ -94,6 +98,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
 
           const response = yield* Effect.tryPromise({
             try: () =>
+              // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- raw Web Request/Response relay passed straight to HttpServerResponse.fromWeb
               fetch(otlp.endpoint, {
                 method: "POST",
                 headers: {
@@ -134,6 +139,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
 
         const upstream = yield* Effect.tryPromise({
           try: () =>
+            // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- raw Web Request/Response reverse proxy (cf cache opts, redirect: "manual", fromWeb passthrough)
             fetch(target, {
               method: raw.method,
               headers,

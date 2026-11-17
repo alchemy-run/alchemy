@@ -25,12 +25,13 @@ export const storeName = (name: string) =>
 
 export interface StoreRef {
   readonly backend: string;
-  readonly name?: string;
+  /** The `alchemy state` flags that address this store, e.g. `{ name, domain }`. */
+  readonly flags?: Readonly<Record<string, string | undefined>>;
   /** e.g. `Cloudflare State Store 'alchemy-state-store'`. */
   readonly label: string;
   /**
-   * Only the stack's config describes this store, e.g. a custom Worker or
-   * bucket name or a pinned account, so `--backend` can't address it.
+   * Only the stack's config describes this store, e.g. a custom bucket name
+   * or a pinned account, so `--backend` and its flags can't address it.
    */
   readonly configured?: boolean;
 }
@@ -38,7 +39,12 @@ export interface StoreRef {
 const required = (store: StoreRef, action: "bootstrap" | "upgrade", problem: string) => {
   const command = store.configured
     ? "alchemy state bootstrap"
-    : `alchemy state bootstrap --backend ${store.backend}${store.name ? ` --name ${store.name}` : ""}`;
+    : [
+        `alchemy state bootstrap --backend ${store.backend}`,
+        ...Object.entries(store.flags ?? {}).flatMap(([flag, value]) =>
+          value === undefined ? [] : [`--${flag} ${value}`],
+        ),
+      ].join(" ");
   return new StateStoreError({
     message: `${store.label} ${problem}. Run '${command} --profile <your-ci-profile>' first, or pass --yes.`,
     requires: { action, command },

@@ -204,7 +204,9 @@ describe.sequential(
       }).pipe(logLevel),
     );
 
-    test.provider(
+    // Skipped: provisioning a zone fails with `ZoneQuotaExceeded` on the testing
+    // account (see test/Cloudflare/Zone/Zone.test.ts).
+    test.provider.skip(
       "creates and tears down a ruleset whose zone is provisioned in the same deploy",
       (stack) =>
         Effect.gen(function* () {

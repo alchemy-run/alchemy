@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": "build",
+      "flags": [
+        {
+          "name": "platform",
+          "value": "linux/amd64"
+        }
+      ],
+      "instructions": []
+    },
+    {
+      "line": 2,
+      "image": "alpine",
+      "name": null,
+      "flags": [
+        {
+          "name": "platform",
+          "value": "$BUILDPLATFORM"
+        }
+      ],
+      "instructions": []
+    }
+  ]
+}

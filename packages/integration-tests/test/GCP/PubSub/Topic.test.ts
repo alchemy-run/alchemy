@@ -5,6 +5,7 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -34,6 +35,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.PubSub.Topic.lookup({ topicId: created.topicId }), created);
 
       expect(created.name).toContain("/topics/");
       expect(created.topicId).toEqual(expect.any(String));

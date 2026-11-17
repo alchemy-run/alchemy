@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "directives": {
+    "escape": "`"
+  },
+  "stages": [
+    {
+      "line": 2,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo a``"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 4,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo b"
+          }
+        }
+      ]
+    }
+  ]
+}

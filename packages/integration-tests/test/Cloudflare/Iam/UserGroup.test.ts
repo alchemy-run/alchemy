@@ -8,15 +8,16 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic names — the same on every run (never Date.now()/random).
-const UG_NAME = "alchemy-iam-ug-crud";
-const UG_NAME_RENAMED = "alchemy-iam-ug-crud-renamed";
-const RG_NAME = "alchemy-iam-ug-crud-rg";
+const UG_NAME = testName("alchemy-iam-ug-crud");
+const UG_NAME_RENAMED = testName("alchemy-iam-ug-crud-renamed");
+const RG_NAME = testName("alchemy-iam-ug-crud-rg");
 
 // Built-in permission groups looked up by their stable catalog names.
 const PERMISSION_GROUP_NAME = "Page Rules Read";
@@ -157,7 +158,7 @@ test.provider(
   },
 );
 
-const UG_LIST_NAME = "alchemy-iam-ug-list";
+const UG_LIST_NAME = testName("alchemy-iam-ug-list");
 
 test.provider(
   "list enumerates the deployed user group",

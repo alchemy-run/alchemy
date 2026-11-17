@@ -11,9 +11,14 @@ import * as Redacted from "effect/Redacted";
  * Access test in `Hyperdrive.test.ts`).
  */
 export const ACCESS_ORIGIN_ZONE = "alchemy-test-2.us";
-export const ACCESS_ORIGIN_HOST = `hyperdrive-access-${
-  process.env.PULL_REQUEST ?? process.env.USER ?? "local"
-}.${ACCESS_ORIGIN_ZONE}`;
+export const ACCESS_ORIGIN_HOST = `hyperdrive-access-${(
+  process.env.ALCHEMY_TEST_STAGE ??
+  process.env.PULL_REQUEST ??
+  process.env.USER ??
+  "local"
+)
+  .toLowerCase()
+  .replace(/[^a-z0-9-]/g, "-")}.${ACCESS_ORIGIN_ZONE}`;
 export const ACCESS_ORIGIN_PORT = 15432;
 export const ACCESS_ORIGIN_PASSWORD = "alchemy-access-origin";
 

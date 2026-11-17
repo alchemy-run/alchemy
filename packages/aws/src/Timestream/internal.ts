@@ -1,6 +1,7 @@
 import { Endpoint } from "@distilled.cloud/aws";
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as TSW from "@distilled.cloud/aws/timestream-write";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 
 /**
@@ -38,7 +39,7 @@ export const discover = <E, R>(
   describe: Effect.Effect<{ Endpoints: { Address: string; CachePeriodInMinutes: number }[] }, E, R>,
 ): Effect.Effect<string, E, R> =>
   Effect.gen(function* () {
-    const now = Date.now();
+    const now = yield* Clock.currentTimeMillis;
     const cached = cache.get(kind);
     if (cached !== undefined && cached.expiresAt > now) {
       return cached.url;

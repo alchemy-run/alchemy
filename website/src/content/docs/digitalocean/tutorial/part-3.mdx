@@ -1,0 +1,159 @@
+---
+title: "Part 3: Add a Postgres Database"
+description: Declare a managed PostgreSQL cluster, apply SQL migrations on every deploy, and query it from the App with its connection string.
+sidebar:
+  order: 3
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+A managed database cluster is a PostgreSQL server DigitalOcean runs for you, with backups and failover. The App will record the path of every request in a `visits` table.
+
+:::note[Costs]
+The smallest PostgreSQL cluster costs about $15 a month, billed by the hour.
+:::
+
+## Declare a cluster
+
+```diff lang="typescript"
+// src/resources.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
+
+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3", forceDestroy: true });
++
++export const Db = DigitalOcean.Databases.Cluster("Db", {
++  engine: "pg",
++  size: "db-s-1vcpu-1gb",
++  region: "nyc3",
++});
+```
+
+A new cluster takes five to ten minutes to come up, and deploy waits for it.
+
+## Write a migration
+
+Migrations are plain SQL files, applied in name order:
+
+```sql title="migrations/0001_create_visits.sql"
+CREATE TABLE visits (
+  id serial PRIMARY KEY,
+  path text NOT NULL,
+  at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+## Declare the App's database
+
+```diff lang="typescript"
+// src/resources.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
++import * as Effect from "effect/Effect";
+
+export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
+
+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3", forceDestroy: true });
+
+export const Db = DigitalOcean.Databases.Cluster("Db", {
+  engine: "pg",
+  size: "db-s-1vcpu-1gb",
+  region: "nyc3",
+});
++
++export const AppDb = Effect.gen(function* () {
++  const db = yield* Db;
++  return yield* DigitalOcean.Databases.Database("App", {
++    clusterId: db.clusterId,
++    migrations: "./migrations",
++  });
++});
+```
+
+`Database` creates a database named `App` in the cluster and applies every migration it hasn't run yet, on every deploy. Alchemy records each applied file in an `__alchemy_migrations` table, so a later deploy runs only new files. It's declared inside an `Effect.gen` because it needs the cluster's id.
+
+## Install a driver
+
+<PackageManagers add="pg" dev="@types/pg" />
+
+## Bind the database
+
+```diff lang="typescript"
+// src/api.ts
+-import { Registry, Uploads } from "./resources.ts";
++import { AppDb, Registry, Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc", registry: Registry },
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
+    const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
++    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
+```
+
+`Connect(AppDb)` gives the App the database's connection string as a secret, and the certificate of the CA DigitalOcean signs the cluster's TLS certificate with. The App's deploy now waits for the migrations.
+
+## Provide its client
+
+```diff lang="typescript"
+// src/api.ts, at the end of the class
+  }).pipe(
+    Effect.provide(
+-      Layer.mergeAll(DigitalOcean.Spaces.PutObjectHttp, DigitalOcean.Spaces.GetObjectHttp),
++      Layer.mergeAll(
++        DigitalOcean.Spaces.PutObjectHttp,
++        DigitalOcean.Spaces.GetObjectHttp,
++        DigitalOcean.Databases.ConnectHttp,
++      ),
+    ),
+  ),
+) {}
+```
+
+## Run a query
+
+Add a small helper inside the Effect, after `conn`:
+
+```typescript
+const query = (sql: string, params: unknown[] = []) =>
+  Effect.gen(function* () {
+    const uri = yield* conn.connectionString;
+    const ca = yield* conn.caCertificate;
+    return yield* Effect.tryPromise(async () => {
+      const client = new pg.Client({
+        // `ssl` verifies the server against DigitalOcean's CA; pg ignores it
+        // while the string carries `sslmode`.
+        connectionString: Redacted.value(uri).replace(/[?&]sslmode=[^&]*/, ""),
+        ssl: { ca },
+      });
+      await client.connect();
+      try {
+        return (await client.query(sql, params)).rows;
+      } finally {
+        await client.end();
+      }
+    });
+  });
+```
+
+It opens a connection per query, which is enough for a small App. Import `pg` from `"pg"` and `Redacted` from `"effect/Redacted"` at the top of the file.
+
+## Record each request
+
+```diff lang="typescript"
+// src/api.ts, inside fetch
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const key = new URL(request.url, "http://api").pathname.slice(1);
++        yield* query("INSERT INTO visits (path) VALUES ($1)", [`/${key}`]);
+        if (request.method === "PUT") {
+```
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+Call the App a few times, then look in the database. The cluster's page in the control panel shows the connection details and a console.
+
+Next, in [Part 4](/digitalocean/tutorial/part-4), a nightly job writes a report of the visits.

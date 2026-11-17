@@ -1,0 +1,149 @@
+---
+title: What is Fly?
+description: The concepts behind Fly.io — organizations, Apps, Machines, regions, the Fly proxy, private networking, Volumes, managed data, secrets and certificates — and how @alchemy.run/fly models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Fly.io runs your programs as small virtual machines in data centers around the world. You choose the regions, Fly starts the machines there, and its proxy sends each request to the nearest one that's running. It's a whole server per instance, with a disk if you want one, close to your users.
+
+Take one small app: an API Service in two regions that stores files on a Volume and keeps its data in Postgres. Everything in an organization shares one private network. The App's Machines run in two regions, each with its own Volume, and reach Postgres over the private network. Fly's proxy sends each request to the nearest Machine.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization · private network", icon: "brand:fly", areas: ["app", "pg"] },
+    { id: "app", label: "api", type: "app", parent: "org", dashed: true, icon: "app-window", areas: ["riad rlhr"], colGap: 1 },
+    { id: "riad", label: "iad", type: "region · Ashburn", parent: "app", dashed: true, icon: "map-pin", areas: ["iad volIad"], phoneAreas: ["iad volIad"], colGap: 3 },
+    { id: "iad", label: "Machine", type: "runs api", parent: "riad", tone: "accent", icon: "server" },
+    { id: "volIad", label: "data", type: "Volume", parent: "riad", icon: "hard-drive" },
+    { id: "rlhr", label: "lhr", type: "region · London", parent: "app", dashed: true, icon: "map-pin", areas: ["lhr volLhr"], phoneAreas: ["lhr volLhr"], colGap: 3 },
+    { id: "lhr", label: "Machine", type: "runs api", parent: "rlhr", tone: "accent", icon: "server" },
+    { id: "volLhr", label: "data", type: "Volume", parent: "rlhr", icon: "hard-drive" },
+    { id: "pg", label: "Postgres", type: "Managed Postgres", parent: "org", icon: "brand:postgresql" },
+  ]}
+  links={[
+    { from: "iad", to: "volIad", label: "mounts" },
+    { from: "lhr", to: "volLhr", label: "mounts" },
+    { from: "iad", to: "pg" },
+    { from: "lhr", to: "pg" },
+  ]}
+  caption="An organization's apps share one private network over WireGuard. Each Machine runs in one region, with its own Volume there. Fly's anycast proxy sends each request for api.fly.dev to the nearest Machine, and both Machines reach Postgres over the private network."
+/>
+
+## Organizations
+
+An **organization** holds your Apps, databases and billing, and the people allowed to use them. Every Fly account has a personal organization, and teams make more.
+
+Alchemy deploys into the organization your API token belongs to. Create the token and connect it once, in [Setup](/fly/setup).
+
+## Apps: a name and a namespace
+
+An **App** is a named group of Machines, with its own hostname, `{name}.fly.dev`, its own secrets and its own addresses. App names are global across all of Fly, so no two Apps anywhere share one.
+
+Alchemy generates a unique name from your app, stage and id unless you give one, so each stage gets its own App.
+
+See [Apps](/fly/compute/apps).
+
+## Machines: a VM per instance
+
+A **Machine** is a Firecracker virtual machine running a container image. It boots in about a second, runs in one region, and has the CPU and memory you choose. A Machine can stop when idle and start again on the next request, so you pay for what runs.
+
+```typescript title="alchemy.run.ts"
+const web = yield* Fly.Machine("Web", { app: Site, region: "iad", image: "nginx:alpine" });
+```
+
+See [Machines](/fly/compute/machines).
+
+## Services: your program on Machines
+
+In Alchemy, a **Service** is your Effect program running on Machines, in an App of its own. Its code and its configuration live in one file:
+
+```typescript title="src/api.ts"
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { main: import.meta.url, region: ["iad", "lhr"], count: 1 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from Fly")),
+    };
+  }),
+) {}
+```
+
+Deploy bundles the file, builds an image, pushes it to Fly's registry, and starts `count` Machines in each region behind one hostname.
+
+See [Services](/fly/compute/services).
+
+## Regions
+
+A **region** is one Fly data center, named by a nearby airport code: `iad` near Washington, `lhr` London, `nrt` Tokyo. Every Machine, Volume and database lives in one. Running Machines in several regions puts your program near users in each.
+
+See [Regions](/fly/compute/regions).
+
+## The proxy and public addresses
+
+Every request to an App goes through the **Fly proxy**. It terminates TLS, routes the request to the nearest Machine that's running, starts a stopped one if needed, and balances load between them.
+
+An App is reachable from the internet once it has a public IP. A shared IPv4 and an IPv6 address are free. A Service gets them automatically. A custom domain needs a **certificate**, which Fly issues once your DNS points at the App.
+
+See [IPs & certificates](/fly/networking).
+
+## Private networking
+
+Every App in an organization joins a **private network**. Apps on it reach each other at `{app}.internal` addresses, and private Services at `{app}.flycast`, through the proxy, without ever touching the internet.
+
+In Alchemy, one Service calls another by binding it, and gets a typed client for its methods:
+
+```typescript title="src/gateway.ts"
+const users = yield* Fly.bindService(Users);
+```
+
+See [Connect Services](/fly/compute/connecting-services).
+
+## Volumes: a disk per Machine
+
+A **Volume** is a local disk in one region, attached to one Machine at a time. It survives restarts and deploys. Because it's attached to one Machine, three Machines need three Volumes, each holding its own data.
+
+See [Volumes](/fly/data/volumes).
+
+## Managed data
+
+Fly runs data services alongside your Apps: **Managed Postgres**, **Upstash Redis**, and **Tigris**, object storage that speaks the S3 API. A Service reaches each through a binding that hands it the connection details.
+
+See [Postgres](/fly/data/postgres), [Redis](/fly/data/redis) and [Tigris](/fly/data/tigris).
+
+## Secrets
+
+An App's **secrets** are values Fly encrypts and gives to its Machines as environment variables. Values from your `.env` read with `effect/Config` reach a Service the same way.
+
+See [Secrets](/fly/data/secrets).
+
+## Sprites: sandboxes that sleep
+
+A **Sprite** is a persistent sandbox in your organization: a machine with its own filesystem that hibernates when idle and wakes on the next request, without belonging to an App.
+
+See [Sprites](/fly/compute/sprites).
+
+## State: where Alchemy keeps its record
+
+Fly has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Fly.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## How @alchemy.run/fly models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your API token picks the organization, and `Fly.providers()` deploys into it. A Service is your program on Machines in an App of its own, with addresses and a hostname. Machines, Apps, Volumes, databases, secrets and certificates are declarations like any other. Bindings give a Service the connection details for what it uses, and a typed client for other Services.
+
+Next, build one: the [tutorial](/fly/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Services](/fly/compute/services).

@@ -12,9 +12,11 @@ interface Props {
   height: number;
   label: string;
   type?: string;
+  /** Icon paths in a 24×24 box, in place of the kind's own icon. */
+  icon?: ReadonlyArray<string>;
 }
 
-const { kind, width: w, height: h, label, type } = Astro.props as Props;
+const { kind, width: w, height: h, label, type, icon } = Astro.props as Props;
 const style = KINDS[kind];
 
 // Labels are monospace at 13px, so their width is predictable enough to
@@ -69,7 +71,7 @@ const radius = style.shape === "pill" ? h / 2 : 8;
   }
   {style.shape === "record" && <path d={`M ${w - FOLD} 0 V ${FOLD} H ${w}`} class="alc-dnode__fold" />}
   <g transform={`translate(${left}, ${labelY - ICON / 2}) scale(${ICON / 24})`} class="alc-dnode__icon">
-    {style.icon.map((d) => <path d={d} />)}
+    {(icon ?? style.icon).map((d) => <path d={d} />)}
   </g>
   <text x={left + ICON + GAP} y={labelY} class="alc-dnode__label" dominant-baseline="middle">
     {label}

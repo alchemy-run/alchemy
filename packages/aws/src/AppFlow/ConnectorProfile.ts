@@ -58,8 +58,18 @@ export interface ConnectorProfile extends Resource<
     credentialsArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectorProfileLookup
 > {}
+
+/**
+ * Props for {@link ConnectorProfile.lookup}: find a connector profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConnectorProfileLookup {
+  /** The connector profile name of the existing connector profile. */
+  connectorProfileName: string;
+}
 
 /**
  * An Amazon AppFlow connector profile. A connector profile stores the
@@ -90,6 +100,16 @@ export interface ConnectorProfile extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing connector profile
+ * `ConnectorProfile.lookup` references a connector profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `connectorProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing connector profile
+ * ```typescript
+ * const existing = AWS.AppFlow.ConnectorProfile.lookup({ connectorProfileName: "my-connector-profile" });
  * ```
  *
  * @resource
@@ -129,6 +149,13 @@ export const ConnectorProfileProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ connectorProfileName: name }) {
+          if (name === undefined) return undefined;
+          const profile = yield* observe(name);
+          if (profile === undefined || profile.connectorProfileArn === undefined) return undefined;
+          return toAttrs(name, profile);
         }),
 
         read: Effect.fn(function* ({ olds, output }) {

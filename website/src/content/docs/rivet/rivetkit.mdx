@@ -1,0 +1,77 @@
+---
+title: RivetKit Actors
+description: Deploy Actors written with RivetKit, unchanged, to a Rivet control plane and pool on any cloud.
+---
+
+RivetKit Actors are Actors written with Rivet's own library, as [Rivet's docs](https://rivet.dev/docs/actors/) describe. Alchemy deploys them as they are: it bundles your entry file and runs it on a pool's nodes, connected to your control plane.
+
+## Write the Actors
+
+Write the file the way RivetKit documents it. It defines the Actors, registers them, and starts the registry:
+
+```typescript title="src/actors.ts"
+import { actor, setup } from "rivetkit";
+
+export const counter = actor({
+  state: { count: 0 },
+  actions: {
+    increment: (c, x: number) => {
+      c.state.count += x;
+      c.broadcast("newCount", c.state.count);
+      return c.state.count;
+    },
+  },
+});
+
+export const registry = setup({ use: { counter } });
+
+registry.start();
+```
+
+`registry.start()` takes no settings. On the pool's nodes, Alchemy sets `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL`, and RivetKit reads them to join the right pool on the right control plane.
+
+## Declare it
+
+Point a `Rivet.DurableObject` at the file, and give it a pool:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Counters } from "./cluster.ts";
+
+export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+With only `main` and no implementation, the Durable Object is external. Alchemy bundles `src/actors.ts` and everything it imports, except `rivetkit` itself, which the pool's nodes install. It doesn't change your code.
+
+`main` is relative to where you run the deploy.
+
+## Give it a pool of its own
+
+The program runs its own process on every node, so its pool runs nothing else:
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+```
+
+Any pool on any cloud works. A pool given a RivetKit program and another Durable Object fails to deploy with `Rivet.PoolProgramConflict`.
+
+## Reach it from other code
+
+Callers use RivetKit's client, as [Rivet's docs](https://rivet.dev/docs/actors/) describe. The Durable Object's attributes give them what to connect with: the control plane's `endpoint`, the `namespace`, the `pool` and the admin `token`.
+
+```typescript title="alchemy.run.ts"
+const counter = yield* Counter;
+return { endpoint: counter.endpoint, namespace: counter.namespace, pool: counter.pool };
+```
+
+There are no bindings and no `yield*` calls from other runtimes. For those, write the Actor as a [Durable Object](/rivet/durable-objects).
+
+Next, [RivetKit Effect Actors](/rivet/rivetkit-effect): the same for Rivet's Effect SDK.

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -108,8 +109,34 @@ export type FirewallEndpointAssociation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FirewallEndpointAssociationLookup
 >;
+
+/**
+ * Props for {@link FirewallEndpointAssociation.lookup}: find a firewall
+ * endpoint association this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface FirewallEndpointAssociationLookup {
+  /**
+   * Association id (the `{firewallEndpointAssociation}` segment of
+   * `projects
+   * /{project}/locations/{location}/firewallEndpointAssociations/{firewallEn
+   * dpointAssociation}`).
+   */
+  firewallEndpointAssociationId: string;
+  /**
+   * Zone of the association (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * Associates a Cloud NGFW FirewallEndpoint with a VPC network so
@@ -143,6 +170,19 @@ export type FirewallEndpointAssociation = Resource<
  *     disabled: true,
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing firewall endpoint association
+ * `FirewallEndpointAssociation.lookup` references a firewall endpoint
+ * association Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared firewall endpoint association.
+ *
+ * **Example:** Reference an existing firewall endpoint association
+ * ```typescript
+ * const firewallEndpointAssociation = GCP.NetworkSecurity.FirewallEndpointAssociation.lookup({
+ *   firewallEndpointAssociationId: "my-firewall-endpoint-association",
+ * });
  * ```
  *
  * @resource
@@ -222,6 +262,15 @@ export const FirewallEndpointAssociationProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ firewallEndpointAssociationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, firewallEndpointAssociationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

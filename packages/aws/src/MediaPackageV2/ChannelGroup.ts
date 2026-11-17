@@ -46,8 +46,18 @@ export interface ChannelGroup extends Resource<
     egressDomain: string;
   },
   never,
-  Providers
+  Providers,
+  ChannelGroupLookup
 > {}
+
+/**
+ * Props for {@link ChannelGroup.lookup}: find a channel group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ChannelGroupLookup {
+  /** The channel group name of the existing channel group. */
+  channelGroupName: string;
+}
 
 /**
  * An AWS Elemental MediaPackage v2 channel group — the top-level container
@@ -77,6 +87,16 @@ export interface ChannelGroup extends Resource<
  * const group = yield* MediaPackageV2.ChannelGroup("Live");
  * // e.g. abcde.egress.xyz.mediapackagev2.us-east-1.amazonaws.com
  * const domain = group.egressDomain;
+ * ```
+ *
+ * ### Looking up an existing channel group
+ * `ChannelGroup.lookup` references a channel group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing channel group
+ * ```typescript
+ * const existing = AWS.MediaPackageV2.ChannelGroup.lookup({ channelGroupName: "my-channel-group" });
  * ```
  *
  * @resource
@@ -113,6 +133,13 @@ export const ChannelGroupProvider = () =>
           const newName = yield* createName(id, news);
           // The name is the group's identity; a change means a new group.
           if (oldName !== newName) return { action: "replace" } as const;
+        }),
+
+        lookup: Effect.fn(function* ({ channelGroupName: name }) {
+          const group = yield* getGroup(name);
+          if (group === undefined) return undefined;
+          const attrs = toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

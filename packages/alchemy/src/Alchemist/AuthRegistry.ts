@@ -1,17 +1,21 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import * as Contributions from "../Contributions.ts";
 import type { ContributionError } from "../Contributions.ts";
+import { UserFacingError } from "../UserFacingError.ts";
 import { makeCachedFunction } from "../Util/cached-function.ts";
 import { DEFAULT_ENTRYPOINT, importStack } from "./Entrypoint.ts";
 import * as Operations from "./Operations.ts";
@@ -22,7 +26,11 @@ import type { Services } from "./Runtime.ts";
 // installed providers' auth and the project's providers into one registry.
 
 /** What collecting an auth registry can fail with. */
-export type CollectAuthProvidersError = AuthError | ContributionError | PlatformError;
+export type CollectAuthProvidersError =
+  | AuthError
+  | AuthProviderImportError
+  | ContributionError
+  | PlatformError;
 
 /** What collecting an auth registry runs under. */
 export type CollectAuthProvidersServices = Services | Scope.Scope;
@@ -76,6 +84,61 @@ const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
 );
 
+/** `Name [code]: message` for an error-shaped value, or `undefined`. */
+const describeError = (error: unknown): string | undefined => {
+  if (!Predicate.hasProperty(error, "message") || typeof error.message !== "string") {
+    return undefined;
+  }
+  const name =
+    Predicate.hasProperty(error, "name") && typeof error.name === "string" ? error.name : "Error";
+  const code =
+    Predicate.hasProperty(error, "code") && typeof error.code === "string"
+      ? ` [${error.code}]`
+      : "";
+  return error.message === "" ? `${name}${code}` : `${name}${code}: ${error.message}`;
+};
+
+const describeValue = (value: unknown): string =>
+  describeError(value) ?? (typeof value === "string" ? value : Formatter.format(value));
+
+/**
+ * Renders an error's `cause` chain on one line, with an `AggregateError`'s
+ * members in parentheses. Duck-typed rather than `instanceof Error`: Bun's
+ * `ResolveMessage` and `BuildMessage`, which a failed import throws, are not
+ * `Error` instances.
+ */
+const describeCauseChain = (error: unknown): string => {
+  const reasons: string[] = [];
+  let current = error;
+  for (let depth = 0; current != null && depth < 8; depth++) {
+    const described = describeError(current);
+    if (described === undefined) {
+      reasons.push(describeValue(current));
+      break;
+    }
+    const members =
+      Predicate.hasProperty(current, "errors") && Array.isArray(current.errors)
+        ? current.errors
+        : [];
+    reasons.push(
+      members.length > 0 ? `${described} (${members.map(describeValue).join(", ")})` : described,
+    );
+    current = Predicate.hasProperty(current, "cause") ? current.cause : undefined;
+  }
+  return reasons.join("; caused by ");
+};
+
+/** The stack entrypoint failed to load, so its auth providers can't be registered. */
+export class AuthProviderImportError extends Data.TaggedError("AuthProviderImportError")<{
+  readonly main: string;
+  readonly cause: unknown;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    return `Could not load auth providers from '${this.main}': ${describeCauseChain(this.cause)}`;
+  }
+}
+
 /**
  * Every auth provider reachable from the current project: the built-ins, plus
  * whatever the user's stack module registers when it is importable.
@@ -118,10 +181,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
           return suppressed
             ? Effect.void
             : Effect.fail(
-                AuthError.make({
-                  message: `Could not load auth providers from '${options.main}'.`,
-                  cause,
-                }),
+                new AuthProviderImportError({ main: options.main, cause: Cause.squash(cause) }),
               );
         }),
       );

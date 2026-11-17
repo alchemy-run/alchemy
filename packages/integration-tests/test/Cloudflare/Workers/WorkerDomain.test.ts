@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { stageSuffix } from "../../names.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -25,7 +26,7 @@ const zoneName =
 
 // Deterministic per-run hostnames on the standing test zone. Each rerun
 // reuses the same hostnames (never derive names from Date.now()).
-const domainSuffix = `alchemy-worker-domain-${process.env.PULL_REQUEST ?? process.env.USER}`;
+const domainSuffix = `alchemy-worker-domain-${stageSuffix()}`;
 
 const DECLARED_HOSTNAME = `wd1-${domainSuffix}.${zoneName}`;
 const OUT_OF_BAND_HOSTNAME = `wd2-${domainSuffix}.${zoneName}`;

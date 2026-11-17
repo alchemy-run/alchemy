@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -49,6 +50,10 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Stripe.WebhookEndpoint.lookup({ id: created.id }), created, {
+        // Stripe returns the signing secret only from a create.
+        ignore: ["secret"],
+      });
 
       expect(created.id).toMatch(/^we_/);
       expect(created.url).toEqual(TEST_URL);

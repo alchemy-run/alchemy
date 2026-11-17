@@ -24,6 +24,7 @@ export {
   DrizzleV0LayoutError,
   MigrationError,
   MigrationHistoryConflictError,
+  NonLinearMigrationHistoryError,
   RewrittenMigrationHistoryError,
   type MigrationApplyError,
   type MigrationDialect,

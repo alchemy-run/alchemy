@@ -32,8 +32,13 @@ const concurrencyFlag = Flag.Int("concurrency").pipe(
   Flag.map((value): number | "unbounded" => (value <= 0 ? "unbounded" : value)),
 );
 const timeoutFlag = Flag.Int("timeout").pipe(
-  Flag.withDescription("Per-provider timeout in seconds"),
+  Flag.withDescription("Per-provider delete timeout in seconds"),
   Flag.withDefault(120),
+  Flag.map(Duration.seconds),
+);
+const scanTimeoutFlag = Flag.Int("scan-timeout").pipe(
+  Flag.withDescription("Per-provider scan (list) timeout in seconds"),
+  Flag.withDefault(60),
   Flag.map(Duration.seconds),
 );
 const independentFlag = Flag.Boolean("independent").pipe(
@@ -90,6 +95,7 @@ const nukeCommand = Command.make(
     dryRun: dryRunFlag,
     concurrency: concurrencyFlag,
     timeout: timeoutFlag,
+    scanTimeout: scanTimeoutFlag,
     independent: independentFlag,
     retries: retriesFlag,
     include: includeFlag,
@@ -114,7 +120,7 @@ const nukeCommand = Command.make(
                 include: args.include,
                 exclude: args.exclude,
                 concurrency: args.concurrency,
-                providerTimeoutSeconds: Duration.toSeconds(args.timeout),
+                providerTimeoutSeconds: Duration.toSeconds(args.scanTimeout),
               }),
             ).pipe(renderNukeScan());
             const predicates = yield* Effect.forEach(args.filter, compileFilter);

@@ -14,6 +14,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { stageSuffix } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -30,7 +31,7 @@ const zoneName =
 
 // Deterministic per-run hostnames on the standing test zone (never derive
 // names from Date.now()).
-const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+const suffix = stageSuffix();
 
 const resolveZone = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

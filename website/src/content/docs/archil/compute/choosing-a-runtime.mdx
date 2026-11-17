@@ -1,0 +1,158 @@
+---
+title: Choosing a runtime
+description: Serverless exec, program sandboxes, sandboxes created at run time, and mounts on your own hosts, and when to use each.
+sidebar:
+  order: 1
+---
+
+import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
+import DAG from "../../../../components/DAG.astro";
+
+Archil runs code next to a disk in four ways. Three of them are Firecracker microVMs that Archil runs, and the fourth is a host you already run, with the disk mounted. They differ in how long the code lives and who keeps it running.
+
+## Archil manages less as you decide more
+
+<Responsibility
+  platform="Archil"
+  columns={[
+    { label: "exec", type: "per call" },
+    { label: "program", type: "sandbox + main" },
+    { label: "sandbox", type: "per task" },
+    { label: "mount", type: "your host" },
+  ]}
+  rows={[
+    { label: "your code", you: [true, true, true, true] },
+    { label: "processes", you: [false, false, true, true] },
+    { label: "machine lifetime", you: [false, false, true, true] },
+    { label: "image", you: [false, false, true, true] },
+    { label: "host & client", you: [false, false, false, true] },
+  ]}
+  caption="From left to right, Archil manages less and you decide more. A mount runs on a host you already run, so everything under your code is yours."
+/>
+
+## Serverless exec: one call, one microVM
+
+`Archil.ExecDisk` runs one command against a disk. Each call boots a microVM with the disk at `/mnt/archil`, runs the command to completion, and shuts down. Many calls run at once, and each one is a single charge.
+
+```typescript
+const dataset = yield* Archil.ExecDisk(Dataset);
+const result = yield* dataset.exec("wc -l /mnt/archil/*.csv");
+```
+
+A call runs for at most five minutes and keeps nothing but what it writes to the disk. Choose it for an agent's shell tool, a search, or a batch over a dataset. See [Disks](/archil/storage/disks#run-commands-against-a-disk).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "a", label: "call 1" }, { id: "b", label: "call 2" }, { id: "c", label: "call 3" }]}
+  bars={[
+    { lane: "a", start: 0, end: 0.6, tone: "muted" },
+    { lane: "a", start: 0.6, end: 3.2, label: "wc -l" },
+    { lane: "b", start: 1, end: 1.6, tone: "muted" },
+    { lane: "b", start: 1.6, end: 6.2, label: "grep TODO" },
+    { lane: "c", start: 5, end: 5.6, tone: "muted" },
+    { lane: "c", start: 5.6, end: 8, label: "git pull" },
+  ]}
+  legend={[{ tone: "accent", label: "command" }, { tone: "muted", label: "boot" }]}
+  caption="Each call gets its own microVM with the disk mounted, and it's gone when the command exits."
+/>
+
+## Program sandboxes: your program at a URL
+
+An `Archil.Sandbox` with a `main` runs your program. Archil's service manager keeps it running, and its port gets a public `https://` URL. The sandbox pauses when idle, and the next request wakes it.
+
+```typescript title="src/api.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Archil.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("hello")) };
+  }),
+) {}
+```
+
+Choose it for APIs and websites that live next to their data. See [Programs](/archil/compute/programs).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "s", label: "Api" }]}
+  bars={[
+    { lane: "s", start: 0, end: 3.2, label: "serving" },
+    { lane: "s", start: 3.2, end: 6.4, tone: "muted", label: "paused" },
+    { lane: "s", start: 6.4, end: 7, tone: "warn" },
+    { lane: "s", start: 7, end: 10, label: "serving" },
+  ]}
+  marks={[{ at: 6.4, label: "request" }]}
+  legend={[{ tone: "muted", label: "paused, not billed" }, { tone: "warn", label: "wake" }]}
+  caption="One sandbox serves every request. It pauses once idle, and a request to its URL wakes it with its memory intact."
+/>
+
+## Sandboxes created at run time: one per task
+
+`Archil.CreateSandbox` gives a Worker or Lambda a client that creates sandboxes by name, from an image. Your code drives each one: it runs commands, starts processes, opens terminals and deletes it when the task is done.
+
+```typescript
+const sandboxes = yield* Archil.CreateSandbox(MyImage);
+const sandbox = yield* sandboxes.create({ name: `task-${id}` });
+yield* sandbox.exec("npm test");
+```
+
+Choose it for agent loops and preview environments, where each user or task needs a machine of its own. See [Sandboxes](/archil/compute/sandboxes).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "t1", label: "task-1" }, { id: "t2", label: "task-2" }]}
+  bars={[
+    { lane: "t1", start: 0.4, end: 3.4, label: "npm test" },
+    { lane: "t1", start: 3.4, end: 5.6, tone: "muted", label: "paused" },
+    { lane: "t1", start: 5.6, end: 8, label: "npm test" },
+    { lane: "t2", start: 2, end: 6.4, label: "agent loop" },
+  ]}
+  marks={[{ at: 8, label: "delete" }]}
+  caption="Each task gets its own sandbox. It keeps its files and memory while paused, until your code deletes it."
+/>
+
+## Mounts: a disk on your own host
+
+`Archil.MountDisk` on a Cloudflare Container or an ECS task on EC2 installs Archil's FUSE client in the host's image. The host mounts the disk while it handles a request, with a mount token for that disk only.
+
+```typescript
+const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+const path = yield* dataset.mount();
+```
+
+Choose it when the code already runs somewhere else and needs the files. See [Mounting](/archil/storage/mounting).
+
+<Tree
+  nodes={[
+    { id: "host", label: "Indexer", type: "your Container" },
+    { id: "prog", label: "your program", type: "Effect", parent: "host" },
+    { id: "client", label: "archil client", type: "FUSE", parent: "host", specs: [["mount", "/data"], ["mode", "read-only"]] },
+  ]}
+  scopes={[{ on: "host", label: "mount token: Dataset" }]}
+  caption="The host runs your program and the Archil client side by side. Its token mounts one disk."
+/>
+
+## Mix runtimes in one app
+
+One disk serves all of them at once. A program serves the files, a Worker runs commands against them, and your Container reads them to build an index:
+
+<DAG
+  nodes={[
+    { id: "worker", label: "Worker", type: "ExecDisk", col: 0, row: 0 },
+    { id: "api", label: "Api", type: "program sandbox", col: 0, row: 1 },
+    { id: "indexer", label: "Indexer", type: "MountDisk", col: 0, row: 2 },
+    { id: "dataset", label: "Dataset", type: "disk", tone: "accent", col: 1, row: 1 },
+  ]}
+  edges={[
+    { from: "worker", to: "dataset", exit: "side" },
+    { from: "api", to: "dataset", label: "mounts" },
+    { from: "indexer", to: "dataset", exit: "side" },
+  ]}
+  caption="Three runtimes on one disk at once. An exclusive mount locks the disk for one writer, so mount it read-only or conditional where several clients share it."
+/>

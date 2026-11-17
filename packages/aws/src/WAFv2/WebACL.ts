@@ -131,8 +131,24 @@ export interface WebACL extends Resource<
     };
   },
   never,
-  Providers
+  Providers,
+  WebACLLookup
 > {}
+
+/**
+ * Props for {@link WebACL.lookup}: find a web ACL this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface WebACLLookup {
+  /** The name of the existing web ACL. */
+  webAclName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 Web ACL — a collection of rules that inspect and control web
@@ -212,6 +228,17 @@ export interface WebACL extends Resource<
  *   webAclArn: acl.webAclArn,
  *   resourceArn: userPool.userPoolArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing web ACL
+ * `WebACL.lookup` references a web ACL Alchemy doesn't manage (created in the
+ * console or by another stack), found by `webAclName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing web ACL
+ * ```typescript
+ * const firewall = AWS.WAFv2.WebACL.lookup({ webAclName: "edge", scope: "CLOUDFRONT" });
+ * const webAclArn = firewall.webAclArn;
  * ```
  *
  * @resource
@@ -366,6 +393,20 @@ export const WebACLProvider = () =>
           if ((olds?.scope ?? defaultScope) !== (news.scope ?? defaultScope)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ webAclName, scope = defaultScope }) {
+          const found = yield* findWebACL(scope, webAclName, undefined);
+          return found?.WebACL
+            ? {
+                ...toAttrs(found.WebACL, scope),
+                configuration: observeWebACLConfiguration(
+                  found.WebACL,
+                  undefined,
+                  yield* fetchWafTags(scope, found.WebACL.ARN),
+                ),
+              }
+            : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

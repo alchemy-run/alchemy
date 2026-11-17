@@ -1,3 +1,4 @@
+import { type BuildCacheOptions, BuildCacheSchema } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -50,6 +51,16 @@ export interface FunctionDockerImageSource extends FunctionImageConfig {
    * image layers. Do not use them for secrets.
    */
   buildArgs?: Record<string, string>;
+  /**
+   * Keep build layers in a remote cache so a fresh builder (a new CI runner)
+   * skips unchanged steps. `true` keeps every stage's layers at the function
+   * repository's `:buildcache` tag; pass BuildKit's `--cache-from` /
+   * `--cache-to` values as `{ from, to }` for another
+   * [backend](https://docs.docker.com/build/cache/backends/). The cache is
+   * not part of the image hash.
+   * @default false
+   */
+  cache?: BuildCacheOptions["cache"];
 }
 
 /** An existing private ECR image, addressed by tag or immutable digest. */
@@ -65,6 +76,7 @@ export interface FunctionEcrImageSource extends FunctionImageConfig {
   context?: never;
   dockerfile?: never;
   buildArgs?: never;
+  cache?: never;
 }
 
 /**
@@ -87,6 +99,7 @@ const FunctionDockerImageSourceSchema = Schema.Struct({
   context: Schema.String,
   dockerfile: Schema.String,
   buildArgs: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  cache: Schema.optionalKey(BuildCacheSchema),
   ...FunctionImageConfigFields,
 }) satisfies Schema.Schema<FunctionDockerImageSource>;
 
@@ -275,9 +288,9 @@ export const decodeFunctionImageSource = Effect.fn("AWS.Lambda.decodeFunctionIma
       record.context !== undefined ||
       record.dockerfile !== undefined ||
       record.buildArgs !== undefined;
-    if (hasUri && hasBuildSource) {
+    if (hasUri && (hasBuildSource || record.cache !== undefined)) {
       return yield* new FunctionImageInvalidProps({
-        message: `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, or image.buildArgs; declare exactly one image source`,
+        message: `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, image.buildArgs, or image.cache; declare exactly one image source`,
       });
     }
     if (!hasUri && !hasBuildSource) {
@@ -286,10 +299,10 @@ export const decodeFunctionImageSource = Effect.fn("AWS.Lambda.decodeFunctionIma
       });
     }
     const decodeError = (error: unknown) =>
-      new Error(
-        `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
-        { cause: error },
-      );
+      new FunctionImageInvalidProps({
+        message: `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
+        cause: error,
+      });
     if (hasUri) {
       return yield* Schema.decodeUnknownEffect(FunctionEcrImageSourceSchema)(source).pipe(
         Effect.map((decoded): FunctionEcrImageSource => decoded),
@@ -536,6 +549,7 @@ export const makeFunctionImage = Effect.gen(function* () {
         dockerfile: build.dockerfile,
         platform: functionImagePlatform(options.architecture),
         buildArgs: source.buildArgs,
+        cache: source.cache,
         args: ["--provenance=false"],
       }).pipe(
         Effect.as(true),
@@ -602,20 +616,18 @@ export const makeFunctionImage = Effect.gen(function* () {
       return false;
     }
 
+    const readTags = ecr
+      .listTagsForResource({ resourceArn: repository.repositoryArn })
+      .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
+    const readPolicy = ecr.getRepositoryPolicy({ repositoryName }).pipe(
+      Effect.map((response) => response.policyText),
+      Effect.catchTag(
+        ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
+        () => Effect.undefined,
+      ),
+    );
     const [tags, observedPolicy, image] = yield* Effect.all(
-      [
-        ecr
-          .listTagsForResource({ resourceArn: repository.repositoryArn })
-          .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined)),
-        ecr.getRepositoryPolicy({ repositoryName }).pipe(
-          Effect.map((response) => response.policyText),
-          Effect.catchTag(
-            ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
-            () => Effect.undefined,
-          ),
-        ),
-        describeImage(repositoryName, imageTag),
-      ] as const,
+      [readTags, readPolicy, describeImage(repositoryName, imageTag)] as const,
       { concurrency: 3 },
     );
     if (tags === undefined || !(yield* hasAlchemyTags(id, tags.tags))) {

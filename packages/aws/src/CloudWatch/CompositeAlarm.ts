@@ -22,6 +22,9 @@ export class CompositeAlarmUnexpectedResponse extends Data.TaggedError(
 
 export type CompositeAlarmName = string;
 
+/** A composite alarm as `describeAlarms` lists it. */
+type ListedCompositeAlarm = NonNullable<cloudwatch.DescribeAlarmsOutput["CompositeAlarms"]>[number];
+
 export interface CompositeAlarmProps extends Omit<
   cloudwatch.PutCompositeAlarmInput,
   "AlarmName" | "Tags"
@@ -54,8 +57,18 @@ export interface CompositeAlarm extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CompositeAlarmLookup
 > {}
+
+/**
+ * Props for {@link CompositeAlarm.lookup}: find a composite alarm this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CompositeAlarmLookup {
+  /** The alarm name of the existing composite alarm. */
+  alarmName: string;
+}
 
 /**
  * A CloudWatch composite alarm — combines the states of other alarms with
@@ -84,6 +97,16 @@ export interface CompositeAlarm extends Resource<
  * const composite = yield* CompositeAlarm("HighSeverity", {
  *   AlarmRule: Output.interpolate`ALARM("${errors.alarmName}")`,
  * });
+ * ```
+ *
+ * ### Looking up an existing composite alarm
+ * `CompositeAlarm.lookup` references a composite alarm Alchemy doesn't manage (created in the
+ * console or by another stack), found by `alarmName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing composite alarm
+ * ```typescript
+ * const existing = AWS.CloudWatch.CompositeAlarm.lookup({ alarmName: "my-composite-alarm" });
  * ```
  *
  * @resource
@@ -142,6 +165,11 @@ export const CompositeAlarmProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ alarmName: name }) {
+          const state = yield* readCompositeAlarm(name);
+          if (!state) return undefined;
+          return state;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
@@ -211,7 +239,7 @@ export const CompositeAlarmProvider = () =>
                     (page.CompositeAlarms ?? []).filter(
                       (
                         candidate,
-                      ): candidate is cloudwatch.CompositeAlarm & {
+                      ): candidate is ListedCompositeAlarm & {
                         AlarmName: string;
                         AlarmArn: string;
                       } => candidate.AlarmName != null && candidate.AlarmArn != null,

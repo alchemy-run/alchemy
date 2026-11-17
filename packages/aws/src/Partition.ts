@@ -1,4 +1,4 @@
-import { partition } from "@distilled.cloud/aws/rules-engine/aws-functions";
+import { partition } from "@distilled.cloud/s3/rules-engine/aws-functions";
 
 /**
  * An AWS partition: the first segment after `arn:` in every ARN, e.g. `aws`,

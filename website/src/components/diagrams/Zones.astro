@@ -1,0 +1,133 @@
+---
+/**
+ * `<Zones />` — compute on top of shared storage, across Availability Zones.
+ * One column per zone, the instances in the zones they run in, and one volume
+ * spanning every zone with its copies in each. Use it for databases that
+ * separate compute from storage: an Aurora cluster's writer and readers over
+ * one cluster volume.
+ *
+ *   <Zones
+ *     title="Aurora cluster"
+ *     zones={["us-east-1a", "us-east-1b", "us-east-1c"]}
+ *     instances={[
+ *       { zone: 0, label: "writer", type: "instance", flow: "writes", tone: "accent" },
+ *       { zone: 1, label: "reader", type: "instance", flow: "reads" },
+ *     ]}
+ *     volume={{ label: "cluster volume", type: "grows automatically", copies: 2 }}
+ *   />
+ */
+import "./diagram.css";
+
+interface Props {
+  title: string;
+  zones: string[];
+  instances: { zone: number; label: string; type?: string; flow?: string; tone?: "accent" | "default" }[];
+  volume: { label: string; type?: string; copies: number };
+  caption?: string;
+}
+
+const { title, zones, instances, volume, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+// Two layouts: full-width zones (desktop) and narrow ones (phones), so the
+// text keeps its size. CSS shows one.
+const layout = (narrow: boolean) => {
+const ZW = narrow ? 100 : 176;
+const ZG = narrow ? 8 : 14;
+const PAD = 14;
+const X0 = 8 + PAD;
+const TOP = 34; // cluster label
+const ZTOP = TOP + 12;
+const INST_Y = ZTOP + 30;
+const IH = 46;
+const FLOW_Y = INST_Y + IH;
+const VOL_Y = FLOW_Y + 46;
+const VH = 96;
+const ZBOTTOM = VOL_Y + VH + 12;
+const W = 16 + PAD * 2 + zones.length * ZW + (zones.length - 1) * ZG;
+const H = ZBOTTOM + PAD + 8;
+const zx = (i: number) => X0 + i * (ZW + ZG);
+const COPY_W = narrow ? 34 : 52;
+return { narrow, ZW, ZG, PAD, X0, TOP, ZTOP, INST_Y, IH, FLOW_Y, VOL_Y, VH, ZBOTTOM, W, H, zx, COPY_W };
+};
+const layouts = [layout(false), layout(true)];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  {layouts.map(({ narrow, ZW, ZG, PAD, X0, TOP, ZTOP, INST_Y, IH, FLOW_Y, VOL_Y, VH, ZBOTTOM, W, H, zx, COPY_W }) => (
+  <svg class:list={["alc-fig__svg", narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide"]} viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
+    <defs>
+      <marker id={`alc-z-arrow${narrow ? "-n" : ""}-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    <rect x={8} y={8} width={W - 16} height={H - 16} rx="12" class="alc-fig__box alc-z__outer" />
+    <text x={22} y={28} class="alc-fig__strong">{title}</text>
+
+    {zones.map((z, i) => (
+      <g>
+        <rect x={zx(i)} y={ZTOP} width={ZW} height={ZBOTTOM - ZTOP} rx="8" class="alc-fig__box alc-fig__box--muted" />
+        <text x={zx(i) + ZW / 2} y={ZTOP + 18} text-anchor="middle" class="alc-fig__type">{z}</text>
+      </g>
+    ))}
+
+    <rect x={zx(0) + 8} y={VOL_Y} width={zones.length * ZW + (zones.length - 1) * ZG - 16} height={VH} rx="9" class="alc-fig__box alc-z__volume" />
+    <text x={W / 2} y={VOL_Y + 22} text-anchor="middle" class="alc-fig__label">{volume.label}</text>
+    {volume.type && <text x={W / 2} y={VOL_Y + 38} text-anchor="middle" class="alc-fig__type">{volume.type}</text>}
+    {
+      zones.map((_, i) => {
+        const total = volume.copies * COPY_W + (volume.copies - 1) * 8;
+        const start = zx(i) + (ZW - total) / 2;
+        return Array.from({ length: volume.copies }, (_, k) => (
+          <g>
+            <rect x={start + k * (COPY_W + 8)} y={VOL_Y + 54} width={COPY_W} height={26} rx="4" class="alc-fig__box" />
+            <text x={start + k * (COPY_W + 8) + COPY_W / 2} y={VOL_Y + 71} text-anchor="middle" class="alc-fig__small">copy</text>
+          </g>
+        ));
+      })
+    }
+
+    {
+      instances.map((n) => {
+        const x = zx(n.zone) + (narrow ? 8 : 16);
+        const w = ZW - (narrow ? 16 : 32);
+        const writes = n.flow === "writes";
+        return (
+          <g>
+            <rect x={x} y={INST_Y} width={w} height={IH} rx="8" class:list={["alc-fig__box", n.tone === "accent" && "alc-fig__box--accent"]} />
+            <text x={x + w / 2} y={INST_Y + IH / 2 + (n.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{n.label}</text>
+            {n.type && <text x={x + w / 2} y={INST_Y + IH / 2 + 13} text-anchor="middle" class="alc-fig__type">{n.type}</text>}
+            {n.flow && (
+              <g>
+                <line
+                  x1={x + w / 2}
+                  y1={writes ? FLOW_Y + 2 : VOL_Y - 2}
+                  x2={x + w / 2}
+                  y2={writes ? VOL_Y - 2 : FLOW_Y + 2}
+                  class="alc-fig__line"
+                  marker-end={`url(#alc-z-arrow${narrow ? "-n" : ""}-${uid})`}
+                />
+                <text x={x + w / 2 + 8} y={FLOW_Y + 27} class="alc-fig__small">{n.flow}</text>
+              </g>
+            )}
+          </g>
+        );
+      })
+    }
+  </svg>
+  ))}
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>
+
+<style>
+  .alc-z__outer {
+    fill: transparent;
+  }
+  .alc-z__volume {
+    fill: color-mix(in srgb, var(--alc-accent-soft) 35%, var(--alc-bg-elev-2));
+    stroke: var(--alc-accent);
+  }
+</style>

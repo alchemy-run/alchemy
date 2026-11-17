@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { flyApi } from "../limit.ts";
 import {
   assertAppGone,
   assertMachineGone,
@@ -19,7 +20,7 @@ import {
   websiteServices,
 } from "./fixtures/deployment.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(

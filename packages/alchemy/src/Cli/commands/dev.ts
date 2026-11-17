@@ -76,6 +76,7 @@ export const devCommand = Command.make(
         ),
       );
       for (const [key, value] of Object.entries(env)) {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports provider dev env onto this process for spawned sidecars, not config reading
         process.env[key] ??= value;
       }
       const spawner = yield* RpcSpawner.RpcSpawner;
@@ -108,6 +109,8 @@ export const devCommand = Command.make(
       const consoleSettings = yield* currentConsoleSettings;
       // The child's records and spans join this command's trace.
       const traceEnv = yield* traceParentEnv;
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- forwards this process's env (mutated above) to the exec child, not config reading
+      const extraCaCerts = process.env.NODE_EXTRA_CA_CERTS;
       const runChild = ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",
         stdout: "inherit",
@@ -118,9 +121,7 @@ export const devCommand = Command.make(
           [LOG_FD_ENV]: "3",
           // The exec child renders the run's logs but never sees this argv.
           ...consoleSettingsEnv(consoleSettings),
-          ...(process.env.NODE_EXTRA_CA_CERTS
-            ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }
-            : {}),
+          ...(extraCaCerts ? { NODE_EXTRA_CA_CERTS: extraCaCerts } : {}),
           [SPAWNER_URL_ENV_KEY]: spawner.url,
           ...traceEnv,
         },
