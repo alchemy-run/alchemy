@@ -42,6 +42,7 @@ import {
   type BaseRuntimeContext,
   type GatewayContext,
 } from "./RuntimeContext.ts";
+import { Self } from "./Self.ts";
 
 /** The gateway of the sandbox a Layer is provided on. */
 export class Gateway extends Context.Service<
@@ -247,8 +248,17 @@ export const make = <R>(
     const deployed = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* deploy;
     // Bound before the phase is installed, so they land on the sandbox.
     const url = yield* Output.named(deployed?.url ?? literal(""), SANDBOX_URL_KEY).asEffect();
+    // A platform that sets the token at the sandbox's boundary keeps it out
+    // of the sandbox: the program sends an empty one, which is overwritten.
+    const injected = sandbox.gatewayEgress === true;
+    if (deployed !== undefined && injected) {
+      const host = (yield* Self) as unknown as {
+        bind: (id: string, data: unknown) => Effect.Effect<void>;
+      };
+      yield* host.bind("Gateway", { gateway: { url: deployed.url, token: deployed.token } });
+    }
     const token = yield* Output.named(
-      deployed?.token ?? literal(Redacted.make("")),
+      (injected ? undefined : deployed?.token) ?? literal(Redacted.make("")),
       SANDBOX_TOKEN_KEY,
     ).asEffect();
 

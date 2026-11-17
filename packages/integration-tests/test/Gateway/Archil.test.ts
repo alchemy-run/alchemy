@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import type { Served } from "./conformance/app.ts";
 import { expectGatewayed } from "./conformance/conformance.ts";
 import StreamingArchil, { GatewayDisk } from "./fixtures/archil-disk.ts";
+import LockedArchil from "./fixtures/archil-locked.ts";
 import GatewayedArchil from "./fixtures/archil.ts";
 
 const { test } = Test.make({
@@ -68,6 +69,36 @@ test.provider(
     }),
   {
     tags: ["provider:archil", "provider:cloudflare", "live"],
+    timeout: 600_000,
+  },
+);
+
+test.provider(
+  "an Archil sandbox locked to its gateway reaches nothing else and holds no token",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const sandbox = yield* stack.deploy(LockedArchil);
+
+      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+      const get = <A>(path: string) =>
+        client.get(`${sandbox.url}${path}`).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
+          Effect.map((body) => body as unknown as A),
+        );
+      // Its bindings still work: Archil allows the gateway and adds the token.
+      expectGatewayed(yield* get<Served>("/"), { gatewayHost: "workers.dev" });
+      // The token is not in the sandbox, and the rest of the internet is closed.
+      expect((yield* get<{ token: string | null }>("/env")).token ?? "").not.toMatch(
+        /[0-9a-f]{16}/,
+      );
+      expect((yield* get<{ reached: boolean }>("/reach")).reached).toBe(false);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:archil", "provider:e2b", "provider:cloudflare", "live"],
     timeout: 600_000,
   },
 );

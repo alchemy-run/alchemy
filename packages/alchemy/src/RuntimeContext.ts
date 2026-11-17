@@ -62,6 +62,14 @@ export interface BaseRuntimeContext {
    */
   gateway?: GatewayContext;
   /**
+   * Set by a sandbox platform whose network policy can add a header to
+   * requests leaving the sandbox. Its gateway is then bound onto it
+   * (`{ gateway: { url, token } }`): the platform allows the gateway's host
+   * and sets the token at the boundary, so the token never enters the
+   * sandbox.
+   */
+  gatewayEgress?: boolean;
+  /**
    * Mint an OIDC ID token for `audience`, signed by the host's platform
    * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform
    * issues them. Bindings exchange it with a cloud's STS instead of

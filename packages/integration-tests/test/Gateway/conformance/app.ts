@@ -4,6 +4,8 @@ import * as E2B from "@alchemy.run/e2b";
 import * as Fly from "@alchemy.run/fly";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -30,6 +32,19 @@ export const app = Effect.gen(function* () {
           // call the sandbox's network refuses.
           token: env.ALCHEMY_GATEWAY_SANDBOX_TOKEN ?? null,
         });
+      }
+      if (new URL(request.url, "http://sandbox").pathname === "/reach") {
+        // Whether the sandbox's network lets it reach a host that is not
+        // its gateway.
+        const client = yield* HttpClient.HttpClient;
+        const reached = yield* client
+          .get("https://example.com/")
+          .pipe(
+            Effect.timeout("10 seconds"),
+            Effect.match({ onFailure: () => false, onSuccess: () => true }),
+            Effect.provide(FetchHttpClient.layer),
+          );
+        return yield* HttpServerResponse.json({ reached });
       }
       const now = Math.floor(Date.now() / 1000);
       const teamId = yield* team.teamId;
