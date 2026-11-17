@@ -15,6 +15,7 @@
     { "path": "../../packages/cloudflare/tsconfig.json" },
     { "path": "../../packages/domain/tsconfig.json" },
     { "path": "../../packages/stripe/tsconfig.json" },
-    { "path": "../../packages/axiom/tsconfig.json" }
+    { "path": "../../packages/axiom/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }
