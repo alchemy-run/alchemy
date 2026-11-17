@@ -16,7 +16,13 @@ local explorer/observability UIs have no counterpart.
 ### Tracking v2
 
 Upstream develops v2 on `main`; v1 (`1.x`, on the `vite-plugin-v1` branch)
-only gets maintenance releases, so the catalog tracks v2's prerelease line.
+only gets maintenance releases, so the differential tests below run against
+v2's prerelease line (the `cloudflare-vite-plugin-v2` catalog). The examples
+and Website fixtures stay on npm `latest` (v1, the default catalog), which is
+what create-cloudflare templates and framework docs install today; a v2 that
+meets their leftover `wrangler.jsonc` rejects the project (see the rows on
+Wrangler configs below).
+
 Most of v2 is how a project is configured and deployed: native
 `cloudflare.config.ts`, Build Output in `.cloudflare/output/v1` for
 `cf deploy`, no Wrangler. Alchemy uses none of that, so it is out of scope
@@ -34,7 +40,7 @@ their reasons; search for "v2" to find them.
 | [`test/parity/constants.test.ts`](./test/parity/constants.test.ts) | Compares the runtime pieces ported verbatim (handler keys, additional module rules, `cloudflare:*` built-ins, Sandbox preview origins) with the installed release. v2 states module rules as `@cloudflare/config` globs, so the test checks each glob's file resolves to the same module type. |
 | `packages/integration-tests/test/Cloudflare/Website/Vite*.test.ts` | The plugin's playgrounds and create-cloudflare's templates, deployed and under `alchemy dev`. |
 
-Upgrading `@cloudflare/vite-plugin` in the catalog re-runs all three
+Upgrading `@cloudflare/vite-plugin` in the `cloudflare-vite-plugin-v2` catalog re-runs all three
 differential tests against the new release, so upstream drift in config,
 build output or the ported runtime fails CI here instead of in an app.
 Fixes ported from upstream `main` before a release ships them are listed in
@@ -49,8 +55,9 @@ the differential tests ignore until the installed release catches up.
 | --- | --- | --- |
 | Frameworks detect the plugin by a `vite-plugin-cloudflare` name prefix (React Router, vinext, Vike's `@universal-deploy`, Flue) | Matched (`vite-plugin-cloudflare:alchemy`) | `plugin-name.test.ts` |
 | An official `cloudflare()` left in the config (or added by an async factory, e.g. RedwoodSDK) is neutralized | Matched | `plugin-name.test.ts`, `ViteTemplates.test.ts` |
-| The `config` customizer of a neutralized `cloudflare()` still runs (Flue's `flueWorkerConfig()`). In v2 it is a callback over the loaded `cloudflare.config.ts`, and it runs without that file | Matched, against the installed release | `plugin-name.test.ts`, `examples/cloudflare-flue` |
+| The `config` customizer of a neutralized `cloudflare()` still runs (Flue's `flueWorkerConfig()`). In v2 it is a callback over the loaded `cloudflare.config.ts`, and it runs when the project has neither that file nor a Wrangler config (v1 always calls it) | Matched, against the installed release | `plugin-name.test.ts`, `examples/cloudflare-flue` |
 | v2 with a leftover `wrangler.json`/`wrangler.jsonc` and no `cloudflare.config.ts` | Different: v2 rejects the project before calling the customizer, so a customizer (Flue) doesn't run. That is v2's own migration step (it fails the same way without Alchemy), so Alchemy doesn't work around it; the project still builds with Alchemy's plugin | `plugin-name.test.ts` |
+| A framework that reloads `vite.config.ts` for a second Vite server (React Router's child compiler) gets a fresh official `cloudflare()` that Alchemy never sees | Different: that instance runs as configured. v1 reads `wrangler.jsonc` there and works; v2 rejects a leftover `wrangler.jsonc` there, as it does without Alchemy, so `alchemy dev` of the React Router template fails with v2 until the project moves to `cloudflare.config.ts`. The fixtures stay on v1 for this reason | `ViteTemplates.test.ts` (react-router, dev) |
 | `rsc: { serverHandler: false }` for `@vitejs/plugin-rsc` | Matched | React Router RSC fixtures |
 | Worker settings from `cloudflare.config.ts` (v2) or `wrangler.json` (v1), and the customizer's result | Different: declared on the Website resource | — |
 | `auxiliaryWorkers`, `persistState`, `remoteBindings`, `inspectorPort` | Different: separate `Cloudflare.Worker` resources, Alchemy state, `Alchemy.remote()` | — |
@@ -102,7 +109,7 @@ the differential tests ignore until the installed release catches up.
 | WebSockets to the Worker; Vite's HMR and DevTools (`/__devtools/__ws`) sockets left alone unless from a Sandbox preview origin, HMR upgrades closed when `server.ws` is `false`; a socket another `upgrade` listener answers is left to it | Matched | `websockets.test.ts`, `constants.test.ts`, `ViteRuntime.test.ts` (WebSockets) |
 | A refused WebSocket upgrade | Different: the Worker's response reaches the client (upstream resets the socket) | `websockets.test.ts` |
 | `/cdn-cgi/local/*` trigger endpoints | Matched | `ViteRuntime.test.ts` (scheduled and email) |
-| The legacy `/cdn-cgi/mf/*` and `/cdn-cgi/handler/*` trigger paths | Different: still served. v2 stopped rewriting them, but Alchemy's runtime answers both, so scripts written against v1 or Wrangler keep working, and dropping them gains nothing | `ViteRuntime.test.ts` (scheduled and email), `Email.test.ts` |
+| The legacy `/cdn-cgi/mf/scheduled`, `/cdn-cgi/handler/scheduled` and `/cdn-cgi/handler/email` trigger paths | Different: still served. v2 stopped rewriting them, but Alchemy's runtime answers both, so scripts written against v1 or Wrangler keep working, and dropping them gains nothing | `Scheduled.test.ts`, `Email.test.ts` |
 | Public URL from the dev server's host, port and HTTPS | Matched | `ViteStreaming.test.ts` (HTTPS) |
 | `X-Forwarded-Host`, `X-Forwarded-Proto` (case-insensitive), `ctx.access` from `dev.access` | Matched | `forwarded-host.test.ts`, `ViteRuntime.test.ts` (headers, Access) |
 | The Worker's response status text (dev and preview) | Matched | `dev-proxy.test.ts` |

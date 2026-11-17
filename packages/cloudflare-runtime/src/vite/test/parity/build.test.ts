@@ -234,6 +234,14 @@ describe.each(SHAPES)("build output matches @cloudflare/vite-plugin for $name", 
     expect(await outputs(alchemyRoot, "alchemy", shape.worker)).toEqual(
       await outputs(officialRoot, "official", shape.worker),
     );
+    // Only the environment directories: anything else under `dist/` would be
+    // deployed without being compared above.
+    if (shape.worker) {
+      const stray = (await NodeFs.readdir(NodePath.join(alchemyRoot, "dist"))).filter(
+        (entry) => entry !== "client" && entry !== "ssr",
+      );
+      expect(stray).toEqual([]);
+    }
   }, 120_000);
 
   it.skipIf(!shape.worker)(
