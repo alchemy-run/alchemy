@@ -14,7 +14,6 @@ import {
   wasmInitPlugin,
 } from "../rolldown/plugins/index.ts";
 import { dev } from "./dev-plugin.ts";
-import { redirectOfficialCloudflareVitePlugin } from "./official-plugin-redirect.ts";
 import { preview } from "./preview-plugin.ts";
 
 export interface CloudflareVitePluginDevOptions {
@@ -122,21 +121,6 @@ const isPromiseLike = (value: unknown): value is PromiseLike<unknown> =>
   value !== null &&
   "then" in value &&
   typeof (value as { then: unknown }).then === "function";
-
-/** Disables the official plugins among those one `cloudflare()` call returned. */
-const disableReturnedOfficialCloudflareVitePlugins = (plugins: unknown): unknown => {
-  for (const plugin of Array.isArray(plugins) ? plugins.flat(Infinity) : [plugins]) {
-    if (
-      plugin !== null &&
-      typeof plugin === "object" &&
-      typeof (plugin as vite.Plugin).name === "string" &&
-      isOfficialCloudflareVitePlugin(plugin as vite.Plugin)
-    ) {
-      disableOfficialCloudflareVitePlugin(plugin as vite.Plugin);
-    }
-  }
-  return plugins;
-};
 
 const disableOfficialCloudflareVitePlugin = (plugin: vite.Plugin): void => {
   const record = plugin as unknown as Record<string, unknown>;
@@ -247,10 +231,6 @@ const clientFallbackPlugin = (): vite.Plugin => ({
 export default function cloudflareVitePlugin(
   options: CloudflareVitePluginOptions = {},
 ): vite.PluginOption {
-  // Before Vite evaluates the project's config, so an official
-  // `cloudflare()` in it, or in a framework's second Vite server built from
-  // it, stands down as soon as it is called.
-  redirectOfficialCloudflareVitePlugin(disableReturnedOfficialCloudflareVitePlugins);
   return [
     alchemyCloudflareVitePlugin(),
     optionsPlugin.vite(options),

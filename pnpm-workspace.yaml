@@ -100,7 +100,9 @@ catalog:
   partyserver: "^0.5.10"
   cross-fetch: "^4.0.0"
   # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
-  "@cloudflare/vite-plugin": "2.0.0-rc.1"
+  # npm `latest` (v1): what create-cloudflare templates and framework docs
+  # install. The examples and Website fixtures use it as their users do.
+  "@cloudflare/vite-plugin": "^1.70.0"
   "@flue/runtime": "^2.3.0"
   "@flue/sdk": "^2.3.0"
   "@flue/vite": "^2.3.0"
@@ -256,6 +258,10 @@ catalog:
   zod: "4.5.4"
 
 catalogs:
+  # Upstream's v2 line, which Alchemy's Vite plugin parity tests compare
+  # against (see packages/cloudflare-runtime/src/vite/PARITY.md).
+  cloudflare-vite-plugin-v2:
+    "@cloudflare/vite-plugin": "2.0.0-rc.1"
   # Cloudflare's worker test plugin does not yet support Vitest 5.
   cloudflare-test-compat:
     vitest: "^4.1.8"
