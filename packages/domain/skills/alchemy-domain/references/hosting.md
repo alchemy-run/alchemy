@@ -51,16 +51,15 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 
 ## Hosting on Rivet or Effect Cluster
 
-Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model.
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the default export of `main` and host the model.
 
 ```ts
 // packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
-export const BankLive = Bank.layer(BankHandlers).pipe(
+export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
     DomainRivet.layerDurableObjects({
       name: "Bank",
       main: import.meta.url,
-      handler: "BankLive",
       pool: Default,
     }),
     // on Effect Cluster: DomainCluster.layerEntities, with the same options
@@ -68,7 +67,7 @@ export const BankLive = Bank.layer(BankHandlers).pipe(
 );
 ```
 
-- `handler` names the export the nodes load: export the model's Layer.
+- Make the model's Layer the default export of `main`; set `handler` only when another export holds it.
 - Callers build the same model Layer, so they need the handlers' services too.
 - Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.

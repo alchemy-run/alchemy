@@ -1,12 +1,20 @@
 import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import * as Process from "@distilled.cloud/archil/Process";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import EgressGateway, { API_KEY, GATEWAY_TOKEN } from "./fixtures/gateway.ts";
 import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ providers: Archil.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Archil.providers(), Cloudflare.providers()),
+});
 
 const observe = (sid: string) =>
   archil.getSandbox({ sid }).pipe(
@@ -88,6 +96,132 @@ test.provider(
       expect(yield* observe(resized.sandbox.sandboxId)).toBeUndefined();
     }),
   { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "egress adds a header to matching requests, and the sandbox never holds its value",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = (value: string) =>
+        Archil.Sandbox("Proxied", {
+          baseImage: "node:24-bookworm",
+          idleTtlSeconds: 300,
+          network: {
+            egress: {
+              default: "deny",
+              allow: [
+                {
+                  target: "postman-echo.com",
+                  headers: { "X-Alchemy-Secret": Redacted.make(value) },
+                },
+              ],
+            },
+          },
+        });
+      const echoed = (sid: string) =>
+        Process.exec(sid, "curl -sS -m 20 https://postman-echo.com/headers").pipe(
+          Effect.map((r) => r.stdout + r.stderr),
+        );
+
+      // Archil adds the header outside the sandbox, on the way to the target.
+      const sandbox = yield* stack.deploy(app("s3cr3t-value"));
+      expect(yield* echoed(sandbox.sandboxId)).toContain("s3cr3t-value");
+      const env = yield* Process.exec(sandbox.sandboxId, "env; cat /proc/1/environ");
+      expect(env.stdout).not.toContain("s3cr3t-value");
+
+      // A new value updates the policy on the running sandbox.
+      const rotated = yield* stack.deploy(app("r0tated-value"));
+      expect(rotated.sandboxId).toBe(sandbox.sandboxId);
+      expect(yield* echoed(sandbox.sandboxId)).toContain("r0tated-value");
+
+      yield* stack.destroy();
+      expect(yield* observe(sandbox.sandboxId)).toBeUndefined();
+    }),
+  { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "egress forwards matching requests to a Worker gateway that adds the credential",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { gateway, sandbox } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const gateway = yield* EgressGateway;
+          const sandbox = yield* Archil.Sandbox("Gatewayed", {
+            baseImage: "node:24-bookworm",
+            idleTtlSeconds: 300,
+            network: {
+              egress: {
+                default: "deny",
+                allow: [
+                  {
+                    target: "postman-echo.com",
+                    // Archil adds the token on the way out, so only the
+                    // gateway's own egress rule can call it.
+                    headers: { "X-Gateway-Token": Redacted.make(GATEWAY_TOKEN) },
+                    forwardUrl: gateway.url.as<string>(),
+                  },
+                ],
+              },
+            },
+          });
+          return { gateway: gateway.url.as<string>(), sandbox };
+        }),
+      );
+
+      // The sandbox calls the real host; the response came through the
+      // gateway, which added the API key and saw which sandbox called.
+      const out = yield* Process.exec(
+        sandbox.sandboxId,
+        "curl -sS -i -m 30 https://postman-echo.com/headers",
+      ).pipe(
+        Effect.map((r) => r.stdout + r.stderr),
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (body) => body.includes(API_KEY),
+          times: 10,
+        }),
+      );
+      expect(out).toContain(API_KEY);
+      expect(out.toLowerCase()).toContain(`x-gateway-sandbox: ${sandbox.sandboxId}`.toLowerCase());
+      // The gateway strips its token before the upstream sees the request.
+      expect(out).not.toContain(GATEWAY_TOKEN);
+
+      // Neither secret is inside the sandbox.
+      const env = yield* Process.exec(sandbox.sandboxId, "env; cat /proc/1/environ");
+      expect(env.stdout).not.toContain(API_KEY);
+      expect(env.stdout).not.toContain(GATEWAY_TOKEN);
+
+      // Without the token Archil adds, the gateway refuses.
+      const client = yield* HttpClient.HttpClient;
+      const direct = yield* client
+        .get(`${gateway}/headers`, {
+          headers: { "archil-forwarded-host": "postman-echo.com" },
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (r) => r.status === 403,
+            times: 10,
+          }),
+        );
+      expect(direct.status).toBe(403);
+
+      yield* stack.destroy();
+      expect(yield* observe(sandbox.sandboxId)).toBeUndefined();
+    }),
+  {
+    tags: [
+      "provider:archil",
+      "provider:archil:sandbox",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );
 
 test.provider(

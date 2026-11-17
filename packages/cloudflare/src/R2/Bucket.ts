@@ -1045,35 +1045,35 @@ export const ProviderLive = () =>
           // concurrently so each bucket costs one round-trip of wall
           // clock instead of four (a large leaked-bucket census can
           // otherwise blow the nuke scan's per-provider timeout).
+          const readLifecycleRules = r2
+            .getBucketLifecycle({
+              accountId,
+              bucketName: bucket.name,
+              jurisdiction: bucket.jurisdiction,
+            })
+            .pipe(
+              Effect.map((observed) => (observed.rules ?? []).map(toLifecycleRule)),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed([] as Bucket.LifecycleRule[])),
+            );
+          const readCors = r2
+            .getBucketCors({
+              accountId,
+              bucketName: bucket.name,
+              jurisdiction: bucket.jurisdiction,
+            })
+            .pipe(
+              Effect.map((observed) => (observed.rules ?? []).map(toCorsRule)),
+              Effect.catchTag(["NoSuchBucket", "NoCorsConfiguration"], () =>
+                Effect.succeed([] as Bucket.CorsRule[]),
+              ),
+            );
           const [domains, lifecycleRules, cors, publicDomain] = yield* Effect.all(
             [
               listCustomDomains(bucket.name, bucket.jurisdiction, {
                 retryMissing: false,
               }).pipe(Effect.map((d) => d ?? [])),
-              r2
-                .getBucketLifecycle({
-                  accountId,
-                  bucketName: bucket.name,
-                  jurisdiction: bucket.jurisdiction,
-                })
-                .pipe(
-                  Effect.map((observed) => (observed.rules ?? []).map(toLifecycleRule)),
-                  Effect.catchTag("NoSuchBucket", () =>
-                    Effect.succeed([] as Bucket.LifecycleRule[]),
-                  ),
-                ),
-              r2
-                .getBucketCors({
-                  accountId,
-                  bucketName: bucket.name,
-                  jurisdiction: bucket.jurisdiction,
-                })
-                .pipe(
-                  Effect.map((observed) => (observed.rules ?? []).map(toCorsRule)),
-                  Effect.catchTag(["NoSuchBucket", "NoCorsConfiguration"], () =>
-                    Effect.succeed([] as Bucket.CorsRule[]),
-                  ),
-                ),
+              readLifecycleRules,
+              readCors,
               listManagedDomain(bucket.name, bucket.jurisdiction, {
                 retryMissing: false,
               }),

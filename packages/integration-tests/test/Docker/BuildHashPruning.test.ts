@@ -32,16 +32,19 @@ const guardedReadDirectories = (
   forbidden: ReadonlyArray<string>,
 ) => {
   const reads: string[] = [];
+  const guard = (directory: string) => {
+    const relative = path.relative(root, directory) || ".";
+    reads.push(relative);
+    return forbidden.some((entry) => relative === entry || relative.startsWith(`${entry}/`))
+      ? Effect.die(new Error(`pruned directory was descended into: ${relative}`))
+      : Effect.void;
+  };
   const guarded: FileSystem.FileSystem = {
     ...fs,
-    readDirectory: (directory, options) => {
-      const relative = path.relative(root, directory) || ".";
-      reads.push(relative);
-      if (forbidden.some((entry) => relative === entry || relative.startsWith(`${entry}/`))) {
-        return Effect.die(new Error(`pruned directory was descended into: ${relative}`));
-      }
-      return fs.readDirectory(directory, options);
-    },
+    readDirectory: (directory, options) =>
+      guard(directory).pipe(Effect.andThen(fs.readDirectory(directory, options))),
+    readDirectoryEntries: (directory) =>
+      guard(directory).pipe(Effect.andThen(fs.readDirectoryEntries(directory))),
   };
   return { guarded, reads };
 };
@@ -305,6 +308,44 @@ layer(BunServices.layer)("Docker build hash traversal", (test) => {
         expect(yield* hashDockerBuildInputs(source, "effective")).toBe(
           "91124478d665ef48e0af2670d271511b",
         );
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
+  test.effect(
+    "leaves `excludeNames` directories out of the hash at any depth and never reads them",
+    () =>
+      Effect.gen(function* () {
+        const { root, fs, path } = yield* makeContext();
+        for (const dir of [".git", "node_modules/dep", "src/node_modules/dep"]) {
+          yield* fs.makeDirectory(path.join(root, dir), { recursive: true });
+        }
+        const source = sourceFor(root);
+        const { guarded } = guardedReadDirectories(fs, path, root, [
+          ".git",
+          "node_modules",
+          "src/node_modules",
+        ]);
+        const hash = hashDockerBuildInputs(source, "effective", {
+          excludeNames: [".git", "node_modules"],
+        }).pipe(Effect.provideService(FileSystem.FileSystem, guarded));
+        const write = (i: number) =>
+          Effect.forEach(
+            [".git/index", "node_modules/dep/a.js", "src/node_modules/dep/a.js"],
+            (file) => fs.writeFileString(path.join(root, file), `${i}`),
+          );
+        yield* write(1);
+        const before = yield* hash;
+        yield* write(2);
+        expect(yield* hash).toBe(before);
+        // Without `excludeNames`, Docker's own semantics hash them like any file.
+        const all = hashDockerBuildInputs(source, "effective");
+        const withThem = yield* all;
+        yield* fs.writeFileString(path.join(root, "src/node_modules/dep/a.js"), "3");
+        expect(yield* all).not.toBe(withThem);
+        // A real change still moves the excluding hash.
+        yield* fs.writeFileString(path.join(root, "src", "main.txt"), "changed\n");
+        expect(yield* hash).not.toBe(before);
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );

@@ -136,9 +136,9 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
- * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
- * derives asset routing from Foldkit's completed build metadata. It also
- * supplies SPA fallback for client-only apps.
+ * {@link Foldkit | Cloudflare.Website.Foldkit} derives asset routing from
+ * the app's rendering mode instead, including SPA fallback for client-only
+ * apps in dev and on deploy.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
@@ -296,7 +296,7 @@ export const Vite: {
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,
-          main: undefined!,
+          main: null,
           vite: {
             main: props?.main,
             rootDir: props?.rootDir,

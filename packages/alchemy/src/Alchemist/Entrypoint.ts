@@ -53,9 +53,9 @@ export const importStack = Effect.fn("Alchemist.importStack")(function* (main: s
   const loader = yield* StackModuleLoader;
   const module = yield* Effect.promise(() => loader.import(pathToFileURL(absolutePath).href));
   if (
-    !Effect.isEffect(module.default) ||
     !Predicate.hasProperty(module.default, "stackName") ||
-    typeof module.default.stackName !== "string"
+    typeof module.default.stackName !== "string" ||
+    !Effect.isEffect(module.default)
   ) {
     return yield* new StackEntrypointError({
       message: `Stack entrypoint '${main}' must export a default stack definition (export default Alchemy.Stack({...})).`,

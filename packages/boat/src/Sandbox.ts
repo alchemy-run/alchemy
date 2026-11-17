@@ -15,6 +15,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { isDeclaration } from "./internal/Declared.ts";
 import {
   boatName,
   hasAnyAlchemyLabel,
@@ -308,13 +309,13 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * **Example:** A sandbox with a project set up and its secrets
  * ```typescript
  * export const Golden = Boat.Snapshot("Golden", { run: ["npm i -g pnpm"] });
- * export const Agents = Boat.Environment("Agents", {
+ * export const MyEnv = Boat.Environment("MyEnv", {
  *   env: { API_TOKEN: Config.Redacted("API_TOKEN") },
  * });
  *
  * export const Box = Boat.Sandbox("Box", {
  *   snapshot: Golden,
- *   environment: Agents,
+ *   environment: MyEnv,
  *   autoStop: "30 minutes",
  * });
  * ```
@@ -363,8 +364,10 @@ export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRu
     transformProps: (_id, props: SandboxProps) =>
       Effect.gen(function* () {
         if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        // A lookup (`Boat.Environment.lookup({ name })`) is an Output, which
+        // the engine resolves; only a declaration is yielded.
         const ref = <T>(value: T) =>
-          Effect.isEffect(value)
+          isDeclaration(value)
             ? (value as unknown as Effect.Effect<T, never, Providers>)
             : Effect.succeed(value);
         return {

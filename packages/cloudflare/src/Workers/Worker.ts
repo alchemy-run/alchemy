@@ -44,7 +44,6 @@ import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
-import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
@@ -539,6 +538,11 @@ export interface WorkerPreviewOptions {
    * Preview Worker. Locally-hosted Durable Object and Workflow classes
    * *are* allowed: each Preview gets its own isolated namespace.
    *
+   * `observability` and `Cloudflare.Telemetry()` apply to the Preview
+   * itself: Cloudflare keeps Workers Logs and Traces settings per
+   * Preview, independent of the parent, so a Preview records logs by
+   * default and traces when it provides `Cloudflare.Telemetry()`.
+   *
    * Changing the parent replaces the resource (a Preview belongs to
    * exactly one script).
    */
@@ -722,6 +726,8 @@ export interface WorkerProps<
    * across full deployments. Setting it to `false` or omitting `issues`
    * disables Issues on the next full deployment. Version-only uploads and
    * gradual rollouts keep the parent's live observability settings.
+   * A Preview Worker (`preview.of`) applies these settings to its own
+   * Preview, which Cloudflare configures separately from the parent.
    */
   observability?: WorkerObservability;
   /**
@@ -773,8 +779,11 @@ export interface WorkerProps<
    * `python_workers` compatibility flag is added, and dependencies from
    * `pyproject.toml` (or a prebuilt `python_modules/` directory) are
    * vendored alongside. See the Python Workers section above.
+   *
+   * `null` is the same as omitting it, so a wrapper that spreads its own
+   * props (where `main` means something else) can clear it.
    */
-  main?: string;
+  main?: string | null;
   /**
    * Raw module source for the Worker. When provided, bundling is bypassed
    * entirely and this string is uploaded as a single ESM module
@@ -1165,12 +1174,13 @@ export interface WorkerSourceDescriptor {
    */
   readonly devMode: "server" | "bundle";
   /**
-   * The framework project root. Server-mode dev children are spawned with
-   * this directory as their working directory — some framework dev servers
-   * (e.g. `next dev`, which 404s every route when `process.cwd()` differs
-   * from its `dir`) require cwd to be the project root. Relative paths
-   * resolve against the engine's working directory. Defaults to the
-   * engine's working directory.
+   * The framework project root. The only place a source's root is set:
+   * the engine resolves it once and hands it to the module's `make`, and
+   * server-mode dev children are spawned with it as their working
+   * directory — some framework dev servers (e.g. `next dev`, which 404s
+   * every route when `process.cwd()` differs from its `dir`) require cwd to
+   * be the project root. Relative paths resolve against the engine's
+   * working directory. Defaults to the engine's working directory.
    */
   readonly rootDir?: string;
   /**
@@ -1182,7 +1192,7 @@ export interface WorkerSourceDescriptor {
    */
   readonly runtime?: "node";
   /**
-   * Provider-specific options (rootDir, memo, framework config, ...).
+   * Provider-specific options (memo, framework config, ...).
    * Must be JSON-serializable AND JSON-stable: the descriptor persists
    * in state and participates in the metadata hash, so non-deterministic
    * values here cause perpetual redeploys.
@@ -1190,14 +1200,29 @@ export interface WorkerSourceDescriptor {
   readonly options?: unknown;
 }
 
-export interface ViteOptions {
+/**
+ * Which files are hashed to decide whether a framework build re-runs: by
+ * default every non-gitignored file under the root plus the nearest
+ * lockfile, and the workspace packages the build imports.
+ */
+export interface WorkspaceMemoOptions extends MemoOptions {
   /**
-   * Framework-specific build metadata interpreted after Vite completes.
-   * Set by `Website.Foldkit` to derive asset routing from its manifest.
-   * @internal
+   * Workspace directories outside the root to hash. `"auto"` hashes the
+   * workspaces the build's module graph reached; an explicit array pins
+   * them, each hashed under its own scope.
+   * @default "auto"
    */
-  framework?: "foldkit";
+  workspaces?:
+    | "auto"
+    | Array<
+        MemoOptions & {
+          /** The workspace directory, relative to the root. */
+          cwd: string;
+        }
+      >;
+}
 
+export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
@@ -1229,24 +1254,7 @@ export interface ViteOptions {
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions & {
-    /**
-     * Configure additional workspaces to hash.
-     * By default, auto-detects workspaces during Vite build, then hashes all
-     * non-gitignored files in the workspace plus the nearest lockfile.
-     * @default "auto"
-     */
-    workspaces?:
-      | "auto"
-      | Array<
-          MemoOptions & {
-            /**
-             * The working directory to hash, relative to the Vite root.
-             */
-            cwd: string;
-          }
-        >;
-  };
+  memo?: WorkspaceMemoOptions;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -3044,19 +3052,34 @@ export const Worker: ResourceClassLike<Worker> & {
   Platform(
     WorkerTypeId,
     {
-      // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+      // Binding wiring is deploy-time only and its imports reach the local
+      // runtime, so load it on first use: a runtime bundle folds the guard and
+      // never reads `WorkerAsyncBindings` (#3227). The lazy import also defers
+      // its `isWorker` access until this module has initialized.
       // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
-      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+      onCreate: (resource, props) =>
+        globalThis.__ALCHEMY_RUNTIME__
+          ? Effect.void
+          : Effect.promise(() => import("./WorkerAsyncBindings.ts")).pipe(
+              Effect.flatMap(({ bindWorkerAsyncBindings }) =>
+                bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+              ),
+            ),
       createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-      // Normalize `main` relative to the cwd, then let `domain.dns` naming a
-      // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
-      // records and rewrite `domain` into routes.
+      // Drop a `null` main and normalize a path `main` relative to the cwd,
+      // then let `domain.dns` naming a non-Cloudflare DNS host compose
+      // Cloudflare for SaaS custom hostnames + records and rewrite `domain`
+      // into routes.
       transformProps: (id, props) =>
         transformWorkerDomainProps(
           id,
-          globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
+          globalThis.__ALCHEMY_RUNTIME__ || props === undefined
             ? props
-            : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+            : props.main === null
+              ? { ...props, main: undefined }
+              : typeof props.main === "string"
+                ? { ...props, main: relativeWorkerMain(props.main, process.cwd()) }
+                : props,
         ),
     },
     { URL },

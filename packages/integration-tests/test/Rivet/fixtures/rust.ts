@@ -54,10 +54,13 @@ export const expectRustCounter = Effect.fn(function* (target: RustTarget, key: s
     Effect.tryPromise({
       try: () => counter.increment(amount),
       catch: (cause) => new NodeNotReady({ cause }),
-    }).pipe(
-      Effect.timeout("20 seconds"),
-      Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 36 }),
-    );
+    });
+  // Wait for the node with a call that changes nothing: an attempt that
+  // times out can still land, so the counted calls are never retried.
+  yield* call(0).pipe(
+    Effect.timeout("20 seconds"),
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 36 }),
+  );
   const first = yield* call(3);
   const second = yield* call(4);
   expect(second - first).toBe(8);
