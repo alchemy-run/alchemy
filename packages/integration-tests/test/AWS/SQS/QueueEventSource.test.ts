@@ -22,6 +22,7 @@ describe.sequential(
     const deliversThroughEventSource = (
       stack: Test.ScratchStack,
       deployFunction: Effect.Effect<{ functionName: string; functionUrl?: string }, any, any>,
+      forwardPrefix = "",
     ) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -50,7 +51,9 @@ describe.sequential(
             MaxNumberOfMessages: 10,
             WaitTimeSeconds: 2,
           });
-          const match = (result.Messages ?? []).find((message) => message.Body === messageBody);
+          const match = (result.Messages ?? []).find(
+            (message) => message.Body === `${forwardPrefix}${messageBody}`,
+          );
           if (!match?.ReceiptHandle) {
             return yield* Effect.fail(new MessageNotDelivered());
           }
@@ -66,7 +69,7 @@ describe.sequential(
           }),
         );
 
-        expect(received).toEqual(messageBody);
+        expect(received).toEqual(`${forwardPrefix}${messageBody}`);
 
         yield* stack.destroy();
 
@@ -81,6 +84,8 @@ describe.sequential(
         deliversThroughEventSource(
           stack,
           stack.deploy(QueueEventSourceFunction.pipe(Effect.provide(QueueEventSourceFunctionLive))),
+          // The handler reads a service provided around `consumeQueueMessages`.
+          "forwarded:",
         ),
       { timeout: 240_000 },
     );

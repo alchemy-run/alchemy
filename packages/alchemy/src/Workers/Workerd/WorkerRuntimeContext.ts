@@ -38,7 +38,7 @@ const makeRequestHandler =
   <Req = never>(handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>) =>
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
-      ? makeRequestEffect(event.input, handler, event.context)
+      ? makeRequestEffect<Req>(event.input, handler, event.context)
       : undefined;
 
 export interface WorkerRuntimeContext extends FunctionContext {
@@ -86,7 +86,7 @@ export const makeWorkerRuntimeContext = (
       // expose any non-handler methods on it as RPC methods on the
       // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
       if (options?.shape) userShape = options.shape;
-      return ctx.listen(makeRequestHandler(handler));
+      return ctx.listen<unknown, Req>(makeRequestHandler<Req>(handler));
     },
     listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
       Effect.gen(function* () {

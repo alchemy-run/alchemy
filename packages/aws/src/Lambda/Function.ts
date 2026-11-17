@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { Endpoint } from "@distilled.cloud/aws/Endpoint";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import * as Binding from "alchemy/Binding";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -20,6 +22,7 @@ import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resou
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
+import type { Stage } from "alchemy/Stage";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { buildEventTelemetry } from "alchemy/Telemetry";
 import { sha256 } from "alchemy/Util/sha256";
@@ -28,10 +31,12 @@ import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import type { SecureRandom } from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -914,6 +919,24 @@ export type FunctionServices =
   // The host itself, provided to the implementation at runtime (like Cloudflare's Worker).
   | Function;
 
+/**
+ * Services the Lambda bootstrap supplies while a deferred listener
+ * initializes, once per sandbox. Subtracted from the initializer's
+ * requirements.
+ */
+export type FunctionInitServices =
+  | Scope.Scope
+  | NodeServices
+  | HttpClient
+  | FunctionServices
+  | Endpoint
+  | SecureRandom
+  | Stack
+  | Stage;
+
+/** Services the Lambda dispatcher supplies to every invocation. */
+export type FunctionInvocationServices = Scope.Scope | HandlerContext;
+
 export type FunctionShape = Main<FunctionServices>;
 
 export interface NormalizedFunctionUrlConfig {
@@ -1499,7 +1522,7 @@ export const Function: Platform<
   Function,
   FunctionServices,
   FunctionShape,
-  FunctionContext,
+  FunctionContext<FunctionInitServices, FunctionInvocationServices>,
   {},
   FunctionZipProps
 > &
@@ -1508,8 +1531,13 @@ export const Function: Platform<
   // composes AFTER the Function resource is declared.
   onCreate: (resource, props) =>
     composeFunctionDomain(resource as Function, (props as FunctionProps | undefined)?.domain),
-  createRuntimeContext: (id: string): FunctionContext => {
-    const listeners: Effect.Effect<FunctionListener>[] = [];
+  createRuntimeContext: (
+    id: string,
+  ): FunctionContext<FunctionInitServices, FunctionInvocationServices> => {
+    const listeners: {
+      init: Effect.Effect<FunctionListener>;
+      services: Context.Context<never>;
+    }[] = [];
     const env: Record<string, any> = {};
 
     const ctx = {
@@ -1539,18 +1567,36 @@ export const Function: Platform<
           ),
         ),
       listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as FunctionContext["listen"],
+        // Services provided around `listen`/`serve` have to be there when a
+        // deferred listener initializes and when its handler runs. Scope,
+        // invocation metadata and the layer memo map belong to that
+        // execution, so they are not frozen from registration.
+        Effect.contextWith((context) =>
+          Effect.sync(() => {
+            listeners.push({
+              init: Effect.isEffect(handler) ? handler : Effect.succeed(handler),
+              services: Context.omit(Scope.Scope, HandlerContext, Layer.CurrentMemoMap)(context),
+            });
+          }),
+        )) as any as FunctionContext<FunctionInitServices, FunctionInvocationServices>["listen"],
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>
         handler: Effect.gen(function* () {
-          const handlers = yield* Effect.all(listeners, {
-            concurrency: "unbounded",
-          });
+          // Deferred listeners initialize once per sandbox. Merge what was
+          // captured at registration onto this fiber so the instance Scope
+          // stays the execution scope.
+          const handlers = yield* Effect.forEach(
+            listeners,
+            ({ init, services: registered }) =>
+              Effect.contextWith((current: Context.Context<never>) =>
+                init.pipe(
+                  Effect.provideContext(Context.merge(current, registered)),
+                  Effect.map((handler) => ({ handler, services: registered })),
+                ),
+              ),
+            { concurrency: "unbounded" },
+          );
           // Sandbox-lifetime services, captured so each invocation can
           // build its telemetry exporters and run the handler effect
           // against the same context the init phase saw (mirrors
@@ -1558,7 +1604,8 @@ export const Function: Platform<
           // user `Effect.provide`s inside a handler builds per invocation.
           const services = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
           const dispatch = async (event: any, context: lambda.Context): Promise<any> => {
-            for (const handler of handlers) {
+            for (const { handler, services: registered } of handlers) {
+              const handlerServices = Context.merge(services, registered);
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 // Each invocation gets a fresh request scope, matching the
@@ -1593,12 +1640,16 @@ export const Function: Platform<
                       // buffered spans/logs/metrics flush when it settles
                       // below.
                       Layer.effectContext(
-                        buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
+                        buildEventTelemetry(
+                          handlerServices,
+                          scope,
+                          (ctx as FunctionContext).telemetry,
+                        ),
                       ),
                     ),
                   ),
                   Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExitWith(services),
+                  Effect.runPromiseExitWith(handlerServices),
                 );
                 if (!isScopeEjected(scope)) {
                   // The HttpMiddleware tracer ends the request's root span
@@ -1611,7 +1662,7 @@ export const Function: Platform<
                       log: "Warn",
                       message: "Lambda invocation scope close failed",
                     }),
-                    Effect.runPromiseWith(services),
+                    Effect.runPromiseWith(handlerServices),
                   );
                 }
                 if (deadline.fired) {
