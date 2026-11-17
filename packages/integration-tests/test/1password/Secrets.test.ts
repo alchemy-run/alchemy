@@ -104,12 +104,24 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
       for (const supplied of [
         { references: { SECRET: "private-invalid-reference" } },
         { references: { SECRET: "op://v/i/" } },
+        { references: { SECRET: 123 } },
+      ]) {
+        const result = yield* runStack(
+          [OnePassword.Secrets(supplied as OnePassword.OnePasswordOptions)],
+          Effect.void,
+        ).pipe(Effect.result);
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(String(result.failure)).toContain("config key 'SECRET'");
+          expect(String(result.failure)).not.toContain("private-invalid-reference");
+        }
+      }
+      for (const supplied of [
         { references: { SECRET: "op://v/i/f" }, environmentId: "env" },
         { references: {} },
         { references: { "": "op://v/i/f" } },
         { references: { " ": "op://v/i/f" } },
         { references: { GOOD: "op://v/i/f", "": "op://v/i/f" } },
-        { references: { SECRET: 123 } },
         { references: "op://v/i/f" },
         {},
         { environmentId: " " },

@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 export const SecretReference = Schema.String.check(
   Schema.makeFilter(
     (value) =>
-      /^op:\/\/[A-Za-z0-9_. -]+\/[A-Za-z0-9_. -]+\/(?:[A-Za-z0-9_. -]+\/)?[A-Za-z0-9_. -]+(?:\?(?:attribute=t?otp|ssh-format=openssh))?$(?![\s\S])/.test(
+      /^op:\/\/[A-Za-z0-9_. -]+\/[A-Za-z0-9_. -]+\/(?:[A-Za-z0-9_. -]+\/)?[A-Za-z0-9_. -]+(?:\?(?:attribute=t?otp|ssh-format=openssh))?$/.test(
         value,
       ) &&
       value

@@ -10,7 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { resolveCredentials } from "./AuthProvider.ts";
-import { OnePasswordSecretsError } from "./Errors.ts";
+import { OnePasswordReferenceError, OnePasswordSecretsError } from "./Errors.ts";
 import { loadSecrets } from "./internal/sdk.ts";
 import { SecretReference } from "./SecretReference.ts";
 
@@ -38,6 +38,8 @@ export type OnePasswordOptions = OnePasswordAuthOptions &
         environmentId?: never;
       }
   );
+
+const isSecretReference = Schema.is(SecretReference);
 
 const NonBlankString = Schema.String.check(Schema.makeFilter((value) => value.trim().length > 0));
 
@@ -134,6 +136,18 @@ export const Secrets = (options: SecretsOption<OnePasswordOptions>) =>
       Effect.gen(function* () {
         if (yield* SuppressMissingProviderConfig) return ConfigProvider.fromEnv({ env: {} });
         const supplied = yield* resolveSecretsOption(options);
+        // Name the config key of a malformed reference; config keys aren't secret.
+        const references: unknown = (supplied as { references?: unknown }).references;
+        if (typeof references === "object" && references !== null) {
+          for (const [configKey, reference] of Object.entries(references)) {
+            if (!isSecretReference(reference)) {
+              return yield* new OnePasswordReferenceError({
+                configKey,
+                reason: "InvalidReference",
+              });
+            }
+          }
+        }
         const resolved = yield* Schema.decodeEffect(OnePasswordOptionsSchema)(supplied).pipe(
           // Schema issues retain their input; never expose malformed references or values.
           Effect.mapError(

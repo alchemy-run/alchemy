@@ -23,6 +23,8 @@ export class OnePasswordRateLimitError extends Data.TaggedError("OnePasswordRate
 export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecretsError")<{
   readonly environmentId?: string;
   readonly operation: OnePasswordOperation;
+  /** For `InvalidEnvironment`: the variable name that is empty or repeated. */
+  readonly variableName?: string;
   readonly reason:
     | "SdkError"
     | "AuthExpired"
@@ -42,22 +44,36 @@ export class OnePasswordSecretsError extends Data.TaggedError("OnePasswordSecret
       case "Timeout":
         return `${prefix} The operation timed out. Check network access and, for desktop authentication, unlock 1Password and approve the authorization prompt.`;
       case "InvalidEnvironment":
-        return "1Password: environmentId must be non-empty and the Environment must contain unique, non-empty variable names with string values.";
+        return `${prefix} Variable name '${this.variableName ?? ""}' is empty or repeated, or its value is not a string.`;
       case "InvalidOptions":
-        return "1Password: specify exactly one of a non-empty environmentId or a non-empty references map. References must be op://vault/item/[section/]field strings with supported SDK syntax and non-empty config keys. Optional queries are ?attribute=otp, ?attribute=totp or ?ssh-format=openssh. Use IDs for names with unsupported characters, not URL encoding.";
+        return "1Password: specify exactly one of a non-empty environmentId or a non-empty references map. References must be op://vault/item/[section/]field strings with supported SDK syntax and non-empty config keys. Optional queries are ?attribute=otp, ?attribute=totp or ?ssh-format=openssh.";
       default:
         return `${prefix} Check the Environment ID or secret references and read permissions, OP_SERVICE_ACCOUNT_TOKEN or desktop account selection, and the 1Password SDK installation. For desktop access, unlock the app and enable Settings > Developer > Integrate with other apps.`;
     }
   }
 }
 
-/** A reference could not be resolved. Neither its URI nor the SDK error is retained. */
+/**
+ * A reference could not be resolved. Neither its URI nor the SDK's free-text
+ * message is retained; `errorType` is the SDK's fixed error kind
+ * (e.g. `fieldNotFound`, `itemNotFound`, `vaultNotFound`).
+ */
 export class OnePasswordReferenceError extends Data.TaggedError("OnePasswordReferenceError")<{
   readonly configKey: string;
   readonly reason: "InvalidReference" | "ResolutionFailed" | "MissingResponse";
+  readonly errorType?: string;
 }> {
   readonly [UserFacingError] = true;
   override get message() {
-    return `1Password could not resolve the reference for config key '${this.configKey}'. Check the op://vault/item/[section/]field syntax, that the vault, item and field exist, and read permissions. No partial config was loaded.`;
+    const prefix = `1Password could not resolve the reference for config key '${this.configKey}'`;
+    const suffix = "No partial config was loaded.";
+    switch (this.reason) {
+      case "InvalidReference":
+        return `${prefix}: expected op://vault/item/[section/]field using ASCII letters, digits, spaces, hyphens, underscores and periods, optionally ?attribute=otp, ?attribute=totp or ?ssh-format=openssh. Use IDs for names with other characters. ${suffix}`;
+      case "ResolutionFailed":
+        return `${prefix}${this.errorType ? ` (${this.errorType})` : ""}. Check that the vault, item and field exist and are readable. ${suffix}`;
+      default:
+        return `${prefix}: 1Password returned no result for it. ${suffix}`;
+    }
   }
 }

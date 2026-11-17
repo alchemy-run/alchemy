@@ -34,17 +34,6 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
     }),
   );
 
-  // The public schema checks syntax without importing the SDK. Also ask the
-  // pinned SDK to validate offline, before opening an authenticated session.
-  if (references !== undefined) {
-    for (const [configKey, reference] of Object.entries(references)) {
-      yield* Effect.try({
-        try: () => sdk.Secrets.validateSecretReference(reference),
-        catch: () => new OnePasswordReferenceError({ configKey, reason: "InvalidReference" }),
-      });
-    }
-  }
-
   const call = <A>(
     operation: OnePasswordOperation,
     run: () => Promise<A>,
@@ -101,6 +90,8 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
         return yield* new OnePasswordReferenceError({
           configKey,
           reason: response ? "ResolutionFailed" : "MissingResponse",
+          // A fixed SDK error kind; its free-text `message` may echo the reference.
+          errorType: response?.error?.type,
         });
       }
       env[configKey] = response.content.secret;
@@ -121,6 +112,7 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
           environmentId,
           operation: "read",
           reason: "InvalidEnvironment",
+          variableName: variable.name,
         });
       }
       env[variable.name] = variable.value;
