@@ -51,28 +51,10 @@ const PREVIEW_COMMENT_LINES: [number, number][] = [[6, 12]];
 
 // The vertical track beside the sections that walk the full picture.
 const RAIL = [
-  {
-    label: "Declare",
-    steps: [
-      { id: "loop-model", title: "model" },
-      { id: "loop-stories", title: "specify" },
-      { id: "loop-verify", title: "prove" },
-    ],
-  },
-  {
-    label: "Ground",
-    steps: [
-      { id: "loop-connect", title: "encapsulate" },
-      { id: "loop-types", title: "type-check" },
-    ],
-  },
-  {
-    label: "Run",
-    steps: [
-      { id: "loop-local", title: "emulate" },
-      { id: "loop-live", title: "test live" },
-    ],
-  },
+  { label: "Declare", steps: [{ id: "loop-model", title: "the model" }] },
+  { label: "Prove", steps: [{ id: "loop-prove", title: "stories and rules" }] },
+  { label: "Ground", steps: [{ id: "loop-ground", title: "Layers" }] },
+  { label: "Run", steps: [{ id: "loop-local", title: "on your machine" }] },
   { label: "Ship", steps: [{ id: "loop-pr", title: "preview per PR" }] },
   { label: "Observe", steps: [{ id: "loop-prod", title: "trace the model" }] },
 ];
@@ -182,19 +164,52 @@ twice, every answer FraudCheck can give[/d]
 12 commands picked at random (seed 1)[/d]
   [g]✓[/g] none breaks a rule`;
 
-const EXTERNAL_SRC = `// what the model needs, in its own words
-export class Payments extends Domain.ExternalSystem("Payments", {
-  refund: {
-    args: { settlementId: Schema.String, amount: Cents },
-    success: { refundId: Schema.String },
+// What a Layer can ground a program in, by the contract it answers.
+const LAYERS = [
+  {
+    label: "Actors",
+    items: [
+      { label: "Durable Objects", href: "/domain/cloudflare" },
+      { label: "Rivet", href: "/domain/rivet" },
+      { label: "Effect Cluster", href: "/domain/effect-cluster" },
+      { label: "In memory", href: "/domain/in-memory" },
+    ],
   },
-}) {}
-
-// a policy calls it; a story answers it in tests
-const { refundId } = yield* payments.refund({
-  settlementId,
-  amount,
-});`;
+  {
+    label: "Sandboxes",
+    items: [
+      { label: "E2B", href: "/e2b" },
+      { label: "Daytona", href: "/daytona" },
+      { label: "Modal", href: "/modal" },
+      { label: "Boat", href: "/boat" },
+      { label: "Archil", href: "/archil" },
+      { label: "AWS", href: "/aws/compute/ecs-sandboxes" },
+    ],
+  },
+  {
+    label: "Compute",
+    items: [
+      { label: "Cloudflare", href: "/cloudflare" },
+      { label: "AWS", href: "/aws" },
+      { label: "GCP", href: "/gcp" },
+      { label: "Fly", href: "/fly" },
+      { label: "Railway", href: "/railway" },
+      { label: "Hetzner", href: "/hetzner" },
+      { label: "Kubernetes", href: "/kubernetes" },
+      { label: "Docker", href: "/docker" },
+    ],
+  },
+  {
+    label: "Data",
+    items: [
+      { label: "Neon", href: "/neon" },
+      { label: "PlanetScale", href: "/planetscale" },
+      { label: "Turso", href: "/turso" },
+      { label: "Prisma", href: "/prisma" },
+    ],
+  },
+  { label: "Agents", items: [{ label: "harnesses, coming soon" }] },
+];
 
 const WIRING_SRC = `const BankLive = Bank.layer(BankHandlers).pipe(
   // the ledger projection writes to a D1 database
@@ -273,8 +288,8 @@ const PROVIDERS = [
 ---
 
 <Marketing
-  title="Alchemy · the framework for generating and verifying working software"
-  description="Model your business, specify its behavior as stories, and prove its rules. Layers ground it in real, type-checked infrastructure, with the tightest feedback loop from an idea to production."
+  title="Alchemy · manifest verifiable software"
+  description="Declare your business and your infrastructure in one typed program. Prove it before it runs, then ground it in any platform with a Layer."
 >
   <!-- Hero + marquee fill the first screen so the marquee lands just above the fold. -->
   <div class="v2-fold">
@@ -294,7 +309,7 @@ const PROVIDERS = [
             id="hero-h1"
             style="font-size:clamp(38px,3.65vw,52px);"
           >
-            The framework for generating and verifying working software
+            Manifest verifiable software
           </h1>
           <p
             data-copy
@@ -302,7 +317,7 @@ const PROVIDERS = [
             id="hero-sub"
             style="font-size:clamp(17px,2.2vw,22px);max-width:560px;"
           >
-            Model your business, specify its behavior as stories, and prove its rules. Layers ground it in real, type-checked infrastructure, with the tightest feedback loop from an idea to production.
+            Declare your business and your infrastructure in one typed program. Prove it before it runs, then ground it in any platform with a Layer.
           </p>
           <div class="alc-hero__cta">
             <Button variant="primary" icon="arrow" href="/getting-started">
@@ -408,9 +423,9 @@ const PROVIDERS = [
   <AlchemicalDivider variant="dot" class="v2-divider" />
   <section class="v2-section v2-pat-1 v2-overview">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>Declare it, and every step is verified</h2>
+      <h2 class="v2-h2" data-copy>One program, from the business rule to the cloud resource</h2>
       <p class="v2-lede" data-copy>
-        You or your agent declare the software: the business as a model, its behavior as stories and rules, its infrastructure as Layers. Each step then proves it works before the next one starts. Types, stories and proofs answer in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds. CI deploys a preview, tests it, and ships it on merge.
+        You or your agent declare the software against contracts: the business as a model, its behavior as stories and rules, and everything it needs from outside. Layers ground each contract in a real platform. Every step then proves the program works before the next one starts: types, stories and proofs answer in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds. CI deploys a preview, tests it, and ships it on merge.
       </p>
       <p class="v2-overview__source">
         <a
@@ -426,7 +441,7 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <nav class="v2-rail" aria-label="From a model to production">
+  <nav class="v2-rail" aria-label="From a declaration to production">
     <span class="v2-rail__track" aria-hidden="true"><span class="v2-rail__fill"></span></span>
     {RAIL.map((group) => (
       <div class="v2-rail__group">
@@ -492,14 +507,14 @@ const PROVIDERS = [
   </script>
 
 
-  <!-- ───────────────── MODEL ───────────────── -->
+  <!-- ───────────────── DECLARE ───────────────── -->
   <AlchemicalDivider variant="line" class="v2-divider" />
   <section class="v2-section v2-pat-2 v2-feature" id="loop-model" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-model")}</p>
-      <h2 class="v2-h2" data-copy>Declare the business in its own language</h2>
+      <h2 class="v2-h2" data-copy>Declare the whole system in its own language</h2>
       <p class="v2-lede" data-copy>
-        <a href="/domain">Alchemy Domain</a> gives the words your business already uses a place in the code. A command declares what it asks for and every way it can end, an aggregate decides it in a pure function, and an event records what happened. You, your agent and the type checker all read the same model.
+        <a href="/domain">Alchemy Domain</a> gives the words your business already uses a place in the code. A command declares what it asks for and every way it can end, an aggregate decides it in a pure function, and an event records what happened. What the model needs from outside, a payment provider or a database, it declares as a contract and nothing more. You, your agent and the type checker all read the same program.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/WithdrawMoney.command.ts" code={COMMAND_SRC} compact />
@@ -508,30 +523,21 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── SPECIFY ───────────────── -->
+  <!-- ───────────────── PROVE ───────────────── -->
   <AlchemicalDivider variant="triangle" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-feature" id="loop-stories" data-rail-section>
+  <section class="v2-section v2-pat-3 v2-feature" id="loop-prove" data-rail-section>
     <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-stories")}</p>
-      <h2 class="v2-h2" data-copy>Stories specify behavior and verify it in milliseconds</h2>
+      <p class="v2-kicker">{railKicker("loop-prove")}</p>
+      <h2 class="v2-h2" data-copy>Prove it before it runs</h2>
       <p class="v2-lede" data-copy>
-        A <a href="/domain/story">story</a> states a rule as an example: given this history, when this command, then these events. It runs your real model in memory, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
+        A <a href="/domain/story">story</a> states behavior as an example: given this history, when this command, then these events. It runs the real model in memory in milliseconds, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
       </p>
       <div class="v2-split">
         <CodeBlock filename="test/Account.test.ts" code={STORY_RULE_SRC} compact />
         <CodeBlock filename="test/Fraud.test.ts" code={STORY_CHAIN_SRC} compact />
       </div>
-    </div>
-  </section>
-
-  <!-- ───────────────── VERIFY ───────────────── -->
-  <AlchemicalDivider variant="square" class="v2-divider" />
-  <section class="v2-section v2-pat-4 v2-feature" id="loop-verify" data-rail-section>
-    <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-verify")}</p>
-      <h2 class="v2-h2" data-copy>Write the rule once and have it proved</h2>
-      <p class="v2-lede" data-copy>
-        A story checks the examples you thought of. A rule says what must always be true, and one test proves it for every state and input, or searches every short sequence of commands for one that breaks it. Nobody writes a value to try. A broken rule fails with the shortest sequence that breaks it, written as a story.
+      <p class="v2-lede v2-lede--next" data-copy>
+        A story checks the examples you thought of. A rule says what must always be true, and one test proves it for every state and input, or searches every short sequence of commands for one that breaks it. A broken rule fails with the shortest sequence that breaks it, written as a story. None of this needs a cloud.
       </p>
       <div class="v2-split">
         <CodeBlock filename="src/Account.aggregate.ts" code={RULES_SRC} compact />
@@ -540,43 +546,49 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── CONNECT ───────────────── -->
-  <AlchemicalDivider variant="pentagon" class="v2-divider" />
-  <section class="v2-section v2-pat-5 v2-feature" id="loop-connect" data-rail-section>
+  <!-- ───────────────── GROUND ───────────────── -->
+  <AlchemicalDivider variant="square" class="v2-divider" />
+  <section class="v2-section v2-pat-4 v2-feature" id="loop-ground" data-rail-section>
     <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-connect")}</p>
-      <h2 class="v2-h2" data-copy>Layers encapsulate the infrastructure</h2>
+      <p class="v2-kicker">{railKicker("loop-ground")}</p>
+      <h2 class="v2-h2" data-copy>A Layer grounds it in a real platform</h2>
       <p class="v2-lede" data-copy>
-        A proved model still knows nothing about the cloud. It declares what it needs from outside: somewhere to run, the <a href="/domain/external-system">external systems</a> its policies and sagas call, and the stores its <a href="/domain/projection">projections</a> feed. Each is a Layer, and a Layer owns its resources and the access to them: Durable Objects, a database, a webhook. Swap a Layer and the same model runs in memory, on your machine, or on another cloud.
+        A proved model still knows nothing about the cloud. A Layer answers each contract with a real platform, and owns the resources and the access that takes: Durable Objects for the aggregates, a database for the ledger, a vendor for payments. Swap a Layer and the same program runs in memory, on your machine, or on another platform.
       </p>
-      <div class="v2-split">
-        <CodeBlock filename="src/Payments.external.ts" code={EXTERNAL_SRC} compact />
+      <dl class="v2-layers">
+        {LAYERS.map((family) => (
+          <div class="v2-layers__row">
+            <dt>{family.label}</dt>
+            <dd>
+              {family.items.map((item) =>
+                "href" in item ? (
+                  <a href={item.href}>{item.label}</a>
+                ) : (
+                  <span>{item.label}</span>
+                ),
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div class="v2-split v2-split--narrow">
         <CodeBlock filename="src/BankWorker.ts" code={WIRING_SRC} compact />
       </div>
-    </div>
-  </section>
-
-  <!-- ───────────────── TYPE-CHECK ───────────────── -->
-  <AlchemicalDivider variant="hexagon" class="v2-divider" />
-  <section class="v2-section v2-pat-6 v2-feature" id="loop-types" data-rail-section>
-    <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-types")}</p>
-      <h2 class="v2-h2" data-copy>The type checker proves it is wired correctly</h2>
-      <p class="v2-lede" data-copy>
-        A model declares what it needs in its type, and so does each Layer: the resources it creates, the access it grants, and the services it calls. Leave one out and the program doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
+      <p class="v2-lede v2-lede--next" data-copy>
+        The program declares what it needs in its type, and so does each Layer: the resources it creates, the access it grants, and the services it calls. Leave one out and it doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
       </p>
       <TypePolicy client:visible />
     </div>
   </section>
 
-  <!-- ───────────────── EMULATED ───────────────── -->
-  <AlchemicalDivider variant="heptagon" class="v2-divider" />
-  <section class="v2-section v2-pat-1 v2-feature" id="loop-local" data-rail-section>
+  <!-- ───────────────── RUN ───────────────── -->
+  <AlchemicalDivider variant="pentagon" class="v2-divider" />
+  <section class="v2-section v2-pat-5 v2-feature" id="loop-local" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-local")}</p>
-      <h2 class="v2-h2" data-copy>Run the whole app on your machine</h2>
+      <h2 class="v2-h2" data-copy>Run the whole system on your machine</h2>
       <p class="v2-lede" data-copy>
-        <code class="alc-code-inline">alchemy dev</code> runs Workers, Durable Objects, queues and buckets on emulated services on your machine, and the frontend reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and the same suite runs against those services in seconds, with nothing deployed.
+        <code class="alc-code-inline">alchemy dev</code> grounds the same program in local Layers: Workers, Durable Objects, queues and buckets run on emulated services on your machine, and the frontend reloads as you type. Set <code class="alc-code-inline">dev: true</code> in a test and the same suite runs against those services in seconds, with nothing deployed.
       </p>
       <div class="v2-split">
         <CodeBlock filename="alchemy.run.ts" code={VITE_SRC} compact />
@@ -585,25 +597,9 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── TESTED LIVE ───────────────── -->
-  <AlchemicalDivider variant="octagon" class="v2-divider" />
-  <section class="v2-section v2-pat-2 v2-feature" id="loop-live" data-rail-section>
-    <div class="v2-container">
-      <p class="v2-kicker">{railKicker("loop-live")}</p>
-      <h2 class="v2-h2" data-copy>Run the same tests against the real cloud</h2>
-      <p class="v2-lede" data-copy>
-        Once it works locally, run the same test without <code class="alc-code-inline">LOCAL=1</code>. It deploys the app to a stage of its own, runs against real Workers, buckets and permissions, and destroys the stage afterwards, in about 20 seconds.
-      </p>
-      <div class="v2-split">
-        <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
-        <TestTerminal client:visible />
-      </div>
-    </div>
-  </section>
-
-  <!-- ───────────────── PER PULL REQUEST ───────────────── -->
-  <AlchemicalDivider variant="nonagon" class="v2-divider" />
-  <section class="v2-section v2-pat-3 v2-feature" id="loop-pr" data-rail-section>
+  <!-- ───────────────── SHIP ───────────────── -->
+  <AlchemicalDivider variant="hexagon" class="v2-divider" />
+  <section class="v2-section v2-pat-6 v2-feature" id="loop-pr" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-pr")}</p>
       <h2 class="v2-h2" data-copy>Every pull request gets its own deployment</h2>
@@ -619,17 +615,25 @@ const PROVIDERS = [
         />
         <PreviewComment client:visible />
       </div>
+      <h3 class="v2-h3" data-copy>Test against a live cloud deployment</h3>
+      <p class="v2-lede" data-copy>
+        The tests CI runs are the ones you ran locally, without <code class="alc-code-inline">LOCAL=1</code>. They deploy the app to a stage of its own, run against real Workers, buckets and permissions, and destroy the stage afterwards, in about 20 seconds.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+        <TestTerminal client:visible />
+      </div>
     </div>
   </section>
 
-  <!-- ───────────────── OBSERVABILITY ───────────────── -->
-  <AlchemicalDivider variant="decagon" class="v2-divider" />
-  <section class="v2-section v2-pat-4 v2-feature" id="loop-prod" data-rail-section>
+  <!-- ───────────────── OBSERVE ───────────────── -->
+  <AlchemicalDivider variant="heptagon" class="v2-divider" />
+  <section class="v2-section v2-pat-1 v2-feature" id="loop-prod" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-prod")}</p>
-      <h2 class="v2-h2" data-copy>The model traces itself in production</h2>
+      <h2 class="v2-h2" data-copy>Production traces speak the model's language</h2>
       <p class="v2-lede" data-copy>
-        The model gives telemetry a shape. Every command, event, policy, view and saga records an OpenTelemetry span named after itself, and the spans join into one trace from a click to everything it caused. Provide one Layer to export them. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app.
+        The model gives telemetry a shape. Every command, event, policy, view and saga records an OpenTelemetry span named after itself and the resource it ran on, and the spans join into one trace from a click to everything it caused. Provide one Layer to export them. Its datasets, dashboards and alert monitors are resources in the same program, so monitoring ships with the app.
       </p>
       <div class="v2-trace">
         <Terminal title="trace · Account.WithdrawMoney" content={TRACE_OUT} />
@@ -639,8 +643,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── SENTIMENT ───────────────── -->
-  <AlchemicalDivider variant="hendecagon" class="v2-divider" />
-  <section class="v2-section v2-pat-5" aria-labelledby="sentiment-h">
+  <AlchemicalDivider variant="octagon" class="v2-divider" />
+  <section class="v2-section v2-pat-2" aria-labelledby="sentiment-h">
     <div class="v2-container">
       <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
       <p class="v2-lede" data-copy>
@@ -653,9 +657,9 @@ const PROVIDERS = [
 
   <!-- ───────────────── GET STARTED ───────────────── -->
   <AlchemicalDivider variant="circle" class="v2-divider" />
-  <section class="v2-section v2-pat-6 v2-section--last">
+  <section class="v2-section v2-pat-3 v2-section--last">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>Get started.</h2>
+      <h2 class="v2-h2" data-copy>Manifest yours</h2>
       <ol class="v2-steps">
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Install</span>
@@ -1163,6 +1167,54 @@ const PROVIDERS = [
   }
   .v2-lede a:hover {
     text-decoration-color: currentColor;
+  }
+
+  .v2-lede--next {
+    margin-top: 40px;
+  }
+  .v2-split + .v2-h3 {
+    margin-top: 48px;
+  }
+  .v2-layers {
+    margin: 0 0 28px;
+    border-top: 1px solid var(--alc-hairline-2);
+  }
+  .v2-layers__row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--alc-hairline-2);
+    align-items: baseline;
+  }
+  .v2-layers dt {
+    font-family: var(--alc-font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--alc-accent-text);
+  }
+  .v2-layers dd {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: 15px;
+    color: var(--alc-fg-2);
+  }
+  .v2-layers dd a {
+    color: var(--alc-fg-1);
+    text-decoration: none;
+  }
+  .v2-layers dd a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  @media (max-width: 560px) {
+    .v2-layers__row {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
   }
 
   .v2-split {
