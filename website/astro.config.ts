@@ -1893,8 +1893,16 @@ export default defineConfig({
                   link: "/stripe/guides/connect",
                 },
                 {
+                  label: "Price your product",
+                  link: "/stripe/guides/pricing",
+                },
+                {
                   label: "React to Stripe events",
                   link: "/stripe/guides/webhooks",
+                },
+                {
+                  label: "Collect tax and pay out",
+                  link: "/stripe/guides/tax-and-payouts",
                 },
               ],
             },

@@ -1139,7 +1139,9 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 - [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, CI, and how Worker bindings get their credentials.
 - [Sell a subscription](https://alchemy.run/stripe/guides/subscriptions) — The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 - [Onboard merchants with Connect](https://alchemy.run/stripe/guides/connect) — Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
-- [React to Stripe events](https://alchemy.run/stripe/guides/webhooks) — consumeEvents provisions the webhook endpoint and runs one Effect per delivery. When to use it, which events to listen for, and how to manage the endpoint yourself.
+- [Price your product](https://alchemy.run/stripe/guides/pricing) — Per-seat tiers, packs, pay what you want, several currencies, paid trials and payment links, declared as Stripe resources next to the Worker that sells them.
+- [React to Stripe events](https://alchemy.run/stripe/guides/webhooks) — consumeEvents creates the webhook and runs one Effect per delivery. Which events to listen for, thin events, delivery to a Lambda through EventBridge, and managing the endpoint yourself.
+- [Collect tax and pay out](https://alchemy.run/stripe/guides/tax-and-payouts) — Stripe Tax settings, your business's tax ids, customers' tax status, and the payout schedule, declared in your Stack and restored when you destroy it.
 
 ## Docker
 
