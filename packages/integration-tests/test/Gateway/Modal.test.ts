@@ -33,7 +33,8 @@ test.provider(
             ? res.json
             : Effect.flatMap(res.text, (text) => Effect.fail(new Error(`${res.status}: ${text}`))),
         ),
-        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 5 }),
+        // A fresh workers.dev url can answer 404 for tens of seconds.
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
       );
       expectGatewayed(served as unknown as Served, { gatewayHost: "workers.dev" });
 
