@@ -56,6 +56,7 @@ const RAIL = [
   { label: "Prove", steps: [{ id: "loop-prove", title: "invariants" }] },
   { label: "Ground", steps: [{ id: "loop-ground", title: "Layers" }] },
   { label: "Run", steps: [{ id: "loop-local", title: "on your machine" }] },
+  { label: "Test", steps: [{ id: "loop-live", title: "live cloud" }] },
   { label: "Ship", steps: [{ id: "loop-pr", title: "preview per PR" }] },
   { label: "Observe", steps: [{ id: "loop-prod", title: "trace the model" }] },
 ];
@@ -607,9 +608,25 @@ const PROVIDERS = [
     </div>
   </section>
 
-  <!-- ───────────────── SHIP ───────────────── -->
+  <!-- ───────────────── TEST LIVE ───────────────── -->
   <AlchemicalDivider variant="heptagon" class="v2-divider" />
-  <section class="v2-section v2-pat-1 v2-feature" id="loop-pr" data-rail-section>
+  <section class="v2-section v2-pat-1 v2-feature" id="loop-live" data-rail-section>
+    <div class="v2-container">
+      <p class="v2-kicker">{railKicker("loop-live")}</p>
+      <h2 class="v2-h2" data-copy>Test against a live cloud deployment</h2>
+      <p class="v2-lede" data-copy>
+        Once it works locally, run the same test without <code class="alc-code-inline">LOCAL=1</code>. It deploys the app to a stage of its own, runs against real Workers, buckets and permissions, and destroys the stage afterwards, in about 20 seconds.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
+        <TestTerminal client:visible />
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── SHIP ───────────────── -->
+  <AlchemicalDivider variant="octagon" class="v2-divider" />
+  <section class="v2-section v2-pat-2 v2-feature" id="loop-pr" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-pr")}</p>
       <h2 class="v2-h2" data-copy>Every pull request gets its own deployment</h2>
@@ -625,20 +642,12 @@ const PROVIDERS = [
         />
         <PreviewComment client:visible />
       </div>
-      <h3 class="v2-h3" data-copy>Test against a live cloud deployment</h3>
-      <p class="v2-lede" data-copy>
-        The tests CI runs are the ones you ran locally, without <code class="alc-code-inline">LOCAL=1</code>. They deploy the app to a stage of its own, run against real Workers, buckets and permissions, and destroy the stage afterwards, in about 20 seconds.
-      </p>
-      <div class="v2-split">
-        <CodeBlock filename="test/api.test.ts" code={TEST_SRC} compact />
-        <TestTerminal client:visible />
-      </div>
     </div>
   </section>
 
   <!-- ───────────────── OBSERVE ───────────────── -->
-  <AlchemicalDivider variant="octagon" class="v2-divider" />
-  <section class="v2-section v2-pat-2 v2-feature" id="loop-prod" data-rail-section>
+  <AlchemicalDivider variant="nonagon" class="v2-divider" />
+  <section class="v2-section v2-pat-3 v2-feature" id="loop-prod" data-rail-section>
     <div class="v2-container">
       <p class="v2-kicker">{railKicker("loop-prod")}</p>
       <h2 class="v2-h2" data-copy>Production traces speak the model's language</h2>
@@ -653,8 +662,8 @@ const PROVIDERS = [
   </section>
 
   <!-- ───────────────── SENTIMENT ───────────────── -->
-  <AlchemicalDivider variant="nonagon" class="v2-divider" />
-  <section class="v2-section v2-pat-3" aria-labelledby="sentiment-h">
+  <AlchemicalDivider variant="decagon" class="v2-divider" />
+  <section class="v2-section v2-pat-4" aria-labelledby="sentiment-h">
     <div class="v2-container">
       <h2 class="v2-h2" id="sentiment-h" data-copy>Loved by the people shipping with it</h2>
       <p class="v2-lede" data-copy>
@@ -667,7 +676,7 @@ const PROVIDERS = [
 
   <!-- ───────────────── GET STARTED ───────────────── -->
   <AlchemicalDivider variant="circle" class="v2-divider" />
-  <section class="v2-section v2-pat-4 v2-section--last">
+  <section class="v2-section v2-pat-5 v2-section--last">
     <div class="v2-container">
       <h2 class="v2-h2" data-copy>Manifest yours</h2>
       <ol class="v2-steps">
