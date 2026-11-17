@@ -52,8 +52,8 @@ export type SandboxGatewayProps = InputProps<
  * @product Service
  * @provides Alchemy.Gateway
  */
-export const SandboxGateway = (
-  props: SandboxGatewayProps | Effect.Effect<SandboxGatewayProps, never, any>,
+export const SandboxGateway = <R = never>(
+  props: SandboxGatewayProps | Effect.Effect<SandboxGatewayProps, never, R>,
 ) =>
   Layer.effect(
     Gateway.Gateway,
@@ -75,7 +75,7 @@ export const SandboxGateway = (
                 ...resolved,
                 main: entry,
                 env: {
-                  ...resolved.env,
+                  ...(resolved.env as Record<string, unknown> | undefined),
                   // Packed like every bound value, so the secret survives
                   // the container's plain-string environment.
                   [Gateway.TOKEN_KEY]: secret.text.pipe(Output.map(packEnvValue)),

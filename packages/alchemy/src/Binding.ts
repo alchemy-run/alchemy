@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Gateway from "./Gateway.ts";
 import type { Input } from "./Input.ts";

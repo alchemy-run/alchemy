@@ -1,3 +1,7 @@
+// A gateway carries the calls of any binding, so the errors and services of
+// what it forwards are not known here.
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+
 /**
  * The gateway's side. A gateway host's entry imports this module and the
  * sandbox's own program: it runs the program's Construction with
@@ -68,12 +72,11 @@ const readCall = async (request: Request): Promise<Call> => {
   const body = request.body;
   const scope = Scope.makeUnsafe();
   const [head, rest] = await Effect.runPromise(
-    Stream.peel(
-      decodeRpcResponseStream(
-        Stream.fromReadableStream({ evaluate: () => body, onError: (cause) => cause }),
-      ),
-      Sink.head(),
-    ).pipe(Effect.provideService(Scope.Scope, scope)),
+    Stream.fromReadableStream({ evaluate: () => body, onError: (cause) => cause }).pipe(
+      decodeRpcResponseStream,
+      Stream.peel(Sink.head()),
+      Effect.provideService(Scope.Scope, scope),
+    ),
   );
   // Through the gateway's own codec, so bytes in the other arguments survive.
   const call = decode(JSON.stringify(Option.getOrUndefined(head))) as Required<Call>;
@@ -221,20 +224,34 @@ export const serve = (
         Stream.toReadableStream(encodeRpcResponseStream(body) as Stream.Stream<Uint8Array>),
         { headers: { [RPC_STREAM_HEADER]: "ndjson" } },
       );
-    const provide = Effect.provideContext(services);
+    // The binding's own services were resolved when it was built; what is
+    // left is what the gateway's Construction provides.
+    const run = (effect: unknown) =>
+      Effect.provideContext(
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- a binding's client, whose services are the gateway's
+        (Effect.isEffect(effect) ? effect : Effect.succeed(effect)) as Effect.Effect<
+          unknown,
+          unknown,
+          never
+        >,
+        services,
+      );
+    const provided = (body: unknown) =>
+      Stream.provideContext(
+        // A binding's stream, whose services are the gateway's.
+        body as Stream.Stream<unknown, unknown, never>,
+        services,
+      );
     if (Stream.isStream(value) && !Effect.isEffect(value)) {
-      return stream(Stream.provideContext(value, services) as Stream.Stream<unknown, unknown>);
+      const body: unknown = value;
+      return stream(provided(body));
     }
-    const exit = await Effect.runPromiseExit(
-      (Effect.isEffect(value) ? value : Effect.succeed(value)).pipe(provide) as Effect.Effect<
-        unknown,
-        unknown
-      >,
-    );
+    const exit = await Effect.runPromiseExit(run(value));
     if (Exit.isSuccess(exit)) {
       const result = exit.value;
       if (Stream.isStream(result)) {
-        return stream(Stream.provideContext(result, services) as Stream.Stream<unknown, unknown>);
+        const body: unknown = result;
+        return stream(provided(body));
       }
       // A result with one streamed field (an object's body): the value
       // first, then the field's chunks, as they are produced.
@@ -247,10 +264,7 @@ export const serve = (
         return new Response(
           Stream.toReadableStream(
             encodeRpcResponseStream(
-              Stream.concat(
-                Stream.succeed(JSON.parse(encode(head))),
-                Stream.provideContext(body as Stream.Stream<unknown, unknown, never>, services),
-              ),
+              Stream.concat(Stream.succeed(JSON.parse(encode(head))), provided(body)),
             ) as Stream.Stream<Uint8Array>,
           ),
           { headers: { [STREAM_FIELD_HEADER]: field } },

@@ -1,3 +1,7 @@
+// A gateway carries the calls of any binding, so the errors and services of
+// what it forwards are not known here.
+/** @effect-diagnostics anyUnknownInErrorContext:off */
+
 /**
  * A sandbox's gateway: where its bindings run, holding the credentials the
  * sandbox must never see.
@@ -473,9 +477,8 @@ export const wrapClientInvocations = (
   layer: Layer.Layer<any, any, never>,
 ): unknown => {
   const provide = (value: unknown): unknown =>
-    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
+    // Client Effects come in any shape; each binding's own types carry them.
     Effect.isEffect(value) ? Effect.provide(value as Effect.Effect<any, any, any>, layer) : value;
-  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
   if (Effect.isEffect(client)) return provide(client);
   if (typeof client === "function") {
     return new Proxy(client, {

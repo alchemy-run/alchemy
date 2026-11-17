@@ -36,7 +36,7 @@ export const gateway = (entrypoint: unknown) =>
             Effect.gen(function* () {
               const request = yield* HttpServerRequest;
               const web = yield* HttpServerRequestApi.toWeb(request);
-              // oxlint-disable-next-line effecttsgo/process-env-in-effect -- bound values are read raw, never through Config (see unpackEnvValue)
+              // Bound values are read raw, never through Config (see unpackEnvValue).
               const response = yield* Effect.promise(() => handle(web, process.env));
               return HttpServerResponse.fromWeb(response);
             }).pipe(Effect.orDie),
