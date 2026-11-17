@@ -213,7 +213,7 @@ const routeClientDataPlane = (
           );
         }
         // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
-        return wrapClientInvocations(client, local[0]!);
+        return Gateway.wrapClientInvocations(client, local[0]!);
       }
       // Live-mode / `Alchemy.remote()`: ambient in a `dev` run is the
       // emulator, so provide the registration-captured live environment
@@ -225,7 +225,7 @@ const routeClientDataPlane = (
         ),
       ];
       // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
-      if (live.length === 1) return wrapClientInvocations(client, live[0]!);
+      if (live.length === 1) return Gateway.wrapClientInvocations(client, live[0]!);
       return client;
     });
   });
@@ -243,39 +243,6 @@ const describeResolution = (plane: DataPlaneResolution): string => {
     case "unregistered":
       return "real cloud (no provider registered)";
   }
-};
-
-/**
- * Wrap every invocation surface of a binding client so its returned Effects
- * run with `layer` provided closest. Handles the client shapes bindings
- * return: a callable (the common per-operation client), an object of
- * methods/Effects (multi-method clients), or a bare Effect. Anything else
- * passes through untouched. Proxies preserve identity, extra properties,
- * and method names.
- */
-const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, never>): unknown => {
-  const provide = (value: unknown): unknown =>
-    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
-    Effect.isEffect(value) ? Effect.provide(value as Effect.Effect<any, any, any>, layer) : value;
-  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
-  if (Effect.isEffect(client)) return provide(client);
-  if (typeof client === "function") {
-    return new Proxy(client, {
-      apply: (target, thisArg, argArray) => provide(Reflect.apply(target, thisArg, argArray)),
-    });
-  }
-  if (typeof client === "object" && client !== null) {
-    return new Proxy(client, {
-      get: (target, prop, receiver) => {
-        const value = Reflect.get(target, prop, receiver);
-        if (typeof value === "function") {
-          return (...args: any[]) => provide(Reflect.apply(value, target, args));
-        }
-        return provide(value);
-      },
-    });
-  }
-  return client;
 };
 
 /**

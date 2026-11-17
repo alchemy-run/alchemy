@@ -14,6 +14,7 @@ import * as Schedule from "effect/Schedule";
 import type { Served } from "./conformance/app.ts";
 import type { AwsServed } from "./conformance/aws-app.ts";
 import { expectAwsGatewayed, expectGatewayed } from "./conformance/conformance.ts";
+import SignedBoat from "./fixtures/boat-aws-signed.ts";
 import AwsGatewayedBoat from "./fixtures/boat-aws.ts";
 import EcsGatewayedBoat from "./fixtures/boat-ecs-service.ts";
 import FlyGatewayedBoat from "./fixtures/boat-fly.ts";
@@ -85,7 +86,13 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const sandbox = yield* stack.deploy(AwsGatewayedBoat);
-      expectAwsGatewayed((yield* ask(sandbox)) as unknown as AwsServed);
+      const served = (yield* ask(sandbox)) as unknown as AwsServed;
+      expectAwsGatewayed(served);
+      // Only the presigned download left the sandbox for AWS: every binding
+      // call went to the gateway.
+      expect(served.hosts.filter((host) => host.endsWith(".amazonaws.com"))).toEqual([
+        served.presignedHost,
+      ]);
       yield* stack.destroy();
     }),
   {
@@ -127,5 +134,23 @@ test.provider.skipIf(!!process.env.FAST)(
   {
     tags: ["provider:boat", "provider:aws", "provider:aws:ecs", "provider:aws:s3", "live"],
     timeout: 1_500_000,
+  },
+);
+
+test.provider(
+  "a Boat sandbox sends S3 requests itself, signed by its gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const sandbox = yield* stack.deploy(SignedBoat);
+      const served = (yield* ask(sandbox)) as unknown as AwsServed;
+      expectAwsGatewayed(served);
+      // The object's bytes went from the sandbox to S3, not through the gateway.
+      expect(served.hosts.some((host) => host.endsWith(".amazonaws.com"))).toBe(true);
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:boat", "provider:aws", "provider:aws:lambda", "provider:aws:s3", "live"],
+    timeout: 900_000,
   },
 );

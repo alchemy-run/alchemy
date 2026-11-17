@@ -21,6 +21,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -448,8 +449,52 @@ export const bind = <A, E, R>(
     if (gateway.phase === "gateway") {
       return Effect.tap(build(...args), (client) => gateway.register(key, client));
     }
+    const direct = gateway.direct?.(id);
+    if (direct !== undefined) {
+      // Built here after all: its calls leave the sandbox themselves.
+      return build(...args).pipe(
+        Effect.provide(direct),
+        Effect.map((client) => wrapClientInvocations(client, direct) as A),
+      ) as Effect.Effect<A, E, R>;
+    }
     return Effect.succeed(remoteClient(gateway.call, key, []) as A);
   });
+
+/**
+ * Wrap every invocation surface of a binding client so its returned Effects
+ * run with `layer` provided closest. Handles the client shapes bindings
+ * return: a callable (the common per-operation client), an object of
+ * methods/Effects (multi-method clients), or a bare Effect. Anything else
+ * passes through untouched. Proxies preserve identity, extra properties,
+ * and method names.
+ */
+export const wrapClientInvocations = (
+  client: unknown,
+  layer: Layer.Layer<any, any, never>,
+): unknown => {
+  const provide = (value: unknown): unknown =>
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
+    Effect.isEffect(value) ? Effect.provide(value as Effect.Effect<any, any, any>, layer) : value;
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
+  if (Effect.isEffect(client)) return provide(client);
+  if (typeof client === "function") {
+    return new Proxy(client, {
+      apply: (target, thisArg, argArray) => provide(Reflect.apply(target, thisArg, argArray)),
+    });
+  }
+  if (typeof client === "object" && client !== null) {
+    return new Proxy(client, {
+      get: (target, prop, receiver) => {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value === "function") {
+          return (...args: any[]) => provide(Reflect.apply(value, target, args));
+        }
+        return provide(value);
+      },
+    });
+  }
+  return client;
+};
 
 /** The same context with another view of the gateway. */
 const derive = (ctx: BaseRuntimeContext, gateway: GatewayContext | undefined): BaseRuntimeContext =>

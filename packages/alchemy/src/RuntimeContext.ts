@@ -113,6 +113,13 @@ export type GatewayContext =
   | {
       /** Inside the sandbox: bindings are not built; calls go to the gateway. */
       readonly phase: "sandbox";
+      /**
+       * Bindings that are built in the sandbox after all, by id: the Layer
+       * returned is provided around each of their calls. Set by a Layer that
+       * lets the sandbox send a request itself with something the gateway
+       * hands it (a signature), such as `AWS.SandboxSigner`.
+       */
+      direct?: (id: string) => Layer.Layer<any> | undefined;
       /** Call `path` on the client the gateway holds under `key`. */
       readonly call: (
         key: string,

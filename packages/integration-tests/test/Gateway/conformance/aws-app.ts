@@ -28,6 +28,18 @@ export const awsApp = Effect.gen(function* () {
   const own = Layer.mergeAll(Credentials.fromEnv(), Region.fromEnv(), FetchHttpClient.layer);
   return {
     fetch: Effect.gen(function* () {
+      // The hosts this sandbox sends requests to while it serves this one.
+      const hosts = new Set<string>();
+      const original = globalThis.fetch;
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          globalThis.fetch = ((input: any, init?: any) => {
+            hosts.add(new URL(typeof input === "string" ? input : (input.url ?? input)).host);
+            return original(input, init);
+          }) as typeof fetch;
+        }),
+        () => Effect.sync(() => void (globalThis.fetch = original)),
+      );
       yield* put({ Key: "note.txt", Body: "written through the gateway" });
       const object = yield* get({ Key: "note.txt" });
       // The body is streamed from S3 through the gateway.
@@ -54,6 +66,7 @@ export const awsApp = Effect.gen(function* () {
       );
       return yield* HttpServerResponse.json({
         streamed,
+        hosts: [...hosts],
         presignedHost: new URL(signed).host,
         downloaded,
         body,
@@ -62,6 +75,7 @@ export const awsApp = Effect.gen(function* () {
         gateway: (yield* Effect.sync(() => process.env)).ALCHEMY_GATEWAY_URL ?? null,
       });
     }).pipe(
+      Effect.scoped,
       // Say why, so a failing platform's test shows the cause.
       Effect.catchCause((cause) =>
         Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
@@ -79,6 +93,8 @@ export const AwsGateway = Layer.mergeAll(
 
 /** What {@link awsApp} answers. */
 export interface AwsServed {
+  /** Every host the sandbox itself sent a request to. */
+  readonly hosts: ReadonlyArray<string>;
   readonly streamed: number;
   readonly presignedHost: string;
   readonly downloaded: string;
@@ -87,3 +103,13 @@ export interface AwsServed {
   readonly direct: string;
   readonly gateway: string | null;
 }
+
+/**
+ * The same bindings, built in the sandbox: the gateway only signs, and the
+ * sandbox sends its requests to S3 itself.
+ */
+export const AwsSignedGateway = Layer.mergeAll(
+  AWS.S3.PutObjectHttp,
+  AWS.S3.GetObjectHttp,
+  AWS.S3.PresignGetObjectHttp,
+).pipe(Layer.provide(AWS.SandboxSigner), Layer.provide(AWS.Lambda.SandboxGateway));
