@@ -8869,11 +8869,11 @@ importers:
         specifier: workspace:*
         version: link:../alchemy
       effect:
-        specifier: 4.0.5
-        version: 4.0.5
+        specifier: 4.1.4
+        version: 4.1.4
       typescript:
         specifier: 'catalog:'
-        version: 7.0.2
+        version: 7.1.0-dev.20261105.1
 
   packages/acme:
     dependencies:
