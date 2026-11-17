@@ -1,11 +1,19 @@
 // Opt-in integration tests against an isolated Docker Engine reached over SSH
 // or mTLS. Supply ALCHEMY_DOCKER_REMOTE_SPEC and an isolated DOCKER_CONFIG.
 // Docker uses certificate paths for TLS; SSH uses the runner's agent/key files.
-// Only for a disposable Engine: ALCHEMY_DOCKER_REMOTE_SWARM=1 permits Swarm
-// init/teardown; ALCHEMY_DOCKER_REMOTE_ROTATE_TLS=1 selects the mTLS rotation
-// case instead of the ordinary Swarm case. Neither flag is used by default.
+// Swarm opt-in requires a separate, dedicated Engine: set
+// ALCHEMY_DOCKER_REMOTE_SWARM=1 and ALCHEMY_DOCKER_REMOTE_SWARM_ENGINE_ID to
+// that daemon's ID. The daemon MUST be configured with the permanent label
+// alchemy.test.disposable=true, and have no user resources. Do not use a
+// workstation or production daemon. ALCHEMY_DOCKER_REMOTE_ROTATE_TLS=1
+// selects the mTLS rotation case instead of the ordinary Swarm case.
 import * as Docker from "@alchemy.run/docker";
-import { dockerContextTarget, dockerEndpointFromSpec } from "@alchemy.run/docker/Docker";
+import {
+  dockerContextTarget,
+  dockerEndpointFromSpec,
+  dockerTargetArgs,
+  type Docker as DockerService,
+} from "@alchemy.run/docker/Docker";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
@@ -32,7 +40,52 @@ const remoteSpec = Effect.gen(function* () {
 const decodeServiceVersion = Schema.NonEmptyArray(
   Schema.Struct({ Version: Schema.Struct({ Index: Schema.Number }) }),
 ).pipe(Schema.fromJsonString, Schema.decodeEffect);
+const decodeDaemonLabels = Schema.NullOr(Schema.Array(Schema.String)).pipe(
+  Schema.fromJsonString,
+  Schema.decodeEffect,
+);
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
+
+// A Swarm's membership is daemon-wide. Unlike the ordinary remote tests,
+// these must refuse arbitrary reachable engines before ANY stack mutation.
+// The daemon-owned label and ID are independent of the test process, and an
+// empty resource inventory prevents touching pre-existing workloads.
+const assertDisposableSwarmEngine = Effect.fn(function* (target: DockerService.Target) {
+  if (typeof target === "string") {
+    return yield* Effect.fail(new Error("Remote Swarm tests require an explicit Docker endpoint"));
+  }
+  const expectedId = yield* Config.String("ALCHEMY_DOCKER_REMOTE_SWARM_ENGINE_ID");
+  const docker = yield* Docker.Docker;
+  const args = dockerTargetArgs(target);
+  const engineId = yield* docker
+    .run([...args, "info", "--format", "{{.ID}}"])
+    .pipe(Effect.map(({ stdout }) => stdout.trim()));
+  if (!expectedId.trim() || engineId !== expectedId.trim()) {
+    return yield* Effect.fail(
+      new Error("Remote Swarm test refused: configured disposable Engine ID does not match"),
+    );
+  }
+  const labels = yield* docker
+    .run([...args, "info", "--format", "{{json .Labels}}"])
+    .pipe(Effect.flatMap(({ stdout }) => decodeDaemonLabels(stdout)));
+  if (!labels?.includes("alchemy.test.disposable=true")) {
+    return yield* Effect.fail(
+      new Error("Remote Swarm test refused: daemon lacks alchemy.test.disposable=true"),
+    );
+  }
+  for (const [kind, command] of [
+    ["containers", ["container", "ls", "--all", "--quiet"]],
+    ["volumes", ["volume", "ls", "--quiet"]],
+    ["custom networks", ["network", "ls", "--filter", "type=custom", "--quiet"]],
+  ] as const) {
+    const { stdout } = yield* docker.run([...args, ...command]);
+    if (stdout.trim()) {
+      return yield* Effect.fail(
+        new Error(`Remote Swarm test refused: disposable Engine contains existing ${kind}`),
+      );
+    }
+  }
+});
 
 test.provider.skipIf(!remoteEnabled)(
   "plans no changes and repairs container drift without a machine-local context",
@@ -168,6 +221,9 @@ const swarmLifecycle = (rotateTls: boolean) => (stack: Test.ScratchStack) =>
     const serviceName = `${name}-service`;
     const target = dockerContextTarget({ name: contextName, dockerSpec });
     expect(typeof target).toBe("object");
+
+    if (!target) return yield* Effect.fail(new Error("Remote Docker endpoint is required"));
+    yield* assertDisposableSwarmEngine(target);
 
     // A remote test must never adopt or dissolve an existing Swarm. This
     // also rejects pending, locked and error states before changing anything.
