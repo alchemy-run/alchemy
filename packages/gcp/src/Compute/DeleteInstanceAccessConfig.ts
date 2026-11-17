@@ -30,7 +30,7 @@ export type DeleteInstanceAccessConfigShape = (
  * **Example:** Call `instances.deleteAccessConfig`
  * ```typescript
  * const deleteInstanceAccessConfig = yield* GCP.Compute.DeleteInstanceAccessConfig(instance);
- * const response = yield* deleteInstanceAccessConfig({ networkInterface: "...", accessConfig: "..." });
+ * const response = yield* deleteInstanceAccessConfig({ accessConfig: "...", networkInterface: "..." });
  * ```
  *
  * @binding

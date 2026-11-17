@@ -5,7 +5,7 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";
-import { Base } from "./src/Images.ts";
+import { Warm } from "./src/Images.ts";
 
 export default Alchemy.Stack(
   "DaytonaSandboxes",
@@ -14,8 +14,8 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const base = yield* Base;
+    const warm = yield* Warm;
     const api = yield* Api;
-    return { url: api.url.as<string>(), snapshot: base.name };
+    return { url: api.url.as<string>(), snapshot: warm.name };
   }),
 );

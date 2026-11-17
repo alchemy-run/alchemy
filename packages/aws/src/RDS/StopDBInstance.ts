@@ -45,6 +45,6 @@ export const StopDBInstanceHttp = Layer.effect(
   makeRdsInstanceHttpBinding({
     tag: "AWS.RDS.StopDBInstance",
     operation: rds.stopDBInstance,
-    actions: ["rds:StopDBInstance"],
+    actions: ["rds:AddTagsToResource", "rds:CreateDBSnapshot", "rds:StopDBInstance"],
   }),
 );

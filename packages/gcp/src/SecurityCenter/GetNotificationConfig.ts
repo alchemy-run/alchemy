@@ -10,34 +10,34 @@ import type { NotificationConfig } from "./NotificationConfig.ts";
 import type { OrganizationsNotificationConfig } from "./OrganizationsNotificationConfig.ts";
 
 export interface GetNotificationConfigRequest extends Omit<
-  securitycenter.GetFoldersNotificationConfigsRequest,
+  securitycenter.GetOrganizationsNotificationConfigsRequest,
   "name"
 > {}
 
 export type GetNotificationConfigShape = (
-  resource: FolderNotificationConfig | NotificationConfig | OrganizationsNotificationConfig,
+  resource: OrganizationsNotificationConfig | NotificationConfig | FolderNotificationConfig,
 ) => Effect.Effect<
   (
     request?: GetNotificationConfigRequest,
   ) => Effect.Effect<
     securitycenter.NotificationConfig,
-    | securitycenter.GetFoldersNotificationConfigsError
+    | securitycenter.GetOrganizationsNotificationConfigsError
     | securitycenter.GetProjectsNotificationConfigsError
-    | securitycenter.GetOrganizationsNotificationConfigsError,
+    | securitycenter.GetFoldersNotificationConfigsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `securitycenter.folders.notificationConfigs.get`.
+ * Runtime binding for `securitycenter.organizations.notificationConfigs.get`.
  *
- * Bind it to a {@link FolderNotificationConfig} or {@link NotificationConfig} or {@link OrganizationsNotificationConfig} and provide {@link GetNotificationConfigHttp}. The
+ * Bind it to a {@link OrganizationsNotificationConfig} or {@link NotificationConfig} or {@link FolderNotificationConfig} and provide {@link GetNotificationConfigHttp}. The
  * host gets `roles/securitycenter.notificationConfigViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `notificationConfigs.get`
  * ```typescript
- * const getNotificationConfig = yield* GCP.SecurityCenter.GetNotificationConfig(folderNotificationConfig);
+ * const getNotificationConfig = yield* GCP.SecurityCenter.GetNotificationConfig(organizationsNotificationConfig);
  * const response = yield* getNotificationConfig();
  * ```
  *
@@ -66,8 +66,8 @@ export const GetNotificationConfigHttp = Layer.effect(
     tag: "GCP.SecurityCenter.GetNotificationConfig",
     variants: [
       {
-        resource: "GCP.SecurityCenter.FolderNotificationConfig",
-        operation: securitycenter.getFoldersNotificationConfigs,
+        resource: "GCP.SecurityCenter.OrganizationsNotificationConfig",
+        operation: securitycenter.getOrganizationsNotificationConfigs,
         param: "name",
         iam: { role: "roles/securitycenter.notificationConfigViewer" },
       },
@@ -78,8 +78,8 @@ export const GetNotificationConfigHttp = Layer.effect(
         iam: { role: "roles/securitycenter.notificationConfigViewer" },
       },
       {
-        resource: "GCP.SecurityCenter.OrganizationsNotificationConfig",
-        operation: securitycenter.getOrganizationsNotificationConfigs,
+        resource: "GCP.SecurityCenter.FolderNotificationConfig",
+        operation: securitycenter.getFoldersNotificationConfigs,
         param: "name",
         iam: { role: "roles/securitycenter.notificationConfigViewer" },
       },

@@ -11,21 +11,21 @@ import type { FolderBucketsView } from "./FolderBucketsView.ts";
 import type { OrganizationBucketsView } from "./OrganizationBucketsView.ts";
 
 export interface ListViewLogsRequest extends Omit<
-  logging.ListProjectsLocationsBucketsViewsLogsRequest,
+  logging.ListBillingAccountsLocationsBucketsViewsLogsRequest,
   "parent"
 > {}
 
 export type ListViewLogsShape = (
-  resource: BucketsView | BillingBucketsView | FolderBucketsView | OrganizationBucketsView,
+  resource: BillingBucketsView | OrganizationBucketsView | BucketsView | FolderBucketsView,
 ) => Effect.Effect<
   (
     request?: ListViewLogsRequest,
   ) => Effect.Effect<
     logging.ListLogsResponse,
-    | logging.ListProjectsLocationsBucketsViewsLogsError
     | logging.ListBillingAccountsLocationsBucketsViewsLogsError
-    | logging.ListFoldersLocationsBucketsViewsLogsError
-    | logging.ListOrganizationsLocationsBucketsViewsLogsError,
+    | logging.ListOrganizationsLocationsBucketsViewsLogsError
+    | logging.ListProjectsLocationsBucketsViewsLogsError
+    | logging.ListFoldersLocationsBucketsViewsLogsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type ListViewLogsShape = (
 /**
  * Lists the logs in projects, organizations, folders, or billing accounts.
  *
- * Bind it to a {@link BucketsView} or {@link BillingBucketsView} or {@link FolderBucketsView} or {@link OrganizationBucketsView} and provide {@link ListViewLogsHttp}. The
+ * Bind it to a {@link BillingBucketsView} or {@link OrganizationBucketsView} or {@link BucketsView} or {@link FolderBucketsView} and provide {@link ListViewLogsHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `logs.list`
  * ```typescript
- * const listViewLogs = yield* GCP.Logging.ListViewLogs(bucketsView);
+ * const listViewLogs = yield* GCP.Logging.ListViewLogs(billingBucketsView);
  * const response = yield* listViewLogs();
  * ```
  *
@@ -66,26 +66,26 @@ export const ListViewLogsHttp = Layer.effect(
     tag: "GCP.Logging.ListViewLogs",
     variants: [
       {
-        resource: "GCP.Logging.BucketsView",
-        operation: logging.listProjectsLocationsBucketsViewsLogs,
-        param: "parent",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingBucketsView",
         operation: logging.listBillingAccountsLocationsBucketsViewsLogs,
         param: "parent",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.FolderBucketsView",
-        operation: logging.listFoldersLocationsBucketsViewsLogs,
+        resource: "GCP.Logging.OrganizationBucketsView",
+        operation: logging.listOrganizationsLocationsBucketsViewsLogs,
         param: "parent",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationBucketsView",
-        operation: logging.listOrganizationsLocationsBucketsViewsLogs,
+        resource: "GCP.Logging.BucketsView",
+        operation: logging.listProjectsLocationsBucketsViewsLogs,
+        param: "parent",
+        iam: { role: "roles/logging.privateLogViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucketsView",
+        operation: logging.listFoldersLocationsBucketsViewsLogs,
         param: "parent",
         iam: { role: "roles/logging.privateLogViewer" },
       },

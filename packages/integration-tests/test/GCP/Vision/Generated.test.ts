@@ -170,16 +170,16 @@ describe.skipIf(!!process.env.FAST)(
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip("vision.images.annotate: its path names no project", () => Effect.void);
-      test.provider.skip(
-        "vision.images.asyncBatchAnnotate: its path names no project",
-        () => Effect.void,
-      );
-      test.provider.skip("vision.files.annotate: its path names no project", () => Effect.void);
       test.provider.skip(
         "vision.files.asyncBatchAnnotate: its path names no project",
         () => Effect.void,
       );
+      test.provider.skip("vision.files.annotate: its path names no project", () => Effect.void);
+      test.provider.skip(
+        "vision.images.asyncBatchAnnotate: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip("vision.images.annotate: its path names no project", () => Effect.void);
     });
   },
 );

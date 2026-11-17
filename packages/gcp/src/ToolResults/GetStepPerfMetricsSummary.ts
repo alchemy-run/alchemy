@@ -31,7 +31,7 @@ export type GetStepPerfMetricsSummaryShape = () => Effect.Effect<
  * **Example:** Call `steps.getPerfMetricsSummary`
  * ```typescript
  * const getStepPerfMetricsSummary = yield* GCP.ToolResults.GetStepPerfMetricsSummary();
- * const response = yield* getStepPerfMetricsSummary({ stepId: "...", historyId: "...", executionId: "..." });
+ * const response = yield* getStepPerfMetricsSummary({ stepId: "...", executionId: "...", historyId: "..." });
  * ```
  *
  * @binding

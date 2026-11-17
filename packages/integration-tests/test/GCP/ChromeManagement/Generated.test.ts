@@ -78,27 +78,51 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "chromemanagement.customers.certificateProvisioningProcesses.uploadCertificate: addressed under `customers/`, not a project",
+        "chromemanagement.customers.telemetry.users.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.certificateProvisioningProcesses.setFailure: addressed under `customers/`, not a project",
+        "chromemanagement.customers.telemetry.users.get: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.certificateProvisioningProcesses.get: addressed under `customers/`, not a project",
+        "chromemanagement.customers.telemetry.notificationConfigs.delete: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.certificateProvisioningProcesses.claim: addressed under `customers/`, not a project",
+        "chromemanagement.customers.telemetry.notificationConfigs.create: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.certificateProvisioningProcesses.signData: addressed under `customers/`, not a project",
+        "chromemanagement.customers.telemetry.notificationConfigs.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.enterprise.securityInsights.queryUrlVisitsBreakdowns: addressed under `customers/`, not a project",
+        "chromemanagement.customers.telemetry.events.list: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.telemetry.devices.list: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.telemetry.devices.get: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.enrollmentTokens.revoke: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.enrollmentTokens.get: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.enrollmentTokens.create: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.enrollmentTokens.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -106,15 +130,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.enterprise.securityInsights.queryContentTransfersBreakdowns: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "chromemanagement.customers.enterprise.securityInsights.disable: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.enterprise.securityInsights.queryContentTransfers: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -122,35 +138,47 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "chromemanagement.customers.enterprise.securityInsights.queryContentTransfers: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.enterprise.securityInsights.queryContentTransfersBreakdowns: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "chromemanagement.customers.enterprise.securityInsights.checkEnablementStatus: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.profiles.list: addressed under `customers/`, not a project",
+        "chromemanagement.customers.enterprise.securityInsights.queryUrlVisitsBreakdowns: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.profiles.get: addressed under `customers/`, not a project",
+        "chromemanagement.customers.thirdPartyProfileUsers.move: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.profiles.delete: addressed under `customers/`, not a project",
+        "chromemanagement.customers.chromeBrowsers.get: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.profiles.commands.get: addressed under `customers/`, not a project",
+        "chromemanagement.customers.chromeBrowsers.move: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.profiles.commands.create: addressed under `customers/`, not a project",
+        "chromemanagement.customers.chromeBrowsers.patch: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.profiles.commands.list: addressed under `customers/`, not a project",
+        "chromemanagement.customers.chromeBrowsers.delete: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.apps.fetchDevicesRequestingExtension: addressed under `customers/`, not a project",
+        "chromemanagement.customers.chromeBrowsers.list: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.apps.fetchUsersRequestingExtension: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -158,7 +186,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.apps.fetchUsersRequestingExtension: addressed under `customers/`, not a project",
+        "chromemanagement.customers.apps.fetchDevicesRequestingExtension: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -174,59 +202,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.countChromeDevicesReachingAutoExpirationDate: addressed under `customers/`, not a project",
+        "chromemanagement.customers.profiles.get: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.countChromeProfileVersions: addressed under `customers/`, not a project",
+        "chromemanagement.customers.profiles.delete: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.enumeratePrintJobs: addressed under `customers/`, not a project",
+        "chromemanagement.customers.profiles.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.findInstalledAppProfiles: addressed under `customers/`, not a project",
+        "chromemanagement.customers.profiles.commands.create: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.findSaasUsageProfiles: addressed under `customers/`, not a project",
+        "chromemanagement.customers.profiles.commands.get: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.countDevicesPerBootType: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countDevicesPerReleaseChannel: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countActiveDevices: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countChromeCrashEvents: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countInstalledApps: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countPrintJobsByPrinter: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countChromeDevicesThatNeedAttention: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countPrintJobsByUser: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.reports.countChromeVersions: addressed under `customers/`, not a project",
+        "chromemanagement.customers.profiles.commands.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -234,11 +230,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.findSaasUsageBrowsers: addressed under `customers/`, not a project",
+        "chromemanagement.customers.reports.countChromeDevicesReachingAutoExpirationDate: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.reports.findInstalledAppDevices: addressed under `customers/`, not a project",
+        "chromemanagement.customers.reports.countPrintJobsByUser: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countChromeProfileVersions: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countDevicesPerBootType: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countChromeVersions: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countPrintJobsByPrinter: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -246,15 +258,67 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "chromemanagement.customers.reports.findSaasUsageProfiles: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countChromeCrashEvents: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.findSaasUsageBrowsers: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countActiveDevices: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countDevicesPerReleaseChannel: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.countInstalledApps: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.findInstalledAppDevices: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.reports.findInstalledAppProfiles: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "chromemanagement.customers.reports.countChromeBrowsersNeedingAttention: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.thirdPartyProfileUsers.move: addressed under `customers/`, not a project",
+        "chromemanagement.customers.reports.enumeratePrintJobs: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.connectorConfigs.list: addressed under `customers/`, not a project",
+        "chromemanagement.customers.reports.countChromeDevicesThatNeedAttention: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.certificateProvisioningProcesses.signData: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.certificateProvisioningProcesses.get: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.certificateProvisioningProcesses.setFailure: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.certificateProvisioningProcesses.uploadCertificate: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "chromemanagement.customers.certificateProvisioningProcesses.claim: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -262,35 +326,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "chromemanagement.customers.telemetry.events.list: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.notificationConfigs.create: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.notificationConfigs.list: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.notificationConfigs.delete: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.users.list: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.users.get: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.devices.list: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "chromemanagement.customers.telemetry.devices.get: addressed under `customers/`, not a project",
+        "chromemanagement.customers.connectorConfigs.list: addressed under `customers/`, not a project",
         () => Effect.void,
       );
     });

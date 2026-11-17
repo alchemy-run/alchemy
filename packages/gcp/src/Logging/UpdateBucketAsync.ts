@@ -11,21 +11,21 @@ import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
 export interface UpdateBucketAsyncRequest extends Omit<
-  logging.UpdateAsyncProjectsLocationsBucketsRequest,
+  logging.UpdateAsyncBillingAccountsLocationsBucketsRequest,
   "name"
 > {}
 
 export type UpdateBucketAsyncShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
+  resource: BillingBucket | OrganizationLogBucket | LogBucket | FolderBucket,
 ) => Effect.Effect<
   (
     request?: UpdateBucketAsyncRequest,
   ) => Effect.Effect<
     logging.Operation,
-    | logging.UpdateAsyncProjectsLocationsBucketsError
     | logging.UpdateAsyncBillingAccountsLocationsBucketsError
-    | logging.UpdateAsyncFoldersLocationsBucketsError
-    | logging.UpdateAsyncOrganizationsLocationsBucketsError,
+    | logging.UpdateAsyncOrganizationsLocationsBucketsError
+    | logging.UpdateAsyncProjectsLocationsBucketsError
+    | logging.UpdateAsyncFoldersLocationsBucketsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type UpdateBucketAsyncShape = (
 /**
  * Updates a log bucket asynchronously.If the bucket has a lifecycle_state of DELETE_REQUESTED, then FAILED_PRECONDITION will be returned.After a bucket has been created, the bucket's location cannot be changed.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link UpdateBucketAsyncHttp}. The
+ * Bind it to a {@link BillingBucket} or {@link OrganizationLogBucket} or {@link LogBucket} or {@link FolderBucket} and provide {@link UpdateBucketAsyncHttp}. The
  * host gets `roles/logging.configWriter` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `buckets.updateAsync`
  * ```typescript
- * const updateBucketAsync = yield* GCP.Logging.UpdateBucketAsync(logBucket);
+ * const updateBucketAsync = yield* GCP.Logging.UpdateBucketAsync(billingBucket);
  * const response = yield* updateBucketAsync();
  * ```
  *
@@ -68,26 +68,26 @@ export const UpdateBucketAsyncHttp = Layer.effect(
     tag: "GCP.Logging.UpdateBucketAsync",
     variants: [
       {
-        resource: "GCP.Logging.LogBucket",
-        operation: logging.updateAsyncProjectsLocationsBuckets,
-        param: "name",
-        iam: { role: "roles/logging.configWriter" },
-      },
-      {
         resource: "GCP.Logging.BillingBucket",
         operation: logging.updateAsyncBillingAccountsLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.configWriter" },
       },
       {
-        resource: "GCP.Logging.FolderBucket",
-        operation: logging.updateAsyncFoldersLocationsBuckets,
+        resource: "GCP.Logging.OrganizationLogBucket",
+        operation: logging.updateAsyncOrganizationsLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.configWriter" },
       },
       {
-        resource: "GCP.Logging.OrganizationLogBucket",
-        operation: logging.updateAsyncOrganizationsLocationsBuckets,
+        resource: "GCP.Logging.LogBucket",
+        operation: logging.updateAsyncProjectsLocationsBuckets,
+        param: "name",
+        iam: { role: "roles/logging.configWriter" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucket",
+        operation: logging.updateAsyncFoldersLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.configWriter" },
       },

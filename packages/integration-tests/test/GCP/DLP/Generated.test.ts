@@ -522,7 +522,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "dlp.locations.infoTypes.list: addressed under `locations/`, not a project",
+        "dlp.organizations.inspectTemplates.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -530,55 +530,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.organizations.locations.fileStoreDataProfiles.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.fileStoreDataProfiles.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.fileStoreDataProfiles.delete: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.discoveryConfigs.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.infoTypes.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.columnDataProfiles.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.columnDataProfiles.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.storedInfoTypes.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "dlp.organizations.locations.deidentifyTemplates.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.organizations.locations.tableDataProfiles.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.tableDataProfiles.delete: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.tableDataProfiles.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.connections.get: name collision on GetConnection",
+        "dlp.organizations.locations.dlpJobs.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -586,11 +542,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "dlp.organizations.locations.connections.get: name collision on GetConnection",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "dlp.organizations.locations.connections.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.organizations.locations.inspectTemplates.list: addressed under `organizations/`, not a project",
+        "dlp.organizations.locations.infoTypes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.storedInfoTypes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.jobTriggers.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -602,19 +570,51 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.organizations.locations.dlpJobs.list: addressed under `organizations/`, not a project",
+        "dlp.organizations.locations.fileStoreDataProfiles.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.organizations.locations.jobTriggers.list: addressed under `organizations/`, not a project",
+        "dlp.organizations.locations.fileStoreDataProfiles.delete: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.organizations.inspectTemplates.list: addressed under `organizations/`, not a project",
+        "dlp.organizations.locations.fileStoreDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.tableDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.tableDataProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.tableDataProfiles.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.columnDataProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.columnDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.inspectTemplates.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.discoveryConfigs.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "dlp.organizations.storedInfoTypes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.locations.infoTypes.list: addressed under `locations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip("dlp.infoTypes.list: its path names no project", () => Effect.void);

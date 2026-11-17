@@ -31,7 +31,7 @@ export type BatchSampleCreateShape = () => Effect.Effect<
  * **Example:** Call `samples.batchCreate`
  * ```typescript
  * const batchSampleCreate = yield* GCP.ToolResults.BatchSampleCreate();
- * const response = yield* batchSampleCreate({ sampleSeriesId: "...", executionId: "...", historyId: "...", stepId: "..." });
+ * const response = yield* batchSampleCreate({ stepId: "...", executionId: "...", sampleSeriesId: "...", historyId: "..." });
  * ```
  *
  * @binding

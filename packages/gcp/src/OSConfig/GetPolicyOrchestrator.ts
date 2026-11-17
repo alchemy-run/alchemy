@@ -10,37 +10,37 @@ import type { OrganizationsLocationsGlobalPolicyOrchestrator } from "./Organizat
 import type { ProjectsLocationsGlobalPolicyOrchestrator } from "./ProjectsLocationsGlobalPolicyOrchestrator.ts";
 
 export interface GetPolicyOrchestratorRequest extends Omit<
-  osconfig.GetOrganizationsLocationsGlobalPolicyOrchestratorsRequest,
+  osconfig.GetFoldersLocationsGlobalPolicyOrchestratorsRequest,
   "name"
 > {}
 
 export type GetPolicyOrchestratorShape = (
   resource:
-    | OrganizationsLocationsGlobalPolicyOrchestrator
+    | FoldersLocationsGlobalPolicyOrchestrator
     | ProjectsLocationsGlobalPolicyOrchestrator
-    | FoldersLocationsGlobalPolicyOrchestrator,
+    | OrganizationsLocationsGlobalPolicyOrchestrator,
 ) => Effect.Effect<
   (
     request?: GetPolicyOrchestratorRequest,
   ) => Effect.Effect<
     osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator,
-    | osconfig.GetOrganizationsLocationsGlobalPolicyOrchestratorsError
+    | osconfig.GetFoldersLocationsGlobalPolicyOrchestratorsError
     | osconfig.GetProjectsLocationsGlobalPolicyOrchestratorsError
-    | osconfig.GetFoldersLocationsGlobalPolicyOrchestratorsError,
+    | osconfig.GetOrganizationsLocationsGlobalPolicyOrchestratorsError,
     RuntimeContext
   >
 >;
 
 /**
- * Retrieves an existing policy orchestrator, parented by an organization.
+ * Retrieves an existing policy orchestrator, parented by a folder.
  *
- * Bind it to a {@link OrganizationsLocationsGlobalPolicyOrchestrator} or {@link ProjectsLocationsGlobalPolicyOrchestrator} or {@link FoldersLocationsGlobalPolicyOrchestrator} and provide {@link GetPolicyOrchestratorHttp}. The
+ * Bind it to a {@link FoldersLocationsGlobalPolicyOrchestrator} or {@link ProjectsLocationsGlobalPolicyOrchestrator} or {@link OrganizationsLocationsGlobalPolicyOrchestrator} and provide {@link GetPolicyOrchestratorHttp}. The
  * host gets `roles/osconfig.policyOrchestratorViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `policyOrchestrators.get`
  * ```typescript
- * const getPolicyOrchestrator = yield* GCP.OSConfig.GetPolicyOrchestrator(organizationsLocationsGlobalPolicyOrchestrator);
+ * const getPolicyOrchestrator = yield* GCP.OSConfig.GetPolicyOrchestrator(foldersLocationsGlobalPolicyOrchestrator);
  * const response = yield* getPolicyOrchestrator();
  * ```
  *
@@ -69,8 +69,8 @@ export const GetPolicyOrchestratorHttp = Layer.effect(
     tag: "GCP.OSConfig.GetPolicyOrchestrator",
     variants: [
       {
-        resource: "GCP.OSConfig.OrganizationsLocationsGlobalPolicyOrchestrator",
-        operation: osconfig.getOrganizationsLocationsGlobalPolicyOrchestrators,
+        resource: "GCP.OSConfig.FoldersLocationsGlobalPolicyOrchestrator",
+        operation: osconfig.getFoldersLocationsGlobalPolicyOrchestrators,
         param: "name",
         iam: { role: "roles/osconfig.policyOrchestratorViewer" },
       },
@@ -81,8 +81,8 @@ export const GetPolicyOrchestratorHttp = Layer.effect(
         iam: { role: "roles/osconfig.policyOrchestratorViewer" },
       },
       {
-        resource: "GCP.OSConfig.FoldersLocationsGlobalPolicyOrchestrator",
-        operation: osconfig.getFoldersLocationsGlobalPolicyOrchestrators,
+        resource: "GCP.OSConfig.OrganizationsLocationsGlobalPolicyOrchestrator",
+        operation: osconfig.getOrganizationsLocationsGlobalPolicyOrchestrators,
         param: "name",
         iam: { role: "roles/osconfig.policyOrchestratorViewer" },
       },

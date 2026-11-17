@@ -23,6 +23,7 @@ import { ApiMapping } from "../ApiGatewayV2/ApiMapping.ts";
 import { DomainName } from "../ApiGatewayV2/DomainName.ts";
 import { HttpApi } from "../ApiGatewayV2/HttpApi.ts";
 import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
+import type { Providers } from "../Providers.ts";
 import { qualifiedArnOf, qualifiedNameOf } from "./QualifiedArn.ts";
 
 /** Object form of the `AWS.Lambda.Function` `domain` prop. */
@@ -112,13 +113,14 @@ interface FunctionDomainHost {
 export const composeFunctionDomain = (
   fn: FunctionDomainHost,
   domainProp: FunctionDomain | undefined,
-): Effect.Effect<void, never, any> =>
+): Effect.Effect<void, never, Providers> =>
   Effect.gen(function* () {
     if (globalThis.__ALCHEMY_RUNTIME__) return;
     const domain = normalizeFunctionDomain(domainProp);
     if (domain === undefined) return;
-    if ((fn.Mode ?? (yield* defaultProviderMode)) === "local") return;
 
+    // An invalid `domain` is invalid in dev too, so it is checked before the
+    // local early return.
     const id = fn.LogicalId;
     const names = [domain.name, ...(domain.aliases ?? [])];
     if (names.some((name) => typeof name !== "string" || name.length === 0)) {
@@ -138,6 +140,7 @@ export const composeFunctionDomain = (
         }),
       );
     }
+    if ((fn.Mode ?? (yield* defaultProviderMode)) === "local") return;
 
     yield* Effect.gen(function* () {
       // Integrate and grant invoke on the alias when the Function has one.
@@ -200,4 +203,4 @@ export const composeFunctionDomain = (
         });
       }
     }).pipe(Namespace.push(id));
-  }) as Effect.Effect<void, never, any>;
+  });

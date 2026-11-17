@@ -113,11 +113,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "iamcredentials.projects.locations.workloadIdentityPools.getAllowedLocations: public metadata that takes no credentials",
+        "iamcredentials.projects.serviceAccounts.getAllowedLocations: public metadata that takes no credentials",
         () => Effect.void,
       );
       test.provider.skip(
-        "iamcredentials.projects.serviceAccounts.getAllowedLocations: public metadata that takes no credentials",
+        "iamcredentials.projects.locations.workloadIdentityPools.getAllowedLocations: public metadata that takes no credentials",
         () => Effect.void,
       );
       test.provider.skip(

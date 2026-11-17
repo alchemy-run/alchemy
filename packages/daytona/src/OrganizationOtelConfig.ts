@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { declarable } from "./internal/Declared.ts";
 import {
   currentOrganizationId,
   movesOrganization,
@@ -62,8 +63,8 @@ export type OrganizationOtelConfig = Resource<
  * @resource
  * @product Organization
  */
-export const OrganizationOtelConfig = Resource<OrganizationOtelConfig>(
-  "Daytona.OrganizationOtelConfig",
+export const OrganizationOtelConfig = declarable<OrganizationOtelConfig>()(
+  Resource<OrganizationOtelConfig>("Daytona.OrganizationOtelConfig"),
 );
 
 const plainHeaders = (headers: OrganizationOtelConfigProps["headers"]) =>

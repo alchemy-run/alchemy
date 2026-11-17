@@ -9,33 +9,33 @@ import type { AgentsFlowsTransitionRouteGroup } from "./AgentsFlowsTransitionRou
 import type { AgentsTransitionRouteGroup } from "./AgentsTransitionRouteGroup.ts";
 
 export interface GetTransitionRouteGroupRequest extends Omit<
-  dialogflow.GetProjectsLocationsAgentsFlowsTransitionRouteGroupsRequest,
+  dialogflow.GetProjectsLocationsAgentsTransitionRouteGroupsRequest,
   "name"
 > {}
 
 export type GetTransitionRouteGroupShape = (
-  resource: AgentsFlowsTransitionRouteGroup | AgentsTransitionRouteGroup,
+  resource: AgentsTransitionRouteGroup | AgentsFlowsTransitionRouteGroup,
 ) => Effect.Effect<
   (
     request?: GetTransitionRouteGroupRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3TransitionRouteGroup,
-    | dialogflow.GetProjectsLocationsAgentsFlowsTransitionRouteGroupsError
-    | dialogflow.GetProjectsLocationsAgentsTransitionRouteGroupsError,
+    | dialogflow.GetProjectsLocationsAgentsTransitionRouteGroupsError
+    | dialogflow.GetProjectsLocationsAgentsFlowsTransitionRouteGroupsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `dialogflow.projects.locations.agents.flows.transitionRouteGroups.get`.
+ * Runtime binding for `dialogflow.projects.locations.agents.transitionRouteGroups.get`.
  *
- * Bind it to a {@link AgentsFlowsTransitionRouteGroup} or {@link AgentsTransitionRouteGroup} and provide {@link GetTransitionRouteGroupHttp}. The
+ * Bind it to a {@link AgentsTransitionRouteGroup} or {@link AgentsFlowsTransitionRouteGroup} and provide {@link GetTransitionRouteGroupHttp}. The
  * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `transitionRouteGroups.get`
  * ```typescript
- * const getTransitionRouteGroup = yield* GCP.Dialogflow.GetTransitionRouteGroup(agentsFlowsTransitionRouteGroup);
+ * const getTransitionRouteGroup = yield* GCP.Dialogflow.GetTransitionRouteGroup(agentsTransitionRouteGroup);
  * const response = yield* getTransitionRouteGroup();
  * ```
  *
@@ -64,14 +64,14 @@ export const GetTransitionRouteGroupHttp = Layer.effect(
     tag: "GCP.Dialogflow.GetTransitionRouteGroup",
     variants: [
       {
-        resource: "GCP.Dialogflow.AgentsFlowsTransitionRouteGroup",
-        operation: dialogflow.getProjectsLocationsAgentsFlowsTransitionRouteGroups,
+        resource: "GCP.Dialogflow.AgentsTransitionRouteGroup",
+        operation: dialogflow.getProjectsLocationsAgentsTransitionRouteGroups,
         param: "name",
         iam: { role: "roles/dialogflow.reader" },
       },
       {
-        resource: "GCP.Dialogflow.AgentsTransitionRouteGroup",
-        operation: dialogflow.getProjectsLocationsAgentsTransitionRouteGroups,
+        resource: "GCP.Dialogflow.AgentsFlowsTransitionRouteGroup",
+        operation: dialogflow.getProjectsLocationsAgentsFlowsTransitionRouteGroups,
         param: "name",
         iam: { role: "roles/dialogflow.reader" },
       },

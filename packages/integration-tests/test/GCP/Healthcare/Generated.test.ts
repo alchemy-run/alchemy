@@ -672,11 +672,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.getStudyMetrics: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*` has no Alchemy resource to bind",
+        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.setBlobStorageSettings: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.setBlobStorageSettings: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*` has no Alchemy resource to bind",
+        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.getStudyMetrics: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(
@@ -688,11 +688,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.studies.retrieveStudy: no distilled operation retrieveStudyProjectsLocationsDatasetsDicomStoresStudies",
+        "healthcare.projects.locations.datasets.dicomStores.studies.retrieveMetadata: no distilled operation retrieveMetadataProjectsLocationsDatasetsDicomStoresStudies",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.studies.retrieveMetadata: no distilled operation retrieveMetadataProjectsLocationsDatasetsDicomStoresStudies",
+        "healthcare.projects.locations.datasets.dicomStores.studies.retrieveStudy: no distilled operation retrieveStudyProjectsLocationsDatasetsDicomStoresStudies",
         () => Effect.void,
       );
       test.provider.skip(
@@ -704,11 +704,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveRendered: no distilled operation retrieveRenderedProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveInstance: no distilled operation retrieveInstanceProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveInstance: no distilled operation retrieveInstanceProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveRendered: no distilled operation retrieveRenderedProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
         () => Effect.void,
       );
       test.provider.skip(
@@ -716,11 +716,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveRendered: addressed under `studies/`, not a project",
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveFrames: no distilled operation retrieveFramesProjectsLocationsDatasetsDicomStoresStudiesSeriesInstancesFrames",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveFrames: no distilled operation retrieveFramesProjectsLocationsDatasetsDicomStoresStudiesSeriesInstancesFrames",
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveRendered: addressed under `studies/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -732,7 +732,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
+        "healthcare.projects.locations.datasets.fhirStores.fhir.search-type: no distilled operation search_typeProjectsLocationsDatasetsFhirStoresFhir",
         () => Effect.void,
       );
       test.provider.skip(
@@ -748,11 +748,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-validate: no distilled operation Resource_validateProjectsLocationsDatasetsFhirStoresFhir",
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-everything: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge: no distilled operation Resource_purgeProjectsLocationsDatasetsFhirStoresFhir",
+        "healthcare.projects.locations.datasets.fhirStores.fhir.bulk-export: no distilled operation bulk_exportProjectsLocationsDatasetsFhirStoresFhir",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-validate: no distilled operation Resource_validateProjectsLocationsDatasetsFhirStoresFhir",
         () => Effect.void,
       );
       test.provider.skip(
@@ -760,23 +768,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-everything: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.search-type: no distilled operation search_typeProjectsLocationsDatasetsFhirStoresFhir",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "healthcare.projects.locations.datasets.fhirStores.fhir.Binary-vread: addressed under `*/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.Consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Consent/*` has no Alchemy resource to bind",
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge: no distilled operation Resource_purgeProjectsLocationsDatasetsFhirStoresFhir",
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.bulk-export: no distilled operation bulk_exportProjectsLocationsDatasetsFhirStoresFhir",
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Consent/*` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(

@@ -10,19 +10,22 @@ import type { Exclusion } from "./Exclusion.ts";
 import type { FolderExclusion } from "./FolderExclusion.ts";
 import type { OrganizationExclusion } from "./OrganizationExclusion.ts";
 
-export interface GetExclusionRequest extends Omit<logging.GetProjectsExclusionsRequest, "name"> {}
+export interface GetExclusionRequest extends Omit<
+  logging.GetBillingAccountsExclusionsRequest,
+  "name"
+> {}
 
 export type GetExclusionShape = (
-  resource: Exclusion | BillingExclusion | FolderExclusion | OrganizationExclusion,
+  resource: BillingExclusion | OrganizationExclusion | Exclusion | FolderExclusion,
 ) => Effect.Effect<
   (
     request?: GetExclusionRequest,
   ) => Effect.Effect<
     logging.LogExclusion,
-    | logging.GetProjectsExclusionsError
     | logging.GetBillingAccountsExclusionsError
-    | logging.GetFoldersExclusionsError
-    | logging.GetOrganizationsExclusionsError,
+    | logging.GetOrganizationsExclusionsError
+    | logging.GetProjectsExclusionsError
+    | logging.GetFoldersExclusionsError,
     RuntimeContext
   >
 >;
@@ -30,13 +33,13 @@ export type GetExclusionShape = (
 /**
  * Gets the description of an exclusion in the _Default sink.
  *
- * Bind it to a {@link Exclusion} or {@link BillingExclusion} or {@link FolderExclusion} or {@link OrganizationExclusion} and provide {@link GetExclusionHttp}. The
+ * Bind it to a {@link BillingExclusion} or {@link OrganizationExclusion} or {@link Exclusion} or {@link FolderExclusion} and provide {@link GetExclusionHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `exclusions.get`
  * ```typescript
- * const getExclusion = yield* GCP.Logging.GetExclusion(exclusion);
+ * const getExclusion = yield* GCP.Logging.GetExclusion(billingExclusion);
  * const response = yield* getExclusion();
  * ```
  *
@@ -63,26 +66,26 @@ export const GetExclusionHttp = Layer.effect(
     tag: "GCP.Logging.GetExclusion",
     variants: [
       {
-        resource: "GCP.Logging.Exclusion",
-        operation: logging.getProjectsExclusions,
-        param: "name",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingExclusion",
         operation: logging.getBillingAccountsExclusions,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.FolderExclusion",
-        operation: logging.getFoldersExclusions,
+        resource: "GCP.Logging.OrganizationExclusion",
+        operation: logging.getOrganizationsExclusions,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationExclusion",
-        operation: logging.getOrganizationsExclusions,
+        resource: "GCP.Logging.Exclusion",
+        operation: logging.getProjectsExclusions,
+        param: "name",
+        iam: { role: "roles/logging.privateLogViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderExclusion",
+        operation: logging.getFoldersExclusions,
         param: "name",
         iam: { role: "roles/logging.privateLogViewer" },
       },

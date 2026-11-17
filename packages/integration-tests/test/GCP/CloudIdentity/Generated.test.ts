@@ -78,31 +78,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudidentity.allowlistedDomains.delete: addressed under `allowlistedDomains/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.allowlistedDomains.get: addressed under `allowlistedDomains/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.policies.patch: addressed under `policies/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.policies.get: addressed under `policies/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.policies.delete: addressed under `policies/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudidentity.groups.updateSecuritySettings: addressed under `groups/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.groups.getSecuritySettings: addressed under `groups/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -110,11 +86,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.groups.memberships.get: no predefined role grants its permission",
+        "cloudidentity.groups.getSecuritySettings: addressed under `groups/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.groups.memberships.searchDirectGroups: no predefined role grants its permission",
+        "cloudidentity.groups.memberships.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -126,15 +102,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudidentity.groups.memberships.searchDirectGroups: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudidentity.groups.memberships.lookup: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.groups.memberships.getMembershipGraph: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.groups.memberships.list: no predefined role grants its permission",
+        "cloudidentity.groups.memberships.checkTransitiveMembership: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -142,7 +118,35 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.groups.memberships.checkTransitiveMembership: no predefined role grants its permission",
+        "cloudidentity.groups.memberships.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.groups.memberships.getMembershipGraph: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSamlSsoProfiles.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.add: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSsoAssignments.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -154,23 +158,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.devices.cancelWipe: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudidentity.devices.wipe: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.devices.deviceUsers.cancelWipe: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.devices.deviceUsers.block: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.devices.deviceUsers.list: no predefined role grants its permission",
+        "cloudidentity.devices.cancelWipe: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -178,7 +170,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudidentity.devices.deviceUsers.cancelWipe: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.devices.deviceUsers.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.devices.deviceUsers.block: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudidentity.devices.deviceUsers.lookup: addressed under `devices/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.devices.deviceUsers.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -187,10 +195,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudidentity.devices.deviceUsers.wipe: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.devices.deviceUsers.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -206,7 +210,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSsoAssignments.get: no predefined role grants its permission",
+        "cloudidentity.customers.userinvitations.isInvitableUser: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -214,11 +218,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.customers.userinvitations.cancel: addressed under `customers/`, not a project",
+        "cloudidentity.customers.userinvitations.send: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.customers.userinvitations.isInvitableUser: addressed under `customers/`, not a project",
+        "cloudidentity.customers.userinvitations.cancel: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -226,47 +230,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.customers.userinvitations.send: addressed under `customers/`, not a project",
+        "cloudidentity.policies.get: addressed under `policies/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSamlSsoProfiles.get: no predefined role grants its permission",
+        "cloudidentity.policies.delete: addressed under `policies/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.delete: no predefined role grants its permission",
+        "cloudidentity.policies.patch: addressed under `policies/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.add: no predefined role grants its permission",
+        "cloudidentity.allowlistedDomains.delete: addressed under `allowlistedDomains/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.inboundSamlSsoProfiles.idpCredentials.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.allowlistedDomains.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.allowlistedDomains.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.policies.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.policies.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudidentity.groups.lookup: no predefined role grants its permission",
+        "cloudidentity.allowlistedDomains.get: addressed under `allowlistedDomains/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -274,7 +254,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudidentity.groups.lookup: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudidentity.groups.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSamlSsoProfiles.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.inboundSsoAssignments.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -286,11 +278,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSsoAssignments.list: no predefined role grants its permission",
+        "cloudidentity.policies.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudidentity.inboundSamlSsoProfiles.list: no predefined role grants its permission",
+        "cloudidentity.policies.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.allowlistedDomains.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudidentity.allowlistedDomains.create: no predefined role grants its permission",
         () => Effect.void,
       );
     });

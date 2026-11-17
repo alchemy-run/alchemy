@@ -17,16 +17,16 @@ export interface GetFeedbackLabelRequest extends Omit<
 export type GetFeedbackLabelShape = (
   resource:
     | DatasetsConversationsFeedbackLabel
-    | AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel
-    | ConversationsFeedbackLabel,
+    | ConversationsFeedbackLabel
+    | AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel,
 ) => Effect.Effect<
   (
     request?: GetFeedbackLabelRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1FeedbackLabel,
     | contactcenterinsights.GetProjectsLocationsDatasetsConversationsFeedbackLabelsError
-    | contactcenterinsights.GetProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelsError
-    | contactcenterinsights.GetProjectsLocationsConversationsFeedbackLabelsError,
+    | contactcenterinsights.GetProjectsLocationsConversationsFeedbackLabelsError
+    | contactcenterinsights.GetProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelsError,
     RuntimeContext
   >
 >;
@@ -34,7 +34,7 @@ export type GetFeedbackLabelShape = (
 /**
  * Get feedback label.
  *
- * Bind it to a {@link DatasetsConversationsFeedbackLabel} or {@link AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel} or {@link ConversationsFeedbackLabel} and provide {@link GetFeedbackLabelHttp}. The
+ * Bind it to a {@link DatasetsConversationsFeedbackLabel} or {@link ConversationsFeedbackLabel} or {@link AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel} and provide {@link GetFeedbackLabelHttp}. The
  * host gets `roles/contactcenterinsights.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
@@ -75,16 +75,16 @@ export const GetFeedbackLabelHttp = Layer.effect(
         iam: { role: "roles/contactcenterinsights.viewer" },
       },
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel",
-        operation:
-          contactcenterinsights.getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels,
+        resource: "GCP.ContactCenterInsights.ConversationsFeedbackLabel",
+        operation: contactcenterinsights.getProjectsLocationsConversationsFeedbackLabels,
         param: "name",
         iam: { role: "roles/contactcenterinsights.viewer" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsFeedbackLabel",
-        operation: contactcenterinsights.getProjectsLocationsConversationsFeedbackLabels,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel",
+        operation:
+          contactcenterinsights.getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels,
         param: "name",
         iam: { role: "roles/contactcenterinsights.viewer" },
       },

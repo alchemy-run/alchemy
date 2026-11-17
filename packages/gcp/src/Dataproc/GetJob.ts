@@ -24,7 +24,7 @@ export type GetJobShape = () => Effect.Effect<
  * **Example:** Call `jobs.get`
  * ```typescript
  * const getJob = yield* GCP.Dataproc.GetJob();
- * const response = yield* getJob({ jobId: "...", region: "..." });
+ * const response = yield* getJob({ region: "...", jobId: "..." });
  * ```
  *
  * @binding

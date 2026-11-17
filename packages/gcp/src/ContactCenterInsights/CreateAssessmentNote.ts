@@ -9,19 +9,19 @@ import type { AuthorizedViewSetsAuthorizedViewsConversationsAssessment } from ".
 import type { ConversationsAssessment } from "./ConversationsAssessment.ts";
 
 export interface CreateAssessmentNoteRequest extends Omit<
-  contactcenterinsights.CreateProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesRequest,
+  contactcenterinsights.CreateProjectsLocationsConversationsAssessmentsNotesRequest,
   "parent"
 > {}
 
 export type CreateAssessmentNoteShape = (
-  resource: AuthorizedViewSetsAuthorizedViewsConversationsAssessment | ConversationsAssessment,
+  resource: ConversationsAssessment | AuthorizedViewSetsAuthorizedViewsConversationsAssessment,
 ) => Effect.Effect<
   (
     request?: CreateAssessmentNoteRequest,
   ) => Effect.Effect<
     contactcenterinsights.GoogleCloudContactcenterinsightsV1Note,
-    | contactcenterinsights.CreateProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesError
-    | contactcenterinsights.CreateProjectsLocationsConversationsAssessmentsNotesError,
+    | contactcenterinsights.CreateProjectsLocationsConversationsAssessmentsNotesError
+    | contactcenterinsights.CreateProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotesError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type CreateAssessmentNoteShape = (
 /**
  * Create Note.
  *
- * Bind it to a {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} or {@link ConversationsAssessment} and provide {@link CreateAssessmentNoteHttp}. The
+ * Bind it to a {@link ConversationsAssessment} or {@link AuthorizedViewSetsAuthorizedViewsConversationsAssessment} and provide {@link CreateAssessmentNoteHttp}. The
  * host gets `roles/contactcenterinsights.editor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `notes.create`
  * ```typescript
- * const createAssessmentNote = yield* GCP.ContactCenterInsights.CreateAssessmentNote(authorizedViewSetsAuthorizedViewsConversationsAssessment);
+ * const createAssessmentNote = yield* GCP.ContactCenterInsights.CreateAssessmentNote(conversationsAssessment);
  * const response = yield* createAssessmentNote();
  * ```
  *
@@ -64,16 +64,16 @@ export const CreateAssessmentNoteHttp = Layer.effect(
     tag: "GCP.ContactCenterInsights.CreateAssessmentNote",
     variants: [
       {
-        resource:
-          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
-        operation:
-          contactcenterinsights.createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotes,
+        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
+        operation: contactcenterinsights.createProjectsLocationsConversationsAssessmentsNotes,
         param: "parent",
         iam: { role: "roles/contactcenterinsights.editor" },
       },
       {
-        resource: "GCP.ContactCenterInsights.ConversationsAssessment",
-        operation: contactcenterinsights.createProjectsLocationsConversationsAssessmentsNotes,
+        resource:
+          "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessment",
+        operation:
+          contactcenterinsights.createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessmentsNotes,
         param: "parent",
         iam: { role: "roles/contactcenterinsights.editor" },
       },

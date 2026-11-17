@@ -269,6 +269,13 @@ const listOwned = (project: string) =>
     ),
   );
 
+// A backend service that is briefly UPDATING (a backup or config change in
+// flight) rejects federation until it is ACTIVE again: `BadRequest: Only
+// ACTIVE DPMS instances can be configured for federation`.
+const isBackendNotActive = (error: { readonly _tag: string; readonly message?: string }) =>
+  error._tag === "BadRequest" &&
+  (error.message ?? "").includes("Only ACTIVE DPMS instances can be configured for federation");
+
 export const FederationProvider = () =>
   Provider.succeed(Federation, {
     stables: ["name", "federationId", "project", "location", "version", "uid", "createTime"],
@@ -354,14 +361,8 @@ export const FederationProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
-            // A backend service that is briefly UPDATING (a backup or config
-            // change in flight) rejects federation until it is ACTIVE again.
             Effect.retry({
-              while: (error) =>
-                error._tag === "BadRequest" &&
-                (error.message ?? "").includes(
-                  "Only ACTIVE DPMS instances can be configured for federation",
-                ),
+              while: isBackendNotActive,
               times: 20,
               schedule: Schedule.spaced("15 seconds"),
             }),

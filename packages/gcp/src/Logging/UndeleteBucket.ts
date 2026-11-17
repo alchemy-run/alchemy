@@ -11,21 +11,21 @@ import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
 export interface UndeleteBucketRequest extends Omit<
-  logging.UndeleteProjectsLocationsBucketsRequest,
+  logging.UndeleteBillingAccountsLocationsBucketsRequest,
   "name"
 > {}
 
 export type UndeleteBucketShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
+  resource: BillingBucket | OrganizationLogBucket | LogBucket | FolderBucket,
 ) => Effect.Effect<
   (
     request?: UndeleteBucketRequest,
   ) => Effect.Effect<
     logging.Empty,
-    | logging.UndeleteProjectsLocationsBucketsError
     | logging.UndeleteBillingAccountsLocationsBucketsError
-    | logging.UndeleteFoldersLocationsBucketsError
-    | logging.UndeleteOrganizationsLocationsBucketsError,
+    | logging.UndeleteOrganizationsLocationsBucketsError
+    | logging.UndeleteProjectsLocationsBucketsError
+    | logging.UndeleteFoldersLocationsBucketsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type UndeleteBucketShape = (
 /**
  * Undeletes a log bucket.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link UndeleteBucketHttp}. The
+ * Bind it to a {@link BillingBucket} or {@link OrganizationLogBucket} or {@link LogBucket} or {@link FolderBucket} and provide {@link UndeleteBucketHttp}. The
  * host gets `roles/logging.configWriter` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `buckets.undelete`
  * ```typescript
- * const undeleteBucket = yield* GCP.Logging.UndeleteBucket(logBucket);
+ * const undeleteBucket = yield* GCP.Logging.UndeleteBucket(billingBucket);
  * const response = yield* undeleteBucket();
  * ```
  *
@@ -66,26 +66,26 @@ export const UndeleteBucketHttp = Layer.effect(
     tag: "GCP.Logging.UndeleteBucket",
     variants: [
       {
-        resource: "GCP.Logging.LogBucket",
-        operation: logging.undeleteProjectsLocationsBuckets,
-        param: "name",
-        iam: { role: "roles/logging.configWriter" },
-      },
-      {
         resource: "GCP.Logging.BillingBucket",
         operation: logging.undeleteBillingAccountsLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.configWriter" },
       },
       {
-        resource: "GCP.Logging.FolderBucket",
-        operation: logging.undeleteFoldersLocationsBuckets,
+        resource: "GCP.Logging.OrganizationLogBucket",
+        operation: logging.undeleteOrganizationsLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.configWriter" },
       },
       {
-        resource: "GCP.Logging.OrganizationLogBucket",
-        operation: logging.undeleteOrganizationsLocationsBuckets,
+        resource: "GCP.Logging.LogBucket",
+        operation: logging.undeleteProjectsLocationsBuckets,
+        param: "name",
+        iam: { role: "roles/logging.configWriter" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucket",
+        operation: logging.undeleteFoldersLocationsBuckets,
         param: "name",
         iam: { role: "roles/logging.configWriter" },
       },

@@ -31,7 +31,7 @@ export type DebugInstanceShape = () => Effect.Effect<
  * **Example:** Call `instances.debug`
  * ```typescript
  * const debugInstance = yield* GCP.AppEngine.DebugInstance();
- * const response = yield* debugInstance({ locationsId: "...", versionsId: "...", instancesId: "...", servicesId: "...", applicationsId: "..." });
+ * const response = yield* debugInstance({ instancesId: "...", applicationsId: "...", servicesId: "...", versionsId: "...", locationsId: "..." });
  * ```
  *
  * @binding

@@ -703,59 +703,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "contactcenterinsights.projects.locations.insightsdata.export: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.dashboards.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.dashboards.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.dashboards.charts.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.dashboards.charts.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.autoLabelingRules.test: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.autoLabelingRules.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.autoLabelingRules.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.calculateStats: name collision on CalculateConversationStats",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.generateSignedAudio: name collision on GenerateConversationSignedAudio",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.assistantSessions.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.assistantSessions.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.assistantSessions.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.assistantSessions.streamChat: no predefined role grants its permission",
+        "contactcenterinsights.projects.locations.conversations.generateSignedAudio: name collision on GenerateConversationSignedAudio",
         () => Effect.void,
       );
       test.provider.skip(
@@ -767,7 +715,35 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "contactcenterinsights.projects.locations.conversations.generateSignedAudio: name collision on GenerateConversationSignedAudio",
+        "contactcenterinsights.projects.locations.dashboards.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.dashboards.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.generateSignedAudio: name collision on GenerateConversationSignedAudio",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.calculateStats: name collision on CalculateConversationStats",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.insightsdata.export: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.autoLabelingRules.test: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.autoLabelingRules.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contactcenterinsights.projects.locations.autoLabelingRules.get: no predefined role grants its permission",
         () => Effect.void,
       );
     });

@@ -200,6 +200,8 @@ export const AddonProvider = () =>
                       { concurrency: 5 },
                     ),
                   ),
+                  // A cluster deleted after the listing has nothing left to list.
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 5 },
             );

@@ -644,6 +644,8 @@ const toBinding = (
       scriptName: binding.scriptName,
       hostNamespace: hostNamespaceOf(binding.scriptName, binding.className ?? binding.name),
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
+      ...(binding.renamedFrom !== undefined &&
+        binding.scriptName === undefined && { renamedFrom: binding.renamedFrom }),
       storage: binding.storage,
     };
   } else if (isWorkflowResource(binding)) {

@@ -1,11 +1,17 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Modal from "@alchemy.run/modal";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as app from "@distilled.cloud/modal/app";
 import * as functions from "@distilled.cloud/modal/functions";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import TracedServer from "./fixtures/traced-server.ts";
 
-const { test } = Test.make({ providers: Modal.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Modal.providers(), Cloudflare.providers()),
+});
 
 const main = new URL("./fixtures/lifecycle-program.ts", import.meta.url).pathname;
 
@@ -46,4 +52,40 @@ test.provider(
       ).toBe(true);
     }),
   { tags: ["provider:modal", "provider:modal:server", "live"], timeout: 900_000 },
+);
+
+test.provider(
+  "a server exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const server = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedServer;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(server.url!, "modal")).toBe("did work modal");
+      const traces = yield* waitForWorkSpan(collector.url!, "modal");
+      expect(traces).toContain("work:modal");
+      expect(traces).toContain("modal-server-e2e");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:modal",
+      "provider:modal:server",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

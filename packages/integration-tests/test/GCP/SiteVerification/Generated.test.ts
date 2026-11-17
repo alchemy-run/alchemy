@@ -78,15 +78,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "siteVerification.webResource.update: addressed under `webResource/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "siteVerification.webResource.get: addressed under `webResource/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "siteVerification.webResource.patch: addressed under `webResource/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -94,11 +86,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "siteVerification.webResource.list: no predefined role grants its permission",
+        "siteVerification.webResource.update: addressed under `webResource/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "siteVerification.webResource.patch: addressed under `webResource/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "siteVerification.webResource.getToken: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "siteVerification.webResource.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

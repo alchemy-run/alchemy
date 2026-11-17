@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationStageRddGraphRequest extends Omit<
-  dataproc.AccessStageRddGraphProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessStageRddGraphProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface AccessSparkApplicationStageRddGraphRequest extends Omit<
 }
 
 export type AccessSparkApplicationStageRddGraphShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationStageRddGraphRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationStageRddOperationGraphResponse
-    | dataproc.AccessSessionSparkApplicationStageRddOperationGraphResponse,
-    | dataproc.AccessStageRddGraphProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessStageRddGraphProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationStageRddOperationGraphResponse
+    | dataproc.AccessSparkApplicationStageRddOperationGraphResponse,
+    | dataproc.AccessStageRddGraphProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessStageRddGraphProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type AccessSparkApplicationStageRddGraphShape = (
 /**
  * Obtain RDD operation graph for a Spark Application Stage.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationStageRddGraphHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationStageRddGraphHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessStageRddGraph`
  * ```typescript
- * const accessSparkApplicationStageRddGraph = yield* GCP.Dataproc.AccessSparkApplicationStageRddGraph(batch);
+ * const accessSparkApplicationStageRddGraph = yield* GCP.Dataproc.AccessSparkApplicationStageRddGraph(session);
  * const response = yield* accessSparkApplicationStageRddGraph({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const AccessSparkApplicationStageRddGraphHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationStageRddGraph",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessStageRddGraphProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessStageRddGraphProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessStageRddGraphProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessStageRddGraphProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

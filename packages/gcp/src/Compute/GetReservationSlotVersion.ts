@@ -27,7 +27,7 @@ export type GetReservationSlotVersionShape = () => Effect.Effect<
  * **Example:** Call `reservationSlots.getVersion`
  * ```typescript
  * const getReservationSlotVersion = yield* GCP.Compute.GetReservationSlotVersion();
- * const response = yield* getReservationSlotVersion({ reservationSlot: "...", parentName: "...", zone: "..." });
+ * const response = yield* getReservationSlotVersion({ zone: "...", parentName: "...", reservationSlot: "..." });
  * ```
  *
  * @binding

@@ -4,26 +4,22 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpProjectBinding } from "../HttpBinding.ts";
+import { makeGcpBinding } from "../HttpBinding.ts";
+import type { DatasetsDatasetVersion } from "./DatasetsDatasetVersion.ts";
 
 export interface GetDatasetVersionRequest extends Omit<
-  aiplatform.GetProjectsLocationsDatasetsDatasetVersionsRequest,
+  aiplatform.GetDatasetsDatasetVersionsRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the dataset (`datasets/{dataset}`). */
-  dataset: string;
-  /** Id of the datasetVersion (`datasetVersions/{datasetVersion}`). */
-  datasetVersion: string;
-}
+> {}
 
-export type GetDatasetVersionShape = () => Effect.Effect<
+export type GetDatasetVersionShape = (
+  resource: DatasetsDatasetVersion,
+) => Effect.Effect<
   (
-    request: GetDatasetVersionRequest,
+    request?: GetDatasetVersionRequest,
   ) => Effect.Effect<
     aiplatform.GoogleCloudAiplatformV1DatasetVersion,
-    aiplatform.GetProjectsLocationsDatasetsDatasetVersionsError,
+    aiplatform.GetDatasetsDatasetVersionsError,
     RuntimeContext
   >
 >;
@@ -31,14 +27,14 @@ export type GetDatasetVersionShape = () => Effect.Effect<
 /**
  * Gets a Dataset version.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetDatasetVersionHttp}. The host gets `roles/aiplatform.viewer` on the project.
+ * Bind it to a {@link DatasetsDatasetVersion} and provide {@link GetDatasetVersionHttp}. The
+ * host gets `roles/aiplatform.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `datasetVersions.get`
  * ```typescript
- * const getDatasetVersion = yield* GCP.AIPlatform.GetDatasetVersion();
- * const response = yield* getDatasetVersion({ location: "us-central1", dataset: "...", datasetVersion: "..." });
+ * const getDatasetVersion = yield* GCP.AIPlatform.GetDatasetVersion(datasetsDatasetVersion);
+ * const response = yield* getDatasetVersion();
  * ```
  *
  * @binding
@@ -62,18 +58,14 @@ export const GetDatasetVersion = Binding.Service<GetDatasetVersion>(
  */
 export const GetDatasetVersionHttp = Layer.effect(
   GetDatasetVersion,
-  makeGcpProjectBinding<GetDatasetVersionShape>({
+  makeGcpBinding<GetDatasetVersionShape>({
     tag: "GCP.AIPlatform.GetDatasetVersion",
     variants: [
       {
-        operation: aiplatform.getProjectsLocationsDatasetsDatasetVersions,
+        resource: "GCP.AIPlatform.DatasetsDatasetVersion",
+        operation: aiplatform.getDatasetsDatasetVersions,
         param: "name",
-        location: true,
-        children: [
-          ["datasets", "dataset"],
-          ["datasetVersions", "datasetVersion"],
-        ],
-        role: "roles/aiplatform.viewer",
+        iam: { role: "roles/aiplatform.viewer" },
       },
     ],
   }),

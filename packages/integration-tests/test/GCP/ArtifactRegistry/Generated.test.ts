@@ -79,11 +79,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "artifactregistry.projects.getProjectSettings: no predefined role grants its permission",
+        "artifactregistry.projects.updateProjectSettings: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "artifactregistry.projects.updateProjectSettings: no predefined role grants its permission",
+        "artifactregistry.projects.getProjectSettings: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -91,19 +91,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "artifactregistry.projects.locations.repositories.prewarmArtifact: checks a permission no predefined Artifact Registry role grants (preview)",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "artifactregistry.projects.locations.repositories.checkPrewarmedArtifact: checks a permission no predefined Artifact Registry role grants (preview)",
         () => Effect.void,
       );
       test.provider.skip(
-        "artifactregistry.projects.locations.repositories.googetArtifacts.upload: a media upload; distilled sends only the request metadata, not the file body",
+        "artifactregistry.projects.locations.repositories.prewarmArtifact: checks a permission no predefined Artifact Registry role grants (preview)",
         () => Effect.void,
       );
       test.provider.skip(
-        "artifactregistry.projects.locations.repositories.genericArtifacts.upload: a media upload; distilled sends only the request metadata, not the file body",
+        "artifactregistry.projects.locations.repositories.kfpArtifacts.upload: a media upload; distilled sends only the request metadata, not the file body",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "artifactregistry.projects.locations.repositories.prewarmedArtifacts.list: checks a permission no predefined Artifact Registry role grants (preview)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "artifactregistry.projects.locations.repositories.googetArtifacts.upload: a media upload; distilled sends only the request metadata, not the file body",
         () => Effect.void,
       );
       test.provider.skip(
@@ -115,19 +119,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "artifactregistry.projects.locations.repositories.kfpArtifacts.upload: a media upload; distilled sends only the request metadata, not the file body",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "artifactregistry.projects.locations.repositories.goModules.upload: a media upload; distilled sends only the request metadata, not the file body",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "artifactregistry.projects.locations.repositories.files.upload: a media upload; distilled sends only the request metadata, not the file body",
         () => Effect.void,
       );
       test.provider.skip(
-        "artifactregistry.projects.locations.repositories.prewarmedArtifacts.list: checks a permission no predefined Artifact Registry role grants (preview)",
+        "artifactregistry.projects.locations.repositories.genericArtifacts.upload: a media upload; distilled sends only the request metadata, not the file body",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "artifactregistry.projects.locations.repositories.goModules.upload: a media upload; distilled sends only the request metadata, not the file body",
         () => Effect.void,
       );
     });

@@ -22,6 +22,7 @@ import * as Stream from "effect/Stream";
 import type { Annotations } from "./Annotations.ts";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, MissingGroup } from "./DefinitionError.ts";
+import { sendPayload } from "./internal.ts";
 import {
   type CallName,
   type ClientOf,
@@ -157,17 +158,7 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
   // The request's headers go to the call, so its middleware reads cookies and tokens as usual.
   const headers = request.request.headers;
   if (operation.operation === "send") {
-    const send = client[operation.name] as (
-      target: unknown,
-      input: unknown,
-      options: object,
-    ) => Effect.Effect<unknown, unknown>;
-    const { target, input, commandId } = request.payload as {
-      readonly target: unknown;
-      readonly input: unknown;
-      readonly commandId?: string;
-    };
-    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
+    return sendPayload(client[operation.name], request.payload, { headers });
   }
   if (operation.operation === "ask") {
     const ask = client[operation.name] as (
@@ -343,7 +334,7 @@ const endpointOf = (
  *
  * | Call          | Method and path              | Input                                          |
  * | ------------- | ---------------------------- | ---------------------------------------------- |
- * | a command     | `POST /<Command>`            | JSON body: `target`, `commandId`, input        |
+ * | a command     | `POST /<Command>`            | JSON body: `commandId`, input                  |
  * | a query       | `QUERY /<Query>`             | JSON body: `input`, `atLeast`, `after`, `take` |
  * | `get`, `peek` | `GET /<Name>/{key}`          | `?stream=&version=` waits for a write          |
  * | `snapshot`    | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for a write          |

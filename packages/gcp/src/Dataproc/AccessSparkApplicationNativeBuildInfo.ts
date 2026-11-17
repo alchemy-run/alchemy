@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationNativeBuildInfoRequest extends Omit<
-  dataproc.AccessNativeBuildInfoProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessNativeBuildInfoProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,29 +17,29 @@ export interface AccessSparkApplicationNativeBuildInfoRequest extends Omit<
 }
 
 export type AccessSparkApplicationNativeBuildInfoShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationNativeBuildInfoRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationNativeBuildInfoResponse
-    | dataproc.AccessSessionSparkApplicationNativeBuildInfoResponse,
-    | dataproc.AccessNativeBuildInfoProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessNativeBuildInfoProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationNativeBuildInfoResponse
+    | dataproc.AccessSparkApplicationNativeBuildInfoResponse,
+    | dataproc.AccessNativeBuildInfoProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessNativeBuildInfoProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
 
 /**
- * Obtain build data for Native Job
+ * Obtain data corresponding to Native Build Information for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationNativeBuildInfoHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationNativeBuildInfoHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessNativeBuildInfo`
  * ```typescript
- * const accessSparkApplicationNativeBuildInfo = yield* GCP.Dataproc.AccessSparkApplicationNativeBuildInfo(batch);
+ * const accessSparkApplicationNativeBuildInfo = yield* GCP.Dataproc.AccessSparkApplicationNativeBuildInfo(session);
  * const response = yield* accessSparkApplicationNativeBuildInfo({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const AccessSparkApplicationNativeBuildInfoHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationNativeBuildInfo",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessNativeBuildInfoProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessNativeBuildInfoProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessNativeBuildInfoProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessNativeBuildInfoProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

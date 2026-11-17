@@ -4,24 +4,19 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpProjectBinding } from "../HttpBinding.ts";
+import { makeGcpBinding } from "../HttpBinding.ts";
+import type { Dataset } from "./Dataset.ts";
 
-export interface GetDatasetRequest extends Omit<
-  aiplatform.GetProjectsLocationsDatasetsRequest,
-  "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the dataset (`datasets/{dataset}`). */
-  dataset: string;
-}
+export interface GetDatasetRequest extends Omit<aiplatform.GetDatasetsRequest, "name"> {}
 
-export type GetDatasetShape = () => Effect.Effect<
+export type GetDatasetShape = (
+  resource: Dataset,
+) => Effect.Effect<
   (
-    request: GetDatasetRequest,
+    request?: GetDatasetRequest,
   ) => Effect.Effect<
     aiplatform.GoogleCloudAiplatformV1Dataset,
-    aiplatform.GetProjectsLocationsDatasetsError,
+    aiplatform.GetDatasetsError,
     RuntimeContext
   >
 >;
@@ -29,14 +24,14 @@ export type GetDatasetShape = () => Effect.Effect<
 /**
  * Gets a Dataset.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetDatasetHttp}. The host gets `roles/aiplatform.viewer` on the project.
+ * Bind it to a {@link Dataset} and provide {@link GetDatasetHttp}. The
+ * host gets `roles/aiplatform.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `datasets.get`
  * ```typescript
- * const getDataset = yield* GCP.AIPlatform.GetDataset();
- * const response = yield* getDataset({ location: "us-central1", dataset: "..." });
+ * const getDataset = yield* GCP.AIPlatform.GetDataset(dataset);
+ * const response = yield* getDataset();
  * ```
  *
  * @binding
@@ -58,15 +53,14 @@ export const GetDataset = Binding.Service<GetDataset>("GCP.AIPlatform.GetDataset
  */
 export const GetDatasetHttp = Layer.effect(
   GetDataset,
-  makeGcpProjectBinding<GetDatasetShape>({
+  makeGcpBinding<GetDatasetShape>({
     tag: "GCP.AIPlatform.GetDataset",
     variants: [
       {
-        operation: aiplatform.getProjectsLocationsDatasets,
+        resource: "GCP.AIPlatform.Dataset",
+        operation: aiplatform.getDatasets,
         param: "name",
-        location: true,
-        children: [["datasets", "dataset"]],
-        role: "roles/aiplatform.viewer",
+        iam: { role: "roles/aiplatform.viewer" },
       },
     ],
   }),

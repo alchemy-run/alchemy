@@ -86,11 +86,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "rapidmigrationassessment.projects.locations.annotations.create: no predefined role grants its permission",
+        "rapidmigrationassessment.projects.locations.annotations.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "rapidmigrationassessment.projects.locations.annotations.get: no predefined role grants its permission",
+        "rapidmigrationassessment.projects.locations.annotations.create: no predefined role grants its permission",
         () => Effect.void,
       );
     });

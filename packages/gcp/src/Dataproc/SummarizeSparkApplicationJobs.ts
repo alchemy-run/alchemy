@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SummarizeSparkApplicationJobsRequest extends Omit<
-  dataproc.SummarizeJobsProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SummarizeJobsProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SummarizeSparkApplicationJobsRequest extends Omit<
 }
 
 export type SummarizeSparkApplicationJobsShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SummarizeSparkApplicationJobsRequest,
   ) => Effect.Effect<
-    | dataproc.SummarizeSparkApplicationJobsResponse
-    | dataproc.SummarizeSessionSparkApplicationJobsResponse,
-    | dataproc.SummarizeJobsProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SummarizeJobsProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SummarizeSessionSparkApplicationJobsResponse
+    | dataproc.SummarizeSparkApplicationJobsResponse,
+    | dataproc.SummarizeJobsProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SummarizeJobsProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SummarizeSparkApplicationJobsShape = (
 /**
  * Obtain summary of Jobs for a Spark Application
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SummarizeSparkApplicationJobsHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SummarizeSparkApplicationJobsHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.summarizeJobs`
  * ```typescript
- * const summarizeSparkApplicationJobs = yield* GCP.Dataproc.SummarizeSparkApplicationJobs(batch);
+ * const summarizeSparkApplicationJobs = yield* GCP.Dataproc.SummarizeSparkApplicationJobs(session);
  * const response = yield* summarizeSparkApplicationJobs({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const SummarizeSparkApplicationJobsHttp = Layer.effect(
     tag: "GCP.Dataproc.SummarizeSparkApplicationJobs",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.summarizeJobsProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.summarizeJobsProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.summarizeJobsProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.summarizeJobsProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

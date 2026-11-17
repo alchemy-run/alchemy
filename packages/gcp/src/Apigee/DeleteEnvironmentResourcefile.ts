@@ -34,7 +34,7 @@ export type DeleteEnvironmentResourcefileShape = (
  * **Example:** Call `resourcefiles.delete`
  * ```typescript
  * const deleteEnvironmentResourcefile = yield* GCP.Apigee.DeleteEnvironmentResourcefile(environment);
- * const response = yield* deleteEnvironmentResourcefile({ name: "...", type: "..." });
+ * const response = yield* deleteEnvironmentResourcefile({ type: "...", name: "..." });
  * ```
  *
  * @binding

@@ -78,7 +78,7 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
         "GetAutoscalingPolicy@RegionsAutoscalingPolicy": probeOutcome(Retry.none(p3({} as never))),
         "GetAutoscalingPolicy@AutoscalingPolicy": probeOutcome(Retry.none(p4({} as never))),
         GetJob: probeOutcome(
-          Retry.none(p5({ jobId: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(p5({ region: "us-central1", jobId: "alchemy-missing" } as never)),
         ),
         GetRegionClusterNodeGroup: probeOutcome(
           Retry.none(
@@ -95,8 +95,8 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
         InjectClusterCredentials: probeOutcome(
           Retry.none(
             p10({
-              cluster: "alchemy-missing",
               region: "us-central1",
+              cluster: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),

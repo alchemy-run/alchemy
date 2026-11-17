@@ -86,11 +86,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "servicemanagement.services.delete: addressed under `services/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "servicemanagement.services.get: addressed under `services/`, not a project",
+        "servicemanagement.services.undelete: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -98,11 +94,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "servicemanagement.services.undelete: addressed under `services/`, not a project",
+        "servicemanagement.services.get: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicemanagement.services.rollouts.list: addressed under `services/`, not a project",
+        "servicemanagement.services.delete: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -114,11 +110,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "servicemanagement.services.configs.submit: addressed under `services/`, not a project",
+        "servicemanagement.services.rollouts.list: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "servicemanagement.services.configs.create: addressed under `services/`, not a project",
+        "servicemanagement.services.configs.submit: addressed under `services/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -127,6 +123,10 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "servicemanagement.services.configs.get: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.configs.create: addressed under `services/`, not a project",
         () => Effect.void,
       );
     });

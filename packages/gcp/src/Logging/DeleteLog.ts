@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
-export interface DeleteLogRequest extends Omit<logging.DeleteProjectsLogsRequest, "logName"> {
+export interface DeleteLogRequest extends Omit<logging.DeleteLogsRequest, "logName"> {
   /** Id of the log (`logs/{log}`). */
   log: string;
 }
@@ -14,7 +14,7 @@ export interface DeleteLogRequest extends Omit<logging.DeleteProjectsLogsRequest
 export type DeleteLogShape = () => Effect.Effect<
   (
     request: DeleteLogRequest,
-  ) => Effect.Effect<logging.Empty, logging.DeleteProjectsLogsError, RuntimeContext>
+  ) => Effect.Effect<logging.Empty, logging.DeleteLogsError, RuntimeContext>
 >;
 
 /**
@@ -53,7 +53,7 @@ export const DeleteLogHttp = Layer.effect(
     tag: "GCP.Logging.DeleteLog",
     variants: [
       {
-        operation: logging.deleteProjectsLogs,
+        operation: logging.deleteLogs,
         param: "logName",
         children: [["logs", "log"]],
         role: "roles/logging.admin",

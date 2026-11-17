@@ -90,6 +90,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "HibernateEnvironment (composer.projects.locations.environments.hibernate)",
+        () => probe("HibernateEnvironment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:composer", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListEnvironmentUserWorkloadsConfigMaps (composer.projects.locations.environments.userWorkloadsConfigMaps.list)",
         () => probe("ListEnvironmentUserWorkloadsConfigMaps", true),
         {
@@ -132,6 +140,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "RestartEnvironmentWebServer (composer.projects.locations.environments.restartWebServer)",
         () => probe("RestartEnvironmentWebServer", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:composer", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ResumeEnvironment (composer.projects.locations.environments.resume)",
+        () => probe("ResumeEnvironment", false),
         {
           tags: ["provider:gcp", "provider:gcp:composer", "live"],
           timeout: 600_000,

@@ -25,7 +25,7 @@ export type ListDbFindingSummariesShape = () => Effect.Effect<
 >;
 
 /**
- * Lists the finding summary by category for a given scope.
+ * Lists summaries of the active findings in a Data Boundary scope (an organization, folder, or project), with one summary for each finding category.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
  * Provide {@link ListDbFindingSummariesHttp}. The host gets `roles/assuredworkloads.reader` on the project.

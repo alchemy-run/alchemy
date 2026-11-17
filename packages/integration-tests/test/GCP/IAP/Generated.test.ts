@@ -101,14 +101,6 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "iap.projects.iap_tunnel.locations.destGroups.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "iap.projects.iap_tunnel.locations.destGroups.create: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "iap.projects.iap_tunnel.locations.destGroups.get: addressed under `*/`, not a project",
         () => Effect.void,
       );
@@ -117,15 +109,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.create: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "iap.projects.iap_tunnel.locations.destGroups.delete: addressed under `*/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "iap.validateAttributeExpression: addressed under `*/`, not a project",
+        "iap.updateIapSettings: addressed under `*/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "iap.updateIapSettings: addressed under `*/`, not a project",
+        "iap.validateAttributeExpression: addressed under `*/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

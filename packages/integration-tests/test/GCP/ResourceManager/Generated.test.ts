@@ -66,7 +66,15 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("Folder", { concurrent: true }, () => {
       test.provider.skip(
+        "CreateBoundary (cloudresourcemanager.folders.boundaries.create): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "CreateCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.create): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DeleteBoundary (cloudresourcemanager.folders.boundaries.delete): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
       test.provider.skip(
@@ -74,11 +82,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "GetBoundary (cloudresourcemanager.folders.boundaries.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "GetCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
       test.provider.skip(
+        "ListBoundaries (cloudresourcemanager.folders.boundaries.list): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "ListCapabilityConfigs@Folder (cloudresourcemanager.folders.capabilityConfigs.list): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "PatchBoundary (cloudresourcemanager.folders.boundaries.patch): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
       test.provider.skip(
@@ -210,47 +230,15 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudresourcemanager.tagBindings.delete: addressed under `tagBindings/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudresourcemanager.projects.undelete: only a broad admin role grants resourcemanager.projects.undelete",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.liens.get: no predefined role grants its permission",
+        "cloudresourcemanager.organizations.updateBoundaryConfig: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        'cloudresourcemanager.folders.get: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'cloudresourcemanager.folders.move: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'cloudresourcemanager.folders.undelete: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'cloudresourcemanager.folders.capabilities.get: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'cloudresourcemanager.folders.capabilities.patch: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.locations.tagBindingCollections.patch: addressed under `locations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.locations.tagBindingCollections.get: addressed under `locations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.locations.effectiveTagBindingCollections.get: addressed under `locations/`, not a project",
+        "cloudresourcemanager.organizations.getBoundaryConfig: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -266,10 +254,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.organizations.capabilityConfigs.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudresourcemanager.organizations.capabilityConfigs.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
@@ -278,23 +262,79 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.tagBindings.list: no predefined role grants its permission",
+        "cloudresourcemanager.organizations.capabilityConfigs.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.tagBindings.create: no predefined role grants its permission",
+        "cloudresourcemanager.organizations.boundaries.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.liens.list: no predefined role grants its permission",
+        "cloudresourcemanager.organizations.boundaries.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        'cloudresourcemanager.folders.list: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        "cloudresourcemanager.organizations.boundaries.patch: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        'cloudresourcemanager.folders.search: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        "cloudresourcemanager.organizations.boundaries.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.boundaries.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.get: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.getBoundaryConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.move: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.undelete: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.updateBoundaryConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.capabilities.patch: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.capabilities.get: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.locations.effectiveTagBindingCollections.get: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.locations.tagBindingCollections.get: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.locations.tagBindingCollections.patch: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagBindings.delete: addressed under `tagBindings/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.liens.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.effectiveTags.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -302,11 +342,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        'cloudresourcemanager.folders.search: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.list: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudresourcemanager.fetchResourceSemantics: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.effectiveTags.list: no predefined role grants its permission",
+        "cloudresourcemanager.tagBindings.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagBindings.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.liens.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

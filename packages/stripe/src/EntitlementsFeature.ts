@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetEntitlementsFeatures,
   GetEntitlementsFeature,
@@ -344,11 +343,8 @@ export const EntitlementsFeatureProvider = () =>
           lookup_key: lookupKey,
           name,
           metadata,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-entitlements-feature-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-entitlements-feature-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

@@ -69,9 +69,9 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
         DeleteResourceRecordSet: probeOutcome(
           Retry.none(
             p3({
+              type: "alchemy-missing",
               name: "alchemy-missing",
               managedZone: "alchemy-missing",
-              type: "alchemy-missing",
             } as never),
           ),
         ),
@@ -84,23 +84,23 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
           ),
         ),
         GetChange: probeOutcome(
-          Retry.none(p5({ changeId: "alchemy-missing", managedZone: "alchemy-missing" } as never)),
+          Retry.none(p5({ managedZone: "alchemy-missing", changeId: "alchemy-missing" } as never)),
         ),
         GetDnsKey: probeOutcome(
-          Retry.none(p6({ managedZone: "alchemy-missing", dnsKeyId: "alchemy-missing" } as never)),
+          Retry.none(p6({ dnsKeyId: "alchemy-missing", managedZone: "alchemy-missing" } as never)),
         ),
         GetManagedZone: probeOutcome(Retry.none(p7({ managedZone: "alchemy-missing" } as never))),
         GetManagedZoneOperation: probeOutcome(
-          Retry.none(p8({ operation: "alchemy-missing", managedZone: "alchemy-missing" } as never)),
+          Retry.none(p8({ managedZone: "alchemy-missing", operation: "alchemy-missing" } as never)),
         ),
         GetPolicy: probeOutcome(Retry.none(p9({ policy: "alchemy-missing" } as never))),
         GetProject: probeOutcome(Retry.none(p10({} as never))),
         GetResourceRecordSet: probeOutcome(
           Retry.none(
             p11({
+              type: "alchemy-missing",
               name: "alchemy-missing",
               managedZone: "alchemy-missing",
-              type: "alchemy-missing",
             } as never),
           ),
         ),
@@ -132,9 +132,9 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
         PatchResourceRecordSet: probeOutcome(
           Retry.none(
             p22({
+              name: "alchemy-missing",
               managedZone: "alchemy-missing",
               type: "alchemy-missing",
-              name: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),

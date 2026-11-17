@@ -279,11 +279,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "firebaseappcheck.projects.apps.exchangeRecaptchaV3Token: called by client apps with an attestation, not by a service account",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappcheck.projects.apps.exchangeAppAttestAttestation: called by client apps with an attestation, not by a service account",
+        "firebaseappcheck.jwks.get: a public endpoint client apps call; it takes no project credentials",
         () => Effect.void,
       );
       test.provider.skip(
@@ -291,15 +287,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "firebaseappcheck.projects.apps.exchangeDeviceCheckToken: called by client apps with an attestation, not by a service account",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappcheck.projects.apps.generateAppAttestChallenge: called by client apps with an attestation, not by a service account",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappcheck.projects.apps.exchangeAppAttestAssertion: called by client apps with an attestation, not by a service account",
+        "firebaseappcheck.projects.apps.exchangeDebugToken: called by client apps with an attestation, not by a service account",
         () => Effect.void,
       );
       test.provider.skip(
@@ -307,7 +295,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "firebaseappcheck.projects.apps.exchangeDebugToken: called by client apps with an attestation, not by a service account",
+        "firebaseappcheck.projects.apps.exchangeAppAttestAttestation: called by client apps with an attestation, not by a service account",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappcheck.projects.apps.generateAppAttestChallenge: called by client apps with an attestation, not by a service account",
         () => Effect.void,
       );
       test.provider.skip(
@@ -315,15 +307,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "firebaseappcheck.projects.apps.exchangeRecaptchaV3Token: called by client apps with an attestation, not by a service account",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappcheck.projects.apps.exchangeDeviceCheckToken: called by client apps with an attestation, not by a service account",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappcheck.projects.apps.exchangeAppAttestAssertion: called by client apps with an attestation, not by a service account",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "firebaseappcheck.projects.apps.exchangeRecaptchaEnterpriseToken: called by client apps with an attestation, not by a service account",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappcheck.jwks.get: a public endpoint client apps call; it takes no project credentials",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappcheck.oauthClients.generateAppAttestChallenge: a public endpoint client apps call; it takes no project credentials",
         () => Effect.void,
       );
       test.provider.skip(
@@ -331,11 +327,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "firebaseappcheck.oauthClients.exchangeAppAttestAttestation: a public endpoint client apps call; it takes no project credentials",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "firebaseappcheck.oauthClients.exchangeDebugToken: a public endpoint client apps call; it takes no project credentials",
         () => Effect.void,
       );
       test.provider.skip(
-        "firebaseappcheck.oauthClients.exchangeAppAttestAttestation: a public endpoint client apps call; it takes no project credentials",
+        "firebaseappcheck.oauthClients.generateAppAttestChallenge: a public endpoint client apps call; it takes no project credentials",
         () => Effect.void,
       );
     });

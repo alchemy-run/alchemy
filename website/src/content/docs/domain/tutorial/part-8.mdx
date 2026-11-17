@@ -192,7 +192,7 @@ const accountId = AccountId.make(`${customerId}-main`);
 const program = Effect.gen(function* () {
   const bank = yield* BankApi.client;
   // ...
-  yield* bank.WithdrawMoney(accountId, { amount: 30 });
+  yield* bank.WithdrawMoney({ accountId, amount: 30 });
   yield* Effect.sleep("2 seconds");
 +  const today = DateTime.formatIsoDateUtc(yield* DateTime.now);
 +  const totals = yield* bank.DailyDeposits.get(today);

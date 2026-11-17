@@ -31,7 +31,7 @@ export type ListExecutionStepsShape = () => Effect.Effect<
  * **Example:** Call `steps.list`
  * ```typescript
  * const listExecutionSteps = yield* GCP.ToolResults.ListExecutionSteps();
- * const response = yield* listExecutionSteps({ historyId: "...", executionId: "..." });
+ * const response = yield* listExecutionSteps({ executionId: "...", historyId: "..." });
  * ```
  *
  * @binding

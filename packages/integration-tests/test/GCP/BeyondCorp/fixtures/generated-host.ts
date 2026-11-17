@@ -15,29 +15,64 @@ export default class BeyondCorpGeneratedHost extends GCP.Function<BeyondCorpGene
   "BeyondCorpGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.BeyondCorp.ListAppConnections();
-    const p1 = yield* GCP.BeyondCorp.ListAppConnectors();
-    const p2 = yield* GCP.BeyondCorp.ListAppGateways();
-    const p3 = yield* GCP.BeyondCorp.ListSecurityGateways();
-    const p4 = yield* GCP.BeyondCorp.ResolveAppConnection();
+    const p0 = yield* GCP.BeyondCorp.DeleteAppConnection();
+    const p1 = yield* GCP.BeyondCorp.DeleteAppConnector();
+    const p2 = yield* GCP.BeyondCorp.DeleteAppGateway();
+    const p3 = yield* GCP.BeyondCorp.GetAppConnection();
+    const p4 = yield* GCP.BeyondCorp.GetAppConnector();
+    const p5 = yield* GCP.BeyondCorp.GetAppGateway();
+    const p6 = yield* GCP.BeyondCorp.ListAppConnections();
+    const p7 = yield* GCP.BeyondCorp.ListAppConnectors();
+    const p8 = yield* GCP.BeyondCorp.ListAppGateways();
+    const p9 = yield* GCP.BeyondCorp.ListSecurityGateways();
+    const p10 = yield* GCP.BeyondCorp.ResolveAppConnection();
+    const p11 = yield* GCP.BeyondCorp.ResolveAppConnectorInstanceConfig();
     return {
       fetch: serveProbes({
-        ListAppConnections: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListAppConnectors: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListAppGateways: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListSecurityGateways: probeOutcome(Retry.none(p3({ location: "global" } as never))),
-        ResolveAppConnection: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        DeleteAppConnection: probeOutcome(
+          Retry.none(p0({ appConnection: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        DeleteAppConnector: probeOutcome(
+          Retry.none(p1({ appConnector: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        DeleteAppGateway: probeOutcome(
+          Retry.none(p2({ appGateway: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetAppConnection: probeOutcome(
+          Retry.none(p3({ appConnection: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetAppConnector: probeOutcome(
+          Retry.none(p4({ appConnector: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetAppGateway: probeOutcome(
+          Retry.none(p5({ appGateway: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListAppConnections: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListAppConnectors: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListAppGateways: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListSecurityGateways: probeOutcome(Retry.none(p9({ location: "global" } as never))),
+        ResolveAppConnection: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ResolveAppConnectorInstanceConfig: probeOutcome(
+          Retry.none(p11({ appConnector: "alchemy-missing", location: "us-central1" } as never)),
+        ),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.BeyondCorp.DeleteAppConnectionHttp,
+          GCP.BeyondCorp.DeleteAppConnectorHttp,
+          GCP.BeyondCorp.DeleteAppGatewayHttp,
+          GCP.BeyondCorp.GetAppConnectionHttp,
+          GCP.BeyondCorp.GetAppConnectorHttp,
+          GCP.BeyondCorp.GetAppGatewayHttp,
           GCP.BeyondCorp.ListAppConnectionsHttp,
           GCP.BeyondCorp.ListAppConnectorsHttp,
           GCP.BeyondCorp.ListAppGatewaysHttp,
           GCP.BeyondCorp.ListSecurityGatewaysHttp,
           GCP.BeyondCorp.ResolveAppConnectionHttp,
+          GCP.BeyondCorp.ResolveAppConnectorInstanceConfigHttp,
         ),
       ),
     ),

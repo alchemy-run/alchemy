@@ -78,10 +78,6 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudsearch.settings.datasources.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudsearch.settings.searchapplications.get: no predefined role grants its permission",
         () => Effect.void,
       );
@@ -90,7 +86,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.indexing.datasources.getSchema: no predefined role grants its permission",
+        "cloudsearch.settings.datasources.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -102,23 +98,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.indexing.datasources.items.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.indexing.datasources.items.index: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.indexing.datasources.items.upload: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.indexing.datasources.items.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.indexing.datasources.items.get: no predefined role grants its permission",
+        "cloudsearch.indexing.datasources.getSchema: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -126,7 +106,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.indexing.datasources.items.poll: no predefined role grants its permission",
+        "cloudsearch.indexing.datasources.items.delete: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -134,19 +114,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudsearch.indexing.datasources.items.upload: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudsearch.indexing.datasources.items.push: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.media.upload: addressed under `media/`, not a project",
+        "cloudsearch.indexing.datasources.items.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.debug.identitysources.items.listForunmappedidentity: addressed under `identitysources/`, not a project",
+        "cloudsearch.indexing.datasources.items.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.debug.identitysources.unmappedids.list: addressed under `identitysources/`, not a project",
+        "cloudsearch.indexing.datasources.items.poll: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsearch.indexing.datasources.items.index: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -162,15 +150,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudsearch.debug.identitysources.items.listForunmappedidentity: addressed under `identitysources/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsearch.debug.identitysources.unmappedids.list: addressed under `identitysources/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsearch.media.upload: addressed under `media/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsearch.stats.query.searchapplications.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudsearch.stats.user.searchapplications.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
         "cloudsearch.stats.index.datasources.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.stats.query.searchapplications.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -186,11 +186,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "cloudsearch.settings.searchapplications.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudsearch.settings.datasources.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.settings.searchapplications.list: no predefined role grants its permission",
+        "cloudsearch.query.removeActivity: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -202,27 +206,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.query.removeActivity: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudsearch.query.sources.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudsearch.initializeCustomer: no predefined role grants its permission",
+        "cloudsearch.stats.getIndex: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
         "cloudsearch.stats.getSession: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.stats.getSearchapplication: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsearch.stats.getIndex: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -231,6 +223,14 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudsearch.stats.getUser: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsearch.stats.getSearchapplication: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsearch.initializeCustomer: no predefined role grants its permission",
         () => Effect.void,
       );
     });

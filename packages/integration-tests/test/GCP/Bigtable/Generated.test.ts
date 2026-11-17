@@ -83,7 +83,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "bigtableadmin.projects.instances.clusters.getMemoryLayer: the cluster's memory layer (preview); no Alchemy resource models it yet",
+        "bigtableadmin.projects.instances.clusters.updateMemoryLayer: the cluster's memory layer (preview); no Alchemy resource models it yet",
         () => Effect.void,
       );
       test.provider.skip(
@@ -91,7 +91,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "bigtableadmin.projects.instances.clusters.updateMemoryLayer: the cluster's memory layer (preview); no Alchemy resource models it yet",
+        "bigtableadmin.projects.instances.clusters.getMemoryLayer: the cluster's memory layer (preview); no Alchemy resource models it yet",
         () => Effect.void,
       );
     });

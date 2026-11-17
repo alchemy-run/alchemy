@@ -161,35 +161,63 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "auditmanager.projects.locations.operationIds.get: operation metadata, polled internally",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "auditmanager.projects.locations.operationDetails.get: operation metadata, polled internally",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.auditReports.get: addressed under `folders/`, not a project",
+        "auditmanager.projects.locations.operationIds.get: operation metadata, polled internally",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.auditReports.list: addressed under `folders/`, not a project",
+        "auditmanager.organizations.locations.standards.controls.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.auditReports.generate: addressed under `folders/`, not a project",
+        "auditmanager.organizations.locations.auditScopeReports.generate: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.resourceEnrollmentStatuses.list: addressed under `folders/`, not a project",
+        "auditmanager.organizations.locations.resourceEnrollmentStatuses.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.resourceEnrollmentStatuses.get: addressed under `folders/`, not a project",
+        "auditmanager.organizations.locations.resourceEnrollmentStatuses.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.operationDetails.get: addressed under `folders/`, not a project",
+        "auditmanager.organizations.locations.operationDetails.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditReports.generate: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditReports.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditReports.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditSchedules.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditSchedules.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditSchedules.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.auditSchedules.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "auditmanager.organizations.locations.operationIds.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -197,15 +225,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.standards.controls.list: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.folders.locations.operationIds.get: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.folders.locations.auditSchedules.list: addressed under `folders/`, not a project",
+        "auditmanager.folders.locations.auditSchedules.create: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -217,59 +237,39 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.folders.locations.auditSchedules.create: addressed under `folders/`, not a project",
+        "auditmanager.folders.locations.auditSchedules.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.operationIds.get: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.operationDetails.get: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.standards.controls.list: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.standards.controls.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.auditSchedules.get: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.auditReports.get: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.auditSchedules.patch: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.auditReports.generate: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.auditSchedules.create: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.auditReports.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.auditSchedules.list: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.resourceEnrollmentStatuses.get: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.operationDetails.get: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.resourceEnrollmentStatuses.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "auditmanager.organizations.locations.auditScopeReports.generate: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.organizations.locations.auditReports.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.organizations.locations.auditReports.generate: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.organizations.locations.auditReports.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.organizations.locations.resourceEnrollmentStatuses.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "auditmanager.organizations.locations.resourceEnrollmentStatuses.list: addressed under `organizations/`, not a project",
+        "auditmanager.folders.locations.operationIds.get: addressed under `folders/`, not a project",
         () => Effect.void,
       );
     });

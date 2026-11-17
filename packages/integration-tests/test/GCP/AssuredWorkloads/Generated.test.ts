@@ -173,11 +173,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "assuredworkloads.folders.locations.dbFrameworkComplianceReports.aggregate: addressed under `folders/`, not a project",
+        "assuredworkloads.folders.locations.dbFrameworkComplianceSummaries.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "assuredworkloads.folders.locations.dbFrameworkComplianceReports.fetch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.folders.locations.dbFrameworkComplianceReports.aggregate: addressed under `folders/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -186,10 +190,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "assuredworkloads.folders.locations.dbFindingSummaries.list: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "assuredworkloads.folders.locations.dbFrameworkComplianceSummaries.list: addressed under `folders/`, not a project",
         () => Effect.void,
       );
     });

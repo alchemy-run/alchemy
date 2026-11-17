@@ -78,95 +78,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "sasportal.deployments.get: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.deployments.devices.move: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.deployments.devices.patch: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.deployments.devices.delete: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.deployments.devices.updateSigned: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.deployments.devices.get: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.deployments.devices.signDevice: addressed under `deployments/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "sasportal.nodes.get: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.move: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.list: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.deployments.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.nodes.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.devices.createSigned: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.nodes.devices.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.patch: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.get: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.delete: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.move: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.list: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.devices.createSigned: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.deployments.devices.list: addressed under `nodes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.nodes.devices.list: addressed under `nodes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -178,6 +90,14 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "sasportal.nodes.devices.updateSigned: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.devices.list: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "sasportal.nodes.devices.get: no predefined role grants its permission",
         () => Effect.void,
       );
@@ -186,7 +106,87 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.nodes.devices.updateSigned: no predefined role grants its permission",
+        "sasportal.nodes.nodes.list: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.nodes.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.nodes.move: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.nodes.deployments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.nodes.nodes.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.nodes.devices.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.nodes.devices.createSigned: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.list: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.delete: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.patch: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.get: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.move: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.devices.list: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.nodes.deployments.devices.createSigned: addressed under `nodes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.get: addressed under `deployments/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.devices.patch: addressed under `deployments/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.devices.updateSigned: addressed under `deployments/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.devices.get: addressed under `deployments/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.devices.move: addressed under `deployments/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.devices.delete: addressed under `deployments/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.deployments.devices.signDevice: addressed under `deployments/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -198,7 +198,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.deployments.move: no predefined role grants its permission",
+        "sasportal.customers.deployments.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -206,7 +206,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.deployments.get: no predefined role grants its permission",
+        "sasportal.customers.deployments.move: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -218,34 +218,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.devices.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.devices.move: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.devices.signDevice: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.devices.list: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.devices.createSigned: addressed under `customers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.devices.updateSigned: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.nodes.move: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "sasportal.customers.nodes.get: no predefined role grants its permission",
         () => Effect.void,
       );
@@ -254,15 +226,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.nodes.deployments.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.nodes.nodes.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "sasportal.customers.nodes.devices.list: no predefined role grants its permission",
+        "sasportal.customers.nodes.move: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -270,27 +234,47 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.setupSasAnalytics: no predefined role grants its permission",
+        "sasportal.customers.nodes.devices.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.listGcpProjectDeployments: no predefined role grants its permission",
+        "sasportal.customers.nodes.nodes.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.provisionDeployment: no predefined role grants its permission",
+        "sasportal.customers.nodes.deployments.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.list: no predefined role grants its permission",
+        "sasportal.customers.devices.signDevice: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.listLegacyOrganizations: no predefined role grants its permission",
+        "sasportal.customers.devices.createSigned: addressed under `customers/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.customers.migrateOrganization: no predefined role grants its permission",
+        "sasportal.customers.devices.move: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.devices.list: addressed under `customers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.devices.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.devices.updateSigned: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.installer.validate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.installer.generateSecret: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -306,11 +290,27 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.installer.validate: no predefined role grants its permission",
+        "sasportal.customers.setupSasAnalytics: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "sasportal.installer.generateSecret: no predefined role grants its permission",
+        "sasportal.customers.listGcpProjectDeployments: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.provisionDeployment: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.listLegacyOrganizations: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sasportal.customers.migrateOrganization: no predefined role grants its permission",
         () => Effect.void,
       );
     });

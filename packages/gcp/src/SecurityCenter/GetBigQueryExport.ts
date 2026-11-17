@@ -10,34 +10,34 @@ import type { FolderBigQueryExport } from "./FolderBigQueryExport.ts";
 import type { OrganizationBigQueryExport } from "./OrganizationBigQueryExport.ts";
 
 export interface GetBigQueryExportRequest extends Omit<
-  securitycenter.GetFoldersBigQueryExportsRequest,
+  securitycenter.GetOrganizationsBigQueryExportsRequest,
   "name"
 > {}
 
 export type GetBigQueryExportShape = (
-  resource: FolderBigQueryExport | BigQueryExport | OrganizationBigQueryExport,
+  resource: OrganizationBigQueryExport | BigQueryExport | FolderBigQueryExport,
 ) => Effect.Effect<
   (
     request?: GetBigQueryExportRequest,
   ) => Effect.Effect<
     securitycenter.GoogleCloudSecuritycenterV1BigQueryExport,
-    | securitycenter.GetFoldersBigQueryExportsError
+    | securitycenter.GetOrganizationsBigQueryExportsError
     | securitycenter.GetProjectsBigQueryExportsError
-    | securitycenter.GetOrganizationsBigQueryExportsError,
+    | securitycenter.GetFoldersBigQueryExportsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `securitycenter.folders.bigQueryExports.get`.
+ * Runtime binding for `securitycenter.organizations.bigQueryExports.get`.
  *
- * Bind it to a {@link FolderBigQueryExport} or {@link BigQueryExport} or {@link OrganizationBigQueryExport} and provide {@link GetBigQueryExportHttp}. The
+ * Bind it to a {@link OrganizationBigQueryExport} or {@link BigQueryExport} or {@link FolderBigQueryExport} and provide {@link GetBigQueryExportHttp}. The
  * host gets `roles/securitycenter.bigQueryExportsViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `bigQueryExports.get`
  * ```typescript
- * const getBigQueryExport = yield* GCP.SecurityCenter.GetBigQueryExport(folderBigQueryExport);
+ * const getBigQueryExport = yield* GCP.SecurityCenter.GetBigQueryExport(organizationBigQueryExport);
  * const response = yield* getBigQueryExport();
  * ```
  *
@@ -66,8 +66,8 @@ export const GetBigQueryExportHttp = Layer.effect(
     tag: "GCP.SecurityCenter.GetBigQueryExport",
     variants: [
       {
-        resource: "GCP.SecurityCenter.FolderBigQueryExport",
-        operation: securitycenter.getFoldersBigQueryExports,
+        resource: "GCP.SecurityCenter.OrganizationBigQueryExport",
+        operation: securitycenter.getOrganizationsBigQueryExports,
         param: "name",
         iam: { role: "roles/securitycenter.bigQueryExportsViewer" },
       },
@@ -78,8 +78,8 @@ export const GetBigQueryExportHttp = Layer.effect(
         iam: { role: "roles/securitycenter.bigQueryExportsViewer" },
       },
       {
-        resource: "GCP.SecurityCenter.OrganizationBigQueryExport",
-        operation: securitycenter.getOrganizationsBigQueryExports,
+        resource: "GCP.SecurityCenter.FolderBigQueryExport",
+        operation: securitycenter.getFoldersBigQueryExports,
         param: "name",
         iam: { role: "roles/securitycenter.bigQueryExportsViewer" },
       },

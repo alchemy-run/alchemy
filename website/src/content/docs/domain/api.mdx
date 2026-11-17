@@ -64,10 +64,12 @@ Policies, projections and external systems are never on an Api. They run inside 
 
 ### Commands
 
-A command becomes a method that takes its target and input together, and returns the receipt with the reply. Its middleware runs first, and its aggregate's `decide` has the final say.
+A command becomes a method that takes its input, and returns the receipt with the reply. Its middleware runs first, and whatever implements it, an aggregate or a [decision](/domain/decision), has the final say.
+
+The receipt has the `stream` and `version` the command committed at. `commits` lists every stream it committed to: more than one for a command a decision implements.
 
 ```typescript title="packages/server/test/apiEntries.ts"
-const { reply } = yield* bank.DepositMoney(accountId, { amount: 500 });
+const { reply } = yield* bank.DepositMoney({ accountId, amount: 500 });
 ```
 
 ### Views
@@ -91,7 +93,7 @@ const cards = bank.AccountCard.watch(accountId);
 
 ### Queries
 
-A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
+A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). A paged query's method also streams it: `entries` yields every entry and `pages` every page, following the cursors for you. Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
 
 ```typescript title="packages/server/test/CustomerApi.test.ts"
 const first = yield* sam.AccountLedger({ account: accountId }, { atLeast: receipt, take: 1 });
@@ -198,13 +200,13 @@ See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted
 
 ## Call it with a typed client
 
-`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target, the input, and optional call options like `headers`. Each query is a method that takes its input. Each view or stream is a namespace with its reads.
+`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the input and optional call options like `headers`. Each query is a method that takes its input. Each view or stream is a namespace with its reads.
 
 ```typescript title="packages/domain/test/depositAndWatch.ts"
 export const depositAndWatch = Effect.gen(function* () {
   const bank = yield* CustomerApi.client;
   const accountId = AccountId.make("c-1-main");
-  const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
+  const { reply } = yield* bank.DepositMoney({ accountId, amount: 1_000 });
   yield* Effect.log(`balance ${reply.balance}`);
   yield* bank.AccountSummary.watch(accountId).pipe(
     Stream.take(2),
@@ -231,7 +233,7 @@ Every call's error type says exactly what can fail. It's one of the rejections t
 
 ```typescript title="packages/server/test/withdraw.ts"
 export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, mfa).pipe(
+  const receipt = yield* bank.WithdrawMoney({ accountId, amount: 2_000 }, mfa).pipe(
     Effect.catchTag("InsufficientFunds", (r) => Effect.fail(`only ${r.balance} available`)),
   );
   return receipt.reply.balance;
@@ -288,7 +290,7 @@ const asSystem = Layer.succeed(Session, (effect) =>
 
 export const depositFromWebhook = Effect.fn(function* (accountId: AccountId, amount: number) {
   const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
-  return yield* bank.DepositMoney(accountId, { amount });
+  return yield* bank.DepositMoney({ accountId, amount });
 }, Effect.scoped);
 ```
 

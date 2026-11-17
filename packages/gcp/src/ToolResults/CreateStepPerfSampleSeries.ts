@@ -31,7 +31,7 @@ export type CreateStepPerfSampleSeriesShape = () => Effect.Effect<
  * **Example:** Call `perfSampleSeries.create`
  * ```typescript
  * const createStepPerfSampleSeries = yield* GCP.ToolResults.CreateStepPerfSampleSeries();
- * const response = yield* createStepPerfSampleSeries({ stepId: "...", executionId: "...", historyId: "..." });
+ * const response = yield* createStepPerfSampleSeries({ historyId: "...", stepId: "...", executionId: "..." });
  * ```
  *
  * @binding

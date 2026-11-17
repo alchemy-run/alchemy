@@ -4,24 +4,22 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpProjectBinding } from "../HttpBinding.ts";
+import { makeGcpBinding } from "../HttpBinding.ts";
+import type { ProductsCertificate } from "./ProductsCertificate.ts";
 
 export interface GetCertificateRequest extends Omit<
-  integrations.GetProjectsLocationsCertificatesRequest,
+  integrations.GetProjectsLocationsProductsCertificatesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the certificate (`certificates/{certificate}`). */
-  certificate: string;
-}
+> {}
 
-export type GetCertificateShape = () => Effect.Effect<
+export type GetCertificateShape = (
+  resource: ProductsCertificate,
+) => Effect.Effect<
   (
-    request: GetCertificateRequest,
+    request?: GetCertificateRequest,
   ) => Effect.Effect<
     integrations.GoogleCloudIntegrationsV1alphaCertificate,
-    integrations.GetProjectsLocationsCertificatesError,
+    integrations.GetProjectsLocationsProductsCertificatesError,
     RuntimeContext
   >
 >;
@@ -29,14 +27,14 @@ export type GetCertificateShape = () => Effect.Effect<
 /**
  * Get a certificates in the specified project.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetCertificateHttp}. The host gets `roles/integrations.certificateViewer` on the project.
+ * Bind it to a {@link ProductsCertificate} and provide {@link GetCertificateHttp}. The
+ * host gets `roles/integrations.certificateViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `certificates.get`
  * ```typescript
- * const getCertificate = yield* GCP.Integrations.GetCertificate();
- * const response = yield* getCertificate({ location: "us-central1", certificate: "..." });
+ * const getCertificate = yield* GCP.Integrations.GetCertificate(productsCertificate);
+ * const response = yield* getCertificate();
  * ```
  *
  * @binding
@@ -58,15 +56,14 @@ export const GetCertificate = Binding.Service<GetCertificate>("GCP.Integrations.
  */
 export const GetCertificateHttp = Layer.effect(
   GetCertificate,
-  makeGcpProjectBinding<GetCertificateShape>({
+  makeGcpBinding<GetCertificateShape>({
     tag: "GCP.Integrations.GetCertificate",
     variants: [
       {
-        operation: integrations.getProjectsLocationsCertificates,
+        resource: "GCP.Integrations.ProductsCertificate",
+        operation: integrations.getProjectsLocationsProductsCertificates,
         param: "name",
-        location: true,
-        children: [["certificates", "certificate"]],
-        role: "roles/integrations.certificateViewer",
+        iam: { role: "roles/integrations.certificateViewer" },
       },
     ],
   }),

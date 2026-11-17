@@ -9,19 +9,19 @@ import type { ProductsSfdcInstance } from "./ProductsSfdcInstance.ts";
 import type { SfdcInstance } from "./SfdcInstance.ts";
 
 export interface ListSfdcInstanceSfdcChannelsRequest extends Omit<
-  integrations.ListProjectsLocationsProductsSfdcInstancesSfdcChannelsRequest,
+  integrations.ListProjectsLocationsSfdcInstancesSfdcChannelsRequest,
   "parent"
 > {}
 
 export type ListSfdcInstanceSfdcChannelsShape = (
-  resource: ProductsSfdcInstance | SfdcInstance,
+  resource: SfdcInstance | ProductsSfdcInstance,
 ) => Effect.Effect<
   (
     request?: ListSfdcInstanceSfdcChannelsRequest,
   ) => Effect.Effect<
     integrations.GoogleCloudIntegrationsV1alphaListSfdcChannelsResponse,
-    | integrations.ListProjectsLocationsProductsSfdcInstancesSfdcChannelsError
-    | integrations.ListProjectsLocationsSfdcInstancesSfdcChannelsError,
+    | integrations.ListProjectsLocationsSfdcInstancesSfdcChannelsError
+    | integrations.ListProjectsLocationsProductsSfdcInstancesSfdcChannelsError,
     RuntimeContext
   >
 >;
@@ -29,13 +29,13 @@ export type ListSfdcInstanceSfdcChannelsShape = (
 /**
  * Lists all sfdc channels that match the filter.
  *
- * Bind it to a {@link ProductsSfdcInstance} or {@link SfdcInstance} and provide {@link ListSfdcInstanceSfdcChannelsHttp}. The
+ * Bind it to a {@link SfdcInstance} or {@link ProductsSfdcInstance} and provide {@link ListSfdcInstanceSfdcChannelsHttp}. The
  * host gets `roles/integrations.sfdcInstanceViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sfdcChannels.list`
  * ```typescript
- * const listSfdcInstanceSfdcChannels = yield* GCP.Integrations.ListSfdcInstanceSfdcChannels(productsSfdcInstance);
+ * const listSfdcInstanceSfdcChannels = yield* GCP.Integrations.ListSfdcInstanceSfdcChannels(sfdcInstance);
  * const response = yield* listSfdcInstanceSfdcChannels();
  * ```
  *
@@ -64,14 +64,14 @@ export const ListSfdcInstanceSfdcChannelsHttp = Layer.effect(
     tag: "GCP.Integrations.ListSfdcInstanceSfdcChannels",
     variants: [
       {
-        resource: "GCP.Integrations.ProductsSfdcInstance",
-        operation: integrations.listProjectsLocationsProductsSfdcInstancesSfdcChannels,
+        resource: "GCP.Integrations.SfdcInstance",
+        operation: integrations.listProjectsLocationsSfdcInstancesSfdcChannels,
         param: "parent",
         iam: { role: "roles/integrations.sfdcInstanceViewer" },
       },
       {
-        resource: "GCP.Integrations.SfdcInstance",
-        operation: integrations.listProjectsLocationsSfdcInstancesSfdcChannels,
+        resource: "GCP.Integrations.ProductsSfdcInstance",
+        operation: integrations.listProjectsLocationsProductsSfdcInstancesSfdcChannels,
         param: "parent",
         iam: { role: "roles/integrations.sfdcInstanceViewer" },
       },

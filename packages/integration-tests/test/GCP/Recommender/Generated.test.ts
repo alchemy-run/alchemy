@@ -145,6 +145,82 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.updateConfig: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.getConfig: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.recommendations.get: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.recommendations.markDismissed: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.recommendations.markFailed: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.recommendations.markClaimed: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.recommendations.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.recommenders.recommendations.markSucceeded: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.insightTypes.getConfig: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.insightTypes.updateConfig: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.insightTypes.insights.get: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.insightTypes.insights.markAccepted: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.billingAccounts.locations.insightTypes.insights.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.folders.locations.recommenders.recommendations.markSucceeded: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.folders.locations.recommenders.recommendations.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.folders.locations.recommenders.recommendations.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.folders.locations.recommenders.recommendations.markClaimed: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.folders.locations.recommenders.recommendations.markDismissed: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.folders.locations.recommenders.recommendations.markFailed: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "recommender.folders.locations.insightTypes.insights.markAccepted: addressed under `folders/`, not a project",
         () => Effect.void,
       );
@@ -157,79 +233,43 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.folders.locations.recommenders.recommendations.get: addressed under `folders/`, not a project",
+        "recommender.projects.locations.insightTypes.updateConfig: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.folders.locations.recommenders.recommendations.markFailed: addressed under `folders/`, not a project",
+        "recommender.projects.locations.insightTypes.getConfig: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.folders.locations.recommenders.recommendations.list: addressed under `folders/`, not a project",
+        "recommender.projects.locations.insightTypes.insights.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.folders.locations.recommenders.recommendations.markSucceeded: addressed under `folders/`, not a project",
+        "recommender.projects.locations.insightTypes.insights.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.folders.locations.recommenders.recommendations.markDismissed: addressed under `folders/`, not a project",
+        "recommender.projects.locations.insightTypes.insights.markAccepted: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.folders.locations.recommenders.recommendations.markClaimed: addressed under `folders/`, not a project",
+        "recommender.organizations.locations.insightTypes.updateConfig: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.getConfig: addressed under `billingAccounts/`, not a project",
+        "recommender.organizations.locations.insightTypes.getConfig: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.updateConfig: addressed under `billingAccounts/`, not a project",
+        "recommender.organizations.locations.insightTypes.insights.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.recommendations.list: addressed under `billingAccounts/`, not a project",
+        "recommender.organizations.locations.insightTypes.insights.markAccepted: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.recommendations.markFailed: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.recommendations.markDismissed: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.recommendations.markSucceeded: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.recommendations.get: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.recommenders.recommendations.markClaimed: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.insightTypes.getConfig: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.insightTypes.updateConfig: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.insightTypes.insights.markAccepted: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.insightTypes.insights.list: addressed under `billingAccounts/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.billingAccounts.locations.insightTypes.insights.get: addressed under `billingAccounts/`, not a project",
+        "recommender.organizations.locations.insightTypes.insights.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -245,7 +285,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "recommender.organizations.locations.recommenders.recommendations.markSucceeded: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "recommender.organizations.locations.recommenders.recommendations.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommender.organizations.locations.recommenders.recommendations.markFailed: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -254,54 +302,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "recommender.organizations.locations.recommenders.recommendations.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.recommenders.recommendations.markFailed: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.recommenders.recommendations.markSucceeded: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.insightTypes.updateConfig: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.insightTypes.getConfig: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.insightTypes.insights.markAccepted: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.insightTypes.insights.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.organizations.locations.insightTypes.insights.get: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.projects.locations.insightTypes.updateConfig: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.projects.locations.insightTypes.getConfig: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.projects.locations.insightTypes.insights.markAccepted: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.projects.locations.insightTypes.insights.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "recommender.projects.locations.insightTypes.insights.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

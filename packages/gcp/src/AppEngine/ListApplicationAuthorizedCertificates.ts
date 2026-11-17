@@ -31,7 +31,7 @@ export type ListApplicationAuthorizedCertificatesShape = () => Effect.Effect<
  * **Example:** Call `authorizedCertificates.list`
  * ```typescript
  * const listApplicationAuthorizedCertificates = yield* GCP.AppEngine.ListApplicationAuthorizedCertificates();
- * const response = yield* listApplicationAuthorizedCertificates({ applicationsId: "...", locationsId: "..." });
+ * const response = yield* listApplicationAuthorizedCertificates({ locationsId: "...", applicationsId: "..." });
  * ```
  *
  * @binding

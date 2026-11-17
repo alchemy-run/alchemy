@@ -1,0 +1,120 @@
+---
+title: Build images
+description: Build an image from a Dockerfile with Docker.Image — build args, multi-stage targets, platforms, build secrets — and know when a deploy rebuilds it.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+An image is built from a **Dockerfile**, a list of steps run in order against a **build context**, the directory whose files the steps can copy. Each step adds a **layer**. On a rebuild, the engine reuses every layer up to the first step whose inputs changed, and runs that step and every one after it.
+
+<Tree
+  nodes={[
+    { id: "image", label: "acme/api:latest", type: "image · four layers", icon: "package" },
+    { id: "l1", label: "FROM oven/bun:1", type: "reused", parent: "image", tone: "muted", wide: true },
+    { id: "l2", label: "COPY package.json bun.lock", type: "reused", parent: "image", tone: "muted", wide: true },
+    { id: "l3", label: "RUN bun install", type: "reused", parent: "image", tone: "muted", wide: true },
+    { id: "l4", label: "COPY src ./src", type: "rebuilt · a file in src changed", parent: "image", tone: "accent", wide: true },
+  ]}
+  caption="Editing a file in src rebuilds only the last layer. Editing package.json would rerun the install and everything after it, so steps that change least go first."
+/>
+
+## Build from a Dockerfile
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const image = yield* Docker.Image("api", {
+      name: "acme/api",
+      tag: "latest",
+      build: { context: "./api" },
+    });
+
+    return { ref: image.imageRef, id: image.imageId };
+  }),
+);
+```
+
+`build.context` defaults to the current directory, and the Dockerfile to `Dockerfile` inside it. A `.dockerignore` in the context keeps files like `node_modules` out of the build. Leave out `name`, and Alchemy generates one from the Stack, stage and resource ID.
+
+## Choose the Dockerfile, stage and platform
+
+```typescript
+const image = yield* Docker.Image("api", {
+  name: "acme/api",
+  build: {
+    context: "./api",
+    dockerfile: "docker/api.Dockerfile",
+    target: "runtime",
+    platform: "linux/amd64",
+    args: { NODE_ENV: "production" },
+  },
+});
+```
+
+`target` stops at one stage of a multi-stage Dockerfile. `platform` builds for another CPU, which you need when a Mac on Apple silicon builds for an `amd64` server. `args` sets `ARG` values. Any other `docker build` flag goes in `options`.
+
+Build args are saved in the image's history, where anyone who pulls it can read them, so never pass a secret as one.
+
+## Use a secret in a build
+
+A step that needs a secret, like a token for a private npm registry, takes it as a **build secret**:
+
+```dockerfile title="api/Dockerfile"
+FROM oven/bun:1
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN bun install --frozen-lockfile
+COPY src ./src
+CMD ["bun", "src/index.ts"]
+```
+
+```typescript
+const image = yield* Docker.Image("api", {
+  name: "acme/api",
+  build: {
+    context: "./api",
+    secrets: { NPM_TOKEN: yield* Config.Redacted("NPM_TOKEN") },
+  },
+});
+```
+
+The secret is there only while that one `RUN` step runs, as the variable `NPM_TOKEN`, or as a file at `/run/secrets/NPM_TOKEN` without `env=`. It never lands in a layer, the image's history, or the `docker` command line.
+
+## When a deploy rebuilds
+
+Every plan runs the build and compares the new image ID with the last deploy's. With nothing changed, every layer comes from the cache, the build is quick, and it produces the same ID, so nothing updates. A new ID updates the image, and pushes it when it has a `registry`. Each deploy builds once, even though the plan builds too.
+
+A build on a fresh machine has no layers to reuse, and reruns every step. See [Build caches](/docker/build-caches).
+
+## Build on another engine
+
+`context` (the resource prop, not `build.context`) builds on another engine. The files in `build.context` are sent from your machine:
+
+```typescript
+const image = yield* Docker.Image("api", {
+  name: "acme/api",
+  context: "vps",
+  build: { context: "./api" },
+});
+```
+
+The image then exists only on that engine. See [Engines & contexts](/docker/engines-and-contexts).
+
+## Destroying an image
+
+Destroying the resource removes the image from the engine it was built on. A pushed image stays in its registry.
+
+## Next
+
+- [Registries & credentials](/docker/registries) to push the image.
+- [Build caches](/docker/build-caches) for fast builds in CI.
+- [Images on cloud runtimes](/docker/cloud-runtimes) to run it on ECS, Cloudflare or Kubernetes.

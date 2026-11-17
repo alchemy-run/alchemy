@@ -47,6 +47,9 @@ const V1_PREFIXES = ["/docs/", "/guides/", "/providers/", "/concepts/"];
  * dropped.
  */
 const REDIRECTS: Record<string, string> = {
+  "/docker/build-and-push": "/docker/build-images",
+  "/modal/concepts": "/modal/workspaces-and-tokens",
+  "/modal/security/network-and-secrets": "/modal/networking/network",
   "/tutorial/part-1": "/cloudflare/tutorial/part-1",
   "/tutorial/part-2": "/cloudflare/tutorial/part-2",
   "/tutorial/part-3": "/cloudflare/tutorial/part-3",
@@ -205,7 +208,6 @@ const REDIRECTS: Record<string, string> = {
   "/archil/mounting": "/archil/storage/mounting",
   "/archil/sandboxes": "/archil/compute/sandboxes",
   "/archil/network": "/archil/security/network",
-  "/archil/frontend": "/archil/frontend/websites",
   "/archil/compute/services": "/archil/compute/programs",
   "/e2b/concepts": "/e2b/what-is-e2b",
   "/providers/archil/reference/service": "/providers/archil/reference/sandbox",

@@ -1,6 +1,7 @@
 export * from "./CapacityProvider.ts";
 export * from "./Cluster.ts";
 export * from "./ClusterEventSource.ts";
+export * from "./CreateSandbox.ts";
 export * from "./FlociServiceProvider.ts";
 export * from "./FlociTaskProvider.ts";
 export * from "./RunTask.ts";

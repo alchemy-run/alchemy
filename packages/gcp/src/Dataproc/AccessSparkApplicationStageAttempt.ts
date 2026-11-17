@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationStageAttemptRequest extends Omit<
-  dataproc.AccessStageAttemptProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessStageAttemptProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface AccessSparkApplicationStageAttemptRequest extends Omit<
 }
 
 export type AccessSparkApplicationStageAttemptShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationStageAttemptRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationStageAttemptResponse
-    | dataproc.AccessSessionSparkApplicationStageAttemptResponse,
-    | dataproc.AccessStageAttemptProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessStageAttemptProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationStageAttemptResponse
+    | dataproc.AccessSparkApplicationStageAttemptResponse,
+    | dataproc.AccessStageAttemptProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessStageAttemptProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type AccessSparkApplicationStageAttemptShape = (
 /**
  * Obtain data corresponding to a spark stage attempt for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationStageAttemptHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationStageAttemptHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessStageAttempt`
  * ```typescript
- * const accessSparkApplicationStageAttempt = yield* GCP.Dataproc.AccessSparkApplicationStageAttempt(batch);
+ * const accessSparkApplicationStageAttempt = yield* GCP.Dataproc.AccessSparkApplicationStageAttempt(session);
  * const response = yield* accessSparkApplicationStageAttempt({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const AccessSparkApplicationStageAttemptHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationStageAttempt",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessStageAttemptProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessStageAttemptProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessStageAttemptProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessStageAttemptProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

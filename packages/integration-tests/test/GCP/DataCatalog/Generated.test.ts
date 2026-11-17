@@ -67,96 +67,8 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
-        "CreateEntryGroup (datacatalog.projects.locations.entryGroups.create)",
-        () => probe("CreateEntryGroup", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "CreateEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.create)",
-        () => probe("CreateEntryGroupEntry", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "CreateEntryGroupEntryTag (datacatalog.projects.locations.entryGroups.entries.tags.create)",
-        () => probe("CreateEntryGroupEntryTag", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "CreateEntryGroupTag (datacatalog.projects.locations.entryGroups.tags.create)",
-        () => probe("CreateEntryGroupTag", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteEntryGroup (datacatalog.projects.locations.entryGroups.delete)",
-        () => probe("DeleteEntryGroup", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.delete)",
-        () => probe("DeleteEntryGroupEntry", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteEntryGroupEntryTag (datacatalog.projects.locations.entryGroups.entries.tags.delete)",
-        () => probe("DeleteEntryGroupEntryTag", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteEntryGroupTag (datacatalog.projects.locations.entryGroups.tags.delete)",
-        () => probe("DeleteEntryGroupTag", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ExportTaxonomy (datacatalog.projects.locations.taxonomies.export)",
         () => probe("ExportTaxonomy", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetEntryGroup (datacatalog.projects.locations.entryGroups.get)",
-        () => probe("GetEntryGroup", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.get)",
-        () => probe("GetEntryGroupEntry", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ImportEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.import)",
-        () => probe("ImportEntryGroupEntry", false),
         {
           tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
           timeout: 600_000,
@@ -171,100 +83,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListEntryGroupEntries (datacatalog.projects.locations.entryGroups.entries.list)",
-        () => probe("ListEntryGroupEntries", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListEntryGroupEntryTags (datacatalog.projects.locations.entryGroups.entries.tags.list)",
-        () => probe("ListEntryGroupEntryTags", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListEntryGroups (datacatalog.projects.locations.entryGroups.list)",
-        () => probe("ListEntryGroups", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListEntryGroupTags (datacatalog.projects.locations.entryGroups.tags.list)",
-        () => probe("ListEntryGroupTags", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ListTaxonomies (datacatalog.projects.locations.taxonomies.list)",
         () => probe("ListTaxonomies", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider("LookupEntry (datacatalog.entries.lookup)", () => probe("LookupEntry", false), {
-        tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-        timeout: 600_000,
-      });
-      test.provider(
-        "ModifyEntryContacts (datacatalog.projects.locations.entryGroups.entries.modifyEntryContacts)",
-        () => probe("ModifyEntryContacts", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ModifyEntryOverview (datacatalog.projects.locations.entryGroups.entries.modifyEntryOverview)",
-        () => probe("ModifyEntryOverview", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchEntryGroup (datacatalog.projects.locations.entryGroups.patch)",
-        () => probe("PatchEntryGroup", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.patch)",
-        () => probe("PatchEntryGroupEntry", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchEntryGroupEntryTag (datacatalog.projects.locations.entryGroups.entries.tags.patch)",
-        () => probe("PatchEntryGroupEntryTag", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchEntryGroupTag (datacatalog.projects.locations.entryGroups.tags.patch)",
-        () => probe("PatchEntryGroupTag", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ReconcileEntryGroupEntryTag (datacatalog.projects.locations.entryGroups.entries.tags.reconcile)",
-        () => probe("ReconcileEntryGroupEntryTag", false),
         {
           tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
           timeout: 600_000,
@@ -277,49 +97,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
           timeout: 600_000,
         },
-      );
-      test.provider(
-        "StarEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.star)",
-        () => probe("StarEntryGroupEntry", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "UnstarEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.unstar)",
-        () => probe("UnstarEntryGroupEntry", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
-          timeout: 600_000,
-        },
-      );
-    });
-
-    describe("TagTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        'CreateTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.create): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'DeleteTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.delete): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'GetTagTemplate (datacatalog.projects.locations.tagTemplates.get): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'PatchTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.patch): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'RenameTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.rename): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        'RenameTagTemplateFieldEnumValue (datacatalog.projects.locations.tagTemplates.fields.enumValues.rename): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
-        () => Effect.void,
       );
     });
 

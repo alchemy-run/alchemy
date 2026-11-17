@@ -31,7 +31,7 @@ export type GetRegionNetworkFirewallPolicyEffectiveFirewallsShape = () => Effect
  * **Example:** Call `regionNetworkFirewallPolicies.getEffectiveFirewalls`
  * ```typescript
  * const getRegionNetworkFirewallPolicyEffectiveFirewalls = yield* GCP.Compute.GetRegionNetworkFirewallPolicyEffectiveFirewalls();
- * const response = yield* getRegionNetworkFirewallPolicyEffectiveFirewalls({ network: "...", region: "..." });
+ * const response = yield* getRegionNetworkFirewallPolicyEffectiveFirewalls({ region: "...", network: "..." });
  * ```
  *
  * @binding

@@ -3,33 +3,34 @@ title: What is GCP?
 description: The concepts behind Google Cloud — organizations, projects, APIs, regions, IAM principals, roles and service accounts, Cloud Run and the other runtimes, events, networks and logging — and how @alchemy.run/gcp models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Google Cloud (GCP) is a cloud platform with services like Cloud Run, Firestore, Cloud Storage, Pub/Sub, BigQuery and Cloud SQL. Each service creates **resources** in your **project**. Every call to a resource is checked by **IAM**, which decides which **principal** holds which **role** on it.
 
 Take one small app: a Cloud Run service that stores links in Firestore and publishes an event to Pub/Sub for a worker. Your profile deploys into a project. Service accounts and topics belong to the whole project, while the service, the database and the worker live in one region. The service runs as its own service account, which holds a role on each resource it uses.
 
-<DAG
+<Tree
   nodes={[
-    { id: "profile", label: "Profile", type: "gcloud login", col: 0, row: 1 },
-    { id: "sa", label: "alch-api-…", type: "Service account", col: 1, row: 0 },
-    { id: "topic", label: "Events", type: "Pub/Sub topic", col: 2, row: 0 },
-    { id: "api", label: "Api", type: "Cloud Run service", tone: "accent", col: 1, row: 1 },
-    { id: "db", label: "Links", type: "Firestore database", col: 1, row: 2 },
-    { id: "worker", label: "Worker", type: "Cloud Run worker pool", col: 3, row: 2 },
+    { id: "org", label: "example.com", type: "organization", icon: "brand:gcp" },
+    {
+      id: "project", label: "my-app-prod", type: "project", parent: "org", dashed: true, icon: "folder", colGap: 2,
+      areas: ["sa region topic"],
+      phoneAreas: ["sa sa", "region region", "topic topic"],
+    },
+    { id: "sa", label: "alch-api-…", type: "service account", parent: "project", icon: "id-card" },
+    { id: "region", label: "us-central1", type: "region", parent: "project", dashed: true, icon: "map-pin", areas: ["api", "db", "worker"] },
+    { id: "api", label: "Api", type: "Cloud Run service", parent: "region", tone: "accent", icon: "server" },
+    { id: "db", label: "Links", type: "Firestore database", parent: "region", icon: "database" },
+    { id: "worker", label: "Worker", type: "Cloud Run worker pool", parent: "region", icon: "cog" },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", parent: "project", icon: "radio-tower" },
   ]}
-  groups={[
-    { id: "project", label: "Project my-app-prod", nodes: ["sa", "topic"] },
-    { id: "region", label: "us-central1", parent: "project", nodes: ["api", "db", "worker"], dashed: true },
+  links={[
+    { from: "api", to: "sa", label: "runs as" },
+    { from: "api", to: "db", label: "writes" },
+    { from: "api", to: "topic", label: "publishes" },
+    { from: "worker", to: "topic", label: "pulls" },
   ]}
-  edges={[
-    { from: "profile", to: "project", label: "deploy" },
-    { from: "sa", to: "api", label: "runs as" },
-    { from: "api", to: "db", label: "datastore.user" },
-    { from: "api", to: "topic", label: "pubsub.publisher", exit: "side" },
-    { from: "topic", to: "worker", dashed: true, exit: "side" },
-  ]}
-  caption="Service accounts and Pub/Sub topics belong to the project and work in every region. The service, the database and the worker live in one region. Dashed edges are messages delivered later."
+  caption="The project sits in your organization. Service accounts and Pub/Sub topics belong to the project and work in every region. The service, the database and the worker live in one region. Api runs as its service account, which holds a role on Links and Events; Worker pulls the messages Api publishes."
 />
 
 ## Projects: where resources live

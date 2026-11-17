@@ -143,7 +143,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "run.projects.locations.jobs.executions.exportStatus: checks `run.locations.exportImage`, which no predefined role grants",
+        "run.projects.locations.instances.create: creates long-lived infrastructure that belongs in a resource, not a runtime call (Cloud Run instances, preview)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "run.projects.locations.builds.submit: builds a container image for a deploy: a deploy-time step",
         () => Effect.void,
       );
       test.provider.skip(
@@ -151,11 +155,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "run.projects.locations.instances.create: creates long-lived infrastructure that belongs in a resource, not a runtime call (Cloud Run instances, preview)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "run.projects.locations.builds.submit: builds a container image for a deploy: a deploy-time step",
+        "run.projects.locations.jobs.executions.exportStatus: checks `run.locations.exportImage`, which no predefined role grants",
         () => Effect.void,
       );
     });

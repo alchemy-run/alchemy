@@ -71,15 +71,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "bigquerydatapolicy.projects.locations.dataPolicies.addGrantees: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "bigquerydatapolicy.projects.locations.dataPolicies.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
         "bigquerydatapolicy.projects.locations.dataPolicies.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "bigquerydatapolicy.projects.locations.dataPolicies.addGrantees: no predefined role grants its permission",
         () => Effect.void,
       );
     });

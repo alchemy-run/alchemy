@@ -31,7 +31,7 @@ export type GetPerfSampleSeriesShape = () => Effect.Effect<
  * **Example:** Call `perfSampleSeries.get`
  * ```typescript
  * const getPerfSampleSeries = yield* GCP.ToolResults.GetPerfSampleSeries();
- * const response = yield* getPerfSampleSeries({ stepId: "...", executionId: "...", sampleSeriesId: "...", historyId: "..." });
+ * const response = yield* getPerfSampleSeries({ sampleSeriesId: "...", stepId: "...", executionId: "...", historyId: "..." });
  * ```
  *
  * @binding

@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface GetDebugConfigRequest extends Omit<
-  dataflow.GetConfigProjectsJobsDebugRequest,
+  dataflow.GetConfigProjectsLocationsJobsDebugRequest,
   "projectId"
 > {}
 
@@ -16,7 +16,7 @@ export type GetDebugConfigShape = () => Effect.Effect<
     request: GetDebugConfigRequest,
   ) => Effect.Effect<
     dataflow.GetDebugConfigResponse,
-    dataflow.GetConfigProjectsJobsDebugError,
+    dataflow.GetConfigProjectsLocationsJobsDebugError,
     RuntimeContext
   >
 >;
@@ -31,7 +31,7 @@ export type GetDebugConfigShape = () => Effect.Effect<
  * **Example:** Call `debug.getConfig`
  * ```typescript
  * const getDebugConfig = yield* GCP.Dataflow.GetDebugConfig();
- * const response = yield* getDebugConfig({ jobId: "..." });
+ * const response = yield* getDebugConfig({ jobId: "...", location: "..." });
  * ```
  *
  * @binding
@@ -57,7 +57,7 @@ export const GetDebugConfigHttp = Layer.effect(
     tag: "GCP.Dataflow.GetDebugConfig",
     variants: [
       {
-        operation: dataflow.getConfigProjectsJobsDebug,
+        operation: dataflow.getConfigProjectsLocationsJobsDebug,
         projectField: "projectId",
         role: "roles/dataflow.viewer",
       },

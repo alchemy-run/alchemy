@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface ListCustomModuleDescendantRequest extends Omit<
-  securitycenter.ListDescendantProjectsEventThreatDetectionSettingsCustomModulesRequest,
+  securitycenter.ListDescendantProjectsSecurityHealthAnalyticsSettingsCustomModulesRequest,
   "parent"
 > {}
 
@@ -15,14 +15,14 @@ export type ListCustomModuleDescendantShape = () => Effect.Effect<
   (
     request?: ListCustomModuleDescendantRequest,
   ) => Effect.Effect<
-    securitycenter.ListDescendantEventThreatDetectionCustomModulesResponse,
-    securitycenter.ListDescendantProjectsEventThreatDetectionSettingsCustomModulesError,
+    securitycenter.ListDescendantSecurityHealthAnalyticsCustomModulesResponse,
+    securitycenter.ListDescendantProjectsSecurityHealthAnalyticsSettingsCustomModulesError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `securitycenter.projects.eventThreatDetectionSettings.customModules.listDescendant`.
+ * Runtime binding for `securitycenter.projects.securityHealthAnalyticsSettings.customModules.listDescendant`.
  *
  * A call on the stack's project, so it takes no resource.
  * Provide {@link ListCustomModuleDescendantHttp}. The host gets `roles/securitycenter.settingsViewer` on the project.
@@ -59,9 +59,10 @@ export const ListCustomModuleDescendantHttp = Layer.effect(
     tag: "GCP.SecurityCenter.ListCustomModuleDescendant",
     variants: [
       {
-        operation: securitycenter.listDescendantProjectsEventThreatDetectionSettingsCustomModules,
+        operation:
+          securitycenter.listDescendantProjectsSecurityHealthAnalyticsSettingsCustomModules,
         param: "parent",
-        children: [["eventThreatDetectionSettings", ""]],
+        children: [["securityHealthAnalyticsSettings", ""]],
         role: "roles/securitycenter.settingsViewer",
       },
     ],

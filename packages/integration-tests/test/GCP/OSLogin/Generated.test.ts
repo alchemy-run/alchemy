@@ -75,11 +75,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "oslogin.users.projects.provisionPosixAccount: addressed under `users/`, not a project",
+        "oslogin.users.projects.delete: addressed under `users/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "oslogin.users.projects.delete: addressed under `users/`, not a project",
+        "oslogin.users.projects.provisionPosixAccount: addressed under `users/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

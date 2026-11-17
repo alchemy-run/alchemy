@@ -73,24 +73,20 @@ export const stackConstant = (name: string, stage: string): Layer.Layer<Stack | 
 
 /**
  * Resolve the program the bundled platform registered under `exportKey`
- * (`program` for the server/one-shot hosts, `default` for containers,
- * `handler` for Lambda), optionally under process-lifetime telemetry: built
- * once into the root scope; exporters batch on their intervals and flush
- * when the scope closes on graceful shutdown.
+ * (`program` for the server/one-shot hosts, `default` for containers) and
+ * run it under process-lifetime telemetry: built once into the root scope;
+ * exporters batch on their intervals and flush when the scope closes on
+ * graceful shutdown. With no destination bound (no `Telemetry.layerOtlp`, no
+ * `OTEL_EXPORTER_OTLP_*` env), telemetry builds to an empty Layer.
  */
-export const resolveProgram = (
-  exportKey: string,
-  options?: { readonly telemetry?: boolean },
-): Effect.Effect<any, any, any> =>
+export const resolveProgram = (exportKey: string): Effect.Effect<any, any, any> =>
   entrypointTag.pipe(
-    Effect.flatMap((self) => {
-      const program: Effect.Effect<any, any, any> = self.RuntimeContext.exports.pipe(
+    Effect.flatMap((self) =>
+      self.RuntimeContext.exports.pipe(
         Effect.flatMap((exports: any) => exports[exportKey]),
-      );
-      return options?.telemetry
-        ? program.pipe(provideProcessTelemetry(self.RuntimeContext))
-        : program;
-    }),
+        provideProcessTelemetry(self.RuntimeContext),
+      ),
+    ),
   );
 
 /**

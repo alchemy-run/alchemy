@@ -67,14 +67,6 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "datamanager.accountTypes.accounts.userListDirectLicenses.get: addressed under `accountTypes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.accountTypes.accounts.userListDirectLicenses.create: addressed under `accountTypes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "datamanager.accountTypes.accounts.userListDirectLicenses.patch: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
@@ -83,27 +75,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "datamanager.accountTypes.accounts.userListDirectLicenses.create: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListDirectLicenses.get: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "datamanager.accountTypes.accounts.insights.retrieve: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.accountTypes.accounts.userListGlobalLicenses.create: addressed under `accountTypes/`, not a project",
+        "datamanager.accountTypes.accounts.reports.retrievePartnerMatchReport: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.accountTypes.accounts.userListGlobalLicenses.list: addressed under `accountTypes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.accountTypes.accounts.userListGlobalLicenses.get: addressed under `accountTypes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.accountTypes.accounts.userListGlobalLicenses.patch: addressed under `accountTypes/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.accountTypes.accounts.userListGlobalLicenses.userListGlobalLicenseCustomerInfos.list: addressed under `accountTypes/`, not a project",
+        "datamanager.accountTypes.accounts.partnerLinks.delete: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -115,19 +103,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.accountTypes.accounts.partnerLinks.delete: addressed under `accountTypes/`, not a project",
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.get: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.accountTypes.accounts.userLists.get: addressed under `accountTypes/`, not a project",
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.list: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.accountTypes.accounts.userLists.delete: addressed under `accountTypes/`, not a project",
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.patch: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.accountTypes.accounts.userLists.patch: addressed under `accountTypes/`, not a project",
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.create: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.userListGlobalLicenseCustomerInfos.list: addressed under `accountTypes/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -135,7 +127,31 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.get: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.patch: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "datamanager.accountTypes.accounts.userLists.list: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.delete: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.users.ingest: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.users.remove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.events.ingest: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -151,23 +167,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.events.ingest: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.users.ingest: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.users.remove: no predefined role grants its permission",
+        "datamanager.adEvents.ingest: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
         "datamanager.requestStatus.retrieve: no distilled operation retrieveRequestStatus",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamanager.adEvents.ingest: no predefined role grants its permission",
         () => Effect.void,
       );
     });

@@ -10,20 +10,20 @@ import type { EnvironmentsKeyvaluemap } from "./EnvironmentsKeyvaluemap.ts";
 import type { Keyvaluemap } from "./Keyvaluemap.ts";
 
 export interface ListKeyvaluemapEntriesRequest extends Omit<
-  apigee.ListOrganizationsEnvironmentsKeyvaluemapsEntriesRequest,
+  apigee.ListOrganizationsKeyvaluemapsEntriesRequest,
   "parent"
 > {}
 
 export type ListKeyvaluemapEntriesShape = (
-  resource: EnvironmentsKeyvaluemap | ApisKeyvaluemap | Keyvaluemap,
+  resource: Keyvaluemap | ApisKeyvaluemap | EnvironmentsKeyvaluemap,
 ) => Effect.Effect<
   (
     request?: ListKeyvaluemapEntriesRequest,
   ) => Effect.Effect<
     apigee.GoogleCloudApigeeV1ListKeyValueEntriesResponse,
-    | apigee.ListOrganizationsEnvironmentsKeyvaluemapsEntriesError
+    | apigee.ListOrganizationsKeyvaluemapsEntriesError
     | apigee.ListOrganizationsApisKeyvaluemapsEntriesError
-    | apigee.ListOrganizationsKeyvaluemapsEntriesError,
+    | apigee.ListOrganizationsEnvironmentsKeyvaluemapsEntriesError,
     RuntimeContext
   >
 >;
@@ -31,13 +31,13 @@ export type ListKeyvaluemapEntriesShape = (
 /**
  * Lists key value entries for key values maps scoped to an organization, environment, or API proxy.
  *
- * Bind it to a {@link EnvironmentsKeyvaluemap} or {@link ApisKeyvaluemap} or {@link Keyvaluemap} and provide {@link ListKeyvaluemapEntriesHttp}. The
+ * Bind it to a {@link Keyvaluemap} or {@link ApisKeyvaluemap} or {@link EnvironmentsKeyvaluemap} and provide {@link ListKeyvaluemapEntriesHttp}. The
  * host gets `roles/apigee.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `entries.list`
  * ```typescript
- * const listKeyvaluemapEntries = yield* GCP.Apigee.ListKeyvaluemapEntries(environmentsKeyvaluemap);
+ * const listKeyvaluemapEntries = yield* GCP.Apigee.ListKeyvaluemapEntries(keyvaluemap);
  * const response = yield* listKeyvaluemapEntries();
  * ```
  *
@@ -66,8 +66,8 @@ export const ListKeyvaluemapEntriesHttp = Layer.effect(
     tag: "GCP.Apigee.ListKeyvaluemapEntries",
     variants: [
       {
-        resource: "GCP.Apigee.EnvironmentsKeyvaluemap",
-        operation: apigee.listOrganizationsEnvironmentsKeyvaluemapsEntries,
+        resource: "GCP.Apigee.Keyvaluemap",
+        operation: apigee.listOrganizationsKeyvaluemapsEntries,
         param: "parent",
         iam: { role: "roles/apigee.viewer" },
       },
@@ -78,8 +78,8 @@ export const ListKeyvaluemapEntriesHttp = Layer.effect(
         iam: { role: "roles/apigee.viewer" },
       },
       {
-        resource: "GCP.Apigee.Keyvaluemap",
-        operation: apigee.listOrganizationsKeyvaluemapsEntries,
+        resource: "GCP.Apigee.EnvironmentsKeyvaluemap",
+        operation: apigee.listOrganizationsEnvironmentsKeyvaluemapsEntries,
         param: "parent",
         iam: { role: "roles/apigee.viewer" },
       },

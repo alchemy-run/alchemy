@@ -6,12 +6,12 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
-export interface ListLogsRequest extends Omit<logging.ListProjectsLogsRequest, "parent"> {}
+export interface ListLogsRequest extends Omit<logging.ListLogsRequest, "parent"> {}
 
 export type ListLogsShape = () => Effect.Effect<
   (
     request?: ListLogsRequest,
-  ) => Effect.Effect<logging.ListLogsResponse, logging.ListProjectsLogsError, RuntimeContext>
+  ) => Effect.Effect<logging.ListLogsResponse, logging.ListLogsError, RuntimeContext>
 >;
 
 /**
@@ -50,7 +50,7 @@ export const ListLogsHttp = Layer.effect(
     tag: "GCP.Logging.ListLogs",
     variants: [
       {
-        operation: logging.listProjectsLogs,
+        operation: logging.listLogs,
         param: "parent",
         role: "roles/logging.privateLogViewer",
       },

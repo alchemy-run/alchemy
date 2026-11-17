@@ -16,12 +16,12 @@ export type StopWorkloadCaptureReplayShape = (
   resource: Instance,
 ) => Effect.Effect<
   (
-    request: StopWorkloadCaptureReplayRequest,
+    request?: StopWorkloadCaptureReplayRequest,
   ) => Effect.Effect<sqladmin.Operation, sqladmin.StopReplayWorkloadCapturesError, RuntimeContext>
 >;
 
 /**
- * Stops executing a captured workload on the separate Cloud SQL instance.
+ * Stops an active workload replay on the target Cloud SQL replay instance.
  *
  * Bind it to a {@link Instance} and provide {@link StopWorkloadCaptureReplayHttp}. The
  * host gets `roles/cloudsql.editor` on the project (the service has no per-resource IAM policy).
@@ -30,7 +30,7 @@ export type StopWorkloadCaptureReplayShape = (
  * **Example:** Call `workloadCaptures.stopReplay`
  * ```typescript
  * const stopWorkloadCaptureReplay = yield* GCP.SQL.StopWorkloadCaptureReplay(instance);
- * const response = yield* stopWorkloadCaptureReplay({ workloadId: "..." });
+ * const response = yield* stopWorkloadCaptureReplay();
  * ```
  *
  * @binding

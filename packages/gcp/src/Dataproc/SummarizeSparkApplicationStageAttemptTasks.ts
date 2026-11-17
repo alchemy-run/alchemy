@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SummarizeSparkApplicationStageAttemptTasksRequest extends Omit<
-  dataproc.SummarizeStageAttemptTasksProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SummarizeStageAttemptTasksProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SummarizeSparkApplicationStageAttemptTasksRequest extends Omit<
 }
 
 export type SummarizeSparkApplicationStageAttemptTasksShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SummarizeSparkApplicationStageAttemptTasksRequest,
   ) => Effect.Effect<
-    | dataproc.SummarizeSparkApplicationStageAttemptTasksResponse
-    | dataproc.SummarizeSessionSparkApplicationStageAttemptTasksResponse,
-    | dataproc.SummarizeStageAttemptTasksProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SummarizeStageAttemptTasksProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SummarizeSessionSparkApplicationStageAttemptTasksResponse
+    | dataproc.SummarizeSparkApplicationStageAttemptTasksResponse,
+    | dataproc.SummarizeStageAttemptTasksProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SummarizeStageAttemptTasksProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SummarizeSparkApplicationStageAttemptTasksShape = (
 /**
  * Obtain summary of Tasks for a Spark Application Stage Attempt
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SummarizeSparkApplicationStageAttemptTasksHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SummarizeSparkApplicationStageAttemptTasksHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.summarizeStageAttemptTasks`
  * ```typescript
- * const summarizeSparkApplicationStageAttemptTasks = yield* GCP.Dataproc.SummarizeSparkApplicationStageAttemptTasks(batch);
+ * const summarizeSparkApplicationStageAttemptTasks = yield* GCP.Dataproc.SummarizeSparkApplicationStageAttemptTasks(session);
  * const response = yield* summarizeSparkApplicationStageAttemptTasks({ sparkApplication: "..." });
  * ```
  *
@@ -69,15 +69,15 @@ export const SummarizeSparkApplicationStageAttemptTasksHttp = Layer.effect(
     tag: "GCP.Dataproc.SummarizeSparkApplicationStageAttemptTasks",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.summarizeStageAttemptTasksProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.summarizeStageAttemptTasksProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.summarizeStageAttemptTasksProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.summarizeStageAttemptTasksProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

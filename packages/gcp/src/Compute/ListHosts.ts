@@ -24,7 +24,7 @@ export type ListHostsShape = () => Effect.Effect<
  * **Example:** Call `hosts.list`
  * ```typescript
  * const listHosts = yield* GCP.Compute.ListHosts();
- * const response = yield* listHosts({ association: "...", zone: "..." });
+ * const response = yield* listHosts({ zone: "...", association: "..." });
  * ```
  *
  * @binding

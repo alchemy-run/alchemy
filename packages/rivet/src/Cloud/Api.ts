@@ -50,8 +50,17 @@ const ErrorBody = Schema.Struct({
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
+/** A bearer token and, for a sign-in session, the organization it acts in. */
+export interface CloudAuth {
+  readonly token: Redacted.Redacted<string>;
+  readonly organization?: string | undefined;
+}
+
+/** The header naming the organization a sign-in session acts in. */
+export const ORGANIZATION_HEADER = "x-rivet-organization";
+
 interface RequestOptions {
-  readonly token?: Redacted.Redacted<string>;
+  readonly auth?: CloudAuth;
   readonly body?: unknown;
 }
 
@@ -65,8 +74,11 @@ const request = Effect.fn("RivetCloud.request")(function* (
   let req = HttpClientRequest.make(method)(`${CLOUD_API_URL}${path}`).pipe(
     HttpClientRequest.acceptJson,
   );
-  if (options.token !== undefined) {
-    req = HttpClientRequest.bearerToken(req, Redacted.value(options.token));
+  if (options.auth !== undefined) {
+    req = HttpClientRequest.bearerToken(req, Redacted.value(options.auth.token));
+    if (options.auth.organization !== undefined) {
+      req = HttpClientRequest.setHeader(req, ORGANIZATION_HEADER, options.auth.organization);
+    }
   }
   if (options.body !== undefined) {
     req = HttpClientRequest.bodyJsonUnsafe(req, options.body);
@@ -117,19 +129,31 @@ const send = <A>(
 const sendVoid = (method: Method, path: string, options: RequestOptions = {}) =>
   request(method, path, options).pipe(Effect.asVoid);
 
-const get = <A>(
-  token: Redacted.Redacted<string>,
-  path: string,
-  schema: Schema.ConstraintDecoder<A, never>,
-) => send("GET", path, schema, { token });
+const get = <A>(auth: CloudAuth, path: string, schema: Schema.ConstraintDecoder<A, never>) =>
+  send("GET", path, schema, { auth });
 
 /** Every cluster the credential can see. */
-export const listClusters = (token: Redacted.Redacted<string>) =>
-  get(token, "/v2/clusters", ClusterList).pipe(Effect.map((list) => list.items));
+export const listClusters = (auth: CloudAuth) =>
+  get(auth, "/v2/clusters", ClusterList).pipe(Effect.map((list) => list.items));
+
+/** An organization a sign-in session belongs to. */
+export const OrganizationInfo = Schema.Struct({
+  name: Schema.String,
+  slug: Schema.String,
+});
+export type OrganizationInfo = typeof OrganizationInfo.Type;
+
+/** The organizations a sign-in session belongs to, as the Rivet CLI lists them. */
+export const listOrganizations = (auth: CloudAuth) =>
+  get(
+    auth,
+    "/oauth/organizations",
+    Schema.Struct({ organizations: Schema.Array(OrganizationInfo) }),
+  ).pipe(Effect.map((list) => list.organizations));
 
 /** One cluster by its name. */
-export const getCluster = (token: Redacted.Redacted<string>, cluster: string) =>
-  get(token, `/v2/clusters/${encodeURIComponent(cluster)}`, ClusterInfo);
+export const getCluster = (auth: CloudAuth, cluster: string) =>
+  get(auth, `/v2/clusters/${encodeURIComponent(cluster)}`, ClusterInfo);
 
 /**
  * The client id Rivet Cloud's device sign-in accepts. It is the Rivet CLI's:
@@ -204,9 +228,9 @@ const Region = Schema.Struct({
 });
 
 /** The regions a cluster runs in. */
-export const listRegions = (token: Redacted.Redacted<string>, cluster: string) =>
+export const listRegions = (auth: CloudAuth, cluster: string) =>
   get(
-    token,
+    auth,
     `/v2/clusters/${encodeURIComponent(cluster)}/regions`,
     Schema.Struct({ items: Schema.Array(Region) }),
   ).pipe(Effect.map((list) => list.items));
@@ -236,14 +260,14 @@ export type BuildInfo = typeof BuildInfo.Type;
 const buildsPath = (cluster: string) => `/v2/clusters/${encodeURIComponent(cluster)}/builds`;
 
 /** Every build on the cluster. */
-export const listBuilds = (token: Redacted.Redacted<string>, cluster: string) =>
-  get(token, buildsPath(cluster), Schema.Struct({ items: Schema.Array(BuildInfo) })).pipe(
+export const listBuilds = (auth: CloudAuth, cluster: string) =>
+  get(auth, buildsPath(cluster), Schema.Struct({ items: Schema.Array(BuildInfo) })).pipe(
     Effect.map((list) => list.items),
   );
 
 /** Register a build; its image tarball goes to `upload_url`. */
 export const createBuild = (
-  token: Redacted.Redacted<string>,
+  auth: CloudAuth,
   cluster: string,
   body: { readonly image: string; readonly content_length: number; readonly content_md5: string },
 ) =>
@@ -251,7 +275,7 @@ export const createBuild = (
     "POST",
     buildsPath(cluster),
     Schema.Struct({ build_id: Schema.String, upload_url: Schema.String }),
-    { token, body },
+    { auth, body },
   );
 
 /** Upload a build's image tarball: one PUT, with its MD5. */
@@ -284,16 +308,16 @@ export const uploadBuild = Effect.fn("RivetCloud.uploadBuild")(function* (
 });
 
 /** Ask Rivet to verify an uploaded build and prepare it. */
-export const completeBuild = (token: Redacted.Redacted<string>, cluster: string, build: string) =>
-  sendVoid("POST", `${buildsPath(cluster)}/${encodeURIComponent(build)}/complete`, { token });
+export const completeBuild = (auth: CloudAuth, cluster: string, build: string) =>
+  sendVoid("POST", `${buildsPath(cluster)}/${encodeURIComponent(build)}/complete`, { auth });
 
 /** One build and where it is in its lifecycle. */
-export const getBuild = (token: Redacted.Redacted<string>, cluster: string, build: string) =>
-  get(token, `${buildsPath(cluster)}/${encodeURIComponent(build)}`, BuildInfo);
+export const getBuild = (auth: CloudAuth, cluster: string, build: string) =>
+  get(auth, `${buildsPath(cluster)}/${encodeURIComponent(build)}`, BuildInfo);
 
 /** Delete a build; refused while a pool runs it or can roll back to it. */
-export const deleteBuild = (token: Redacted.Redacted<string>, cluster: string, build: string) =>
-  sendVoid("DELETE", `${buildsPath(cluster)}/${encodeURIComponent(build)}`, { token });
+export const deleteBuild = (auth: CloudAuth, cluster: string, build: string) =>
+  sendVoid("DELETE", `${buildsPath(cluster)}/${encodeURIComponent(build)}`, { auth });
 
 /** A runner pool: nodes Rivet runs, booted from a build. */
 export const RunnerPoolInfo = Schema.Struct({
@@ -312,16 +336,12 @@ const runnerPoolPath = (cluster: string, region: string, pool: string) =>
   `/v2/clusters/${encodeURIComponent(cluster)}/regions/${encodeURIComponent(region)}/runner-pools/${encodeURIComponent(pool)}`;
 
 /** One runner pool. */
-export const getRunnerPool = (
-  token: Redacted.Redacted<string>,
-  cluster: string,
-  region: string,
-  pool: string,
-) => get(token, runnerPoolPath(cluster, region, pool), RunnerPoolInfo);
+export const getRunnerPool = (auth: CloudAuth, cluster: string, region: string, pool: string) =>
+  get(auth, runnerPoolPath(cluster, region, pool), RunnerPoolInfo);
 
 /** Roll a runner pool out to a build, creating it when it does not exist. */
 export const putRunnerPool = (
-  token: Redacted.Redacted<string>,
+  auth: CloudAuth,
   cluster: string,
   region: string,
   pool: string,
@@ -331,12 +351,8 @@ export const putRunnerPool = (
     readonly machine_type?: string | undefined;
     readonly node_count?: number | undefined;
   },
-) => send("PUT", runnerPoolPath(cluster, region, pool), RunnerPoolInfo, { token, body });
+) => send("PUT", runnerPoolPath(cluster, region, pool), RunnerPoolInfo, { auth, body });
 
 /** Request a runner pool's removal. */
-export const deleteRunnerPool = (
-  token: Redacted.Redacted<string>,
-  cluster: string,
-  region: string,
-  pool: string,
-) => sendVoid("DELETE", runnerPoolPath(cluster, region, pool), { token });
+export const deleteRunnerPool = (auth: CloudAuth, cluster: string, region: string, pool: string) =>
+  sendVoid("DELETE", runnerPoolPath(cluster, region, pool), { auth });

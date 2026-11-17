@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationJobRequest extends Omit<
-  dataproc.AccessJobProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessJobProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,14 +17,14 @@ export interface AccessSparkApplicationJobRequest extends Omit<
 }
 
 export type AccessSparkApplicationJobShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationJobRequest,
   ) => Effect.Effect<
-    dataproc.AccessSparkApplicationJobResponse | dataproc.AccessSessionSparkApplicationJobResponse,
-    | dataproc.AccessJobProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessJobProjectsLocationsSessionsSparkApplicationsError,
+    dataproc.AccessSessionSparkApplicationJobResponse | dataproc.AccessSparkApplicationJobResponse,
+    | dataproc.AccessJobProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessJobProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -32,13 +32,13 @@ export type AccessSparkApplicationJobShape = (
 /**
  * Obtain data corresponding to a spark job for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationJobHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationJobHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessJob`
  * ```typescript
- * const accessSparkApplicationJob = yield* GCP.Dataproc.AccessSparkApplicationJob(batch);
+ * const accessSparkApplicationJob = yield* GCP.Dataproc.AccessSparkApplicationJob(session);
  * const response = yield* accessSparkApplicationJob({ sparkApplication: "..." });
  * ```
  *
@@ -67,15 +67,15 @@ export const AccessSparkApplicationJobHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationJob",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessJobProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessJobProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessJobProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessJobProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

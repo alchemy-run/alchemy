@@ -133,6 +133,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ResolveAuthProviderAuthorization (agentidentity.projects.locations.authProviders.resolveAuthorization)",
+        () => probe("ResolveAuthProviderAuthorization", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "RevokeAuthProviderAuthorization (agentidentity.projects.locations.authProviders.revokeAuthorization)",
         () => probe("RevokeAuthProviderAuthorization", false),
         {

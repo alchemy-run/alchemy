@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
-export interface DeleteSinkRequest extends Omit<logging.DeleteProjectsSinksRequest, "sinkName"> {
+export interface DeleteSinkRequest extends Omit<logging.DeleteSinksRequest, "sinkName"> {
   /** Id of the sink (`sinks/{sink}`). */
   sink: string;
 }
@@ -14,7 +14,7 @@ export interface DeleteSinkRequest extends Omit<logging.DeleteProjectsSinksReque
 export type DeleteSinkShape = () => Effect.Effect<
   (
     request: DeleteSinkRequest,
-  ) => Effect.Effect<logging.Empty, logging.DeleteProjectsSinksError, RuntimeContext>
+  ) => Effect.Effect<logging.Empty, logging.DeleteSinksError, RuntimeContext>
 >;
 
 /**
@@ -53,7 +53,7 @@ export const DeleteSinkHttp = Layer.effect(
     tag: "GCP.Logging.DeleteSink",
     variants: [
       {
-        operation: logging.deleteProjectsSinks,
+        operation: logging.deleteSinks,
         param: "sinkName",
         children: [["sinks", "sink"]],
         role: "roles/logging.configWriter",

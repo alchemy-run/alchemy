@@ -6,8 +6,7 @@ import { Activity } from "effect/workflow";
 // One aggregate and one view definition, used by two independent models.
 export class Opened extends Domain.Event("Opened", { owner: Schema.String }) {}
 export class Open extends Domain.Command("Open", {
-  target: Schema.String,
-  input: { owner: Schema.String },
+  input: { id: Schema.String, owner: Schema.String },
   events: [Opened],
 }) {}
 export class Account extends Domain.Aggregate("Account", {
@@ -15,6 +14,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Open],
+  keyOf: (command) => command.id,
   decide: { Open: (_, { owner }) => [new Opened({ owner })] },
   evolve: { Opened: (_, { owner }) => ({ owner }) },
 }) {}
@@ -40,7 +40,7 @@ export const OpenAccountLive = OpenAccount.toLayer(
     return Effect.fn(function* ({ key, owner }) {
       yield* Activity.make({
         name: "open",
-        execute: accounts.send(key, new Open({ owner })).pipe(Effect.asVoid),
+        execute: accounts.send(new Open({ id: key, owner })).pipe(Effect.asVoid),
       });
     });
   }),

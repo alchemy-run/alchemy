@@ -25,7 +25,7 @@ export type ListDbFrameworkComplianceSummariesShape = () => Effect.Effect<
 >;
 
 /**
- * Lists the framework compliance summary for a given scope.
+ * Lists the compliance summaries of the frameworks that are deployed in a Data Boundary scope (an organization, folder, or project).
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
  * Provide {@link ListDbFrameworkComplianceSummariesHttp}. The host gets `roles/assuredworkloads.reader` on the project.

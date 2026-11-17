@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface ReportWorkItemStatusRequest extends Omit<
-  dataflow.ReportStatusProjectsJobsWorkItemsRequest,
+  dataflow.ReportStatusProjectsLocationsJobsWorkItemsRequest,
   "projectId"
 > {}
 
@@ -16,7 +16,7 @@ export type ReportWorkItemStatusShape = () => Effect.Effect<
     request: ReportWorkItemStatusRequest,
   ) => Effect.Effect<
     dataflow.ReportWorkItemStatusResponse,
-    dataflow.ReportStatusProjectsJobsWorkItemsError,
+    dataflow.ReportStatusProjectsLocationsJobsWorkItemsError,
     RuntimeContext
   >
 >;
@@ -31,7 +31,7 @@ export type ReportWorkItemStatusShape = () => Effect.Effect<
  * **Example:** Call `workItems.reportStatus`
  * ```typescript
  * const reportWorkItemStatus = yield* GCP.Dataflow.ReportWorkItemStatus();
- * const response = yield* reportWorkItemStatus({ jobId: "..." });
+ * const response = yield* reportWorkItemStatus({ location: "...", jobId: "..." });
  * ```
  *
  * @binding
@@ -59,7 +59,7 @@ export const ReportWorkItemStatusHttp = Layer.effect(
     tag: "GCP.Dataflow.ReportWorkItemStatus",
     variants: [
       {
-        operation: dataflow.reportStatusProjectsJobsWorkItems,
+        operation: dataflow.reportStatusProjectsLocationsJobsWorkItems,
         projectField: "projectId",
         role: "roles/dataflow.worker",
       },

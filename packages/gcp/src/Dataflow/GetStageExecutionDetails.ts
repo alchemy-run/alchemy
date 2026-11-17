@@ -31,7 +31,7 @@ export type GetStageExecutionDetailsShape = () => Effect.Effect<
  * **Example:** Call `stages.getExecutionDetails`
  * ```typescript
  * const getStageExecutionDetails = yield* GCP.Dataflow.GetStageExecutionDetails();
- * const response = yield* getStageExecutionDetails({ stageId: "...", jobId: "...", location: "..." });
+ * const response = yield* getStageExecutionDetails({ location: "...", jobId: "...", stageId: "..." });
  * ```
  *
  * @binding

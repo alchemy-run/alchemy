@@ -26,17 +26,22 @@ You need a [configured Axiom profile](/axiom/setup).
 import * as Alchemy from "alchemy";
 +import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
-+import * as Layer from "effect/Layer";
+import * as Layer from "effect/Layer";
 import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
--  { providers: Cloudflare.providers(), state: Cloudflare.state() },
-+  {
-+    providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),
-+    state: Cloudflare.state(),
-+  },
+  {
+-    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
++    providers: Layer.mergeAll(
++      Cloudflare.providers(),
++      DomainCloudflare.providers(),
++      Axiom.providers(),
++    ),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     const app = yield* Cloudflare.Website.Foldkit("BankApp", {
@@ -91,7 +96,7 @@ Dataset names are global to your Axiom org. If you deploy more than one stage, g
 // src/BankWorker.ts
 +import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
@@ -205,7 +210,7 @@ The Worker will forward spans only from signed-in customers, so a stranger can't
 // src/BankWorker.ts
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 +import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

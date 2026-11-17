@@ -11,21 +11,21 @@ import type { FolderBucketsLink } from "./FolderBucketsLink.ts";
 import type { OrganizationBucketsLink } from "./OrganizationBucketsLink.ts";
 
 export interface GetLinkRequest extends Omit<
-  logging.GetProjectsLocationsBucketsLinksRequest,
+  logging.GetBillingAccountsLocationsBucketsLinksRequest,
   "name"
 > {}
 
 export type GetLinkShape = (
-  resource: BucketsLink | BillingBucketsLink | FolderBucketsLink | OrganizationBucketsLink,
+  resource: BillingBucketsLink | OrganizationBucketsLink | BucketsLink | FolderBucketsLink,
 ) => Effect.Effect<
   (
     request?: GetLinkRequest,
   ) => Effect.Effect<
     logging.Link,
-    | logging.GetProjectsLocationsBucketsLinksError
     | logging.GetBillingAccountsLocationsBucketsLinksError
-    | logging.GetFoldersLocationsBucketsLinksError
-    | logging.GetOrganizationsLocationsBucketsLinksError,
+    | logging.GetOrganizationsLocationsBucketsLinksError
+    | logging.GetProjectsLocationsBucketsLinksError
+    | logging.GetFoldersLocationsBucketsLinksError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type GetLinkShape = (
 /**
  * Gets a link.
  *
- * Bind it to a {@link BucketsLink} or {@link BillingBucketsLink} or {@link FolderBucketsLink} or {@link OrganizationBucketsLink} and provide {@link GetLinkHttp}. The
+ * Bind it to a {@link BillingBucketsLink} or {@link OrganizationBucketsLink} or {@link BucketsLink} or {@link FolderBucketsLink} and provide {@link GetLinkHttp}. The
  * host gets `roles/logging.linkViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `links.get`
  * ```typescript
- * const getLink = yield* GCP.Logging.GetLink(bucketsLink);
+ * const getLink = yield* GCP.Logging.GetLink(billingBucketsLink);
  * const response = yield* getLink();
  * ```
  *
@@ -62,26 +62,26 @@ export const GetLinkHttp = Layer.effect(
     tag: "GCP.Logging.GetLink",
     variants: [
       {
-        resource: "GCP.Logging.BucketsLink",
-        operation: logging.getProjectsLocationsBucketsLinks,
-        param: "name",
-        iam: { role: "roles/logging.linkViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingBucketsLink",
         operation: logging.getBillingAccountsLocationsBucketsLinks,
         param: "name",
         iam: { role: "roles/logging.linkViewer" },
       },
       {
-        resource: "GCP.Logging.FolderBucketsLink",
-        operation: logging.getFoldersLocationsBucketsLinks,
+        resource: "GCP.Logging.OrganizationBucketsLink",
+        operation: logging.getOrganizationsLocationsBucketsLinks,
         param: "name",
         iam: { role: "roles/logging.linkViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationBucketsLink",
-        operation: logging.getOrganizationsLocationsBucketsLinks,
+        resource: "GCP.Logging.BucketsLink",
+        operation: logging.getProjectsLocationsBucketsLinks,
+        param: "name",
+        iam: { role: "roles/logging.linkViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucketsLink",
+        operation: logging.getFoldersLocationsBucketsLinks,
         param: "name",
         iam: { role: "roles/logging.linkViewer" },
       },

@@ -19,16 +19,18 @@ export default class ComposerGeneratedHost extends GCP.Function<ComposerGenerate
     const p0 = yield* GCP.Composer.CheckEnvironmentUpgrade(Airflow);
     const p1 = yield* GCP.Composer.DatabaseEnvironmentFailover(Airflow);
     const p2 = yield* GCP.Composer.FetchEnvironmentDatabaseProperties(Airflow);
-    const p3 = yield* GCP.Composer.ListEnvironments();
-    const p4 = yield* GCP.Composer.ListEnvironmentUserWorkloadsConfigMaps(Airflow);
-    const p5 = yield* GCP.Composer.ListEnvironmentUserWorkloadsSecrets(Airflow);
-    const p6 = yield* GCP.Composer.ListEnvironmentWorkloads(Airflow);
-    const p7 = yield* GCP.Composer.ListImageVersions();
-    const p8 = yield* GCP.Composer.LoadEnvironmentSnapshot(Airflow);
-    const p9 = yield* GCP.Composer.PollEnvironmentAirflowCommand(Airflow);
-    const p10 = yield* GCP.Composer.RestartEnvironmentWebServer(Airflow);
-    const p11 = yield* GCP.Composer.SaveEnvironmentSnapshot(Airflow);
-    const p12 = yield* GCP.Composer.StopEnvironmentAirflowCommand(Airflow);
+    const p3 = yield* GCP.Composer.HibernateEnvironment(Airflow);
+    const p4 = yield* GCP.Composer.ListEnvironments();
+    const p5 = yield* GCP.Composer.ListEnvironmentUserWorkloadsConfigMaps(Airflow);
+    const p6 = yield* GCP.Composer.ListEnvironmentUserWorkloadsSecrets(Airflow);
+    const p7 = yield* GCP.Composer.ListEnvironmentWorkloads(Airflow);
+    const p8 = yield* GCP.Composer.ListImageVersions();
+    const p9 = yield* GCP.Composer.LoadEnvironmentSnapshot(Airflow);
+    const p10 = yield* GCP.Composer.PollEnvironmentAirflowCommand(Airflow);
+    const p11 = yield* GCP.Composer.RestartEnvironmentWebServer(Airflow);
+    const p12 = yield* GCP.Composer.ResumeEnvironment(Airflow);
+    const p13 = yield* GCP.Composer.SaveEnvironmentSnapshot(Airflow);
+    const p14 = yield* GCP.Composer.StopEnvironmentAirflowCommand(Airflow);
     return {
       fetch: serveProbes({
         CheckEnvironmentUpgrade: probeOutcome(
@@ -38,25 +40,31 @@ export default class ComposerGeneratedHost extends GCP.Function<ComposerGenerate
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         FetchEnvironmentDatabaseProperties: probeOutcome(Retry.none(p2({} as never))),
-        ListEnvironments: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListEnvironmentUserWorkloadsConfigMaps: probeOutcome(Retry.none(p4({} as never))),
-        ListEnvironmentUserWorkloadsSecrets: probeOutcome(Retry.none(p5({} as never))),
-        ListEnvironmentWorkloads: probeOutcome(Retry.none(p6({} as never))),
-        ListImageVersions: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
-        LoadEnvironmentSnapshot: probeOutcome(
-          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        HibernateEnvironment: probeOutcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        PollEnvironmentAirflowCommand: probeOutcome(
+        ListEnvironments: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListEnvironmentUserWorkloadsConfigMaps: probeOutcome(Retry.none(p5({} as never))),
+        ListEnvironmentUserWorkloadsSecrets: probeOutcome(Retry.none(p6({} as never))),
+        ListEnvironmentWorkloads: probeOutcome(Retry.none(p7({} as never))),
+        ListImageVersions: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        LoadEnvironmentSnapshot: probeOutcome(
           Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RestartEnvironmentWebServer: probeOutcome(
+        PollEnvironmentAirflowCommand: probeOutcome(
           Retry.none(p10({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        SaveEnvironmentSnapshot: probeOutcome(
+        RestartEnvironmentWebServer: probeOutcome(
           Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        StopEnvironmentAirflowCommand: probeOutcome(
+        ResumeEnvironment: probeOutcome(
           Retry.none(p12({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        SaveEnvironmentSnapshot: probeOutcome(
+          Retry.none(p13({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StopEnvironmentAirflowCommand: probeOutcome(
+          Retry.none(p14({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
       }),
     };
@@ -67,6 +75,7 @@ export default class ComposerGeneratedHost extends GCP.Function<ComposerGenerate
           GCP.Composer.CheckEnvironmentUpgradeHttp,
           GCP.Composer.DatabaseEnvironmentFailoverHttp,
           GCP.Composer.FetchEnvironmentDatabasePropertiesHttp,
+          GCP.Composer.HibernateEnvironmentHttp,
           GCP.Composer.ListEnvironmentsHttp,
           GCP.Composer.ListEnvironmentUserWorkloadsConfigMapsHttp,
           GCP.Composer.ListEnvironmentUserWorkloadsSecretsHttp,
@@ -75,6 +84,7 @@ export default class ComposerGeneratedHost extends GCP.Function<ComposerGenerate
           GCP.Composer.LoadEnvironmentSnapshotHttp,
           GCP.Composer.PollEnvironmentAirflowCommandHttp,
           GCP.Composer.RestartEnvironmentWebServerHttp,
+          GCP.Composer.ResumeEnvironmentHttp,
           GCP.Composer.SaveEnvironmentSnapshotHttp,
           GCP.Composer.StopEnvironmentAirflowCommandHttp,
         ),

@@ -168,6 +168,14 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "ReprovisionBucket (observability.projects.locations.buckets.reprovision)",
+        () => probe("ReprovisionBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:observability", "live"],
+          timeout: 600_000,
+        },
+      );
     });
 
     describe("TraceScope", { concurrent: true }, () => {

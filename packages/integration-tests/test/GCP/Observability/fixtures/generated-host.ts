@@ -29,6 +29,7 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
     const p10 = yield* GCP.Observability.ListTraceScopes();
     const p11 = yield* GCP.Observability.PatchBucket();
     const p12 = yield* GCP.Observability.PatchScope();
+    const p13 = yield* GCP.Observability.ReprovisionBucket();
     return {
       fetch: serveProbes({
         CreateBucket: probeOutcome(
@@ -103,6 +104,15 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
             } as never),
           ),
         ),
+        ReprovisionBucket: probeOutcome(
+          Retry.none(
+            p13({
+              bucket: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
@@ -122,6 +132,7 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
           GCP.Observability.ListTraceScopesHttp,
           GCP.Observability.PatchBucketHttp,
           GCP.Observability.PatchScopeHttp,
+          GCP.Observability.ReprovisionBucketHttp,
         ),
       ),
     ),

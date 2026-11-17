@@ -136,6 +136,32 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("Dataset", { concurrent: true }, () => {
+      test.provider("GetDataset (aiplatform.datasets.get)", () => probe("GetDataset", true), {
+        tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListDatasetVersions (aiplatform.datasets.datasetVersions.list)",
+        () => probe("ListDatasetVersions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("DatasetsDatasetVersion", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetDatasetVersion (aiplatform.datasets.datasetVersions.get): DatasetsDatasetVersion: needs GCP_TEST_AIPLATFORM_DATASET_VERSION (an external prerequisite the testing project lacks)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "RestoreDatasetVersion (aiplatform.datasets.datasetVersions.restore): DatasetsDatasetVersion: needs GCP_TEST_AIPLATFORM_DATASET_VERSION (an external prerequisite the testing project lacks)",
+        () => Effect.void,
+      );
+    });
+
     describe("DeploymentResourcePool", { concurrent: true }, () => {
       test.provider(
         "GetDeploymentResourcePool (aiplatform.projects.locations.deploymentResourcePools.get)",
@@ -1012,6 +1038,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "BatchModelEmbedContents (aiplatform.projects.locations.publishers.models.batchEmbedContents)",
+        () => probe("BatchModelEmbedContents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "BatchPipelineJobCancel (aiplatform.projects.locations.pipelineJobs.batchCancel)",
         () => probe("BatchPipelineJobCancel", false),
         {
@@ -1068,6 +1102,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "CreateInteraction (aiplatform.projects.locations.interactions.create)",
+        () => probe("CreateInteraction", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "DeleteDataset (aiplatform.projects.locations.datasets.delete)",
         () => probe("DeleteDataset", false),
         {
@@ -1094,6 +1136,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "DeleteEvaluationMetric (aiplatform.projects.locations.evaluationMetrics.delete)",
         () => probe("DeleteEvaluationMetric", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteInteraction (aiplatform.projects.locations.interactions.delete)",
+        () => probe("DeleteInteraction", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
@@ -1180,24 +1230,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "GetDataset (aiplatform.projects.locations.datasets.get)",
-        () => probe("GetDataset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "GetDatasetAnnotationSpec (aiplatform.projects.locations.datasets.annotationSpecs.get)",
         () => probe("GetDatasetAnnotationSpec", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetDatasetVersion (aiplatform.projects.locations.datasets.datasetVersions.get)",
-        () => probe("GetDatasetVersion", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
@@ -1366,14 +1400,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListDatasetSavedQueries (aiplatform.projects.locations.datasets.savedQueries.list)",
         () => probe("ListDatasetSavedQueries", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListDatasetVersions (aiplatform.projects.locations.datasets.datasetVersions.list)",
-        () => probe("ListDatasetVersions", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
@@ -1760,14 +1786,6 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "RestoreDatasetVersion (aiplatform.projects.locations.datasets.datasetVersions.restore)",
-        () => probe("RestoreDatasetVersion", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "RetrieveMemoryBankMemory (aiplatform.projects.locations.memoryBanks.memories.retrieve)",
         () => probe("RetrieveMemoryBankMemory", false),
         {
@@ -1810,6 +1828,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ServerModelStreamingPredict (aiplatform.projects.locations.publishers.models.serverStreamingPredict)",
         () => probe("ServerModelStreamingPredict", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "SetNotebookRuntimeTemplateDefault (aiplatform.projects.locations.notebookRuntimeTemplates.setDefault)",
+        () => probe("SetNotebookRuntimeTemplateDefault", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
@@ -2497,103 +2523,51 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
+        "aiplatform.media.upload: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.generateContent: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.fetchPredictOperation: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.streamGenerateContent: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.predictLongRunning: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.countTokens: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.predict: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.computeTokens: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.get: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "aiplatform.batchPredictionJobs.get: addressed under `batchPredictionJobs/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.projects.locations.endpoints.google.science.inference: `projects/*/locations/*/endpoints/google` has no Alchemy resource to bind",
+        "aiplatform.endpoints.fetchPredictOperation: addressed under `endpoints/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.projects.locations.endpoints.openapi.embeddings: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.endpoints.openapi.completions: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.endpoints.openapi.responses: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.servingProfiles.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.servingProfiles.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.servingProfiles.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.servingProfiles.patch: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.servingProfiles.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.reasoningEngines.query: the hand-written binding of the same name reaches the same resource",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.reasoningEngines.get: the hand-written binding of the same name reaches the same resource",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.reasoningEngines.sandboxEnvironmentTemplates.get: the hand-written binding of the same name reaches the same resource",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.agents.get: no distilled operation getProjectsLocationsAgents",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.agents.list: no distilled operation listProjectsLocationsAgents",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.persistentResources.reboot: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.publishers.v1.responses: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.publishers.v1.responses.delete: `projects/*/locations/*/publishers/*/v1/responses/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.publishers.v1.responses.compact: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.publishers.v1.responses.get: `projects/*/locations/*/publishers/*/v1/responses/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.datasets.get: name collision on GetDataset",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.datasets.datasetVersions.get: name collision on GetDatasetVersion",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.datasets.datasetVersions.restore: name collision on RestoreDatasetVersion",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.datasets.datasetVersions.list: name collision on ListDatasetVersions",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.endpoints.predict: addressed under `endpoints/`, not a project",
+        "aiplatform.endpoints.streamGenerateContent: addressed under `endpoints/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -2609,15 +2583,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.endpoints.fetchPredictOperation: addressed under `endpoints/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "aiplatform.endpoints.predictLongRunning: addressed under `endpoints/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.endpoints.streamGenerateContent: addressed under `endpoints/`, not a project",
+        "aiplatform.endpoints.predict: addressed under `endpoints/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -2625,47 +2595,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.media.upload: no predefined role grants its permission",
+        "aiplatform.interactions.getStream: addressed under `interactions/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.publishers.models.computeTokens: addressed under `publishers/`, not a project",
+        "aiplatform.interactions.getPoll: addressed under `interactions/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.publishers.models.streamGenerateContent: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.publishers.models.get: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.publishers.models.predictLongRunning: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.publishers.models.generateContent: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.publishers.models.fetchPredictOperation: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.publishers.models.predict: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.publishers.models.countTokens: addressed under `publishers/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.reasoningEngines.delete: addressed under `reasoningEngines/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.reasoningEngines.streamQuery: addressed under `reasoningEngines/`, not a project",
+        "aiplatform.interactions.cancel: addressed under `interactions/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -2677,27 +2615,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.reasoningEngines.patch: addressed under `reasoningEngines/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "aiplatform.reasoningEngines.asyncQuery: addressed under `reasoningEngines/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.delete: addressed under `reasoningEngines/`, not a project",
+        "aiplatform.reasoningEngines.patch: addressed under `reasoningEngines/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.get: addressed under `reasoningEngines/`, not a project",
+        "aiplatform.reasoningEngines.streamQuery: addressed under `reasoningEngines/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.list: addressed under `reasoningEngines/`, not a project",
+        "aiplatform.reasoningEngines.delete: addressed under `reasoningEngines/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.reasoningEngines.sandboxEnvironments.list: addressed under `reasoningEngines/`, not a project",
+        "aiplatform.reasoningEngines.runtimeRevisions.query: addressed under `reasoningEngines/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -2705,7 +2639,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.reasoningEngines.runtimeRevisions.query: addressed under `reasoningEngines/`, not a project",
+        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.delete: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.list: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.get: addressed under `reasoningEngines/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -2717,11 +2659,143 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.batchPredictionJobs.list: its path names no project",
+        "aiplatform.reasoningEngines.sandboxEnvironments.list: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.files.upload: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.files.download: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.files.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.files.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.files.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses.get: `projects/*/locations/*/publishers/*/v1/responses/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses.compact: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses.delete: `projects/*/locations/*/publishers/*/v1/responses/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.agents.list: no distilled operation listProjectsLocationsAgents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.agents.get: no distilled operation getProjectsLocationsAgents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.reasoningEngines.query: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.reasoningEngines.get: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.reasoningEngines.sandboxEnvironmentTemplates.get: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.google.science.inference: `projects/*/locations/*/endpoints/google` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.openapi.completions: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.openapi.responses: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.openapi.embeddings: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.persistentResources.reboot: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.datasets.get: name collision on GetDataset",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.datasets.datasetVersions.get: name collision on GetDatasetVersion",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.datasets.datasetVersions.list: name collision on ListDatasetVersions",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.datasets.datasetVersions.restore: name collision on RestoreDatasetVersion",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.interactions.createStream: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.interactionsHttp.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.interactionsHttp.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.interactionsHttp.cancel: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
         "aiplatform.batchPredictionJobs.create: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.batchPredictionJobs.list: its path names no project",
         () => Effect.void,
       );
       test.provider.skip("aiplatform.datasets.list: its path names no project", () => Effect.void);
@@ -2730,15 +2804,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "aiplatform.evaluateDataset: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "aiplatform.evaluateInstances: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
         "aiplatform.generateInstanceRubrics: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.evaluateDataset: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

@@ -28,7 +28,7 @@ export type GetWorkloadViolationShape = (
 >;
 
 /**
- * Retrieves Assured Workload Violation based on ID.
+ * Retrieves an Assured Workloads violation by its resource name.
  *
  * Bind it to a {@link Workload} and provide {@link GetWorkloadViolationHttp}. The
  * host gets `roles/assuredworkloads.reader` on the project (the service has no per-resource IAM policy).

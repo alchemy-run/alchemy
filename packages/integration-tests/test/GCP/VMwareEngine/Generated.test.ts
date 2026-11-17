@@ -359,11 +359,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "vmwareengine.projects.locations.announcements.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "vmwareengine.projects.locations.announcements.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "vmwareengine.projects.locations.announcements.get: no predefined role grants its permission",
+        "vmwareengine.projects.locations.capacityAllocations.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

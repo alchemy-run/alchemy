@@ -4,24 +4,22 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeGcpProjectBinding } from "../HttpBinding.ts";
+import { makeGcpBinding } from "../HttpBinding.ts";
+import type { Dataset } from "./Dataset.ts";
 
 export interface ListDatasetVersionsRequest extends Omit<
-  aiplatform.ListProjectsLocationsDatasetsDatasetVersionsRequest,
+  aiplatform.ListDatasetsDatasetVersionsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the dataset (`datasets/{dataset}`). */
-  dataset: string;
-}
+> {}
 
-export type ListDatasetVersionsShape = () => Effect.Effect<
+export type ListDatasetVersionsShape = (
+  resource: Dataset,
+) => Effect.Effect<
   (
-    request: ListDatasetVersionsRequest,
+    request?: ListDatasetVersionsRequest,
   ) => Effect.Effect<
     aiplatform.GoogleCloudAiplatformV1ListDatasetVersionsResponse,
-    aiplatform.ListProjectsLocationsDatasetsDatasetVersionsError,
+    aiplatform.ListDatasetsDatasetVersionsError,
     RuntimeContext
   >
 >;
@@ -29,14 +27,14 @@ export type ListDatasetVersionsShape = () => Effect.Effect<
 /**
  * Lists DatasetVersions in a Dataset.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListDatasetVersionsHttp}. The host gets `roles/aiplatform.viewer` on the project.
+ * Bind it to a {@link Dataset} and provide {@link ListDatasetVersionsHttp}. The
+ * host gets `roles/aiplatform.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `datasetVersions.list`
  * ```typescript
- * const listDatasetVersions = yield* GCP.AIPlatform.ListDatasetVersions();
- * const response = yield* listDatasetVersions({ location: "us-central1", dataset: "..." });
+ * const listDatasetVersions = yield* GCP.AIPlatform.ListDatasetVersions(dataset);
+ * const response = yield* listDatasetVersions();
  * ```
  *
  * @binding
@@ -60,15 +58,14 @@ export const ListDatasetVersions = Binding.Service<ListDatasetVersions>(
  */
 export const ListDatasetVersionsHttp = Layer.effect(
   ListDatasetVersions,
-  makeGcpProjectBinding<ListDatasetVersionsShape>({
+  makeGcpBinding<ListDatasetVersionsShape>({
     tag: "GCP.AIPlatform.ListDatasetVersions",
     variants: [
       {
-        operation: aiplatform.listProjectsLocationsDatasetsDatasetVersions,
+        resource: "GCP.AIPlatform.Dataset",
+        operation: aiplatform.listDatasetsDatasetVersions,
         param: "parent",
-        location: true,
-        children: [["datasets", "dataset"]],
-        role: "roles/aiplatform.viewer",
+        iam: { role: "roles/aiplatform.viewer" },
       },
     ],
   }),

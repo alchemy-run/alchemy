@@ -89,11 +89,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "policyanalyzer.folders.locations.activityTypes.activities.query: addressed under `folders/`, not a project",
+        "policyanalyzer.organizations.locations.activityTypes.activities.query: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "policyanalyzer.organizations.locations.activityTypes.activities.query: addressed under `organizations/`, not a project",
+        "policyanalyzer.folders.locations.activityTypes.activities.query: addressed under `folders/`, not a project",
         () => Effect.void,
       );
     });

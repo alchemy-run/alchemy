@@ -39,14 +39,20 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
       fetch: serveProbes({
         AggregatedJob: probeOutcome(Retry.none(p0({} as never))),
         CreateJob: probeOutcome(
-          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(
+            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
         CreateTemplate: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         GetDebugConfig: probeOutcome(
           Retry.none(
-            p3({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p3({
+              jobId: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
         GetDebugWorkerStacktraces: probeOutcome(
@@ -58,18 +64,24 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
             } as never),
           ),
         ),
-        GetJob: probeOutcome(Retry.none(p5({ jobId: "alchemy-missing" } as never))),
-        GetJobExecutionDetails: probeOutcome(
-          Retry.none(p6({ location: "us-central1", jobId: "alchemy-missing" } as never)),
+        GetJob: probeOutcome(
+          Retry.none(p5({ jobId: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetJobMetrics: probeOutcome(Retry.none(p7({ jobId: "alchemy-missing" } as never))),
-        GetSnapshot: probeOutcome(Retry.none(p8({ snapshotId: "alchemy-missing" } as never))),
+        GetJobExecutionDetails: probeOutcome(
+          Retry.none(p6({ jobId: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetJobMetrics: probeOutcome(
+          Retry.none(p7({ jobId: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetSnapshot: probeOutcome(
+          Retry.none(p8({ snapshotId: "alchemy-missing", location: "us-central1" } as never)),
+        ),
         GetStageExecutionDetails: probeOutcome(
           Retry.none(
             p9({
-              stageId: "alchemy-missing",
-              jobId: "alchemy-missing",
               location: "us-central1",
+              jobId: "alchemy-missing",
+              stageId: "alchemy-missing",
             } as never),
           ),
         ),
@@ -86,23 +98,37 @@ export default class DataflowGeneratedHost extends GCP.Function<DataflowGenerate
         ),
         LeaseJobWorkItem: probeOutcome(
           Retry.none(
-            p13({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p13({
+              jobId: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
-        ListJobMessages: probeOutcome(Retry.none(p14({ jobId: "alchemy-missing" } as never))),
-        ListJobs: probeOutcome(Retry.none(p15({} as never))),
-        ListJobSnapshots: probeOutcome(
-          Retry.none(p16({ location: "us-central1", jobId: "alchemy-missing" } as never)),
+        ListJobMessages: probeOutcome(
+          Retry.none(p14({ location: "us-central1", jobId: "alchemy-missing" } as never)),
         ),
-        ListSnapshots: probeOutcome(Retry.none(p17({} as never))),
+        ListJobs: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListJobSnapshots: probeOutcome(
+          Retry.none(p16({ jobId: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListSnapshots: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
         ReportWorkItemStatus: probeOutcome(
           Retry.none(
-            p18({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p18({
+              location: "us-central1",
+              jobId: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
         SnapshotJob: probeOutcome(
           Retry.none(
-            p19({ jobId: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p19({
+              jobId: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
           ),
         ),
       }),

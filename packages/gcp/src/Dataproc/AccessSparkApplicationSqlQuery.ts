@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface AccessSparkApplicationSqlQueryRequest extends Omit<
-  dataproc.AccessSqlQueryProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.AccessSqlQueryProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface AccessSparkApplicationSqlQueryRequest extends Omit<
 }
 
 export type AccessSparkApplicationSqlQueryShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: AccessSparkApplicationSqlQueryRequest,
   ) => Effect.Effect<
-    | dataproc.AccessSparkApplicationSqlQueryResponse
-    | dataproc.AccessSessionSparkApplicationSqlQueryResponse,
-    | dataproc.AccessSqlQueryProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.AccessSqlQueryProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.AccessSessionSparkApplicationSqlQueryResponse
+    | dataproc.AccessSparkApplicationSqlQueryResponse,
+    | dataproc.AccessSqlQueryProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.AccessSqlQueryProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type AccessSparkApplicationSqlQueryShape = (
 /**
  * Obtain data corresponding to a particular SQL Query for a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link AccessSparkApplicationSqlQueryHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link AccessSparkApplicationSqlQueryHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.accessSqlQuery`
  * ```typescript
- * const accessSparkApplicationSqlQuery = yield* GCP.Dataproc.AccessSparkApplicationSqlQuery(batch);
+ * const accessSparkApplicationSqlQuery = yield* GCP.Dataproc.AccessSparkApplicationSqlQuery(session);
  * const response = yield* accessSparkApplicationSqlQuery({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const AccessSparkApplicationSqlQueryHttp = Layer.effect(
     tag: "GCP.Dataproc.AccessSparkApplicationSqlQuery",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.accessSqlQueryProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.accessSqlQueryProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.accessSqlQueryProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.accessSqlQueryProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

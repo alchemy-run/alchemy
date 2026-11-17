@@ -11,21 +11,21 @@ import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
 export interface ListBucketLinksRequest extends Omit<
-  logging.ListProjectsLocationsBucketsLinksRequest,
+  logging.ListBillingAccountsLocationsBucketsLinksRequest,
   "parent"
 > {}
 
 export type ListBucketLinksShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
+  resource: BillingBucket | OrganizationLogBucket | LogBucket | FolderBucket,
 ) => Effect.Effect<
   (
     request?: ListBucketLinksRequest,
   ) => Effect.Effect<
     logging.ListLinksResponse,
-    | logging.ListProjectsLocationsBucketsLinksError
     | logging.ListBillingAccountsLocationsBucketsLinksError
-    | logging.ListFoldersLocationsBucketsLinksError
-    | logging.ListOrganizationsLocationsBucketsLinksError,
+    | logging.ListOrganizationsLocationsBucketsLinksError
+    | logging.ListProjectsLocationsBucketsLinksError
+    | logging.ListFoldersLocationsBucketsLinksError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type ListBucketLinksShape = (
 /**
  * Lists links.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link ListBucketLinksHttp}. The
+ * Bind it to a {@link BillingBucket} or {@link OrganizationLogBucket} or {@link LogBucket} or {@link FolderBucket} and provide {@link ListBucketLinksHttp}. The
  * host gets `roles/logging.linkViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `links.list`
  * ```typescript
- * const listBucketLinks = yield* GCP.Logging.ListBucketLinks(logBucket);
+ * const listBucketLinks = yield* GCP.Logging.ListBucketLinks(billingBucket);
  * const response = yield* listBucketLinks();
  * ```
  *
@@ -66,26 +66,26 @@ export const ListBucketLinksHttp = Layer.effect(
     tag: "GCP.Logging.ListBucketLinks",
     variants: [
       {
-        resource: "GCP.Logging.LogBucket",
-        operation: logging.listProjectsLocationsBucketsLinks,
-        param: "parent",
-        iam: { role: "roles/logging.linkViewer" },
-      },
-      {
         resource: "GCP.Logging.BillingBucket",
         operation: logging.listBillingAccountsLocationsBucketsLinks,
         param: "parent",
         iam: { role: "roles/logging.linkViewer" },
       },
       {
-        resource: "GCP.Logging.FolderBucket",
-        operation: logging.listFoldersLocationsBucketsLinks,
+        resource: "GCP.Logging.OrganizationLogBucket",
+        operation: logging.listOrganizationsLocationsBucketsLinks,
         param: "parent",
         iam: { role: "roles/logging.linkViewer" },
       },
       {
-        resource: "GCP.Logging.OrganizationLogBucket",
-        operation: logging.listOrganizationsLocationsBucketsLinks,
+        resource: "GCP.Logging.LogBucket",
+        operation: logging.listProjectsLocationsBucketsLinks,
+        param: "parent",
+        iam: { role: "roles/logging.linkViewer" },
+      },
+      {
+        resource: "GCP.Logging.FolderBucket",
+        operation: logging.listFoldersLocationsBucketsLinks,
         param: "parent",
         iam: { role: "roles/logging.linkViewer" },
       },

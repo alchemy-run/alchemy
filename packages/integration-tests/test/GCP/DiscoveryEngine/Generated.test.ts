@@ -1219,11 +1219,11 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "discoveryengine.billingAccounts.billingAccountLicenseConfigs.distributeLicenseConfig: addressed under `billingAccounts/`, not a project",
+        "discoveryengine.billingAccounts.billingAccountLicenseConfigs.retractLicenseConfig: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "discoveryengine.billingAccounts.billingAccountLicenseConfigs.retractLicenseConfig: addressed under `billingAccounts/`, not a project",
+        "discoveryengine.billingAccounts.billingAccountLicenseConfigs.distributeLicenseConfig: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -1243,7 +1243,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.recrawlUris: name collision on RecrawlSiteSearchEngineUris",
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.enableAdvancedSiteSearch: name collision on EnableSiteSearchEngineAdvancedSiteSearch",
         () => Effect.void,
       );
       test.provider.skip(
@@ -1251,7 +1251,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.enableAdvancedSiteSearch: name collision on EnableSiteSearchEngineAdvancedSiteSearch",
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.recrawlUris: name collision on RecrawlSiteSearchEngineUris",
         () => Effect.void,
       );
       test.provider.skip(

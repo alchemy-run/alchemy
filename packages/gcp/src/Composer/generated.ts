@@ -2,6 +2,7 @@
 export * from "./CheckEnvironmentUpgrade.ts";
 export * from "./DatabaseEnvironmentFailover.ts";
 export * from "./FetchEnvironmentDatabaseProperties.ts";
+export * from "./HibernateEnvironment.ts";
 export * from "./ListEnvironments.ts";
 export * from "./ListEnvironmentUserWorkloadsConfigMaps.ts";
 export * from "./ListEnvironmentUserWorkloadsSecrets.ts";
@@ -10,6 +11,7 @@ export * from "./ListImageVersions.ts";
 export * from "./LoadEnvironmentSnapshot.ts";
 export * from "./PollEnvironmentAirflowCommand.ts";
 export * from "./RestartEnvironmentWebServer.ts";
+export * from "./ResumeEnvironment.ts";
 export * from "./SaveEnvironmentSnapshot.ts";
 export * from "./StopEnvironmentAirflowCommand.ts";
 export * from "./EnvironmentAuditLogs.ts";

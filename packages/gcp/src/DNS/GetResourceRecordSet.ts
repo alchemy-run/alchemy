@@ -27,7 +27,7 @@ export type GetResourceRecordSetShape = () => Effect.Effect<
  * **Example:** Call `resourceRecordSets.get`
  * ```typescript
  * const getResourceRecordSet = yield* GCP.DNS.GetResourceRecordSet();
- * const response = yield* getResourceRecordSet({ name: "...", managedZone: "...", type: "..." });
+ * const response = yield* getResourceRecordSet({ type: "...", name: "...", managedZone: "..." });
  * ```
  *
  * @binding

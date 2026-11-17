@@ -27,7 +27,7 @@ export type GetStoragePoolTypeShape = () => Effect.Effect<
  * **Example:** Call `storagePoolTypes.get`
  * ```typescript
  * const getStoragePoolType = yield* GCP.Compute.GetStoragePoolType();
- * const response = yield* getStoragePoolType({ zone: "...", storagePoolType: "..." });
+ * const response = yield* getStoragePoolType({ storagePoolType: "...", zone: "..." });
  * ```
  *
  * @binding

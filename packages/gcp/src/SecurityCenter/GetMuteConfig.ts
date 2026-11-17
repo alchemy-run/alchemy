@@ -10,34 +10,34 @@ import type { MuteConfig } from "./MuteConfig.ts";
 import type { OrganizationMuteConfig } from "./OrganizationMuteConfig.ts";
 
 export interface GetMuteConfigRequest extends Omit<
-  securitycenter.GetFoldersMuteConfigsRequest,
+  securitycenter.GetOrganizationsMuteConfigsRequest,
   "name"
 > {}
 
 export type GetMuteConfigShape = (
-  resource: FolderMuteConfig | MuteConfig | OrganizationMuteConfig,
+  resource: OrganizationMuteConfig | MuteConfig | FolderMuteConfig,
 ) => Effect.Effect<
   (
     request?: GetMuteConfigRequest,
   ) => Effect.Effect<
     securitycenter.GoogleCloudSecuritycenterV1MuteConfig,
-    | securitycenter.GetFoldersMuteConfigsError
+    | securitycenter.GetOrganizationsMuteConfigsError
     | securitycenter.GetProjectsMuteConfigsError
-    | securitycenter.GetOrganizationsMuteConfigsError,
+    | securitycenter.GetFoldersMuteConfigsError,
     RuntimeContext
   >
 >;
 
 /**
- * Runtime binding for `securitycenter.folders.muteConfigs.get`.
+ * Runtime binding for `securitycenter.organizations.muteConfigs.get`.
  *
- * Bind it to a {@link FolderMuteConfig} or {@link MuteConfig} or {@link OrganizationMuteConfig} and provide {@link GetMuteConfigHttp}. The
+ * Bind it to a {@link OrganizationMuteConfig} or {@link MuteConfig} or {@link FolderMuteConfig} and provide {@link GetMuteConfigHttp}. The
  * host gets `roles/securitycenter.muteConfigsViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `muteConfigs.get`
  * ```typescript
- * const getMuteConfig = yield* GCP.SecurityCenter.GetMuteConfig(folderMuteConfig);
+ * const getMuteConfig = yield* GCP.SecurityCenter.GetMuteConfig(organizationMuteConfig);
  * const response = yield* getMuteConfig();
  * ```
  *
@@ -64,8 +64,8 @@ export const GetMuteConfigHttp = Layer.effect(
     tag: "GCP.SecurityCenter.GetMuteConfig",
     variants: [
       {
-        resource: "GCP.SecurityCenter.FolderMuteConfig",
-        operation: securitycenter.getFoldersMuteConfigs,
+        resource: "GCP.SecurityCenter.OrganizationMuteConfig",
+        operation: securitycenter.getOrganizationsMuteConfigs,
         param: "name",
         iam: { role: "roles/securitycenter.muteConfigsViewer" },
       },
@@ -76,8 +76,8 @@ export const GetMuteConfigHttp = Layer.effect(
         iam: { role: "roles/securitycenter.muteConfigsViewer" },
       },
       {
-        resource: "GCP.SecurityCenter.OrganizationMuteConfig",
-        operation: securitycenter.getOrganizationsMuteConfigs,
+        resource: "GCP.SecurityCenter.FolderMuteConfig",
+        operation: securitycenter.getFoldersMuteConfigs,
         param: "name",
         iam: { role: "roles/securitycenter.muteConfigsViewer" },
       },

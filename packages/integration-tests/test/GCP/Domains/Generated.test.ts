@@ -201,15 +201,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "domains.projects.locations.registrations.retrieveImportableDomains: no distilled operation retrieveImportableDomainsProjectsLocationsRegistrations",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "domains.projects.locations.registrations.retrieveRegisterParameters: no distilled operation retrieveRegisterParametersProjectsLocationsRegistrations",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "domains.projects.locations.registrations.retrieveGoogleDomainsDnsRecords: no distilled operation retrieveGoogleDomainsDnsRecordsProjectsLocationsRegistrations",
+        "domains.projects.locations.registrations.retrieveGoogleDomainsForwardingConfig: no distilled operation retrieveGoogleDomainsForwardingConfigProjectsLocationsRegistrations",
         () => Effect.void,
       );
       test.provider.skip(
@@ -217,11 +209,19 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "domains.projects.locations.registrations.retrieveGoogleDomainsForwardingConfig: no distilled operation retrieveGoogleDomainsForwardingConfigProjectsLocationsRegistrations",
+        "domains.projects.locations.registrations.retrieveGoogleDomainsDnsRecords: no distilled operation retrieveGoogleDomainsDnsRecordsProjectsLocationsRegistrations",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "domains.projects.locations.registrations.retrieveRegisterParameters: no distilled operation retrieveRegisterParametersProjectsLocationsRegistrations",
         () => Effect.void,
       );
       test.provider.skip(
         "domains.projects.locations.registrations.retrieveTransferParameters: no distilled operation retrieveTransferParametersProjectsLocationsRegistrations",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "domains.projects.locations.registrations.retrieveImportableDomains: no distilled operation retrieveImportableDomainsProjectsLocationsRegistrations",
         () => Effect.void,
       );
     });

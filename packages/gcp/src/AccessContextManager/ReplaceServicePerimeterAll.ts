@@ -25,7 +25,7 @@ export type ReplaceServicePerimeterAllShape = (
 >;
 
 /**
- * Replace all existing service perimeters in an access policy with the service perimeters provided.
+ * Replaces all existing service perimeters in an access policy with the service perimeters provided.
  *
  * Bind it to a {@link AccessPolicy} and provide {@link ReplaceServicePerimeterAllHttp}. The
  * host gets `roles/accesscontextmanager.policyEditor` on the project (the service has no per-resource IAM policy).

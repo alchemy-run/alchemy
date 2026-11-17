@@ -10,20 +10,20 @@ import type { LogScope } from "./LogScope.ts";
 import type { OrganizationLogScope } from "./OrganizationLogScope.ts";
 
 export interface GetLogScopeRequest extends Omit<
-  logging.GetProjectsLocationsLogScopesRequest,
+  logging.GetOrganizationsLocationsLogScopesRequest,
   "name"
 > {}
 
 export type GetLogScopeShape = (
-  resource: LogScope | FolderLogScope | OrganizationLogScope,
+  resource: OrganizationLogScope | LogScope | FolderLogScope,
 ) => Effect.Effect<
   (
     request?: GetLogScopeRequest,
   ) => Effect.Effect<
     logging.LogScope,
+    | logging.GetOrganizationsLocationsLogScopesError
     | logging.GetProjectsLocationsLogScopesError
-    | logging.GetFoldersLocationsLogScopesError
-    | logging.GetOrganizationsLocationsLogScopesError,
+    | logging.GetFoldersLocationsLogScopesError,
     RuntimeContext
   >
 >;
@@ -31,13 +31,13 @@ export type GetLogScopeShape = (
 /**
  * Gets a log scope.
  *
- * Bind it to a {@link LogScope} or {@link FolderLogScope} or {@link OrganizationLogScope} and provide {@link GetLogScopeHttp}. The
+ * Bind it to a {@link OrganizationLogScope} or {@link LogScope} or {@link FolderLogScope} and provide {@link GetLogScopeHttp}. The
  * host gets `roles/logging.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `logScopes.get`
  * ```typescript
- * const getLogScope = yield* GCP.Logging.GetLogScope(logScope);
+ * const getLogScope = yield* GCP.Logging.GetLogScope(organizationLogScope);
  * const response = yield* getLogScope();
  * ```
  *
@@ -64,6 +64,12 @@ export const GetLogScopeHttp = Layer.effect(
     tag: "GCP.Logging.GetLogScope",
     variants: [
       {
+        resource: "GCP.Logging.OrganizationLogScope",
+        operation: logging.getOrganizationsLocationsLogScopes,
+        param: "name",
+        iam: { role: "roles/logging.viewer" },
+      },
+      {
         resource: "GCP.Logging.LogScope",
         operation: logging.getProjectsLocationsLogScopes,
         param: "name",
@@ -72,12 +78,6 @@ export const GetLogScopeHttp = Layer.effect(
       {
         resource: "GCP.Logging.FolderLogScope",
         operation: logging.getFoldersLocationsLogScopes,
-        param: "name",
-        iam: { role: "roles/logging.viewer" },
-      },
-      {
-        resource: "GCP.Logging.OrganizationLogScope",
-        operation: logging.getOrganizationsLocationsLogScopes,
         param: "name",
         iam: { role: "roles/logging.viewer" },
       },

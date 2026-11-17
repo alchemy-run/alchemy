@@ -31,7 +31,7 @@ export type DeleteResourceRecordSetShape = () => Effect.Effect<
  * **Example:** Call `resourceRecordSets.delete`
  * ```typescript
  * const deleteResourceRecordSet = yield* GCP.DNS.DeleteResourceRecordSet();
- * const response = yield* deleteResourceRecordSet({ name: "...", managedZone: "...", type: "..." });
+ * const response = yield* deleteResourceRecordSet({ type: "...", name: "...", managedZone: "..." });
  * ```
  *
  * @binding

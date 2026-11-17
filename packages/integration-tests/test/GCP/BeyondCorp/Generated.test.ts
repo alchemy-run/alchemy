@@ -64,36 +64,55 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("AppConnection", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAppConnection (beyondcorp.projects.locations.appConnections.get): AppConnection: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
-        () => Effect.void,
-      );
-    });
-
-    describe("AppConnector", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAppConnector (beyondcorp.projects.locations.appConnectors.get): AppConnector: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ReportAppConnectorStatus (beyondcorp.projects.locations.appConnectors.reportStatus): AppConnector: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ResolveAppConnectorInstanceConfig (beyondcorp.projects.locations.appConnectors.resolveInstanceConfig): AppConnector: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
-        () => Effect.void,
-      );
-    });
-
-    describe("AppGateway", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAppGateway (beyondcorp.projects.locations.appGateways.get): AppGateway: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
-        () => Effect.void,
-      );
-    });
-
     describe("project", { concurrent: true }, () => {
+      test.provider(
+        "DeleteAppConnection (beyondcorp.projects.locations.appConnections.delete)",
+        () => probe("DeleteAppConnection", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteAppConnector (beyondcorp.projects.locations.appConnectors.delete)",
+        () => probe("DeleteAppConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteAppGateway (beyondcorp.projects.locations.appGateways.delete)",
+        () => probe("DeleteAppGateway", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAppConnection (beyondcorp.projects.locations.appConnections.get)",
+        () => probe("GetAppConnection", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAppConnector (beyondcorp.projects.locations.appConnectors.get)",
+        () => probe("GetAppConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAppGateway (beyondcorp.projects.locations.appGateways.get)",
+        () => probe("GetAppGateway", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "ListAppConnections (beyondcorp.projects.locations.appConnections.list)",
         () => probe("ListAppConnections", true),
@@ -129,6 +148,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ResolveAppConnection (beyondcorp.projects.locations.appConnections.resolve)",
         () => probe("ResolveAppConnection", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ResolveAppConnectorInstanceConfig (beyondcorp.projects.locations.appConnectors.resolveInstanceConfig)",
+        () => probe("ResolveAppConnectorInstanceConfig", false),
         {
           tags: ["provider:gcp", "provider:gcp:beyondcorp", "live"],
           timeout: 600_000,

@@ -28,6 +28,13 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
     const p9 = yield* GCP.FirebaseDataConnect.ListServices();
     const p10 = yield* GCP.FirebaseDataConnect.ListServiceSchemas(App);
     const p11 = yield* GCP.FirebaseDataConnect.MigrateSchema(Main);
+    const p12 = yield* GCP.FirebaseDataConnect.PostgrestDelete(App);
+    const p13 = yield* GCP.FirebaseDataConnect.PostgrestInsert(App);
+    const p14 = yield* GCP.FirebaseDataConnect.PostgrestRpcCallFunction(App);
+    const p15 = yield* GCP.FirebaseDataConnect.PostgrestRpcQueryFunction(App);
+    const p16 = yield* GCP.FirebaseDataConnect.PostgrestSelect(App);
+    const p17 = yield* GCP.FirebaseDataConnect.PostgrestUpdate(App);
+    const p18 = yield* GCP.FirebaseDataConnect.PostgrestUpsert(App);
     return {
       fetch: serveProbes({
         GenerateServiceQuery: probeOutcome(
@@ -54,6 +61,47 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
         MigrateSchema: probeOutcome(
           Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
+        PostgrestDelete: probeOutcome(
+          Retry.none(p12({ firebasedataconnectTable: "alchemy-missing" } as never)),
+        ),
+        PostgrestInsert: probeOutcome(
+          Retry.none(
+            p13({
+              firebasedataconnectTable: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        PostgrestRpcCallFunction: probeOutcome(
+          Retry.none(
+            p14({
+              firebasedataconnectFunction: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        PostgrestRpcQueryFunction: probeOutcome(
+          Retry.none(p15({ firebasedataconnectFunction: "alchemy-missing" } as never)),
+        ),
+        PostgrestSelect: probeOutcome(
+          Retry.none(p16({ firebasedataconnectTable: "alchemy-missing" } as never)),
+        ),
+        PostgrestUpdate: probeOutcome(
+          Retry.none(
+            p17({
+              firebasedataconnectTable: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        PostgrestUpsert: probeOutcome(
+          Retry.none(
+            p18({
+              firebasedataconnectTable: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
@@ -72,6 +120,13 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
           GCP.FirebaseDataConnect.ListServicesHttp,
           GCP.FirebaseDataConnect.ListServiceSchemasHttp,
           GCP.FirebaseDataConnect.MigrateSchemaHttp,
+          GCP.FirebaseDataConnect.PostgrestDeleteHttp,
+          GCP.FirebaseDataConnect.PostgrestInsertHttp,
+          GCP.FirebaseDataConnect.PostgrestRpcCallFunctionHttp,
+          GCP.FirebaseDataConnect.PostgrestRpcQueryFunctionHttp,
+          GCP.FirebaseDataConnect.PostgrestSelectHttp,
+          GCP.FirebaseDataConnect.PostgrestUpdateHttp,
+          GCP.FirebaseDataConnect.PostgrestUpsertHttp,
         ),
       ),
     ),

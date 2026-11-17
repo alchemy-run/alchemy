@@ -31,7 +31,7 @@ export type ListStepThumbnailsShape = () => Effect.Effect<
  * **Example:** Call `thumbnails.list`
  * ```typescript
  * const listStepThumbnails = yield* GCP.ToolResults.ListStepThumbnails();
- * const response = yield* listStepThumbnails({ executionId: "...", stepId: "...", historyId: "..." });
+ * const response = yield* listStepThumbnails({ stepId: "...", historyId: "...", executionId: "..." });
  * ```
  *
  * @binding

@@ -5,10 +5,9 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
 import { Cluster } from "./fixtures/fly/cluster.ts";
 import { CounterLive } from "./fixtures/fly/counter-live.ts";
 import Front from "./fixtures/fly/front.ts";
@@ -57,19 +56,7 @@ describe.skipIf(!!process.env.FAST)(
     conformanceTests(test, { baseUrl: () => baseUrl, kind: "live" });
     test(
       "Durable Streams: the front appends to and reads a stream on its cloud's Services pool",
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        const read = (yield* Effect.suspend(() =>
-          client.get(`${baseUrl}/durable-stream/${crypto.randomUUID()}`),
-        ).pipe(
-          Effect.flatMap((res) => res.json),
-          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
-        )) as { messages: unknown[] };
-        expect(read.messages).toEqual([
-          { user: "a", text: "one" },
-          { user: "b", text: "two" },
-        ]);
-      }),
+      Effect.suspend(() => expectDurableStream(baseUrl)),
       { timeout: 180_000 },
     );
 

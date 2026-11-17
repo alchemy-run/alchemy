@@ -117,7 +117,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "policysimulator.organizations.locations.orgPolicyViolationsPreviews.create: addressed under `organizations/`, not a project",
+        "policysimulator.organizations.locations.orgPolicyViolationsPreviews.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -125,7 +125,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "policysimulator.organizations.locations.orgPolicyViolationsPreviews.get: addressed under `organizations/`, not a project",
+        "policysimulator.organizations.locations.orgPolicyViolationsPreviews.create: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
@@ -133,11 +133,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "policysimulator.organizations.locations.replays.get: addressed under `organizations/`, not a project",
+        "policysimulator.organizations.locations.replays.create: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "policysimulator.organizations.locations.replays.create: addressed under `organizations/`, not a project",
+        "policysimulator.organizations.locations.replays.get: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

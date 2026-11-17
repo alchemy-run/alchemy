@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -28,8 +28,11 @@ export default class DomainBatchesWorker extends Cloudflare.Worker<DomainBatches
         const group = GroupId.make(decodeURIComponent(route[2]!));
         if (route[1] === "ping") {
           yield* pingers.send(
-            decodeURIComponent(route[3]!),
-            new Ping({ group, slow: url.searchParams.get("slow") === "true" }),
+            new Ping({
+              id: decodeURIComponent(route[3]!),
+              group,
+              slow: url.searchParams.get("slow") === "true",
+            }),
           );
           return HttpServerResponse.text("ok");
         }

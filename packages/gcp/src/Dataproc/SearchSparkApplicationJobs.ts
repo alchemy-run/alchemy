@@ -9,7 +9,7 @@ import type { Batch } from "./Batch.ts";
 import type { Session } from "./Session.ts";
 
 export interface SearchSparkApplicationJobsRequest extends Omit<
-  dataproc.SearchJobsProjectsLocationsBatchesSparkApplicationsRequest,
+  dataproc.SearchJobsProjectsLocationsSessionsSparkApplicationsRequest,
   "name"
 > {
   /** Id of the sparkApplication under the bound resource (`sparkApplications/{sparkApplication}`). */
@@ -17,15 +17,15 @@ export interface SearchSparkApplicationJobsRequest extends Omit<
 }
 
 export type SearchSparkApplicationJobsShape = (
-  resource: Batch | Session,
+  resource: Session | Batch,
 ) => Effect.Effect<
   (
     request: SearchSparkApplicationJobsRequest,
   ) => Effect.Effect<
-    | dataproc.SearchSparkApplicationJobsResponse
-    | dataproc.SearchSessionSparkApplicationJobsResponse,
-    | dataproc.SearchJobsProjectsLocationsBatchesSparkApplicationsError
-    | dataproc.SearchJobsProjectsLocationsSessionsSparkApplicationsError,
+    | dataproc.SearchSessionSparkApplicationJobsResponse
+    | dataproc.SearchSparkApplicationJobsResponse,
+    | dataproc.SearchJobsProjectsLocationsSessionsSparkApplicationsError
+    | dataproc.SearchJobsProjectsLocationsBatchesSparkApplicationsError,
     RuntimeContext
   >
 >;
@@ -33,13 +33,13 @@ export type SearchSparkApplicationJobsShape = (
 /**
  * Obtain list of spark jobs corresponding to a Spark Application.
  *
- * Bind it to a {@link Batch} or {@link Session} and provide {@link SearchSparkApplicationJobsHttp}. The
+ * Bind it to a {@link Session} or {@link Batch} and provide {@link SearchSparkApplicationJobsHttp}. The
  * host gets `roles/dataproc.serverlessViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sparkApplications.searchJobs`
  * ```typescript
- * const searchSparkApplicationJobs = yield* GCP.Dataproc.SearchSparkApplicationJobs(batch);
+ * const searchSparkApplicationJobs = yield* GCP.Dataproc.SearchSparkApplicationJobs(session);
  * const response = yield* searchSparkApplicationJobs({ sparkApplication: "..." });
  * ```
  *
@@ -68,15 +68,15 @@ export const SearchSparkApplicationJobsHttp = Layer.effect(
     tag: "GCP.Dataproc.SearchSparkApplicationJobs",
     variants: [
       {
-        resource: "GCP.Dataproc.Batch",
-        operation: dataproc.searchJobsProjectsLocationsBatchesSparkApplications,
+        resource: "GCP.Dataproc.Session",
+        operation: dataproc.searchJobsProjectsLocationsSessionsSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },
       },
       {
-        resource: "GCP.Dataproc.Session",
-        operation: dataproc.searchJobsProjectsLocationsSessionsSparkApplications,
+        resource: "GCP.Dataproc.Batch",
+        operation: dataproc.searchJobsProjectsLocationsBatchesSparkApplications,
         param: "name",
         children: [["sparkApplications", "sparkApplication"]],
         iam: { role: "roles/dataproc.serverlessViewer" },

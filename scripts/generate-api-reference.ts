@@ -84,6 +84,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/archil/src",
   },
   {
+    srcRoot: "packages/boat/src",
+    providerPrefix: "Boat",
+    sourceDisplayPrefix: "packages/boat/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",
@@ -117,6 +122,11 @@ const sourceRoots: SourceRoot[] = [
     srcRoot: "packages/hetzner/src",
     providerPrefix: "Hetzner",
     sourceDisplayPrefix: "packages/hetzner/src",
+  },
+  {
+    srcRoot: "packages/digitalocean/src",
+    providerPrefix: "DigitalOcean",
+    sourceDisplayPrefix: "packages/digitalocean/src",
   },
   {
     srcRoot: "packages/railway/src",

@@ -7,14 +7,18 @@ import * as Layer from "effect/Layer";
 import { makeGcpProjectBinding } from "../HttpBinding.ts";
 
 export interface GetJobMetricsRequest extends Omit<
-  dataflow.GetMetricsProjectsJobsRequest,
+  dataflow.GetMetricsProjectsLocationsJobsRequest,
   "projectId"
 > {}
 
 export type GetJobMetricsShape = () => Effect.Effect<
   (
     request: GetJobMetricsRequest,
-  ) => Effect.Effect<dataflow.JobMetrics, dataflow.GetMetricsProjectsJobsError, RuntimeContext>
+  ) => Effect.Effect<
+    dataflow.JobMetrics,
+    dataflow.GetMetricsProjectsLocationsJobsError,
+    RuntimeContext
+  >
 >;
 
 /**
@@ -27,7 +31,7 @@ export type GetJobMetricsShape = () => Effect.Effect<
  * **Example:** Call `jobs.getMetrics`
  * ```typescript
  * const getJobMetrics = yield* GCP.Dataflow.GetJobMetrics();
- * const response = yield* getJobMetrics({ jobId: "..." });
+ * const response = yield* getJobMetrics({ jobId: "...", location: "..." });
  * ```
  *
  * @binding
@@ -53,7 +57,7 @@ export const GetJobMetricsHttp = Layer.effect(
     tag: "GCP.Dataflow.GetJobMetrics",
     variants: [
       {
-        operation: dataflow.getMetricsProjectsJobs,
+        operation: dataflow.getMetricsProjectsLocationsJobs,
         projectField: "projectId",
         role: "roles/dataflow.viewer",
       },
