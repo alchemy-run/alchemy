@@ -1,6 +1,6 @@
-# Verifying a Domain model, in two minutes
+# Verifying a Domain model, in under a minute
 
-A Remotion video that explains what `@alchemy.run/domain` verifies and how: rules on the declaration, the proof, the search, the sampled walks, and the run on the real model.
+A Remotion video that shows how a `@alchemy.run/domain` model is written and how its rules are proved: the aggregate and its rule, the one test, the proof, a bug the proof finds, a decision across instances, and the search over the whole model.
 
 ```sh
 pnpm studio   # edit with live preview

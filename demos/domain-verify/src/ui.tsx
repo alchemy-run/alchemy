@@ -86,7 +86,19 @@ export const Scene = ({
           {title}
         </div>
       </Rise>
-      <div style={{ position: "relative", flex: 1, marginTop: 48 }}>{children}</div>
+      <div
+        style={{
+          position: "relative",
+          flex: 1,
+          marginTop: 48,
+          paddingBottom: 40,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+        }}
+      >
+        {children}
+      </div>
     </AbsoluteFill>
   );
 };
@@ -177,8 +189,12 @@ export const Code = ({
   at = 0,
   every = 3,
   size = 28,
-  lit,
+  lit: always,
   litAt = 0,
+  marks,
+  struck,
+  struckAt = 0,
+  added,
 }: {
   code: string;
   at?: number;
@@ -186,9 +202,19 @@ export const Code = ({
   size?: number;
   lit?: ReadonlyArray<number>;
   litAt?: number;
+  /** Lines marked for a while each: the last one that has started wins. */
+  marks?: ReadonlyArray<{ readonly lines: ReadonlyArray<number>; readonly from: number }>;
+  /** Lines crossed out from `struckAt`: the code that was taken away. */
+  struck?: ReadonlyArray<number>;
+  struckAt?: number;
+  /** Lines that are written in from `struckAt`: the code that replaced it. */
+  added?: ReadonlyArray<number>;
 }) => {
   const frame = useCurrentFrame();
-  const marking = lit !== undefined && frame >= litAt;
+  const current = marks?.filter((mark) => frame >= mark.from).at(-1);
+  const lit = current?.lines ?? always;
+  const marking = lit !== undefined && (current !== undefined || frame >= litAt);
+  const striking = struck !== undefined && frame >= struckAt;
   return (
     <div
       style={{
@@ -205,13 +231,24 @@ export const Code = ({
           extrapolateRight: "clamp",
         });
         const marked = marking && lit.includes(index);
+        const gone = striking && struck.includes(index);
+        const fresh = added?.includes(index) ?? false;
+        const written = interpolate(frame, [struckAt + 8, struckAt + 18], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
         return (
           <div
             key={index}
             style={{
-              opacity: shown * (marking && !marked ? 0.35 : 1),
-              background: marked ? "rgba(163, 196, 115, 0.14)" : "transparent",
-              borderLeft: `4px solid ${marked ? brand.moss : "transparent"}`,
+              opacity: (fresh ? written : shown) * (gone ? 0.5 : marking && !marked ? 0.35 : 1),
+              textDecoration: gone ? "line-through" : "none",
+              background: gone
+                ? "rgba(216, 131, 90, 0.16)"
+                : marked || fresh
+                  ? "rgba(163, 196, 115, 0.14)"
+                  : "transparent",
+              borderLeft: `4px solid ${gone ? brand.ember : marked || fresh ? brand.moss : "transparent"}`,
               paddingLeft: 14,
               marginLeft: -18,
               minHeight: size * 1.5,
