@@ -66,7 +66,7 @@ import {
   streamifyHandler,
 } from "./HttpServer.ts";
 import {
-  functionBindingStatements,
+  functionPolicyStatements,
   functionLogGroupGuard,
   renderFunctionPolicy,
 } from "./internal/FunctionPolicy.ts";
@@ -1649,32 +1649,6 @@ export const Function: Platform<
   },
 });
 
-/**
- * What the function's role needs to deliver async invocation records to a
- * destination: Lambda sends them as the role, so without these a configured
- * `OnFailure` queue silently receives nothing.
- */
-const destinationStatements = (arn: string): IAM.PolicyStatement[] => {
-  const service = arn.split(":")[2];
-  switch (service) {
-    case "sqs":
-      return [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [arn] }];
-    case "sns":
-      return [{ Effect: "Allow", Action: ["sns:Publish"], Resource: [arn] }];
-    case "lambda":
-      return [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: [arn] }];
-    case "events":
-      return [{ Effect: "Allow", Action: ["events:PutEvents"], Resource: [arn] }];
-    case "s3":
-      return [
-        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [arn] },
-        { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${arn}/*`] },
-      ];
-    default:
-      return [];
-  }
-};
-
 export const FunctionProvider = () =>
   Provider.effect(
     Function,
@@ -1743,13 +1717,8 @@ export const FunctionProvider = () =>
         const { accountId, region } = yield* AWSEnvironment.current;
         const { document } = yield* renderFunctionPolicy(
           roleName,
-          functionBindingStatements(bindings),
+          functionPolicyStatements(bindings, destinations),
           functionLogGroupGuard(region, accountId, functionName),
-        );
-        policyStatements.push(
-          ...destinations
-            .flatMap(destinationStatements)
-            .map((stmt) => ({ ...stmt, Sid: undefined })),
         );
         // VPC attachments requested through the binding channel (DECISION
         // #5) — set-union across bindings; merged with the `vpc` prop in
@@ -3231,13 +3200,28 @@ export const FunctionProvider = () =>
           const functionArn = output?.functionArn ?? generated.functionArn;
           const policyName = generated.policyName;
 
+          // The prop and every binding's request converge on one config.
+          const invokeConfig = yield* mergeEventInvokeConfig(
+            news.eventInvokeConfig,
+            bindings.flatMap(
+              (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
+                binding.action !== "delete" && binding.data?.eventInvokeConfig
+                  ? [binding.data.eventInvokeConfig]
+                  : [],
+            ),
+          );
+          const destinations = [
+            invokeConfig?.destinationConfig?.OnSuccess?.Destination,
+            invokeConfig?.destinationConfig?.OnFailure?.Destination,
+          ].filter((arn): arn is string => typeof arn === "string");
+
           // The binding policy and the log-group guard share the execution
           // role's inline-policy budget, so reject an oversized grant set
           // before the first IAM write instead of failing part-way through.
           const { accountId, region } = yield* AWSEnvironment.current;
           yield* renderFunctionPolicy(
             roleName,
-            functionBindingStatements(bindings),
+            functionPolicyStatements(bindings, destinations),
             functionLogGroupGuard(region, accountId, functionName),
           );
 
@@ -3256,16 +3240,6 @@ export const FunctionProvider = () =>
           yield* syncLogGroupGuard({ roleName, functionName });
           yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
-          // The prop and every binding's request converge on one config.
-          const invokeConfig = yield* mergeEventInvokeConfig(
-            news.eventInvokeConfig,
-            bindings.flatMap(
-              (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
-                binding.action !== "delete" && binding.data?.eventInvokeConfig
-                  ? [binding.data.eventInvokeConfig]
-                  : [],
-            ),
-          );
           const {
             env,
             vpc: bindingVpc,
@@ -3276,10 +3250,7 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             bindings,
-            destinations: [
-              invokeConfig?.destinationConfig?.OnSuccess?.Destination,
-              invokeConfig?.destinationConfig?.OnFailure?.Destination,
-            ].filter((arn): arn is string => typeof arn === "string"),
+            destinations,
           });
 
           // Both VPC paths (the `vpc` prop and binding-channel requests)

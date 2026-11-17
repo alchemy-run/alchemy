@@ -73,14 +73,43 @@ export const compactFunctionPolicy = (
     .sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
 };
 
-export const functionBindingStatements = (
+/**
+ * What the function's role needs to deliver async invocation records to a
+ * destination: Lambda sends them as the role, so without these a configured
+ * `OnFailure` queue silently receives nothing.
+ */
+const destinationStatements = (arn: string): PolicyStatement[] => {
+  const service = arn.split(":")[2];
+  switch (service) {
+    case "sqs":
+      return [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [arn] }];
+    case "sns":
+      return [{ Effect: "Allow", Action: ["sns:Publish"], Resource: [arn] }];
+    case "lambda":
+      return [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: [arn] }];
+    case "events":
+      return [{ Effect: "Allow", Action: ["events:PutEvents"], Resource: [arn] }];
+    case "s3":
+      return [
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [arn] },
+        { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${arn}/*`] },
+      ];
+    default:
+      return [];
+  }
+};
+
+export const functionPolicyStatements = (
   bindings: readonly (ResourceBinding<{ policyStatements?: PolicyStatement[] }> & {
     action?: string;
   })[],
-) =>
-  bindings
+  destinations: readonly string[],
+): PolicyStatement[] => [
+  ...bindings
     .filter((binding) => binding.action !== "delete")
-    .flatMap((binding) => binding.data?.policyStatements ?? []);
+    .flatMap((binding) => binding.data?.policyStatements ?? []),
+  ...destinations.flatMap(destinationStatements),
+];
 
 export const functionLogGroupGuard = (region: string, accountId: string, functionName: string) =>
   JSON.stringify({

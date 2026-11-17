@@ -5,6 +5,7 @@ import * as Result from "effect/Result";
 import {
   compactFunctionPolicy,
   functionLogGroupGuard,
+  functionPolicyStatements,
   LambdaRolePolicyMaxBytes,
   renderFunctionPolicy,
 } from "../../../../aws/src/Lambda/internal/FunctionPolicy.ts";
@@ -122,6 +123,39 @@ describe("compaction", { tags: ["unit", "local"] }, () => {
 });
 
 describe("aggregate inline-policy budget", { tags: ["unit", "local"] }, () => {
+  it.effect("includes destination permissions alongside active binding grants", () =>
+    Effect.gen(function* () {
+      const queue = "arn:aws:sqs:us-east-1:100000002303:destination";
+      const bucket = "arn:aws:s3:::destination";
+      const statements = functionPolicyStatements(
+        [
+          { sid: "active", data: { policyStatements: [grant(["s3:GetObject"], ["object"])] } },
+          {
+            sid: "removed",
+            action: "delete",
+            data: { policyStatements: [grant(["read"], ["gone"])] },
+          },
+        ],
+        [queue, bucket],
+      );
+      const { document } = yield* renderFunctionPolicy("destinations", statements, guard);
+      expect(permissionPairs(JSON.parse(document!).Statement)).toEqual(
+        permissionPairs([
+          grant(["s3:GetObject"], ["object"]),
+          grant(["sqs:SendMessage"], [queue]),
+          grant(["s3:ListBucket"], [bucket]),
+          grant(["s3:PutObject"], [`${bucket}/*`]),
+        ]),
+      );
+      const oversized = functionPolicyStatements(
+        [],
+        [`${queue}${"x".repeat(LambdaRolePolicyMaxBytes)}`],
+      );
+      const result = yield* Effect.result(renderFunctionPolicy("destinations", oversized, guard));
+      expect(Result.isFailure(result)).toBe(true);
+    }),
+  );
+
   it.effect("accepts exactly the byte budget and rejects one byte more", () =>
     Effect.gen(function* () {
       const overhead = (yield* renderFunctionPolicy("boundary", [grant(["read"], [""])], guard))
