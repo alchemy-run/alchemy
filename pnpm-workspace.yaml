@@ -168,7 +168,7 @@ catalog:
   astro: "7.4.2"
   aws4fetch: "^1.0.20"
   better-auth: "^1.7.5"
-  capnp-es: "^0.0.16"
+  capnp-es: "^0.0.17"
   capnweb: "^0.12.0"
   changelogen: "^0.6.2"
   chokidar: "^5.0.0"

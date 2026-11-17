@@ -30,9 +30,8 @@ export class TransferRequested extends Domain.Event("TransferRequested", {
  * large. The client picks the transfer id, so a retry is idempotent.
  */
 export class RequestTransfer extends Domain.Command("RequestTransfer", {
-  target: TransferId,
   middleware: [Session, MfaChallenge],
-  input: { from: AccountId, to: AccountId, amount: Amount },
+  input: { transferId: TransferId, from: AccountId, to: AccountId, amount: Amount },
   events: [TransferRequested],
   rejects: [AlreadyRequested, SameAccount],
 }) {}

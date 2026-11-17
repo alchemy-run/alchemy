@@ -23,7 +23,7 @@ A `Domain.Model` is how you write one bounded context down. Everything in this m
 
 ## What a model contains
 
-Every model has the same shape. Commands enter on the left and are decided by aggregates. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
+Every model has the same shape. Commands enter on the left and are decided by aggregates: one alone, or several together through a decision. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
 
 <DAG
   nodes={[
@@ -45,7 +45,7 @@ Every model has the same shape. Commands enter on the left and are decided by ag
   caption="Solid edges happen within one command. Dashed edges are delivered after it commits."
 />
 
-A model declares which aggregates, views, policies, projections, streams and queries it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The example bank's model contains two aggregates, two views and one policy:
+A model declares which aggregates, decisions, views, policies, projections, streams and queries it contains. The commands and events come with them, since each aggregate and decision declares the commands it handles and the events it records. The example bank's model contains two aggregates, two views and one policy:
 
 ```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
@@ -60,6 +60,8 @@ export class Bank extends Domain.Model("Bank", {
 An aggregate type has many instances, one per id, and every command names the id of the instance it's for. The model routes the command to that instance and no other.
 
 Each instance handles one command at a time. Commands for the same instance queue, and each is decided against the state the previous one left. Commands for different instances run independently. This is what makes an instance a consistency boundary: nothing else changes its state while it decides.
+
+A command that involves several instances names them all in its input. A [decision](/domain/decision) reads them together and records on all of them or on none.
 
 <DAG
   nodes={[
@@ -79,7 +81,7 @@ Each instance handles one command at a time. Commands for the same instance queu
 In the bank, a deposit names the account it's for, so two deposits into `a-1` queue while a deposit into `a-2` runs alongside them:
 
 ```typescript title="src/depositAndRead.ts"
-const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
 ```
 
 ## The aggregate decides, and everything commits at once
@@ -256,6 +258,22 @@ export class Bank extends Domain.Model("Bank", {
 }) {}
 ```
 
+A [decision](/domain/decision) goes in `decisions`, next to the aggregates it reads. Every command has one implementation, an aggregate or a decision, and a second one is a type error on its entry here.
+
+```typescript
+// src/Bank.model.ts
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
+import { Transfer } from "./Transfer.decision.ts";
+
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account],
+  decisions: [Transfer],
+  views: [AccountSummary],
+}) {}
+```
+
 A policy is declared in one place and implemented in another, because its implementation usually needs things from outside the model, like a client for another aggregate or a payment provider. The declaration goes in `policies`; the implementation is a Layer you keep beside it.
 
 ```typescript
@@ -296,7 +314,7 @@ export class Bank extends Domain.Model(
 
 ## Check the declaration
 
-Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
+Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers, a command implemented twice. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
 
 ```typescript
 // packages/domain/test/Bank.model.test.ts
@@ -330,7 +348,7 @@ export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.I
 
 ## Call it from your code
 
-Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the target id and the command.
+Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the command, which names the account it is for.
 
 ```typescript
 // src/depositAndRead.ts
@@ -344,7 +362,7 @@ export const depositAndRead = Effect.gen(function* () {
   const accounts = yield* Account;
   const summaries = yield* AccountSummary;
   const accountId = AccountId.make("a-1");
-  const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+  const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
   return yield* summaries.get(Account.ref(accountId), { atLeast: receipt });
 });
 ```

@@ -17,21 +17,30 @@ class Recorded extends Domain.Event("Recorded") {}
 class Admitted extends Domain.Event("Admitted", { payloadHash: Schema.String }) {}
 /** How many events the Registry had when it was counted: depends on what committed first. */
 class Counted extends Domain.Event("Counted", { seen: Schema.Int }) {}
-class Record extends Domain.Command("Record", { target: RegistryId, events: [Recorded] }) {}
+class Record extends Domain.Command("Record", {
+  input: { registryId: RegistryId },
+  events: [Recorded],
+}) {}
 class Admit extends Domain.Command("Admit", {
-  target: RegistryId,
-  input: { payloadHash: Schema.String },
+  input: { registryId: RegistryId, payloadHash: Schema.String },
   events: [Admitted],
 }) {}
-class Count extends Domain.Command("Count", { target: RegistryId, events: [Counted] }) {}
+class Count extends Domain.Command("Count", {
+  input: { registryId: RegistryId },
+  events: [Counted],
+}) {}
 /** Commits Recorded, Admitted("b"), Recorded in one decision. */
-class Batch extends Domain.Command("Batch", { target: RegistryId, events: [Recorded, Admitted] }) {}
+class Batch extends Domain.Command("Batch", {
+  input: { registryId: RegistryId },
+  events: [Recorded, Admitted],
+}) {}
 
 class Registry extends Domain.Aggregate("Registry", {
   id: RegistryId,
   state: Schema.Array(Schema.String),
   initial: [],
   commands: [Record, Admit, Count, Batch],
+  keyOf: (command) => command.registryId,
   decide: {
     Record: () => [new Recorded()],
     Admit: (_, c) => [new Admitted({ payloadHash: c.payloadHash })],
@@ -47,14 +56,21 @@ class Registry extends Domain.Aggregate("Registry", {
 
 class Requested extends Domain.Event("Requested") {}
 class Settled extends Domain.Event("Settled") {}
-class Request extends Domain.Command("Request", { target: SubjectId, events: [Requested] }) {}
-class Settle extends Domain.Command("Settle", { target: SubjectId, events: [Settled] }) {}
+class Request extends Domain.Command("Request", {
+  input: { subjectId: SubjectId },
+  events: [Requested],
+}) {}
+class Settle extends Domain.Command("Settle", {
+  input: { subjectId: SubjectId },
+  events: [Settled],
+}) {}
 
 class Subject extends Domain.Aggregate("Subject", {
   id: SubjectId,
   state: Schema.Int,
   initial: 0,
   commands: [Request, Settle],
+  keyOf: (command) => command.subjectId,
   decide: { Request: () => [new Requested()], Settle: () => [new Settled()] },
   evolve: { Requested: (s) => s, Settled: (s) => s + 1 },
 }) {}
@@ -91,7 +107,7 @@ const SettlementRecords = Settlement.toLayer(
   Effect.gen(function* () {
     const registries = yield* Registry;
     return Effect.fn(function* () {
-      yield* registries.send(registry, new Record());
+      yield* registries.send(new Record({ registryId: registry.id }));
     });
   }),
 );
@@ -101,7 +117,7 @@ const SettlementCounts = Settlement.toLayer(
   Effect.gen(function* () {
     const registries = yield* Registry;
     return Effect.fn(function* () {
-      yield* registries.send(registry, new Count());
+      yield* registries.send(new Count({ registryId: registry.id }));
     });
   }),
 );
@@ -113,12 +129,14 @@ const ProcessLive = Process.toLayer(
     return Effect.fn(function* ({ key }) {
       yield* Activity.make({
         name: "settle",
-        execute: subjects.send(key, new Settle()).pipe(Effect.asVoid),
+        execute: subjects.send(new Settle({ subjectId: key })).pipe(Effect.asVoid),
       });
       yield* Activity.make({
         name: "admit-next",
         execute: Effect.gen(function* () {
-          yield* registries.send(registry, new Admit({ payloadHash: yield* digest }));
+          yield* registries.send(
+            new Admit({ registryId: registry.id, payloadHash: yield* digest }),
+          );
         }),
       });
     });
@@ -139,7 +157,7 @@ const countingStory = Story.make(Model, {
 });
 
 const settle = [
-  Story.when(subject, new Request()),
+  Story.when(new Request({ subjectId: subject.id })),
   Story.saga(Process, subject, { _tag: "Completed", result: undefined }),
   Story.then(subject, new Requested(), new Settled()),
 ] as const;
@@ -215,7 +233,7 @@ describe("Domain Story: event order", { tags: ["unit", "local"] }, () => {
 
   it.effect("inOrder inside anyOrder lets other events interleave", () =>
     story(
-      Story.when(registry, new Batch()),
+      Story.when(new Batch({ registryId: registry.id })),
       Story.then(
         registry,
         Story.anyOrder(
@@ -228,7 +246,7 @@ describe("Domain Story: event order", { tags: ["unit", "local"] }, () => {
 
   it.effect("inOrder inside anyOrder still holds its own order", () =>
     story(
-      Story.when(registry, new Batch()),
+      Story.when(new Batch({ registryId: registry.id })),
       Story.then(
         registry,
         Story.anyOrder(
@@ -248,7 +266,7 @@ describe("Domain Story: event order", { tags: ["unit", "local"] }, () => {
 
   it.effect("anyOrder counts each event once", () =>
     story(
-      Story.when(registry, new Batch()),
+      Story.when(new Batch({ registryId: registry.id })),
       Story.then(registry, Story.anyOrder(new Recorded(), new Recorded(), new Recorded())),
     ).pipe(
       Effect.flip,
@@ -258,7 +276,7 @@ describe("Domain Story: event order", { tags: ["unit", "local"] }, () => {
 
   it.effect("a group consumes its events, and later steps assert the rest", () =>
     story(
-      Story.when(registry, new Batch()),
+      Story.when(new Batch({ registryId: registry.id })),
       Story.then(registry, Story.anyOrder(new Admitted({ payloadHash: "b" }), new Recorded())),
       Story.then(registry, new Recorded()),
     ),
@@ -266,7 +284,7 @@ describe("Domain Story: event order", { tags: ["unit", "local"] }, () => {
 
   it.effect("events a group leaves unasserted fail the story at the end", () =>
     story(
-      Story.when(registry, new Batch()),
+      Story.when(new Batch({ registryId: registry.id })),
       Story.then(registry, Story.anyOrder(new Admitted({ payloadHash: "b" }), new Recorded())),
     ).pipe(
       Effect.flip,
@@ -298,7 +316,7 @@ const fanStory = (writes: boolean) =>
           Effect.gen(function* () {
             const registries = yield* Registry;
             return Effect.fn(function* () {
-              if (writes) yield* registries.send(registry, new Record());
+              if (writes) yield* registries.send(new Record({ registryId: registry.id }));
             });
           }),
         ),
@@ -311,7 +329,7 @@ describe("Domain Story: orders of fan-out", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       let runs = 0;
       yield* fanStory(false)(
-        Story.when(subject, new Request()),
+        Story.when(new Request({ subjectId: subject.id })),
         Story.state(subject, () => void runs++),
         Story.then(subject, new Requested()),
       );
@@ -321,7 +339,7 @@ describe("Domain Story: orders of fan-out", { tags: ["unit", "local"] }, () => {
 
   it.effect("too many orders on one stream fail the story instead of checking some", () =>
     fanStory(true)(
-      Story.when(subject, new Request()),
+      Story.when(new Request({ subjectId: subject.id })),
       Story.then(subject, new Requested()),
       Story.then(
         registry,

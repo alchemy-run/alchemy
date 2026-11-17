@@ -17,7 +17,6 @@ export class SettlementOnClosedAccount extends Domain.Event("SettlementOnClosedA
 
 /** Reports a fact that already happened, so it never rejects. */
 export class RecordSettlement extends Domain.Command("RecordSettlement", {
-  target: AccountId,
-  input: { settlementId: Schema.String, amount: Amount },
+  input: { accountId: AccountId, settlementId: Schema.String, amount: Amount },
   events: [SettlementReceived, SettlementOnClosedAccount],
 }) {}

@@ -12,8 +12,7 @@ export class TransferCredited extends Domain.Event("TransferCredited", {
 
 /** Pay a transfer's amount into the destination account. */
 export class CreditTransfer extends Domain.Command("CreditTransfer", {
-  target: AccountId,
-  input: { transferId: TransferId, amount: Amount },
+  input: { accountId: AccountId, transferId: TransferId, amount: Amount },
   events: [TransferCredited],
   rejects: [NotOpen],
 }) {}

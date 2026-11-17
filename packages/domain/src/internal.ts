@@ -246,3 +246,18 @@ export const evolveView = (
   }
   return current;
 };
+
+/**
+ * Call a command's client with a decoded wire payload.
+ *
+ * @internal
+ */
+export const sendPayload = (
+  send: unknown,
+  payload: unknown,
+  options: object,
+): Effect.Effect<unknown, unknown> => {
+  const { input, commandId } = payload as { readonly input: unknown; readonly commandId?: string };
+  const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
+  return call(input, { ...options, ...(commandId === undefined ? {} : { commandId }) });
+};

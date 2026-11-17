@@ -33,10 +33,10 @@ it.effect("withdraws within the balance, and refuses beyond it", () =>
     Story.given(a1, new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" }),
                     new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     Story.provide(CurrentActor, customer("c-1")),        // what the command's middleware would provide
-    Story.when(a1, new WithdrawMoney({ amount: 30 })),
+    Story.when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
     Story.then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
     Story.replied({ balance: 70 }),
-    Story.when(a1, new WithdrawMoney({ amount: 100 })),
+    Story.when(new WithdrawMoney({ accountId: a1.id, amount: 100 })),
     Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
   ),
 );
@@ -100,7 +100,7 @@ A system left out of `stub` is called for real through its adapter Layer, which 
 const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   // Payments runs for real
 
 story(
-  Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+  Story.when(new RecordSettlement({ accountId: account.id, settlementId: "st_1", amount: 500 })),
   Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
   Story.returned(Payments.refund, { refundId: "re_st_1" }),
 ).pipe(Effect.provide(StripePayments));
@@ -136,7 +136,7 @@ Test what a saga does: the events its steps record on aggregates, and how the ru
 Story.then(a1, new TransferDebited({ ... }), new TransferRefunded({ ... })),   // the compensation ran
 Story.saga(ExecuteTransfer, t1, { _tag: "Rejected", rejection: new DestinationClosed() }),
 Story.saga(ExecuteTransfer, t1, { _tag: "Running" }),
-Story.signal(ExecuteTransfer, t1, Decision, "approved"),    // complete a DurableDeferred it waits on
+Story.signal(ExecuteTransfer, t1, Approval, "approved"),    // complete a DurableDeferred it waits on
 ```
 
 The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted` and `Died`. A run that dies fails the story unless a step asserts `{ _tag: "Died" }`.
@@ -224,6 +224,7 @@ Rules of thumb:
 - A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
 - `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, each saga step run twice, reactions reordered, schedules late, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
 - Keep numbers that are added or multiplied whole (`Schema.Int`, `Schema.BigInt`, money in cents). Arithmetic JavaScript rounds is reported as not read. A division is read through `Math.floor`, `Math.ceil` or `Math.trunc`.
+- A `Domain.Decision` states rules about its step in `transitions`: `({ before, after, command, events })`, with each state under its name in `reads`. `Verify.model` proves them, and proves the decision keeps the rules of every aggregate it records on; `Prove.decision(Transfer, { source })` does it for one decision. Two names of the same aggregate are tried as two instances and as one. An aggregate a decision records on is verified through its model, not alone.
 - `decide`, `evolve` and rules are plain functions of their inputs: loops, `+=`, rest patterns, `Option`, `effect/Array`, `effect/Record` and `effect/Struct` helpers are read. A loop over a list from the state or a command is tried up to 2 items past what its schema asks for, so its rule is `Checked`, not `Proved`.
 - Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
@@ -248,10 +249,10 @@ const asCustomer = (id: string) =>
 it.live("only the owner may withdraw", () =>
   Effect.gen(function* () {
     const sam = yield* asCustomer("c-1");
-    const deposited = yield* sam.DepositMoney(accountId, { amount: 250 });
+    const deposited = yield* sam.DepositMoney({ accountId, amount: 250 });
     // deposited: { reply: { balance: 250 }, stream: "Account/...", version: 2 }
     const alex = yield* asCustomer("c-2");
-    const refused = yield* alex.WithdrawMoney(accountId, { amount: 10 }, mfa).pipe(Effect.flip);
+    const refused = yield* alex.WithdrawMoney({ accountId, amount: 10 }, mfa).pipe(Effect.flip);
     expect(refused._tag).toBe("NotOwner");
   }).pipe(Effect.scoped, Effect.provide(World)),
 );

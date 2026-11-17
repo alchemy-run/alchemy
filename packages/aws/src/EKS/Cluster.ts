@@ -28,6 +28,16 @@ export class EKSClusterUnexpectedResponse extends Data.TaggedError("EKSClusterUn
   readonly cause?: unknown;
 }> {}
 
+/**
+ * Deletion was refused because the cluster has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class EKSClusterDeletionProtected extends Data.TaggedError("EKSClusterDeletionProtected")<{
+  readonly clusterName: string;
+  readonly message: string;
+}> {}
+
 export class EKSClusterInvalidProps extends Data.TaggedError("EKSClusterInvalidProps")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -1080,8 +1090,21 @@ export const ClusterProvider = () =>
             kubernetesObjects,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
           const random = yield* SecureRandom.SecureRandom;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete — before any Kubernetes object is removed. Only an
+          // account-wide nuke (`force`) lifts it.
+          const observedProtection = yield* eks.describeCluster({ name: output.clusterName }).pipe(
+            Effect.map((response) => response.cluster?.deletionProtection === true),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
+          );
+          if (observedProtection && force !== true) {
+            return yield* new EKSClusterDeletionProtected({
+              clusterName: output.clusterName,
+              message: `EKS cluster '${output.clusterName}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+            });
+          }
           if ((output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport: yield* getKubernetesTransport(output),
@@ -1089,7 +1112,7 @@ export const ClusterProvider = () =>
             });
           }
 
-          if (output.deletionProtection) {
+          if (observedProtection) {
             const disableDeletionProtection = yield* eks.updateClusterConfig({
               name: output.clusterName,
               deletionProtection: false,

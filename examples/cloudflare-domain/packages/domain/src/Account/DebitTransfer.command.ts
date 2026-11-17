@@ -20,8 +20,7 @@ export class TransferDebited extends Domain.Event("TransferDebited", {
  * fact recorded on it, so it is input rather than request context.
  */
 export class DebitTransfer extends Domain.Command("DebitTransfer", {
-  target: AccountId,
-  input: { transferId: TransferId, amount: Amount, requestedBy: Actor },
+  input: { accountId: AccountId, transferId: TransferId, amount: Amount, requestedBy: Actor },
   events: [TransferDebited],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds],
 }) {}
