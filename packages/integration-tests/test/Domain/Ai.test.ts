@@ -300,7 +300,11 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       const sent = yield* deposit({}).pipe(Effect.forkChild);
       yield* Effect.sleep("100 millis");
       expect(sent.pollUnsafe()).toBeUndefined();
-      yield* settle;
+      // One drain is not enough: on a busy machine the command may not have committed yet.
+      while (sent.pollUnsafe() === undefined) {
+        yield* settle;
+        yield* Effect.sleep("5 millis");
+      }
       expect((yield* Fiber.join(sent)).isFailure).toBe(false);
       // The agent passes no receipt: the read has the deposit.
       expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });

@@ -76,6 +76,19 @@ const held = () => {
 };
 
 /**
+ * Drain the platform until `fiber` answers. One drain is not enough: on a
+ * busy machine the command may not have committed when the first one runs.
+ */
+const joinSettling = <A, E>(settle: Effect.Effect<void>, fiber: Fiber.Fiber<A, E>) =>
+  Effect.gen(function* () {
+    while (fiber.pollUnsafe() === undefined) {
+      yield* settle;
+      yield* Effect.sleep("5 millis");
+    }
+    return yield* Fiber.join(fiber);
+  });
+
+/**
  * A command answers once the view has applied it, so a read by any client
  * after the answer includes it. `consistency: "eventual"` answers at the
  * commit, before the view has it.
@@ -93,8 +106,7 @@ const answersOnceApplied = (
     yield* Effect.sleep("100 millis");
     // Nothing is delivered until the platform drains: the command is still waiting.
     expect(sent.pollUnsafe()).toBeUndefined();
-    yield* settle;
-    expect((yield* Fiber.join(sent)).version).toBe(1);
+    expect((yield* joinSettling(settle, sent)).version).toBe(1);
     // Another client, with no receipt, reads it.
     expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
     // Asked not to wait, the command answers before the view has it.
@@ -103,8 +115,7 @@ const answersOnceApplied = (
     expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
     // A read can still wait for that write by its receipt.
     const read = yield* other.Totals.get("c-1", { atLeast: eventual }).pipe(Effect.forkChild);
-    yield* settle;
-    expect(yield* Fiber.join(read)).toEqual({ total: 3 });
+    expect(yield* joinSettling(settle, read)).toEqual({ total: 3 });
   });
 
 /** A command, and each read that waits for it, on a view that never applies it. */
