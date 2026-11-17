@@ -29,13 +29,13 @@ const NOTES = [
 /** The whole model of an account, and the one rule about it. */
 export const Write = ({ length }: { length: number }) => (
   <Scene kicker="1 · Model it" title="Plain functions, and one rule" length={length}>
-    <div style={{ display: "flex", gap: 44, alignItems: "center" }}>
+    <div style={{ display: "flex", gap: 44, alignItems: "flex-start" }}>
       <Panel title="Account.aggregate.ts" style={{ flex: 1.5 }}>
         <Code
           code={ACCOUNT}
           at={8}
           every={2}
-          size={25}
+          size={24}
           marks={[
             { lines: [3, 4, 5, 6, 7, 8], from: 70 },
             { lines: [9, 10, 11, 12, 13], from: 120 },
@@ -43,12 +43,12 @@ export const Write = ({ length }: { length: number }) => (
           ]}
         />
       </Panel>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 34 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 24, marginTop: 8 }}>
         {NOTES.map((note) => (
           <Rise key={note.name} at={note.at}>
             <div style={{ borderLeft: `6px solid ${note.color}`, paddingLeft: 24 }}>
-              <div style={{ fontSize: 44, fontWeight: 700, color: note.color }}>{note.name}</div>
-              <div style={{ fontSize: 28, color: brand.fgMuted, marginTop: 4 }}>{note.what}</div>
+              <div style={{ fontSize: 40, fontWeight: 700, color: note.color }}>{note.name}</div>
+              <div style={{ fontSize: 26, color: brand.fgMuted, marginTop: 2 }}>{note.what}</div>
             </div>
           </Rise>
         ))}

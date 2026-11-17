@@ -1,6 +1,6 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { brand, mono, sans, serif } from "../theme.ts";
-import { Rise } from "../ui.tsx";
+import { Logo, Rise } from "../ui.tsx";
 
 export const Hook = ({ length }: { length: number }) => {
   const frame = useCurrentFrame();
@@ -19,6 +19,9 @@ export const Hook = ({ length }: { length: number }) => {
         opacity: out,
       }}
     >
+      <div style={{ position: "absolute", top: 56, left: 96 }}>
+        <Logo />
+      </div>
       <Rise at={2}>
         <div style={{ fontFamily: mono, fontSize: 28, letterSpacing: 5, color: brand.moss }}>
           @ALCHEMY.RUN/DOMAIN

@@ -31,5 +31,16 @@ export const serif = loadSourceSerif("normal", {
   subsets: ["latin"],
 }).fontFamily;
 
+export const serifItalic = loadSourceSerif("italic", {
+  weights: ["500"],
+  subsets: ["latin"],
+}).fontFamily;
+
+/**
+ * The corner left empty in every scene, for a camera picture laid over the
+ * video: nothing is drawn inside it.
+ */
+export const FACE = { width: 560, height: 360, right: 64, bottom: 64 } as const;
+
 /** Seconds as frames. */
 export const s = (seconds: number): number => Math.round(seconds * VIDEO.fps);

@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { brand, mono, sans, serif } from "./theme.ts";
+import { brand, FACE, mono, sans, serif, serifItalic } from "./theme.ts";
 
 /** 0 before `at`, easing to 1 over `over` frames. */
 export const useRise = (at: number, over = 14): number => {
@@ -38,6 +38,61 @@ export const Rise = ({
   );
 };
 
+/** The mark and wordmark, as the website's header has them. */
+export const Logo = ({ size = 40 }: { size?: number }) => (
+  <div style={{ display: "inline-flex", alignItems: "center", gap: size * 0.36 }}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={brand.moss}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 21.125 L4.0975 7.4375 L19.9025 7.4375 Z" />
+      <circle cx="12" cy="12" r="1.3" fill={brand.ember} stroke="none" />
+    </svg>
+    <span
+      style={{
+        fontFamily: serifItalic,
+        fontStyle: "italic",
+        fontWeight: 500,
+        fontSize: size * 1.05,
+        letterSpacing: "-0.01em",
+        color: brand.fg,
+      }}
+    >
+      Alchemy
+    </span>
+  </div>
+);
+
+/** Where the camera picture goes: drawn only when a composition asks to see it. */
+export const FaceGuide = () => (
+  <div
+    style={{
+      position: "absolute",
+      right: FACE.right,
+      bottom: FACE.bottom,
+      width: FACE.width,
+      height: FACE.height,
+      border: `2px dashed ${brand.fgMuted}`,
+      borderRadius: 24,
+      color: brand.fgMuted,
+      fontFamily: mono,
+      fontSize: 22,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}
+  >
+    camera
+  </div>
+);
+
 /** One scene: the page, its small label, its headline, and what it shows. */
 export const Scene = ({
   kicker,
@@ -58,9 +113,16 @@ export const Scene = ({
   });
   return (
     <AbsoluteFill
-      style={{ background: brand.bg, color: brand.fg, fontFamily: sans, opacity: out, padding: 96 }}
+      style={{
+        background: brand.bg,
+        color: brand.fg,
+        fontFamily: sans,
+        opacity: out,
+        padding: "56px 96px 64px",
+      }}
     >
-      <Rise at={0}>
+      <Logo />
+      <Rise at={0} style={{ marginTop: 34 }}>
         <div
           style={{
             fontFamily: mono,
@@ -77,9 +139,9 @@ export const Scene = ({
         <div
           style={{
             fontFamily: serif,
-            fontSize: 68,
+            fontSize: 62,
             lineHeight: 1.12,
-            marginTop: 18,
+            marginTop: 12,
             maxWidth: 1500,
           }}
         >
@@ -90,11 +152,7 @@ export const Scene = ({
         style={{
           position: "relative",
           flex: 1,
-          marginTop: 48,
-          paddingBottom: 40,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
+          marginTop: 36,
         }}
       >
         {children}

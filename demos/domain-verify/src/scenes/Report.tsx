@@ -10,7 +10,7 @@ const TIERS = [
 /** What a pass tells you, and where to start. */
 export const Report = ({ length }: { length: number }) => (
   <Scene kicker="The report" title="Every rule says how far it holds" length={length}>
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {TIERS.map(([name, color, what], index) => (
         <Rise key={name} at={8 + index * 14}>
           <div
@@ -21,7 +21,7 @@ export const Report = ({ length }: { length: number }) => (
               borderLeft: `8px solid ${color}`,
               background: brand.bgElevated,
               borderRadius: 14,
-              padding: "20px 28px",
+              padding: "16px 28px",
             }}
           >
             <div style={{ width: 230, fontSize: 44, fontWeight: 700, color }}>{name}</div>
@@ -30,7 +30,7 @@ export const Report = ({ length }: { length: number }) => (
         </Rise>
       ))}
     </div>
-    <Rise at={70} style={{ marginTop: 56 }}>
+    <Rise at={70} style={{ marginTop: 70 }}>
       <div style={{ fontFamily: mono, fontSize: 40, color: brand.moss }}>alchemy.run/domain</div>
     </Rise>
   </Scene>

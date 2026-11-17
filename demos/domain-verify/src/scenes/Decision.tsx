@@ -26,7 +26,7 @@ export const Decision = ({ length }: { length: number }) => (
           <Lines
             at={78}
             every={10}
-            size={23}
+            size={22}
             lines={[
               { text: "state    first:  { balance: 1 }", color: brand.fgMuted },
               { text: "         second: { balance: 1 }", color: brand.fgMuted },
@@ -36,11 +36,8 @@ export const Decision = ({ length }: { length: number }) => (
             ]}
           />
         </Panel>
-        <Rise at={150} style={{ fontSize: 30, color: brand.fg, marginTop: 20 }}>
-          Both names are the same purse.
-        </Rise>
-        <Rise at={166} style={{ fontSize: 30, color: brand.fgMuted }}>
-          Checked for one fee, charged two.
+        <Rise at={150} style={{ fontSize: 28, color: brand.fg, marginTop: 16 }}>
+          Both names are the same purse: checked for one fee, charged two.
         </Rise>
       </Rise>
     </div>

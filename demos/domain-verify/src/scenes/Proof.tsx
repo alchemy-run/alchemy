@@ -13,27 +13,32 @@ export const Proof = ({ length }: { length: number }) => {
   const asking = frame >= 150 && frame < 190;
   return (
     <Scene kicker="2 · Prove it" title="One test. No inputs to write." length={length}>
-      <Panel title="Account.test.ts" style={{ width: 1180 }}>
-        <Code code={TEST} at={6} every={2} size={27} />
-      </Panel>
-      <div style={{ display: "flex", gap: 40, alignItems: "center", marginTop: 34 }}>
-        <Rise at={44} style={{ flex: 1 }}>
-          <Panel title="your code, read as logic">
-            <Lines
-              at={52}
-              every={11}
-              size={26}
-              lines={[
-                { text: "any state the rule allows     balance ≥ 0", color: brand.fgMuted },
-                { text: "any command                   amount: any number", color: brand.fgMuted },
-                { text: "decide records an event       amount ≤ balance" },
-                { text: "evolve                        balance′ = balance − amount" },
-                { text: "can the rule break?           balance′ < 0", color: brand.gold },
-              ]}
-            />
+      <div style={{ display: "flex", gap: 40, alignItems: "flex-start" }}>
+        <div style={{ flex: 1 }}>
+          <Panel title="Account.test.ts">
+            <Code code={TEST} at={6} every={2} size={27} />
           </Panel>
-        </Rise>
-        <div style={{ width: 400, textAlign: "center" }}>
+          <Rise at={44} style={{ marginTop: 30 }}>
+            <Panel title="your code, read as logic">
+              <Lines
+                at={52}
+                every={11}
+                size={25}
+                lines={[
+                  { text: "any state the rule allows     balance ≥ 0", color: brand.fgMuted },
+                  {
+                    text: "any command                   amount: any number",
+                    color: brand.fgMuted,
+                  },
+                  { text: "decide records an event       amount ≤ balance" },
+                  { text: "evolve                        balance′ = balance − amount" },
+                  { text: "can the rule break?           balance′ < 0", color: brand.gold },
+                ]}
+              />
+            </Panel>
+          </Rise>
+        </div>
+        <div style={{ width: 520, textAlign: "center", marginTop: 20 }}>
           <Rise at={150}>
             <div
               style={{

@@ -34,13 +34,13 @@ export const Sequence = ({ length }: { length: number }) => (
                 gap: 18,
                 alignItems: "center",
                 fontFamily: mono,
-                fontSize: 24,
+                fontSize: 23,
                 color: step.color,
                 background: brand.bgElevated,
                 border: `1px solid ${index === STEPS.length - 1 ? brand.ember : brand.border}`,
                 borderRadius: 12,
-                padding: "14px 20px",
-                marginBottom: 12,
+                padding: "11px 20px",
+                marginBottom: 10,
               }}
             >
               <span style={{ color: brand.fgMuted }}>{index + 1}</span>
@@ -50,8 +50,10 @@ export const Sequence = ({ length }: { length: number }) => (
         ))}
       </div>
     </div>
-    <Rise at={176} style={{ fontSize: 30, color: brand.fgMuted, marginTop: 26 }}>
-      Policies and sagas run too, with messages dropped, repeated and reordered.
+    <Rise at={176} style={{ fontSize: 30, color: brand.fgMuted, marginTop: 26, maxWidth: 1100 }}>
+      Policies and sagas react along the way.
+      <br />
+      Their messages are dropped, repeated and reordered.
     </Rise>
   </Scene>
 );

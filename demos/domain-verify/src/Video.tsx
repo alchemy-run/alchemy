@@ -8,6 +8,7 @@ import { Report } from "./scenes/Report.tsx";
 import { Sequence } from "./scenes/Sequence.tsx";
 import { Write } from "./scenes/Write.tsx";
 import { brand, s } from "./theme.ts";
+import { FaceGuide } from "./ui.tsx";
 
 /** The scenes in order, each with its length in seconds. */
 export const SCENES: ReadonlyArray<{
@@ -26,7 +27,8 @@ export const SCENES: ReadonlyArray<{
 
 export const DURATION = SCENES.reduce((total, scene) => total + s(scene.seconds), 0);
 
-export const Video = () => (
+/** The video. `guide` draws the corner kept empty for a camera picture. */
+export const Video = ({ guide = false }: { guide?: boolean }) => (
   <AbsoluteFill style={{ background: brand.bg }}>
     <Series>
       {SCENES.map((scene) => (
@@ -35,5 +37,6 @@ export const Video = () => (
         </Series.Sequence>
       ))}
     </Series>
+    {guide && <FaceGuide />}
   </AbsoluteFill>
 );

@@ -9,4 +9,6 @@ pnpm render   # out/domain-verify.mp4
 
 The rendered video is checked in at [`out/domain-verify.mp4`](./out/domain-verify.mp4).
 
+The bottom right corner of every scene is left empty for a camera picture laid over the video. The `DomainVerifyGuide` composition outlines it (`FACE` in `src/theme.ts` sets its size).
+
 Each scene is one file in `src/scenes`, and `src/Video.tsx` puts them in order with their lengths.
