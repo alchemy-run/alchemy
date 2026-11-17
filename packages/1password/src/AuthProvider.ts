@@ -200,7 +200,7 @@ export const resolveCredentials = (account?: string) =>
       OnePasswordAuthConfig,
       OnePasswordResolvedCredentials
     >(PROVIDER_NAME).pipe(Effect.provide(OnePasswordAuth));
-    // In CI, resolveProviderConfig only reads the environment, so a desktop
-    // profile can't reach here there.
+    // In CI, resolveProviderConfig returns only readEnvironment, so a stored
+    // desktop profile is never resolved.
     return yield* resolved.resolve;
   }).pipe(Effect.provide(CredentialsConfig));

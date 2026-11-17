@@ -124,6 +124,7 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
         { references: { GOOD: "op://v/i/f", "": "op://v/i/f" } },
         { references: "op://v/i/f" },
         {},
+        undefined,
         { environmentId: " " },
         { environmentId: "env", account: " " },
       ]) {

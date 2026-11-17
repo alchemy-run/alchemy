@@ -137,7 +137,10 @@ export const Secrets = (options: SecretsOption<OnePasswordOptions>) =>
         if (yield* SuppressMissingProviderConfig) return ConfigProvider.fromEnv({ env: {} });
         const supplied = yield* resolveSecretsOption(options);
         // Name the config key of a malformed reference; config keys aren't secret.
-        const references: unknown = (supplied as { references?: unknown }).references;
+        const references: unknown =
+          typeof supplied === "object" && supplied !== null
+            ? (supplied as { references?: unknown }).references
+            : undefined;
         if (typeof references === "object" && references !== null) {
           for (const [configKey, reference] of Object.entries(references)) {
             if (!isSecretReference(reference)) {
