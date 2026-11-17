@@ -9,6 +9,7 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import { collectMountCapabilities, mountInstallLines, MountUnsupported } from "alchemy/Mount";
+import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
@@ -1588,8 +1589,12 @@ export const LiveContainerProvider = () =>
           // An observed detached application being re-attached reconciles
           // unattached, like precreate: the Worker publishes the namespace in
           // the same apply and the convergence pass attaches it. A missing
-          // application is never created without its attachment.
+          // application is never created without its attachment: a cycle
+          // whose Worker hasn't published the namespace yet (a deployed
+          // Worker gaining this Container) keeps precreate's placeholder, and
+          // the convergence pass creates the application once it has.
           if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
+            if (output && !isLiveId(output.applicationId)) return output;
             return yield* new ContainerProviderOperationFailed({
               message: `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
             });
@@ -1728,7 +1733,7 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        delete: Effect.fn(function* ({ olds, output }) {
+        delete: Effect.fn(function* ({ id, instanceId, output }) {
           let applicationId = output.applicationId;
           // A Durable Object Container records no application: its Durable
           // Object class owns it.
@@ -1736,10 +1741,14 @@ export const LiveContainerProvider = () =>
           // A `dev:` applicationId is precreate's placeholder: a deploy
           // interrupted after precreate may still have created the
           // application under its generated name. An explicit name never
-          // establishes ownership, so only a generated one is deleted.
+          // establishes ownership, so only this generation's generated name
+          // is looked up, in the account the placeholder recorded.
           if (!isLiveId(applicationId)) {
-            if (nameOf(olds) !== undefined) return;
-            const found = yield* findApplicationByName(output.applicationName);
+            const generated = yield* createPhysicalName({ id, instanceId, lowercase: true });
+            if (output.applicationName !== generated) return;
+            const found = yield* Containers.listContainerApplications({
+              accountId: output.accountId,
+            }).pipe(Effect.map((apps) => apps.find((app) => app.name === generated)));
             if (found === undefined) return;
             applicationId = found.id;
           }

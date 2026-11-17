@@ -47,6 +47,8 @@ import {
   recoveryApplications,
   historyApplications,
 } from "./fixtures/publication/applications.ts";
+import GrowingRemoteWorkerAfter from "./fixtures/remote/growing-after.ts";
+import GrowingRemoteWorkerBefore from "./fixtures/remote/growing-before.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 
@@ -1535,10 +1537,64 @@ describe.concurrent(
           expect(isLiveId(app.applicationId)).toBe(true);
           const namespaceId = app.durableObjects?.namespaceId;
           expect(namespaceId).toBeDefined();
-          const named = (yield* Containers.listContainerApplications({ accountId })).filter(
-            (item) => item.name === app.applicationName,
+          // `list` is eventually consistent: wait for it to show only this id.
+          const named = yield* Containers.listContainerApplications({ accountId }).pipe(
+            Effect.map((apps) =>
+              apps.filter((item) => item.name === app.applicationName).map((item) => item.id),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (ids) => ids.length === 1 && ids[0] === app.applicationId,
+              times: 8,
+            }),
           );
-          expect(named.map((item) => item.id)).toEqual([app.applicationId]);
+          expect(named).toEqual([app.applicationId]);
+          expect(
+            yield* live(accountId, app.applicationId).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ContainerApplicationNotFound",
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            ),
+          ).toMatchObject({ durableObjects: { namespaceId } });
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* waitForApplicationDeleted(accountId, app.applicationId)).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    // A deployed Worker that gains a fleet Container updates inside the
+    // cycle, so it first publishes its old attributes, which have no namespace
+    // for the new class. The Container keeps precreate's placeholder until
+    // the convergence pass hands it the namespace, then creates the
+    // application once, attached.
+    test.provider(
+      "a deployed Worker gains a fleet Container in one deploy",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* scratch.deploy(
+            Effect.gen(function* () {
+              yield* GrowingRemoteWorkerBefore;
+            }),
+          );
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* GrowingRemoteWorkerAfter;
+            const app = yield* RemoteContainer.Application;
+            return { worker, app };
+          });
+          const { worker, app } = yield* scratch.deploy(program);
+
+          expect(isLiveId(app.applicationId)).toBe(true);
+          const namespaceId = worker.durableObjectNamespaces.RemoteContainerObject;
+          expect(namespaceId).toBeDefined();
+          expect(app.durableObjects).toEqual({ namespaceId });
           expect(
             yield* live(accountId, app.applicationId).pipe(
               Effect.retry({
