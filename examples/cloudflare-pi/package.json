@@ -16,6 +16,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/ai": "workspace:*",
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/boat": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",

@@ -17,7 +17,7 @@ export {
   type Submission,
   type SubmissionDraft,
 } from "./Harness.ts";
-export { LocalEnv, Sandbox, type SandboxKey, type SandboxLike } from "./Sandbox.ts";
+export { LocalEnv } from "./Sandbox.ts";
 export {
   block,
   Extension,
@@ -26,8 +26,6 @@ export {
   type ExtensionImpl,
   type ExtensionSpec,
 } from "./Extension.ts";
-export { Skill, type AnySkill, type SkillSpec } from "./Skill.ts";
-export { Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export { MemoryStorage, SqliteFile, Storage, type InstanceStorage } from "./Storage.ts";
 export {
   Tool,

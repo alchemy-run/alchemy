@@ -1,10 +1,10 @@
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 /** The model conversations run on. Which LLM answers is the Layer behind it. */
-export class Fast extends Pi.Model<Fast>()("fast") {}
+export class Fast extends AI.Model<Fast>()("fast") {}
 
 /** Llama 3.3 70B on Workers AI, through the Worker's own `AI` binding. */
 export const FastLive = Layer.unwrap(

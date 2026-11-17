@@ -11,32 +11,13 @@
  *
  * @internal
  */
+import type { SandboxHandle as DaemonSandbox } from "@alchemy.run/ai/Sandbox";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as SandboxApi from "alchemy/Sandbox";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { OpenDaemon } from "./pienv.ts";
-
-/** The sandbox calls the daemon needs. */
-export interface DaemonSandbox {
-  exec(
-    command: SandboxApi.Command,
-    options?: any,
-  ): Effect.Effect<{ readonly exitCode: number | undefined }, unknown, RuntimeContext>;
-  start(
-    command: SandboxApi.Command,
-    options?: any,
-  ): Effect.Effect<
-    {
-      readonly output: Stream.Stream<SandboxApi.ProcessOutput, unknown, RuntimeContext>;
-      kill(): Effect.Effect<unknown, unknown, RuntimeContext>;
-    },
-    unknown,
-    RuntimeContext | Scope.Scope
-  >;
-}
 
 /**
  * `$0` is the daemon, `$1` its input FIFO, `$2` its token. The shell holds

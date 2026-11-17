@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 
@@ -27,7 +28,7 @@ export class Guard extends Pi.Extension<Guard>()(
 ) {}
 
 /** A skill: advertised in the prompt, loaded with `load_skill` when it applies. */
-export class Greeting extends Pi.Skill<Greeting>()("greeting", {
+export class Greeting extends AI.Skill<Greeting>()("greeting", {
   description: "How to greet the user. Use it whenever the user asks you to greet them.",
   instructions: "Greet the user with exactly: HELLO-FROM-SKILL",
 }) {}

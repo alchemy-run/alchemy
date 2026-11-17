@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -17,7 +18,7 @@ import { ModalSandbox } from "./sandboxes/Modal.ts";
  * Which platform the sandbox is on is the one Layer passed in. Nothing else
  * changes from one platform to the next.
  */
-const workspace = <E, R>(sandbox: Layer.Layer<Pi.Sandbox, E, R>) =>
+const workspace = <E, R>(sandbox: Layer.Layer<AI.Sandbox, E, R>) =>
   Effect.gen(function* () {
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 

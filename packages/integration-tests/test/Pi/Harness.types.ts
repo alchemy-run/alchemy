@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as Pi from "@alchemy.run/pi";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -20,9 +21,9 @@ type _PlainNeedsNoSandbox = Assert<Equals<Effect.Services<typeof plain>, Pi.Stor
 // The coding tools, as a group or one at a time, require a sandbox.
 const coding = Pi.Harness({ models: [Fast], tools: [Pi.CodingTools, Add] });
 type _CodingToolsNeedSandbox = Assert<
-  Equals<Effect.Services<typeof coding>, Pi.Storage | Fast | Add | Pi.Sandbox>
+  Equals<Effect.Services<typeof coding>, Pi.Storage | Fast | Add | AI.Sandbox>
 >;
 const bash = Pi.Harness({ models: [Fast], tools: [Pi.Bash] });
 type _OneCodingToolNeedsSandbox = Assert<
-  Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | Pi.Sandbox>
+  Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | AI.Sandbox>
 >;

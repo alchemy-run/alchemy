@@ -32,6 +32,9 @@
       "path": "../../packages/modal/tsconfig.json"
     },
     {
+      "path": "../../packages/ai/tsconfig.json"
+    },
+    {
       "path": "../../packages/pi/tsconfig.json"
     }
   ]

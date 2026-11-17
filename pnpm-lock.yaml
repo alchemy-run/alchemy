@@ -2988,6 +2988,9 @@ importers:
 
   examples/cloudflare-pi:
     dependencies:
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@alchemy.run/archil':
         specifier: workspace:*
         version: link:../../packages/archil
@@ -8763,6 +8766,21 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  packages/ai:
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
   packages/alchemy:
     dependencies:
       '@alchemy.run/node-utils':
@@ -10602,6 +10620,9 @@ importers:
       '@alchemy.run/acme':
         specifier: workspace:*
         version: link:../acme
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@alchemy.run/archil':
         specifier: workspace:*
         version: link:../archil
@@ -11173,6 +11194,9 @@ importers:
 
   packages/pi:
     dependencies:
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@earendil-works/chord':
         specifier: 1.5.0
         version: 1.5.0(esbuild@0.28.2)(ws@8.21.0)

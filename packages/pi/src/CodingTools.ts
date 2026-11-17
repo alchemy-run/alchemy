@@ -1,9 +1,9 @@
+import type { Sandbox } from "@alchemy.run/ai/Sandbox";
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 import { CodingTools as PiCodingTools } from "@earendil-works/pi-durable/tools";
-import type { Sandbox } from "./Sandbox.ts";
 import { builtin, group, type BuiltinTool } from "./Tool.ts";
 
-/** A coding tool works on files or a shell, so listing it requires a `Pi.Sandbox`. */
+/** A coding tool works on files or a shell, so listing it requires an `AI.Sandbox`. */
 const named = <Name extends string>(name: Name): BuiltinTool<Name, Sandbox> => {
   const registration = (PiCodingTools.tools ?? []).find((tool) => tool.name === name);
   if (registration === undefined) throw new Error(`Pi's coding tools have no "${name}"`);
@@ -21,6 +21,6 @@ export const Bash = named("bash");
 
 /**
  * Pi's coding tools: `read`, `write`, `edit` and `bash`. They run in the
- * conversation's `Pi.Sandbox`, which a harness that lists them requires.
+ * conversation's `AI.Sandbox`, which a harness that lists them requires.
  */
 export const CodingTools = group(Read, Write, Edit, Bash);

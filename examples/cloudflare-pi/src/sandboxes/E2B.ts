@@ -1,18 +1,18 @@
+import * as AI from "@alchemy.run/ai";
 import * as E2B from "@alchemy.run/e2b";
-import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { sandboxName } from "./name.ts";
 
 /** One E2B sandbox per conversation. E2B kills it ten minutes after its last use. */
 export const E2BSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* E2B.Template("E2BBase", { image: "node:22-bookworm" });
     const sandboxes = yield* E2B.CreateSandbox(base);
     // E2B finds sandboxes by metadata.
-    const metadataOf = (key: Pi.SandboxKey) => ({ conversation: sandboxName(key) });
-    const find = (key: Pi.SandboxKey) =>
+    const metadataOf = (key: AI.SandboxTarget) => ({ conversation: sandboxName(key) });
+    const find = (key: AI.SandboxTarget) =>
       sandboxes.list({ metadata: metadataOf(key), state: ["running", "paused"] });
 
     return {

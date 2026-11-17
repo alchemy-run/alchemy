@@ -6,6 +6,7 @@
  *
  * @internal
  */
+import type { ModelOptions } from "@alchemy.run/ai/Model";
 import type {
   AssistantMessage,
   AssistantMessageEvent,
@@ -29,15 +30,6 @@ import * as Stream from "effect/Stream";
 import { messageOf } from "./promise.ts";
 
 export const API = "alchemy-effect-ai";
-
-export interface ModelOptions {
-  /** Tokens of context the model accepts. @default 128000 */
-  readonly contextWindow?: number;
-  /** Most tokens one answer may have. @default 8192 */
-  readonly maxTokens?: number;
-  /** Whether the model accepts images. @default false */
-  readonly images?: boolean;
-}
 
 /** Runs the model's Effect where the harness was yielded. */
 export type RunModel = <A, E>(

@@ -1,5 +1,5 @@
+import * as AI from "@alchemy.run/ai";
 import * as Archil from "@alchemy.run/archil";
-import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { sandboxName } from "./name.ts";
@@ -9,7 +9,7 @@ import { sandboxName } from "./name.ts";
  * already has the name, and Archil pauses it while it is idle.
  */
 export const ArchilSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* Archil.Image("ArchilBase", { image: "node:22-bookworm" });
     const sandboxes = yield* Archil.CreateSandbox(base);

@@ -6,17 +6,19 @@ description: Run Pi Durable agent harnesses with Alchemy. Conversations in a Dur
 [Pi Durable](https://github.com/earendil-works/pi/tree/main/packages/durable) is the durable engine behind the Pi coding agent. It keeps conversations, model calls and tool calls as checkpointed tasks in one storage, so a process that dies mid-run picks up where it stopped. `@alchemy.run/pi` hosts it on Alchemy runtimes: a harness is yielded like a binding, tools and models are Effect Layers, and conversations live in the storage of whatever hosts them.
 
 ```sh
-npm install @alchemy.run/pi
+npm install @alchemy.run/pi @alchemy.run/ai
 ```
+
+Models, skills and sandboxes come from `@alchemy.run/ai`. They are declared once and run on any Alchemy harness.
 
 ## A harness in a Durable Object
 
 Name a model once. Which LLM answers is the Layer you back it with:
 
 ```typescript title="src/models.ts"
-import * as Pi from "@alchemy.run/pi";
+import * as AI from "@alchemy.run/ai";
 
-export class Fast extends Pi.Model<Fast>()("fast") {}
+export class Fast extends AI.Model<Fast>()("fast") {}
 ```
 
 Declare a tool as a contract. Its `success` schema becomes the type programs see:
@@ -128,20 +130,20 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 
 ## Tools in a sandbox
 
-A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi.Sandbox` opens a conversation's sandbox and removes it:
+A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `AI.Sandbox` opens a conversation's sandbox and removes it:
 
 ```typescript
 const E2BSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* E2B.CreateSandbox(base);
-    const metadataOf = ({ instanceId, conversationId }: Pi.SandboxKey) => ({
+    const metadataOf = ({ instanceId, conversationId }: AI.SandboxTarget) => ({
       instance: instanceId,
-      conversation: String(conversationId),
+      conversation: conversationId,
     });
-    const find = (key: Pi.SandboxKey) =>
-      sandboxes.list({ metadata: metadataOf(key), state: ["running", "paused"] });
+    const find = (target: AI.SandboxTarget) =>
+      sandboxes.list({ metadata: metadataOf(target), state: ["running", "paused"] });
 
     return {
       open: Effect.fn(function* (target) {
@@ -150,8 +152,8 @@ const E2BSandbox = Layer.effect(
           ? yield* sandboxes.connect(existing.sandboxID)
           : yield* sandboxes.create({ metadata: metadataOf(target), timeout: 600 });
       }),
-      remove: Effect.fn(function* (key) {
-        const found = yield* find(key);
+      remove: Effect.fn(function* (target) {
+        const found = yield* find(target);
         yield* Effect.forEach(found, (sandbox) => sandboxes.kill(sandbox.sandboxID));
       }),
     };
@@ -161,7 +163,7 @@ const E2BSandbox = Layer.effect(
 
 The template is the image every sandbox boots from; the deploy builds it. Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
 
-`Pi.CodingTools` require a `Pi.Sandbox`, so a harness that lists them compiles only once the Layer is provided:
+`Pi.CodingTools` require an `AI.Sandbox`, so a harness that lists them compiles only once the Layer is provided:
 
 ```typescript
 const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
@@ -182,15 +184,15 @@ yield* conversation.removeSandbox;
 
 ### Another sandbox platform
 
-The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `Pi.Sandbox` Layer:
+The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `AI.Sandbox` Layer:
 
 ```typescript
 const DaytonaSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* Daytona.CreateSandbox(base);
-    const nameOf = ({ instanceId, conversationId }: Pi.SandboxKey) =>
+    const nameOf = ({ instanceId, conversationId }: AI.SandboxTarget) =>
       `pi-${instanceId.slice(0, 16)}-${conversationId}`;
 
     return {
@@ -202,7 +204,7 @@ const DaytonaSandbox = Layer.effect(
         yield* existing.startSandbox();
         return existing;
       }),
-      remove: (key) => sandboxes.delete(nameOf(key)),
+      remove: (target) => sandboxes.delete(nameOf(target)),
     };
   }),
 ).pipe(Layer.provide(Daytona.CreateSandboxHttp));
@@ -246,7 +248,7 @@ export class Guard extends Pi.Extension<Guard>()(
 A skill is advertised in the system prompt and loaded with `load_skill` when the task calls for it:
 
 ```typescript
-export class Releasing extends Pi.Skill<Releasing>()("releasing", {
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
   description: "Cut and upload a release. Use when the user asks to ship.",
   instructions: "Run the tests, run .skills/releasing/bump.sh, build, then call deploy.",
   files: { "bump.sh": "npm version patch --no-git-tag-version\n" },

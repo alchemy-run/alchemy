@@ -1,3 +1,6 @@
+import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
+import { Sandbox } from "@alchemy.run/ai/Sandbox";
+import type { AnySkill } from "@alchemy.run/ai/Skill";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
@@ -48,9 +51,8 @@ import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
-import type { AnyModel, ModelService } from "./Model.ts";
-import { makeEnvFor, Sandbox } from "./Sandbox.ts";
-import { isSkill, type AnySkill } from "./Skill.ts";
+import { makeEnvFor } from "./Sandbox.ts";
+import { isSkill, toExtension, type SkillExtension } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
   flattenTools,
@@ -74,7 +76,7 @@ const ConversationNames = defineDoc<{ names: Record<string, number> }>({
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
   Tools extends ReadonlyArray<AnyTool>,
-  Extensions extends ReadonlyArray<AnyExtension> = readonly [],
+  Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
 > {
   /**
    * Distinguishes several harnesses in one Durable Object: each keeps its
@@ -113,8 +115,11 @@ export interface AgentOptions {
    * tools it brings.
    */
   readonly extensions?:
-    | ReadonlyArray<AnyExtension>
-    | { readonly add?: ReadonlyArray<AnyExtension>; readonly remove?: ReadonlyArray<AnyExtension> }
+    | ReadonlyArray<AnyExtension | AnySkill>
+    | {
+        readonly add?: ReadonlyArray<AnyExtension | AnySkill>;
+        readonly remove?: ReadonlyArray<AnyExtension | AnySkill>;
+      }
     | null;
   /** Rendered after every other system prompt section. */
   readonly instructions?: string | null;
@@ -182,7 +187,7 @@ export interface Conversation {
     window?: ConversationWindow,
   ) => Stream.Stream<ConversationView, PiError, RuntimeContext>;
   /**
-   * Delete the conversation's sandbox (`Pi.Sandbox`'s `remove`). Its next
+   * Delete the conversation's sandbox (`AI.Sandbox`'s `remove`). Its next
    * tool call opens a new one. Does nothing on a harness without a sandbox.
    */
   readonly removeSandbox: Effect.Effect<void, PiError, RuntimeContext>;
@@ -238,7 +243,7 @@ const BASE_EXTENSION = "alchemy";
  */
 const LOAD_SKILL = "load_skill";
 
-const loadSkill = (skills: ReadonlyMap<string, AnySkill>): ToolRegistration =>
+const loadSkill = (skills: ReadonlyMap<string, SkillExtension>): ToolRegistration =>
   ({
     name: LOAD_SKILL,
     description:
@@ -308,7 +313,7 @@ const HEARTBEAT = "30 seconds";
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
   const Tools extends ReadonlyArray<AnyTool> = readonly [],
-  const Extensions extends ReadonlyArray<AnyExtension> = readonly [],
+  const Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
 >(
   options: HarnessOptions<Models, Tools, Extensions>,
 ): Effect.Effect<
@@ -352,30 +357,32 @@ export const Harness = <
         }
       });
     const tools = yield* resolveTools(options.tools ?? []);
-    const extensions = yield* Effect.forEach(options.extensions ?? [], (extension) =>
-      Effect.gen(function* () {
-        const impl: ExtensionImpl | undefined = extension.impl
-          ? yield* extension.impl
-          : isSkill(extension) || isCodeMode(extension)
-            ? undefined
-            : Option.getOrUndefined(
-                yield* Effect.serviceOption(
-                  extension as unknown as Context.Key<unknown, ExtensionImpl>,
-                ),
-              );
-        // Code mode's extension is built by its convention when an instance opens.
-        const codemode = isCodeMode(extension) ? yield* CodeModeConvention : undefined;
-        return {
-          extension,
-          impl,
-          codemode,
-          tools: yield* resolveTools(extension.spec.tools ?? []),
-        };
-      }),
+    const extensions = yield* Effect.forEach(
+      (options.extensions ?? []).map(toExtension),
+      (extension) =>
+        Effect.gen(function* () {
+          const impl: ExtensionImpl | undefined = extension.impl
+            ? yield* extension.impl
+            : isSkill(extension) || isCodeMode(extension)
+              ? undefined
+              : Option.getOrUndefined(
+                  yield* Effect.serviceOption(
+                    extension as unknown as Context.Key<unknown, ExtensionImpl>,
+                  ),
+                );
+          // Code mode's extension is built by its convention when an instance opens.
+          const codemode = isCodeMode(extension) ? yield* CodeModeConvention : undefined;
+          return {
+            extension,
+            impl,
+            codemode,
+            tools: yield* resolveTools(extension.spec.tools ?? []),
+          };
+        }),
     );
     const skills = new Map(
       extensions.flatMap(({ extension }) =>
-        isSkill(extension) ? [[extension.skillName, extension as AnySkill] as const] : [],
+        isSkill(extension) ? [[extension.skillName, extension] as const] : [],
       ),
     );
     const captured = yield* Effect.context<never>();
@@ -409,12 +416,14 @@ export const Harness = <
     ]);
 
     /** The tools selecting these extensions enables: their own, and the one that drives them. */
-    const broughtBy = (selected: ReadonlyArray<AnyExtension>): ReadonlyArray<ToolRef> =>
-      selected.flatMap((extension) => [
-        ...flattenTools(extension.spec.tools ?? []),
-        ...(isCodeMode(extension) ? [{ toolName: CODEMODE_TOOL } as ToolRef] : []),
-        ...(isSkill(extension) ? [{ toolName: LOAD_SKILL } as ToolRef] : []),
-      ]);
+    const broughtBy = (selected: ReadonlyArray<AnyExtension | AnySkill>): ReadonlyArray<ToolRef> =>
+      selected
+        .map(toExtension)
+        .flatMap((extension) => [
+          ...flattenTools(extension.spec.tools ?? []),
+          ...(isCodeMode(extension) ? [{ toolName: CODEMODE_TOOL } as ToolRef] : []),
+          ...(isSkill(extension) ? [{ toolName: LOAD_SKILL } as ToolRef] : []),
+        ]);
     const modelName = (model: AnyModel) => model.modelName;
 
     const open = Effect.gen(function* () {
@@ -663,8 +672,8 @@ export const Harness = <
           const enabled = current ?? [...toolByName.keys()];
           tools = yield* exactly([...enabled, ...add].filter((name) => !remove.has(name)));
         }
-        const named = (extension: AnyExtension) =>
-          ({ name: extension.extensionName }) as PiExtension;
+        const named = (extension: AnyExtension | AnySkill) =>
+          ({ name: toExtension(extension).extensionName }) as PiExtension;
         let selected: AgentChange["extensions"];
         if (agent.extensions === null) selected = null;
         else if (agent.extensions === undefined) selected = undefined;
@@ -672,8 +681,8 @@ export const Harness = <
           selected = [{ name: BASE_EXTENSION } as PiExtension, ...agent.extensions.map(named)];
         else {
           const edit = agent.extensions as {
-            add?: ReadonlyArray<AnyExtension>;
-            remove?: ReadonlyArray<AnyExtension>;
+            add?: ReadonlyArray<AnyExtension | AnySkill>;
+            remove?: ReadonlyArray<AnyExtension | AnySkill>;
           };
           selected = {
             ...(edit.add ? { add: edit.add.map(named) } : {}),
@@ -747,7 +756,7 @@ export const Harness = <
           sandbox === undefined
             ? Effect.void
             : Effect.suspend(() =>
-                sandbox.remove({ instanceId: storage.id, conversationId: id }),
+                sandbox.remove({ instanceId: storage.id, conversationId: String(id) }),
               ).pipe(
                 Effect.asVoid,
                 Effect.mapError(

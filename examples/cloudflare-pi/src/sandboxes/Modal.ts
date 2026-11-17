@@ -1,5 +1,5 @@
+import * as AI from "@alchemy.run/ai";
 import * as Modal from "@alchemy.run/modal";
-import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { sandboxName } from "./name.ts";
@@ -9,7 +9,7 @@ import { sandboxName } from "./name.ts";
  * after ten idle minutes.
  */
 export const ModalSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const app = yield* Modal.App("ModalApp", {});
     const base = yield* Modal.Image("ModalBase", { app, image: "node:22-bookworm" });

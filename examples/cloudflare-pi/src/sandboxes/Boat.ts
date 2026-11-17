@@ -1,5 +1,5 @@
+import * as AI from "@alchemy.run/ai";
 import * as Boat from "@alchemy.run/boat";
-import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { sandboxName } from "./name.ts";
@@ -9,12 +9,12 @@ import { sandboxName } from "./name.ts";
  * keeps its disk, so the next tool call resumes it with its files.
  */
 export const BoatSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* Boat.Snapshot("BoatBase", { run: ["npm install --global pnpm"] });
     const sandboxes = yield* Boat.CreateSandbox(base);
     // Boat finds sandboxes by label.
-    const labelsOf = (key: Pi.SandboxKey) => ({ conversation: sandboxName(key) });
+    const labelsOf = (key: AI.SandboxTarget) => ({ conversation: sandboxName(key) });
 
     return {
       open: Effect.fn(function* (target) {

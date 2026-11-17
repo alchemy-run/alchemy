@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@alchemy.run/acme": "workspace:*",
+    "@alchemy.run/ai": "workspace:*",
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",

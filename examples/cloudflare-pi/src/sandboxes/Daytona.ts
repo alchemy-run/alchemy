@@ -1,5 +1,5 @@
+import * as AI from "@alchemy.run/ai";
 import * as Daytona from "@alchemy.run/daytona";
-import * as Pi from "@alchemy.run/pi";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { sandboxName } from "./name.ts";
@@ -9,7 +9,7 @@ import { sandboxName } from "./name.ts";
  * after fifteen idle minutes and deletes it once stopped.
  */
 export const DaytonaSandbox = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const base = yield* Daytona.Snapshot("DaytonaBase", {
       image: "node:22-bookworm",

@@ -353,7 +353,7 @@ const missingEnv = new Proxy(
     get: (_target, property) => {
       if (property === "then") return undefined;
       throw new Error(
-        `This harness has no Pi.Sandbox: the tool cannot use files or a shell (${String(property)}).`,
+        `This harness has no AI.Sandbox: the tool cannot use files or a shell (${String(property)}).`,
       );
     },
   },

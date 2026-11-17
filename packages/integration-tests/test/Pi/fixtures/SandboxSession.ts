@@ -1,3 +1,4 @@
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
 import * as Pi from "@alchemy.run/pi";
@@ -22,7 +23,7 @@ const ModelsLive = Layer.unwrap(
  * Marks a conversation's sandbox. Conversation ids repeat from one Durable
  * Object to the next, so the object's id is part of the mark.
  */
-const markOf = (instanceId: string, conversationId: number) => ({
+const markOf = (instanceId: string, conversationId: string | number) => ({
   "pi-instance": instanceId,
   "pi-conversation": String(conversationId),
 });
@@ -35,10 +36,10 @@ const Sandboxes = Effect.gen(function* () {
 
 /** One E2B sandbox per conversation, found again by its mark. */
 const SandboxLive = Layer.effect(
-  Pi.Sandbox,
+  AI.Sandbox,
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
-    const find = ({ instanceId, conversationId }: Pi.SandboxKey) =>
+    const find = ({ instanceId, conversationId }: AI.SandboxTarget) =>
       sandboxes.list({
         metadata: markOf(instanceId, conversationId),
         state: ["running", "paused"],

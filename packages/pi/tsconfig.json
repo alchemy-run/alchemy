@@ -11,5 +11,9 @@
     "target": "ESNext",
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
   },
-  "references": [{ "path": "../alchemy/tsconfig.json" }, { "path": "../cloudflare/tsconfig.json" }]
+  "references": [
+    { "path": "../alchemy/tsconfig.json" },
+    { "path": "../ai/tsconfig.json" },
+    { "path": "../cloudflare/tsconfig.json" }
+  ]
 }

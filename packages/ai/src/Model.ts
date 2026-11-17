@@ -3,11 +3,18 @@ import type { LanguageModel } from "effect/ai";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { ModelOptions } from "./internal/provider.ts";
 
-export type { ModelOptions } from "./internal/provider.ts";
+const ModelTypeId = "~alchemy/AI/Model" as const;
 
-const ModelTypeId = "~alchemy/Pi/Model" as const;
+/** What a harness needs to know about a model beyond its name. */
+export interface ModelOptions {
+  /** Tokens of context the model accepts. @default 128000 */
+  readonly contextWindow?: number;
+  /** Most tokens one answer may have. @default 8192 */
+  readonly maxTokens?: number;
+  /** Whether the model accepts images. @default false */
+  readonly images?: boolean;
+}
 
 /**
  * A model a harness can run conversations on, named once and backed by an
@@ -16,7 +23,7 @@ const ModelTypeId = "~alchemy/Pi/Model" as const;
  */
 export interface ModelClass<Self, Name extends string> extends Context.ServiceClass<
   Self,
-  `Pi.Model/${Name}`,
+  `AI.Model/${Name}`,
   ModelService
 > {
   readonly [ModelTypeId]: true;
@@ -35,7 +42,7 @@ export interface ModelClass<Self, Name extends string> extends Context.ServiceCl
 
 /**
  * What a model tag holds: its `LanguageModel` Layer, with the services it
- * needed where it was provided already applied. The harness builds it when
+ * needed where it was provided already applied. A harness builds it when
  * an instance opens, where the runtime context exists.
  */
 export interface ModelService {
@@ -48,21 +55,24 @@ export const isModel = (u: unknown): u is AnyModel =>
   typeof u === "function" && u !== null && ModelTypeId in u;
 
 /**
- * Declare a model.
+ * Declare a model. The same declaration runs on any harness.
  *
- * **Example:** A model backed by Workers AI through an AI Gateway
+ * **Example:** A model backed by Workers AI
  * ```typescript
- * export class Fast extends Pi.Model<Fast>()("fast") {}
+ * export class Fast extends AI.Model<Fast>()("fast") {}
  *
- * export const FastLive = Fast.layer(
- *   Cloudflare.AI.makeLanguageModelLayer({ client: gateway, model: "@cf/zai-org/glm-5.3-flash" }),
- * );
+ * export const FastLive = Layer.unwrap(
+ *   Effect.gen(function* () {
+ *     const ai = yield* Cloudflare.Workers.AI();
+ *     return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
+ *   }),
+ * ).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
  * ```
  */
 export const Model =
   <Self>() =>
   <const Name extends string>(name: Name, options: ModelOptions = {}): ModelClass<Self, Name> => {
-    const Tag = Context.Service<Self, ModelService>()(`Pi.Model/${name}`);
+    const Tag = Context.Service<Self, ModelService>()(`AI.Model/${name}`);
     return class extends Tag {
       static readonly [ModelTypeId] = true;
       static readonly modelName = name;
