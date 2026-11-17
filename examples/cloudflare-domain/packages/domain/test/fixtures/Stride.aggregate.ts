@@ -4,14 +4,12 @@ import * as Schema from "effect/Schema";
 export class Moved extends Domain.Event("Moved", { by: Schema.Int }) {}
 
 export class Advance extends Domain.Command("Advance", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Moved],
 }) {}
 
 export class Nudge extends Domain.Command("Nudge", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Moved],
 }) {}
 
@@ -22,6 +20,7 @@ export class Stride extends Domain.Aggregate("Stride", {
   initial: { place: 0 },
   invariants: { NeverBehind: (stride) => stride.place >= 0 },
   commands: [Advance, Nudge],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Advance: () => [new Moved({ by: 5 })],
     Nudge: () => [new Moved({ by: 1 })],

@@ -7,8 +7,7 @@ export class RoundOpened extends Domain.Event("RoundOpened", {}) {}
 export class AlreadyOpen extends Domain.Rejection("AlreadyOpen", {}) {}
 
 export class OpenRound extends Domain.Command("OpenRound", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [RoundOpened],
   rejects: [AlreadyOpen],
 }) {}
@@ -18,6 +17,7 @@ export class Round extends Domain.Aggregate("Round", {
   state: Schema.Struct({ open: Schema.Boolean }),
   initial: { open: false },
   commands: [OpenRound],
+  keyOf: (cmd) => cmd.id,
   decide: {
     OpenRound: (round) => (round.open ? new AlreadyOpen() : [new RoundOpened({})]),
   },
@@ -29,14 +29,12 @@ export class OneAdded extends Domain.Event("OneAdded", {}) {}
 export class Doubled extends Domain.Event("Doubled", {}) {}
 
 export class AddOne extends Domain.Command("AddOne", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [OneAdded],
 }) {}
 
 export class Double extends Domain.Command("Double", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Doubled],
 }) {}
 
@@ -46,6 +44,7 @@ export class Score extends Domain.Aggregate("Score", {
   state: Schema.Struct({ points: Schema.Int }),
   initial: { points: 0 },
   commands: [AddOne, Double],
+  keyOf: (cmd) => cmd.id,
   decide: {
     AddOne: () => [new OneAdded({})],
     Double: () => [new Doubled({})],
@@ -63,7 +62,7 @@ export const AwardLive = Award.toLayer(
   Effect.gen(function* () {
     const scores = yield* Score;
     return Effect.fn(function* ({ source }) {
-      yield* scores.send(source.id, new AddOne({}));
+      yield* scores.send(new AddOne({ id: source.id }));
     });
   }),
 );
@@ -75,7 +74,7 @@ export const BonusLive = Bonus.toLayer(
   Effect.gen(function* () {
     const scores = yield* Score;
     return Effect.fn(function* ({ source }) {
-      yield* scores.send(source.id, new Double({}));
+      yield* scores.send(new Double({ id: source.id }));
     });
   }),
 );

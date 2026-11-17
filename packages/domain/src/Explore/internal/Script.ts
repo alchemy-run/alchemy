@@ -91,10 +91,15 @@ export const ops = (shown: Story): ReadonlyArray<Op> => {
     for (const step of group) {
       if (step.again || step.outcome._tag !== "Accepted" || step.outcome.events.length === 0)
         continue;
-      const key = `${step.aggregate}/${step.id}`;
-      const stream = streams.get(key) ?? { aggregate: step.aggregate, id: step.id, events: [] };
-      stream.events.push(...step.outcome.events);
-      streams.set(key, stream);
+      // A decision records on several instances: each one's events are its own stream's.
+      for (const part of step.recorded ?? [
+        { aggregate: step.aggregate, id: step.id, events: step.outcome.events },
+      ]) {
+        const key = `${part.aggregate}/${part.id}`;
+        const stream = streams.get(key) ?? { aggregate: part.aggregate, id: part.id, events: [] };
+        stream.events.push(...part.events);
+        streams.set(key, stream);
+      }
     }
     for (const stream of streams.values()) made.push({ _tag: "Then", ...stream });
     if (shown.length < story.length && at < shown.length && shown.length <= end)
@@ -152,7 +157,7 @@ export const script = (story: Story): string =>
         case "Clock":
           return `  Story.clock(${JSON.stringify(DateTime.formatIso(op.at))}),`;
         case "When":
-          return `  Story.when(${op.aggregate}.ref(${JSON.stringify(op.id)}), ${made(op.command)}),`;
+          return `  Story.when(${made(op.command)}),`;
         case "Rejected":
           return `  Story.rejected(${made(op.rejection)}),`;
         case "Call":

@@ -8,14 +8,12 @@ export class Renamed extends Domain.Event("Renamed", { code: Schema.String }) {}
 export class Counted extends Domain.Event("Counted", {}) {}
 
 export class Rename extends Domain.Command("Rename", {
-  target: Schema.String,
-  input: { code: Schema.String },
+  input: { id: Schema.String, code: Schema.String },
   events: [Renamed],
 }) {}
 
 export class Count extends Domain.Command("Count", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Counted],
 }) {}
 
@@ -26,6 +24,7 @@ export class Label extends Domain.Aggregate("Label", {
   initial: { code: "A", uses: 0 },
   invariants: { NeverUnused: (label) => label.uses >= 0 },
   commands: [Rename, Count],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Rename: (_state, command) => [new Renamed({ code: command.code })],
     Count: () => [new Counted({})],

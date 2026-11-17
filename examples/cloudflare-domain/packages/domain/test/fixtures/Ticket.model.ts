@@ -7,8 +7,7 @@ export class SeatBooked extends Domain.Event("SeatBooked", {}) {}
 export class AlreadyBooked extends Domain.Rejection("AlreadyBooked", {}) {}
 
 export class BookSeat extends Domain.Command("BookSeat", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [SeatBooked],
   rejects: [AlreadyBooked],
 }) {}
@@ -18,6 +17,7 @@ export class Seat extends Domain.Aggregate("Seat", {
   state: Schema.Struct({ booked: Schema.Boolean }),
   initial: { booked: false },
   commands: [BookSeat],
+  keyOf: (cmd) => cmd.id,
   decide: {
     BookSeat: (seat) => (seat.booked ? new AlreadyBooked() : [new SeatBooked({})]),
   },
@@ -27,8 +27,7 @@ export class Seat extends Domain.Aggregate("Seat", {
 export class TicketIssued extends Domain.Event("TicketIssued", { seat: Schema.String }) {}
 
 export class IssueTicket extends Domain.Command("IssueTicket", {
-  target: Schema.String,
-  input: { seat: Schema.String },
+  input: { id: Schema.String, seat: Schema.String },
   events: [TicketIssued],
 }) {}
 
@@ -37,6 +36,7 @@ export class Ticket extends Domain.Aggregate("Ticket", {
   state: Schema.Struct({ seat: Schema.NullOr(Schema.String) }),
   initial: { seat: null },
   commands: [IssueTicket],
+  keyOf: (cmd) => cmd.id,
   decide: {
     IssueTicket: (ticket, command) =>
       ticket.seat === null ? [new TicketIssued({ seat: command.seat })] : [],
@@ -58,7 +58,7 @@ export const IssueLive = Issue.toLayer(
     const tickets = yield* Ticket;
     return Effect.fn(function* ({ source }) {
       const { number } = yield* numbers.next();
-      yield* tickets.send(number, new IssueTicket({ seat: source.id }));
+      yield* tickets.send(new IssueTicket({ id: number, seat: source.id }));
     });
   }),
 );

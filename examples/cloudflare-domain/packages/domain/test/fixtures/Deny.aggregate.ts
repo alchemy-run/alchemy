@@ -6,8 +6,7 @@ export class Never extends Domain.Rejection("Never") {}
 export class Went extends Domain.Event("Went", {}) {}
 
 export class Go extends Domain.Command("Go", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Went],
   rejects: [Never],
 }) {}
@@ -19,6 +18,7 @@ export class Deny extends Domain.Aggregate("Deny", {
   initial: { n: 0 },
   invariants: { NotNegative: (deny) => deny.n >= 0 },
   commands: [Go],
+  keyOf: (cmd) => cmd.id,
   decide: { Go: () => new Never() },
   evolve: { Went: (deny) => ({ n: deny.n - 1 }) },
 }) {}

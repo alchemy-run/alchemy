@@ -6,14 +6,12 @@ export class Climbed extends Domain.Event("Climbed", {}) {}
 export class Rested extends Domain.Event("Rested", {}) {}
 
 export class Climb extends Domain.Command("Climb", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Climbed],
 }) {}
 
 export class Rest extends Domain.Command("Rest", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Rested],
 }) {}
 
@@ -22,6 +20,7 @@ export class Climber extends Domain.Aggregate("Climber", {
   state: Schema.Struct({ rung: Schema.Int }),
   initial: { rung: 0 },
   commands: [Climb, Rest],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Climb: () => [new Climbed({})],
     Rest: () => [new Rested({})],

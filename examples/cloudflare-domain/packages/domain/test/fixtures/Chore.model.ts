@@ -11,23 +11,20 @@ export class ChoreDropped extends Domain.Event("ChoreDropped", {}) {}
 export class AlreadyStarted extends Domain.Rejection("AlreadyStarted", {}) {}
 
 export class Start extends Domain.Command("Start", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [ChoreStarted],
   rejects: [AlreadyStarted],
 }) {}
 
 /** Remind whoever started the chore. It stays started, and one that is not started records nothing. */
 export class Nudge extends Domain.Command("Nudge", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [ChoreNudged],
 }) {}
 
 /** Give the chore up. One that is not started records nothing. */
 export class Drop extends Domain.Command("Drop", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [ChoreDropped],
 }) {}
 
@@ -40,6 +37,7 @@ export class Chore extends Domain.Aggregate("Chore", {
   ]),
   initial: { _tag: "New" },
   commands: [Start, Nudge, Drop],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Start: (chore) => (chore._tag === "New" ? [new ChoreStarted({})] : new AlreadyStarted()),
     Nudge: (chore) => (chore._tag === "Started" ? [new ChoreNudged({})] : []),
@@ -62,7 +60,7 @@ export const ReminderLive = Reminder.toLayer(
   Effect.gen(function* () {
     const chores = yield* Chore;
     return Effect.fn(function* ({ source }) {
-      yield* chores.schedule(source, new Nudge({}), { after: "1 hour" });
+      yield* chores.schedule(new Nudge({ id: source.id }), { after: "1 hour" });
     });
   }),
 );
@@ -77,7 +75,7 @@ export const GiveUpLive = GiveUp.toLayer(
   Effect.gen(function* () {
     const chores = yield* Chore;
     return Effect.fn(function* ({ source }) {
-      yield* chores.schedule(source, new Drop({}), { after: "1 day" });
+      yield* chores.schedule(new Drop({ id: source.id }), { after: "1 day" });
     });
   }),
 );

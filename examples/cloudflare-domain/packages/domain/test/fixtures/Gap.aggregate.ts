@@ -6,14 +6,12 @@ export class Copied extends Domain.Event("Copied", { b: Schema.Int }) {}
 export class Lowered extends Domain.Event("Lowered", {}) {}
 
 export class Copy extends Domain.Command("Copy", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Copied],
 }) {}
 
 export class Lower extends Domain.Command("Lower", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Lowered],
 }) {}
 
@@ -29,6 +27,7 @@ export class Gap extends Domain.Aggregate("Gap", {
   initial: { a: 0, b: 0 },
   invariants: { BNotNegative: (gap) => gap.b >= 0 },
   commands: [Copy, Lower],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Copy: (gap) => [new Copied({ b: gap.a })],
     Lower: () => [new Lowered({})],

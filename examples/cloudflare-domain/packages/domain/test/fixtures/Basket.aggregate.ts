@@ -13,8 +13,7 @@ export class LinesAdded extends Domain.Event("LinesAdded", {
 }) {}
 
 export class AddLines extends Domain.Command("AddLines", {
-  target: Schema.String,
-  input: { lines: Schema.Array(Line) },
+  input: { id: Schema.String, lines: Schema.Array(Line) },
   events: [LinesAdded],
 }) {}
 
@@ -36,6 +35,7 @@ export class Basket extends Domain.Aggregate("Basket", {
     NeverFewerUnitsThanLines: (basket) => basket.units >= basket.lines.length,
   },
   commands: [AddLines],
+  keyOf: (cmd) => cmd.id,
   decide: {
     AddLines: (_state, command) => {
       let cost = 0;

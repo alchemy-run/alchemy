@@ -398,6 +398,10 @@ export const undone = (
     out.push(
       `the search stopped at its budget: only every sequence of up to ${report.complete} commands was run (allow: { truncated: true } passes with this)`,
     );
+  if ("aggregate" in report && report.outside.length > 0)
+    out.push(
+      `${report.aggregate} folds ${report.outside.join(", ")}, which a decision records: no sequence here has that step, so explore the model that hosts both`,
+    );
   if ("model" in report) {
     const left = [...new Set(report.skipped.map((skipped) => skipped.policy))].filter(
       (name) => !(allow.skipped ?? []).includes(name),
@@ -413,7 +417,9 @@ export const undone = (
   }
   const name = (invariant: { readonly aggregate?: string; readonly name: string }) =>
     invariant.aggregate === undefined ? invariant.name : `${invariant.aggregate}.${invariant.name}`;
-  if (report.states === 0) out.push("no sequence recorded an event, so no state was looked at");
+  // An aggregate with no command of its own has no sequence to run: what is not done is said above.
+  if (report.states === 0 && !("aggregate" in report && report.outside.length > 0))
+    out.push("no sequence recorded an event, so no state was looked at");
   else {
     const unseen = report.invariants.filter(
       (invariant) => !invariant.proved && invariant.states === 0,
@@ -496,7 +502,8 @@ const modelLines = (story: ModelSearch.Story, indent: string): ReadonlyArray<str
   let sent = 0;
   return story.flatMap((step) => {
     const text = [
-      `${step.aggregate} ${Symbolic.show(step.id)}`,
+      // A decision's command names every instance it is for.
+      ...(step.recorded ? [] : [`${step.aggregate} ${Symbolic.show(step.id)}`]),
       Symbolic.show(step.command),
       ...step.context.map((entry) => `as ${Symbolic.show(entry.value)}`),
       ...(timed ? [`at ${DateTime.formatIso(step.now)}`] : []),
@@ -619,7 +626,7 @@ const renderModel = (report: ModelReport): string => {
       ...open.map((ending) => `  ${ending.saga} ${ending.ending}`),
     );
   const arrow = (outcome: ModelSearch.Outcome) =>
-    `${outcome.aggregate}.${outcome.command} ${outcome.kind === "records" ? "→" : "✗"} ${outcome.tag}`;
+    `${outcome.aggregate === undefined ? "" : `${outcome.aggregate}.`}${outcome.command} ${outcome.kind === "records" ? "→" : "✗"} ${outcome.tag}`;
   const reached = report.outcomes.filter((outcome) => outcome.story);
   const missed = report.outcomes.filter((outcome) => !outcome.story);
   out.push("", `Reached ${reached.length} of ${report.outcomes.length} outcomes`, "");

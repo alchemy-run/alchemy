@@ -4,8 +4,7 @@ import * as Schema from "effect/Schema";
 export class Pushed extends Domain.Event("Pushed", { item: Schema.String }) {}
 
 export class Push extends Domain.Command("Push", {
-  target: Schema.String,
-  input: { item: Schema.String },
+  input: { id: Schema.String, item: Schema.String },
   events: [Pushed],
 }) {}
 
@@ -16,6 +15,7 @@ export class Stack extends Domain.Aggregate("Stack", {
   initial: { items: [] },
   invariants: { NeverTooTall: (stack) => stack.items.length < 100 },
   commands: [Push],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Push: (_state, command) => [new Pushed({ item: command.item })],
   },

@@ -19,7 +19,7 @@ export const TicketingLive = Ticketing.toLayer(
         name: "issue",
         execute: Effect.gen(function* () {
           const { number } = yield* numbers.next();
-          yield* tickets.send(number, new IssueTicket({ seat: key }));
+          yield* tickets.send(new IssueTicket({ id: number, seat: key }));
         }),
       });
     });

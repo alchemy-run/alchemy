@@ -50,8 +50,12 @@ export interface Env {
 
 /** A domain class instance: an event, a rejection or a command. */
 export interface Brand {
-  /** `Option`: an `effect/Option`, whose `_tag` is `Some` or `None`. */
-  readonly kind: "Event" | "Rejection" | "Command" | "Option";
+  /**
+   * `Option`: an `effect/Option`, whose `_tag` is `Some` or `None`.
+   * `Recorded`: an event a decision recorded on an instance it read, whose
+   * `cls` is that instance's place among the ones read.
+   */
+  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded";
   readonly cls: unknown;
 }
 

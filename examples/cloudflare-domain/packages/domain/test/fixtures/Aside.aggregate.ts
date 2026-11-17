@@ -4,8 +4,7 @@ import * as Schema from "effect/Schema";
 export class Counted extends Domain.Event("Counted", { n: Schema.Int }) {}
 
 export class Count extends Domain.Command("Count", {
-  target: Schema.String,
-  input: { n: Schema.Int },
+  input: { id: Schema.String, n: Schema.Int },
   events: [Counted],
 }) {}
 
@@ -18,6 +17,7 @@ export class Aside extends Domain.Aggregate("Aside", {
   initial: { n: 0 },
   invariants,
   commands: [Count],
+  keyOf: (cmd) => cmd.id,
   decide: { Count: (_, cmd) => [new Counted({ n: cmd.n })] },
   evolve: { Counted: (_, event) => ({ n: event.n }) },
 }) {}

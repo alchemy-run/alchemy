@@ -4,8 +4,7 @@ import * as Schema from "effect/Schema";
 export class Unlimited extends Domain.Event("Unlimited", {}) {}
 
 export class Use extends Domain.Command("Use", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Unlimited],
 }) {}
 
@@ -19,6 +18,7 @@ export class Quota extends Domain.Aggregate("Quota", {
   initial: { open: false },
   invariants: { NeverOpen: (quota) => !quota.open },
   commands: [Use],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Use: (state) => (state.limit === undefined ? [new Unlimited({})] : []),
   },

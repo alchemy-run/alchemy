@@ -33,6 +33,10 @@ it.effect(
             "Account.AClosedAccountStaysClosed",
             "Account.MoneyLeavesOnlyByWithdrawalOrTransfer",
             "Account.OnlyAnAgentChangesTheOwner",
+            // The username's rule is kept by the decision that claims it, across both instances.
+            "UsernameClaim.AClaimedNameStaysWithItsHolder",
+            "RegisterCustomer.TheNameGoesToWhoRegistered",
+            "RegisterCustomer.OnlyAFreeNameIsClaimed",
           ],
         },
       });
@@ -44,6 +48,10 @@ it.effect(
         "Account.AClosedAccountStaysClosed": "proved",
         "Account.MoneyLeavesOnlyByWithdrawalOrTransfer": "proved",
         "Account.OnlyAnAgentChangesTheOwner": "proved",
+        // Registering is a decision across a customer and a username: its rules are proved too.
+        "UsernameClaim.AClaimedNameStaysWithItsHolder": "proved",
+        "RegisterCustomer.TheNameGoesToWhoRegistered": "proved",
+        "RegisterCustomer.OnlyAFreeNameIsClaimed": "proved",
         // These are about several instances: no sequence of two commands breaks them.
         "Bank.TransfersLoseNoMoney": "checked",
         "Bank.NoTransferLeftPending": "checked",
@@ -56,6 +64,7 @@ it.effect(
       expect(report.runs.length - report.walked).toBeGreaterThan(20);
       expect(report.walked).toBeGreaterThan(50);
       expect(report.explored.projections).toEqual(["Ledger"]);
+      expect(report.explored.decisions).toEqual(["RegisterCustomer"]);
       expect(report.undone).toEqual([]);
       // Everything the sequences were run without is named, with why.
       const aside = report.explored.aside.map((left) => `${left.kind} ${left.name}`);

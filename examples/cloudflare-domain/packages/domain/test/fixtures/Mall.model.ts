@@ -11,14 +11,12 @@ export class Refunded extends Domain.Event("Refunded", { shop: Schema.String, am
 export class NothingToRefund extends Domain.Rejection("NothingToRefund", {}) {}
 
 export class Sell extends Domain.Command("Sell", {
-  target: Schema.String,
-  input: { shop: Schema.String, amount: Cents },
+  input: { id: Schema.String, shop: Schema.String, amount: Cents },
   events: [Sold],
 }) {}
 
 export class Refund extends Domain.Command("Refund", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Refunded],
   rejects: [NothingToRefund],
 }) {}
@@ -33,6 +31,7 @@ export class Sale extends Domain.Aggregate("Sale", {
   ]),
   initial: { _tag: "New" },
   commands: [Sell, Refund],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Sell: (sale, command) =>
       sale._tag === "New" ? [new Sold({ shop: command.shop, amount: command.amount })] : [],

@@ -18,16 +18,14 @@ export class Cleared extends Domain.Event("Cleared", {}) {}
 const Positive = Schema.Int.check(Schema.isGreaterThan(0));
 
 export class Count extends Domain.Command("Count", {
-  target: Schema.String,
   middleware: [Desk],
-  input: { by: Positive },
+  input: { id: Schema.String, by: Positive },
   events: [Counted],
 }) {}
 
 export class Clear extends Domain.Command("Clear", {
-  target: Schema.String,
   middleware: [Desk],
-  input: {},
+  input: { id: Schema.String },
   events: [Cleared],
 }) {}
 
@@ -50,6 +48,7 @@ export class Counter extends Domain.Aggregate("Counter", {
     }),
   },
   commands: [Count, Clear],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Count: (_, command) => [new Counted({ by: command.by })],
     Clear: (counter) => (counter.count === 0 ? [] : [new Cleared({})]),

@@ -11,32 +11,27 @@ export class Finished extends Domain.Event("Finished", {}) {}
 export class Tallied extends Domain.Event("Tallied", { long: Schema.Int }) {}
 
 export class Publish extends Domain.Command("Publish", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Published],
 }) {}
 
 export class Discard extends Domain.Command("Discard", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Discarded],
 }) {}
 
 export class Tag extends Domain.Command("Tag", {
-  target: Schema.String,
-  input: { tag: Schema.String },
+  input: { id: Schema.String, tag: Schema.String },
   events: [Tagged],
 }) {}
 
 export class Finish extends Domain.Command("Finish", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Finished],
 }) {}
 
 export class Tally extends Domain.Command("Tally", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Tallied],
 }) {}
 
@@ -61,6 +56,7 @@ export class Sheet extends Domain.Aggregate("Sheet", {
       Object.values(sheet.counts).every((count) => count >= 0),
   },
   commands: [Publish, Discard, Tag, Finish, Tally],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Publish: (state) => (state.draft == null ? [] : [new Published({})]),
     Discard: () => [new Discarded({})],

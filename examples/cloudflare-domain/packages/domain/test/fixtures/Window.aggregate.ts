@@ -5,8 +5,7 @@ import * as Schema from "effect/Schema";
 export class WindowReset extends Domain.Event("WindowReset", { bucket: Schema.Int }) {}
 
 export class Tick extends Domain.Command("Tick", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [WindowReset],
 }) {}
 
@@ -20,6 +19,7 @@ export class Window extends Domain.Aggregate("Window", {
     TheBucketOnlyGrows: ({ before, after }) => after.bucket >= before.bucket,
   },
   commands: [Tick],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Tick: (state, _command, context) => {
       const bucket = Math.floor(DateTime.toEpochMillis(context.now) / 60_000);

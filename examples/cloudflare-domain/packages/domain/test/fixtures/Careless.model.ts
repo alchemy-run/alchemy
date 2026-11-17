@@ -2,8 +2,8 @@ import * as Domain from "@alchemy.run/domain";
 import { Account } from "../../src/Account/Account.aggregate.ts";
 import { Customer } from "../../src/Customer/Customer.aggregate.ts";
 import { MainAccountProvisioning } from "../../src/Customer/MainAccountProvisioning.policy.ts";
+import { Registration } from "../../src/Customer/Registration.decision.ts";
 import { UsernameClaim } from "../../src/Customer/UsernameClaim.aggregate.ts";
-import { UsernameReservation } from "../../src/Customer/UsernameReservation.policy.ts";
 import { ExecuteTransfer } from "../../src/Transfer/ExecuteTransfer.saga.ts";
 import { Transfer } from "../../src/Transfer/Transfer.aggregate.ts";
 import { TransferApprovalDeadline } from "../../src/Transfer/TransferApprovalDeadline.policy.ts";
@@ -12,12 +12,8 @@ import { TransferExecution } from "../../src/Transfer/TransferExecution.policy.t
 /** The bank's aggregates, policies and saga, with two rules the bank does not keep. */
 export class Careless extends Domain.Model("Careless", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
-  policies: [
-    UsernameReservation,
-    MainAccountProvisioning,
-    TransferExecution,
-    TransferApprovalDeadline,
-  ],
+  decisions: [Registration],
+  policies: [MainAccountProvisioning, TransferExecution, TransferApprovalDeadline],
   sagas: [ExecuteTransfer],
   invariants: {
     /** Forgets that a transfer whose credit is refused gives the money back. */

@@ -42,14 +42,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const report = yield* bank(2);
-      expect(report.followed).toEqual([
-        "UsernameReservation",
+      expect([...report.followed].sort()).toEqual([
         "MainAccountProvisioning",
-        "TransferExecution",
         "TransferApprovalDeadline",
+        "TransferExecution",
       ]);
       expect(report.sagas).toEqual(["ExecuteTransfer"]);
-      const story = (aggregate: string, command: string, tag: string) =>
+      const story = (aggregate: string | undefined, command: string, tag: string) =>
         report.outcomes.find(
           (o) => o.aggregate === aggregate && o.command === command && o.tag === tag,
         )?.story;
@@ -57,10 +56,17 @@ it.effect(
       expect(story("Account", "OpenAccount", "AccountOpened")?.map((step) => step.by)).toContain(
         "MainAccountProvisioning",
       );
-      // A second registration with a taken username is rejected by the policy that claims it.
+      // Registering is a decision across the customer and the username: it records on both at once.
       expect(
-        story("Customer", "RejectRegistration", "RegistrationRejected")?.filter((step) => !step.by),
-      ).toHaveLength(2);
+        story(undefined, "RegisterCustomer", "CustomerRegistered")?.[0]?.recorded,
+      ).toMatchObject([
+        { aggregate: "Customer", events: [{ _tag: "CustomerRegistered" }] },
+        { aggregate: "UsernameClaim", events: [{ _tag: "UsernameClaimed" }] },
+      ]);
+      // A second registration with a taken username is rejected at once, by the same decision.
+      const taken = story(undefined, "RegisterCustomer", "UsernameTaken");
+      expect(taken?.map((step) => step.outcome._tag)).toEqual(["Accepted", "Accepted", "Rejected"]);
+      expect(taken?.filter((step) => !step.by)).toHaveLength(2);
       // A transfer nobody approves expires: the deadline policy's schedule comes due a day later.
       const expired = story("Transfer", "ExpireTransfer", "TransferFailed");
       expect(expired?.map((step) => step.after)).toEqual([undefined, "24 hours"]);
@@ -72,9 +78,9 @@ it.effect(
         { _tag: "DebitTransfer" },
         { _tag: "FailTransfer", reason: "source account not open" },
       ]);
-      // A transfer that needs approval stops until the decision comes.
+      // A transfer that needs approval stops until it is approved or its window closes.
       expect(
-        report.endings.find((ending) => ending.ending === "waits for decision")?.story,
+        report.endings.find((ending) => ending.ending === "waits for approval")?.story,
       ).toHaveLength(1);
       // The bank's own invariants hold after every one of those sequences.
       expect(report.rules.map((rule) => [rule.name, rule.broken])).toEqual([
@@ -144,8 +150,6 @@ it.effect(
       // The explorer picks the deposit: one cent more than the rule allows.
       expect(tags("HoldsAtMostTenDollars")).toEqual([
         "RegisterCustomer",
-        "ClaimUsername",
-        "ConfirmRegistration",
         "OpenAccount",
         "DepositMoney",
       ]);

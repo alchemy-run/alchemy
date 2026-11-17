@@ -6,8 +6,7 @@ export class Exact extends Domain.Event("Exact", {}) {}
 export class Rounded extends Domain.Event("Rounded", {}) {}
 
 export class Add extends Domain.Command("Add", {
-  target: Schema.String,
-  input: { a: Schema.Number, b: Schema.Number },
+  input: { id: Schema.String, a: Schema.Number, b: Schema.Number },
   events: [Exact, Rounded],
 }) {}
 
@@ -22,6 +21,7 @@ export class Drift extends Domain.Aggregate("Drift", {
   initial: { rounded: false },
   invariants: { NeverRounded: (drift) => !drift.rounded },
   commands: [Add],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Add: (_, command) =>
       command.a === 0.1 && command.b === 0.2

@@ -12,21 +12,18 @@ export class Captured extends Domain.Event("Captured", {}) {}
 export class NotEnough extends Domain.Rejection("NotEnough", {}) {}
 
 export class Pay extends Domain.Command("Pay", {
-  target: Schema.String,
-  input: { amount: Cents },
+  input: { id: Schema.String, amount: Cents },
   events: [Paid],
 }) {}
 
 export class Reserve extends Domain.Command("Reserve", {
-  target: Schema.String,
-  input: { amount: Cents },
+  input: { id: Schema.String, amount: Cents },
   events: [Reserved],
   rejects: [NotEnough],
 }) {}
 
 export class Capture extends Domain.Command("Capture", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [Captured],
 }) {}
 
@@ -45,6 +42,7 @@ const definition = {
  */
 export class Escrow extends Domain.Aggregate("Escrow", {
   ...definition,
+  keyOf: (cmd) => cmd.id,
   invariants: {
     NeverOverdrawn: (hold) => hold.balance >= 0,
   },
@@ -66,6 +64,7 @@ export class Escrow extends Domain.Aggregate("Escrow", {
 /** The same aggregate, with the rule that was true all along written down. */
 export class Covered extends Domain.Aggregate("Covered", {
   ...definition,
+  keyOf: (cmd) => cmd.id,
   invariants: {
     NeverOverdrawn: (hold) => hold.balance >= 0,
     ReservedIsCovered: (hold) => hold.reserved >= 0 && hold.reserved <= hold.balance,

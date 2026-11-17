@@ -4,7 +4,9 @@ import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
-import type { Inputs } from "./Paths.ts";
+import type * as Decision from "../../Decision.ts";
+import * as Decide from "./Decide.ts";
+import type { DecisionStep, Inputs } from "./Paths.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
 import type { Run } from "./Value.ts";
@@ -242,7 +244,6 @@ const replay = Effect.fn(function* (
   }
   const now = (yield* build("now", inputs.now)) as DateTime.Utc;
   const prediction = Aggregate.predict(aggregate, state, command, {
-    id: (yield* build("id", inputs.id)) as string,
     now,
     version: (yield* build("version", inputs.version)) as number,
     commandId: (yield* build("commandId", inputs.commandId)) as string,
@@ -296,6 +297,15 @@ export const check = (
   inputs: Inputs,
   condition: string,
 ): Effect.Effect<Verdict, Smt.SolverError> =>
+  judged(solver, run, condition, (model) => replay(aggregate, kept, run, inputs, model));
+
+/** Whether `condition` can be false on a path: a counterexample counts only when `replay` confirms it. */
+const judged = (
+  solver: Smt.Solver,
+  run: Run,
+  condition: string,
+  replay: (model: Model) => Effect.Effect<Verdict, Verdict>,
+): Effect.Effect<Verdict, Smt.SolverError> =>
   condition === "true"
     ? Effect.succeed<Verdict>({ _tag: "Proved" })
     : solve(solver, run, condition).pipe(
@@ -304,8 +314,205 @@ export const check = (
             ? Effect.succeed({ _tag: "Proved" })
             : answer._tag === "Unknown"
               ? Effect.succeed({ _tag: "Unknown", reason: answer.reason })
-              : replay(aggregate, kept, run, inputs, answer.model).pipe(
-                  Effect.catch((verdict) => Effect.succeed(verdict)),
-                ),
+              : replay(answer.model).pipe(Effect.catch((verdict) => Effect.succeed(verdict))),
         ),
       );
+
+/** One step the real code of a decision took: what it left of every instance it read. */
+export interface DecisionMoved {
+  readonly ran: Decide.Ran & { readonly _tag: "Accepted" };
+  /** The stream of each instance the prover gave a state, in the order it read them. */
+  readonly streams: ReadonlyArray<string>;
+  readonly command: unknown;
+  readonly context: Context.Context<never>;
+}
+
+/** Something a decision must keep true of the step it takes. */
+export interface DecisionKept {
+  readonly what: string;
+  readonly holds: (moved: DecisionMoved) => boolean;
+}
+
+/** An aggregate's invariant or transition, on the instance a decision read at this place. */
+export const onInstance = (aggregate: Aggregate.Any, name: string, slot: number): DecisionKept => ({
+  what: `${aggregate.aggregateName}.${name}`,
+  holds: (moved) => {
+    const wrote = moved.ran.wrote.find((wrote) => wrote.stream === moved.streams[slot]);
+    return (
+      !wrote ||
+      wrote.events.length === 0 ||
+      rules(aggregate)[name]!({
+        before: wrote.before,
+        after: wrote.after,
+        command: moved.command,
+        events: wrote.events,
+        context: moved.context,
+      })
+    );
+  },
+});
+
+/** That every instance a decision read is left in its state's schema. */
+export const schemas: DecisionKept = {
+  what: "the states' schemas",
+  holds: (moved) =>
+    moved.ran.wrote.every((wrote) => Schema.is(wrote.aggregate.definition.state)(wrote.after)),
+};
+
+/** One of a decision's own transitions, on the step it took. */
+export const transition = (decision: Decision.Any, name: string): DecisionKept => ({
+  what: name,
+  holds: (moved) => {
+    const holds = decision.definition.transitions?.[name];
+    if (!holds) return true;
+    const wrote = new Map(moved.ran.wrote.map((wrote) => [wrote.stream, wrote]));
+    const made = holds({
+      before: Decide.byName(moved.ran.streams, (stream) => wrote.get(stream)?.before),
+      after: Decide.byName(moved.ran.streams, (stream) => wrote.get(stream)?.after),
+      command: moved.command,
+      events: moved.ran.events,
+    });
+    return (
+      (Effect.isEffect(made)
+        ? made.pipe(
+            Effect.provideContext(moved.context as Context.Context<unknown>),
+            Effect.runSync,
+          )
+        : made) === true
+    );
+  },
+});
+
+/** Build a decision's counterexample as real values, and run the real `decide` and `evolve` on it. */
+const replayDecision = Effect.fn(function* (
+  decision: Decision.Any,
+  /** The aggregate of each instance read, in the order the step read them. */
+  aggregates: ReadonlyArray<Aggregate.Any>,
+  kept: DecisionKept,
+  run: Run,
+  step: DecisionStep,
+  model: Model,
+) {
+  const build = (what: string, value: Parameters<typeof Symbolic.concretize>[0]) => {
+    const built = Symbolic.concretize(value, model, run.lists);
+    return "value" in built
+      ? Effect.succeed(built.value)
+      : Effect.fail(unconfirmed(`the solver found inputs, but ${built.reason} (${what})`));
+  };
+  const states = new Map<string, { readonly state: unknown; readonly version: number }>();
+  const streams: Array<string> = [];
+  for (const [index, slot] of step.slots.entries()) {
+    const aggregate = aggregates[index]!;
+    const state = yield* build("state", slot.state);
+    if (!Schema.is(aggregate.definition.state)(state))
+      return yield* Effect.fail(
+        unconfirmed(
+          `the solver's state ${Symbolic.show(state)} is not one the schema of ${aggregate.aggregateName} allows`,
+        ),
+      );
+    const invariants = (aggregate.definition.invariants ?? {}) as unknown as Record<
+      string,
+      (state: unknown) => boolean
+    >;
+    for (const [name, holds] of Object.entries(invariants)) {
+      if (!(yield* attempt(`${name} threw on the solver's state`, () => holds(state))))
+        return yield* Effect.fail(
+          unconfirmed(
+            `the solver's state ${Symbolic.show(state)} already breaks ${aggregate.aggregateName}.${name}, which the prover could not read`,
+          ),
+        );
+    }
+    const stream = `${aggregate.aggregateName}/${String(yield* build("id", slot.id))}`;
+    if (states.has(stream))
+      return yield* Effect.fail(unconfirmed(`the solver gave two instances the one id ${stream}`));
+    states.set(stream, { state, version: (yield* build("version", slot.version)) as number });
+    streams.push(stream);
+  }
+  const { _tag: tag, ...fields } = (yield* build("command", step.inputs.command)) as {
+    readonly _tag: string;
+  };
+  const cls = decision.command as unknown as new (fields: object) => { readonly _tag: string };
+  const command = yield* attempt(
+    `${tag} refuses the solver's input ${Symbolic.show(fields)}`,
+    () => new cls(fields),
+  );
+  let context = Context.empty() as Context.Context<unknown>;
+  const read: Array<{ name: string; value: unknown }> = [];
+  for (const [key, entry] of run.contexts) {
+    const value = yield* build(key, entry.value);
+    context = Context.add(context, entry.tag as Context.Key<unknown, unknown>, value);
+    read.push({ name: key.slice(key.lastIndexOf("/") + 1), value });
+  }
+  const now = (yield* build("now", step.inputs.now)) as DateTime.Utc;
+  const commandId = (yield* build("commandId", step.inputs.commandId)) as string;
+  const ran = yield* attempt(`${tag} threw`, () =>
+    Decide.run(decision, command, states, {
+      now,
+      commandId,
+      context: context as Context.Context<never>,
+    }),
+  );
+  const before = () =>
+    Symbolic.show(Decide.byName(ranStreams(ran, step, streams), (s) => states.get(s)?.state));
+  if (ran._tag === "Rejected")
+    return unconfirmed(
+      `the solver found ${Symbolic.show(command)} on ${before()}, but the real code rejects it with ${Symbolic.show(ran.rejection)}`,
+    );
+  if (ran._tag === "Unpredictable")
+    return unconfirmed(
+      `the solver found ${Symbolic.show(command)} on ${before()}, but the real code fails on it: ${Cause.pretty(ran.cause)}`,
+    );
+  const holds = yield* attempt(`${kept.what} threw`, () =>
+    kept.holds({ ran, streams, command, context: context as Context.Context<never> }),
+  );
+  if (holds)
+    return unconfirmed(
+      `the solver found ${Symbolic.show(command)} on ${before()}, but the real code keeps ${kept.what} on it`,
+    );
+  const wrote = new Map(ran.wrote.map((wrote) => [wrote.stream, wrote]));
+  const verdict: Verdict = {
+    _tag: "Violated",
+    counterexample: {
+      state: Decide.byName(ran.streams, (stream) => wrote.get(stream)?.before),
+      command,
+      context: read,
+      now,
+      events: ran.events,
+      after: Decide.byName(ran.streams, (stream) => wrote.get(stream)?.after),
+    },
+  };
+  return verdict;
+});
+
+/** The streams each name in `reads` stands for: the real ones, or as the prover read them. */
+const ranStreams = (
+  ran: Decide.Ran,
+  step: DecisionStep,
+  streams: ReadonlyArray<string>,
+): Readonly<Record<string, string | ReadonlyArray<string>>> =>
+  ran._tag === "Accepted"
+    ? ran.streams
+    : Object.fromEntries(
+        Object.entries(step.names).map(([name, index]) => [
+          name,
+          typeof index === "number" ? streams[index]! : index.map((at) => streams[at]!),
+        ]),
+      );
+
+/**
+ * Whether something a decision must keep can be false at the end of one path.
+ * A counterexample counts only when the real `decide` and `evolve`, run on
+ * it, break it too.
+ */
+export const checkDecision = (
+  solver: Smt.Solver,
+  decision: Decision.Any,
+  aggregates: ReadonlyArray<Aggregate.Any>,
+  kept: DecisionKept,
+  run: Run,
+  step: DecisionStep,
+  condition: string,
+): Effect.Effect<Verdict, Smt.SolverError> =>
+  judged(solver, run, condition, (model) =>
+    replayDecision(decision, aggregates, kept, run, step, model),
+  );

@@ -26,7 +26,15 @@ export interface Loader {
 const identityOf = (value: unknown): string | undefined => {
   if (typeof value !== "function") return undefined;
   const cls = value as unknown as Readonly<Record<string, unknown>>;
-  for (const key of ["modelName", "aggregateName", "policyName", "sagaName", "viewName", "tag"])
+  for (const key of [
+    "modelName",
+    "aggregateName",
+    "decisionName",
+    "policyName",
+    "sagaName",
+    "viewName",
+    "tag",
+  ])
     if (typeof cls[key] === "string") return `${key} ${cls[key]}`;
   return undefined;
 };

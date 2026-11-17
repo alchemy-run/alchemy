@@ -18,23 +18,20 @@ export class AlreadyPlaced extends Domain.Rejection("AlreadyPlaced", {}) {}
 export class NotPlaced extends Domain.Rejection("NotPlaced", {}) {}
 
 export class Place extends Domain.Command("Place", {
-  target: Schema.String,
-  input: { total: Cents },
+  input: { id: Schema.String, total: Cents },
   events: [OrderPlaced],
   rejects: [AlreadyPlaced],
 }) {}
 
 export class Hold extends Domain.Command("Hold", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [OrderHeld],
   rejects: [NotPlaced],
 }) {}
 
 /** Set an order aside, because nobody could score it. */
 export class Park extends Domain.Command("Park", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [OrderParked],
   rejects: [NotPlaced],
 }) {}
@@ -47,6 +44,7 @@ export class Order extends Domain.Aggregate("Order", {
   ]),
   initial: { _tag: "New" },
   commands: [Place, Hold, Park],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Place: (order, command) =>
       order._tag === "New" ? [new OrderPlaced({ total: command.total })] : new AlreadyPlaced(),
@@ -105,9 +103,12 @@ export const ReviewLive = Review.toLayer(
         .score({ orderId: source.id, total: event.total })
         .pipe(Effect.catchTag("RiskUnavailable", () => Effect.succeed(undefined)));
       const next =
-        scored === undefined ? new Park({}) : scored.risk > 0.5 ? new Hold({}) : undefined;
-      if (next)
-        yield* orders.send(source, next).pipe(Effect.catchTag("NotPlaced", () => Effect.void));
+        scored === undefined
+          ? new Park({ id: source.id })
+          : scored.risk > 0.5
+            ? new Hold({ id: source.id })
+            : undefined;
+      if (next) yield* orders.send(next).pipe(Effect.catchTag("NotPlaced", () => Effect.void));
     });
   }),
 );

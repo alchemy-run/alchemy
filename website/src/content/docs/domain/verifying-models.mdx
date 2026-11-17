@@ -60,6 +60,43 @@ transitions: {
 },
 ```
 
+## Say what a decision must keep
+
+A [decision](/domain/decision) changes several instances in one step, so it can state a rule about them together. Its `transitions` are given every state it read, before and after, under the names in `reads`.
+
+```diff lang="typescript" title="packages/domain/src/Customer/Registration.decision.ts"
+export class Registration extends Domain.Decision(RegisterCustomer, {
+  reads: { customer: Customer, claim: UsernameClaim },
+  keyOf: (cmd) => ({ customer: cmd.customerId, claim: cmd.username }),
++  transitions: {
++    /** A name is only given while nobody holds it. */
++    OnlyAFreeNameIsClaimed: ({ before }) => before.claim._tag === "Free",
++    /** The username goes to the customer who registered under it. */
++    TheNameGoesToWhoRegistered: ({ after, command }) =>
++      after.customer._tag === "Registered" &&
++      after.customer.username === command.username &&
++      after.claim._tag === "Claimed" &&
++      after.claim.customerId === command.customerId,
++  },
+```
+
+A decision also has to keep the rules of every aggregate it records on. The username's own rule is about one instance, and the decision is what records on it:
+
+```diff lang="typescript" title="packages/domain/src/Customer/UsernameClaim.aggregate.ts"
+export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+  id: Username,
+  initial: { _tag: "Free" },
++  transitions: {
++    /** Once somebody holds a name, nobody else gets it. */
++    AClaimedNameStaysWithItsHolder: ({ before, after }) =>
++      before._tag === "Free" ||
++      (after._tag === "Claimed" && after.customerId === before.customerId),
++  },
+  events: [UsernameClaimed],
+```
+
+Both kinds are about one step, so both can be proved. The report names a decision's own rule after its command: `RegisterCustomer.OnlyAFreeNameIsClaimed`.
+
 ## Say what holds across the model
 
 A rule that spans instances goes on the model. It's given every instance of every aggregate, with its state and the events it recorded.
@@ -177,21 +214,24 @@ console.log(Verify.render(report));
 ```
 
 ```text
-Bank: 48 outcomes, 6 policies, 1 saga, 1 view, 1 projection, 1 external system
+Bank: 46 outcomes, 1 decision, 5 policies, 1 saga, 1 view, 1 projection, 1 external system
 
 Proved: for every state and every input, after any number of commands
+  ✓ UsernameClaim.AClaimedNameStaysWithItsHolder
   ✓ Account.NeverOverdrawn
   ✓ Account.WithinDailyLimit
   ✓ Account.AClosedAccountStaysClosed
   ✓ Account.MoneyLeavesOnlyByWithdrawalOrTransfer
   ✓ Account.OnlyAnAgentChangesTheOwner
+  ✓ RegisterCustomer.TheNameGoesToWhoRegistered
+  ✓ RegisterCustomer.OnlyAFreeNameIsClaimed
 
 Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, with each event delivered twice, each reaction also run behind the others that wait, each step of a saga run twice, every answer FraudCheck can give
-19,641 sequences, 10,648 states
+20,138 sequences, 9,725 states
   ✓ Bank.TransfersLoseNoMoney
   ✓ Bank.NoTransferLeftPending
   ✓ Bank.LedgerIsGivenEveryDeposit
-  ✓ Bank.EveryTransferEnds  holds at the end of the 6,228 sequences that ran their course
+  ✓ Bank.EveryTransferEnds  holds at the end of the 6,158 sequences that ran their course
 
 Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
   ✓ none breaks a rule
@@ -208,9 +248,10 @@ Assumed
   - an external system answers what its schema allows, and nothing else
   - middleware lets every caller in: who sends a command is anyone its request context allows
   - what a projection writes, and what a stream or a query gives, is not checked: only what a projection is given
+  - a decision's events commit on every instance it recorded on, or on none: how a platform commits them is not checked
 ```
 
-**Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance.
+**Proved** is the strong answer. It reads `decide`, `evolve` and the rule as logic, and asks a solver whether any state the rules allow and any input a command accepts lead to a state that breaks one. None does, so the rule holds after any number of commands, not only the ones that were run. An aggregate's invariants and transitions can be proved, because each is about one instance. A decision's transitions can too, because each is about one step. A rule of an aggregate is proved only when every command of its own and every decision that records on it keeps it.
 
 **Checked** means no sequence that was run breaks the rule. A model's rules are about many instances at once, which a solver can't decide in general, so they are searched: every sequence of a few commands, with everything that follows from each.
 
@@ -250,7 +291,7 @@ export const IssueLive = Issue.toLayer(
     const tickets = yield* Ticket;
     return Effect.fn(function* ({ source }) {
       const { number } = yield* numbers.next();
-      yield* tickets.send(number, new IssueTicket({ seat: source.id }));
+      yield* tickets.send(new IssueTicket({ id: number, seat: source.id }));
     });
   }),
 );
@@ -273,29 +314,29 @@ It reads fine, and every story about it passes. Verification fails:
 Tickets: 3 outcomes, 1 policy, 1 external system
 
 ✗ Tickets.OneTicketPerSeat breaks
-    1. Seat "A" BookSeat  → SeatBooked
+    1. Seat "A" BookSeat { id: "A" }  → SeatBooked
        ↳ Issue asks Numbers.next  → { number: "C" }
-       ↳ Issue: Ticket "C" IssueTicket { seat: "A" }  → TicketIssued
+       ↳ Issue: Ticket "C" IssueTicket { id: "C", seat: "A" }  → TicketIssued
        ↳ Issue, handling its event again, asks Numbers.next  → { number: "E" }
-       ↳ Issue, handling its event again: Ticket "E" IssueTicket { seat: "A" }  → TicketIssued
+       ↳ Issue, handling its event again: Ticket "E" IssueTicket { id: "E", seat: "A" }  → TicketIssued
 
     It needs an event delivered to a policy twice, which a platform does and a story does not.
 ```
 
-A platform delivers an event to a policy at least once. The second time, `Issue` asks for another number and sends its command to another ticket. The fix is an id that comes from the event, not from outside: `tickets.send(source.id, ...)`.
+A platform delivers an event to a policy at least once. The second time, `Issue` asks for another number and sends its command to another ticket. The fix is an id that comes from the event, not from outside: `new IssueTicket({ id: source.id, seat: source.id })`.
 
 When a story can run the sequence, the report also writes it as one. This shop holds an order the risk service calls risky, and a rule says no order is ever held:
 
 ```text
 ✗ Shop.NoOrderIsHeld breaks
-    1. Order "A" Place { total: 100 }  → OrderPlaced
+    1. Order "A" Place { id: "A", total: 100 }  → OrderPlaced
        ↳ Review asks Risk.score  → { risk: 1.5 }
-       ↳ Review: Order "A" Hold  → OrderHeld
+       ↳ Review: Order "A" Hold { id: "A" }  → OrderHeld
 
     As a story, to keep as a test:
 
     story(
-      Story.when(Order.ref("A"), new Place({ total: 100 })),
+      Story.when(new Place({ id: "A", total: 100 })),
       Story.call(Risk.score, {}),
       Story.succeed(Risk.score, { risk: 1.5 }),
       Story.then(Order.ref("A"), new OrderPlaced({ total: 100 }), new OrderHeld({})),
@@ -431,6 +472,8 @@ it.effect("an account keeps its rules", () =>
 );
 ```
 
+An aggregate a decision records on can't be verified alone: what the decision does to it isn't one of its commands. Verify the model that hosts both.
+
 A proof also covers two things you didn't write down. Every command leaves the state in its schema, since each proof starts from a state the schema allows. And every command can record an event from some state: one that never can is reported, because a rule is true of it only because it does nothing.
 
 ## Write handlers the prover can read
@@ -487,7 +530,41 @@ Code the prover can't read fails with the file, the line and the reason. The com
 
 ## Use the parts on their own
 
-`Verify` is two tools in one call. `Prove` is the proof, for one aggregate. `Explore` is the search, for an aggregate or a model, and its report lists every event, rejection and saga ending with the shortest sequence that reaches it.
+`Verify` is two tools in one call. `Prove` is the proof, for one aggregate or one decision. `Explore` is the search, for an aggregate or a model, and its report lists every event, rejection and saga ending with the shortest sequence that reaches it.
+
+`Prove.decision` proves a decision without a model around it. It checks the rules of each aggregate the decision reads, on the instance it recorded on, and the decision's own.
+
+```typescript title="packages/domain/test/Bank.prove.test.ts"
+import * as Prove from "@alchemy.run/domain/Prove";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Registration } from "../src/Customer/Registration.decision.ts";
+
+it.effect("no registration gives a name to two customers", () =>
+  Prove.decision(Registration, {
+    source: new URL("../src/Customer/Registration.decision.ts", import.meta.url),
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+```
+
+A decision that breaks a rule fails with the states it read, the command, and what the real `decide` and `evolve` left. This one charges two purses a fee each, after checking that each can pay it:
+
+```text
+ChargeBoth: reads first (Purse), second (Purse); 1 rules, 5 paths
+
+✓ Every state stays in its schema
+✗ Purse.NeverNegative: violated
+    state    { first: { balance: 1 }, second: { balance: 1 } }
+    command  ChargeBoth { first: "", second: "", fee: 1 }
+    now      1970-01-01T00:00:00.000Z
+    events   Sent { amount: 1 }, Sent { amount: 1 }
+    after    { first: { balance: -1 }, second: { balance: -1 } }
+```
+
+The command names the same purse twice. It is one instance with one balance, checked for one fee and charged two. The prover tries two names of the same aggregate both ways: as two instances, and as one.
+
+`Explore` searches a model:
 
 ```typescript title="packages/domain/test/Bank.explore.test.ts"
 import * as Explore from "@alchemy.run/domain/Explore";
@@ -513,14 +590,14 @@ An outcome no sequence reaches is worth a look. It's either out of reach in two 
 
 ## What a pass does not say
 
-A proof is about one aggregate. A rule across instances is checked in every sequence of up to `depth` commands and in the walks that were sampled. A longer sequence that no walk took could still break it.
+A proof is about one aggregate, or one step of a decision. It assumes the decision commits everything it records or nothing, which is the platform's job and isn't checked here. A rule across instances is checked in every sequence of up to `depth` commands and in the walks that were sampled. A longer sequence that no walk took could still break it.
 
 An invariant can be true of every state the aggregate reaches and still not be proved. The proof starts from any state the rules allow, including ones no sequence of commands leads to. This escrow reserves money before it captures it, and `Reserve` checks there is enough, so the balance never goes below zero:
 
 ```text
 Checked: in every sequence of up to 3 commands on a new instance
   ✓ NeverOverdrawn
-      not proved: Capture breaks it from { balance: 0, reserved: 1 }, a state the rules allow
+      not proved: Capture { id: "" } breaks it from { balance: 0, reserved: 1 }, a state the rules allow
       No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved.
 ```
 

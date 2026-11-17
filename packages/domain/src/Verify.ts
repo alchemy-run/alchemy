@@ -265,7 +265,7 @@ const storiesOf = (explored: Explore.ModelReport) => {
     add(`ends without ${explored.model}.${rule.name}`, rule.broken);
   for (const outcome of explored.outcomes)
     add(
-      `${outcome.aggregate}.${outcome.command} ${outcome.kind === "records" ? "→" : "✗"} ${outcome.tag}`,
+      `${outcome.aggregate === undefined ? "" : `${outcome.aggregate}.`}${outcome.command} ${outcome.kind === "records" ? "→" : "✗"} ${outcome.tag}`,
       outcome.story,
     );
   for (const ending of explored.endings) add(`${ending.saga} ${ending.ending}`, ending.story);
@@ -303,7 +303,7 @@ const stepsOf = (model: Model.Any, story: ModelSearch.Story): ReadonlyArray<unkn
       case "Clock":
         return [Story.clock(op.at)];
       case "When":
-        return [Story.when(ref(op.aggregate, op.id), op.command as never)];
+        return [Story.when(op.command as never)];
       case "Rejected":
         return [Story.rejected(op.rejection as never)];
       case "Call":
@@ -390,7 +390,8 @@ export const report = (
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
       ],
-      assumptions: ASSUMPTIONS,
+      // Only a model with a decision takes its commit for granted.
+      assumptions: explored.decisions.length > 0 ? [...ASSUMPTIONS, Prove.ATOMIC] : ASSUMPTIONS,
     };
     return made;
   });
@@ -622,6 +623,7 @@ export const render = (report: Report | AggregateReport): string => {
     n === 0 ? [] : [`${n} ${n === 1 ? one : many}`];
   const parts = [
     ...some(explored.outcomes.length, "outcome", "outcomes"),
+    ...some(explored.decisions.length, "decision", "decisions"),
     ...some(explored.followed.length + explored.idle.length, "policy", "policies"),
     ...some(explored.sagas.length + explored.unstarted.length, "saga", "sagas"),
     ...some(explored.views.length, "view", "views"),

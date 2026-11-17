@@ -8,27 +8,23 @@ export class VaultChanged extends Domain.Event("VaultChanged", { cents: Schema.B
 export class TooLittle extends Domain.Rejection("TooLittle", {}) {}
 
 export class Store extends Domain.Command("Store", {
-  target: Schema.String,
-  input: { amount: Amount },
+  input: { id: Schema.String, amount: Amount },
   events: [VaultChanged],
 }) {}
 
 export class Take extends Domain.Command("Take", {
-  target: Schema.String,
-  input: { amount: Amount },
+  input: { id: Schema.String, amount: Amount },
   events: [VaultChanged],
   rejects: [TooLittle],
 }) {}
 
 export class Halve extends Domain.Command("Halve", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [VaultChanged],
 }) {}
 
 export class Charge extends Domain.Command("Charge", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [VaultChanged],
 }) {}
 
@@ -39,6 +35,7 @@ export class Vault extends Domain.Aggregate("Vault", {
   initial: { cents: 0n },
   invariants: { NeverNegative: (vault) => vault.cents >= 0n },
   commands: [Store, Take, Halve, Charge],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Store: (state, command) => [new VaultChanged({ cents: state.cents + command.amount })],
     Take: (state, command) =>

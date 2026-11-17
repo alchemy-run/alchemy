@@ -8,9 +8,11 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
+import type * as Decision from "../../Decision.ts";
 import * as ExternalSystem from "../../ExternalSystem.ts";
 import * as Key from "../../Key.ts";
 import * as Check from "../../Prove/internal/Check.ts";
+import * as Decide from "../../Prove/internal/Decide.ts";
 import * as Induction from "../../Prove/internal/Induction.ts";
 import type { Interpreter } from "../../Prove/internal/Interpreter.ts";
 import * as Paths from "../../Prove/internal/Paths.ts";
@@ -24,8 +26,20 @@ import { lift, stateTags, tagOf } from "./Search.ts";
 
 /** One command of a story: who it went to, and who sent it. */
 export interface Step extends Move {
+  /** The aggregate the command went to: for a decision, the first it read. */
   readonly aggregate: string;
   readonly id: string;
+  /**
+   * For a command a decision implements: what it recorded, instance by
+   * instance. `undefined` for a command one aggregate handles.
+   */
+  readonly recorded:
+    | ReadonlyArray<{
+        readonly aggregate: string;
+        readonly id: string;
+        readonly events: ReadonlyArray<unknown>;
+      }>
+    | undefined;
   /** The policy or saga that sent the command; `undefined` when a caller did, or a schedule. */
   readonly by: string | undefined;
   /** The delay of the schedule that sent the command, as the code wrote it. */
@@ -67,7 +81,8 @@ export interface Asked {
 export type Story = ReadonlyArray<Step>;
 
 export interface Outcome {
-  readonly aggregate: string;
+  /** The aggregate that handles the command: `undefined` for a command a decision implements. */
+  readonly aggregate: string | undefined;
   readonly command: string;
   readonly kind: "records" | "rejects";
   readonly tag: string;
@@ -143,6 +158,8 @@ export interface Found {
    * event, so nothing said here is about them.
    */
   readonly dead: ReadonlyArray<string>;
+  /** The decisions run in the sequences, each by the command it implements. */
+  readonly decisions: ReadonlyArray<string>;
   readonly outcomes: ReadonlyArray<Outcome>;
   readonly reached: ReadonlyArray<{
     readonly aggregate: string;
@@ -239,6 +256,7 @@ export interface ModelLike {
   readonly modelName: string;
   readonly definitions: {
     readonly aggregates: ReadonlyArray<Aggregate.Any>;
+    readonly decisions?: ReadonlyArray<Decision.Any>;
     readonly views?: ReadonlyArray<unknown>;
     readonly policies: ReadonlyArray<unknown>;
     readonly projections?: ReadonlyArray<unknown>;
@@ -317,6 +335,17 @@ interface Agg {
   readonly rules: Readonly<Record<string, Check.Kept["holds"]>>;
 }
 
+/** A decision the explorer follows: one command, decided across the instances it names. */
+interface Decided extends Induction.DecisionImpl {
+  /** The tag of the command it implements. */
+  readonly name: string;
+  readonly command: CommandClass;
+  /** The aggregate behind each name in `reads`. */
+  readonly aggs: Readonly<Record<string, Agg>>;
+  /** The names of its own transitions. */
+  readonly own: ReadonlyArray<string>;
+}
+
 interface PolicyImpl {
   readonly name: string;
   readonly from: unknown;
@@ -388,9 +417,25 @@ interface Instance {
   readonly version: number;
 }
 
-interface Entry {
+/** What a decision did to one of the instances it read. */
+interface EntryPart {
   readonly agg: Agg;
   readonly instance: number;
+  readonly events: ReadonlyArray<V>;
+  readonly state: V;
+  readonly checks: ReadonlyArray<Paths.Check>;
+}
+
+interface Entry {
+  /** For a decision: the first aggregate it read. */
+  readonly agg: Agg;
+  readonly instance: number;
+  /** Set for a command a decision implements: what it did, instance by instance, and its own rules. */
+  readonly decided?: {
+    readonly decision: Decided;
+    readonly parts: ReadonlyArray<EntryPart>;
+    readonly own: ReadonlyArray<Paths.Check>;
+  };
   readonly command: CommandClass;
   readonly label: string;
   readonly inputs: Paths.Inputs;
@@ -493,6 +538,8 @@ interface Sequence {
   readonly receipts: Map<string, Receipt>;
   /** What each schedule of each delivery gave. */
   readonly armed: Map<string, V>;
+  /** What each decision a delivery sent gave, by the delivery and the send's place in it. */
+  readonly decisions: Map<string, Paths.Decided>;
   readonly queue: Array<Trigger | Resume>;
   readonly sagas: Array<SagaRun>;
   timers: Array<Timer>;
@@ -631,7 +678,7 @@ export const locate = Effect.fn(function* (
     const module = modules.find(
       (m) =>
         Object.values(m.exports).includes(cls) &&
-        Paths.find(m.program, cls.aggregateName, "decide") !== undefined,
+        Paths.find(m.program, cls.aggregateName, "evolve") !== undefined,
     );
     if (!module) {
       missing.push(cls.aggregateName);
@@ -639,7 +686,7 @@ export const locate = Effect.fn(function* (
     }
     const definition: Paths.Definition = {
       module,
-      node: Paths.find(module.program, cls.aggregateName, "decide")!,
+      node: Paths.find(module.program, cls.aggregateName, "evolve")!,
       name: cls.aggregateName,
       state: cls.definition.state,
     };
@@ -660,6 +707,33 @@ export const locate = Effect.fn(function* (
       >,
       rules: Check.rules(cls),
     });
+  }
+
+  const decisions: Array<Decided> = [];
+  for (const cls of model.definitions.decisions ?? []) {
+    const found = yield* Induction.locate(interpreter, modules, cls);
+    const aggs = Object.fromEntries(
+      Object.entries(cls.reads).flatMap(([name, read]) => {
+        const agg = aggregates.find((agg) => agg.cls === read);
+        return agg ? [[name, agg] as const] : [];
+      }),
+    );
+    if (typeof found === "string" || Object.keys(aggs).length < Object.keys(cls.reads).length) {
+      missing.push(typeof found === "string" ? found : `what ${cls.decisionName} reads`);
+      continue;
+    }
+    decisions.push({
+      ...found,
+      name: cls.decisionName,
+      command: cls.command as unknown as CommandClass,
+      aggs,
+      own: Paths.decisionRuleNames(found.definition),
+    });
+    unread.push(
+      ...Object.keys(cls.definition.transitions ?? {})
+        .filter((name) => !Paths.decisionRuleNames(found.definition).includes(name))
+        .map((name) => `${cls.decisionName}.${name}`),
+    );
   }
 
   const classes = new Set([...model.definitions.policies, ...(model.sagas ?? [])]);
@@ -796,6 +870,10 @@ export const locate = Effect.fn(function* (
       const host = value.success.value;
       if ((model.sagas ?? []).includes(host)) return undefined;
       if (aggregates.some((agg) => agg.cls === host)) writes.add(host);
+      // A decision it names writes to every aggregate the decision reads.
+      for (const decision of decisions)
+        if (decision.cls === host)
+          for (const agg of Object.values(decision.aggs)) writes.add(agg.cls);
     }
     return writes;
   });
@@ -898,7 +976,18 @@ export const locate = Effect.fn(function* (
       name: query.queryName,
       reason: "what a query answers is not checked",
     });
-  return { aggregates, missing, unread, policies, sagas, skipped, aside, rules, views: folded };
+  return {
+    aggregates,
+    decisions,
+    missing,
+    unread,
+    policies,
+    sagas,
+    skipped,
+    aside,
+    rules,
+    views: folded,
+  };
 });
 
 export type Located = Effect.Success<ReturnType<typeof locate>>;
@@ -922,6 +1011,9 @@ export const search = Effect.fn(function* (
       .filter((command) => external.includes(command))
       .map((command) => ({ agg, command })),
   );
+  const decisions = located.decisions;
+  /** The decisions callers can send the command of. */
+  const decided = decisions.filter((decision) => external.includes(decision.command));
 
   /**
    * The invariants each command keeps whatever state it meets. A policy's
@@ -930,21 +1022,65 @@ export const search = Effect.fn(function* (
   const dead: Array<string> = [];
   const kept = new Map<string, ReadonlySet<string>>();
   const unkept: Array<string> = [];
+  // A decision is one more command of each aggregate it reads: it has to keep their
+  // rules, and its own, from any states their schemas allow.
+  const decisionRows = new Map<Decided, Induction.DecisionRow>();
+  for (const decision of decisions) {
+    const row = yield* Induction.decisionRow(solver, interpreter, decision);
+    decisionRows.set(decision, row);
+    unkept.push(...Induction.unkept([row]));
+    if (row.accepted === false) dead.push(decision.name);
+  }
+  const readers = (agg: Agg) =>
+    decisions.filter((decision) => Object.values(decision.aggs).includes(agg));
+  /** The aggregates every command and every decision keeps in their schema: the proofs count for them. */
+  const closed = new Set<Agg>();
+  const ownRows = new Map<Agg, ReadonlyArray<Induction.Row>>();
   for (const agg of aggs) {
-    if (agg.invariants.length === 0) continue;
-    const rows = yield* Induction.rows(solver, interpreter, agg.cls, agg.definition);
+    const rows =
+      agg.invariants.length === 0 && readers(agg).length === 0
+        ? []
+        : yield* Induction.rows(solver, interpreter, agg.cls, agg.definition);
+    ownRows.set(agg, rows);
     unkept.push(...Induction.unkept(rows).map((line) => `${agg.name}.${line}`));
     for (const row of rows) if (row.accepted === false) dead.push(`${agg.name}.${row.command}`);
-    if (!Schema.is(agg.definition.state as Schema.Schema<unknown>)(agg.cls.definition.initial))
-      continue;
-    if (!Induction.closed(rows)) continue;
-    for (const row of rows)
+    if (
+      Schema.is(agg.definition.state as Schema.Schema<unknown>)(agg.cls.definition.initial) &&
+      Induction.closed(rows) &&
+      readers(agg).every((decision) => decisionRows.get(decision)!.fits._tag === "Proved")
+    )
+      closed.add(agg);
+  }
+  for (const agg of aggs) {
+    if (!closed.has(agg)) continue;
+    for (const row of ownRows.get(agg)!)
       kept.set(
         `${agg.name}.${row.command}`,
         new Set(
           [...row.verdicts].flatMap(([name, verdict]) => (verdict._tag === "Proved" ? [name] : [])),
         ),
       );
+    // A decision's proof starts from every instance it reads in its schema.
+    for (const decision of readers(agg)) {
+      if (!Object.values(decision.aggs).every((read) => closed.has(read))) continue;
+      const row = decisionRows.get(decision)!;
+      kept.set(
+        `${agg.name}.${decision.name}`,
+        new Set(
+          agg.invariants.filter(
+            (name) => row.verdicts.get(Induction.ruleOf(agg.name, name))?._tag === "Proved",
+          ),
+        ),
+      );
+    }
+  }
+  for (const decision of decisions) {
+    if (!Object.values(decision.aggs).every((read) => closed.has(read))) continue;
+    const row = decisionRows.get(decision)!;
+    kept.set(
+      decision.name,
+      new Set(decision.own.filter((name) => row.verdicts.get(name)?._tag === "Proved")),
+    );
   }
 
   const pass = Effect.fn(function* (skipped: ReadonlyMap<string, Skipped>) {
@@ -989,6 +1125,30 @@ export const search = Effect.fn(function* (
           story: holds && holds(agg.cls.definition.initial) !== true ? [] : undefined,
         });
       }
+    }
+    for (const decision of decisions) {
+      for (const event of decision.command.events)
+        outcomes.set(`${decision.name} records ${event.tag}`, {
+          aggregate: undefined,
+          command: decision.name,
+          kind: "records",
+          tag: event.tag,
+          story: undefined,
+        });
+      for (const rejection of decision.command.rejects)
+        outcomes.set(`${decision.name} rejects ${rejection.tag}`, {
+          aggregate: undefined,
+          command: decision.name,
+          kind: "rejects",
+          tag: rejection.tag,
+          story: undefined,
+        });
+      for (const name of decision.own)
+        broken.set(`${decision.name}.${name}`, {
+          aggregate: decision.name,
+          name,
+          story: undefined,
+        });
     }
     const ruled = new Map<string, Story | undefined>(
       located.rules.names.map((name) => [name, undefined]),
@@ -1039,6 +1199,7 @@ export const search = Effect.fn(function* (
       readonly calls: ReadonlyArray<Call>;
       readonly receipts: ReadonlyMap<string, Receipt>;
       readonly armed: ReadonlyMap<string, V>;
+      readonly decisions: ReadonlyMap<string, Paths.Decided>;
       readonly sagas: ReadonlyArray<SagaRun>;
       readonly timers: ReadonlyArray<Timer>;
       /** The commands callers sent and the schedules that came due. */
@@ -1053,6 +1214,7 @@ export const search = Effect.fn(function* (
       calls: [...from.calls],
       receipts: new Map(from.receipts),
       armed: new Map(from.armed),
+      decisions: new Map(from.decisions),
       queue: [],
       sagas: [...from.sagas],
       timers: [...from.timers],
@@ -1074,6 +1236,7 @@ export const search = Effect.fn(function* (
       calls: [],
       receipts: new Map(),
       armed: new Map(),
+      decisions: new Map(),
       sagas: [],
       timers: [],
       length: 0,
@@ -1540,6 +1703,8 @@ export const search = Effect.fn(function* (
         if (run.branch(`(= ${text} ${other})`)) return index;
       }
       const made = sequence.instances.filter((instance) => instance.agg === agg).length + 1;
+      const ast = Symbolic.typeOf(agg.cls.definition.id);
+      if (ast) Symbolic.assumeFits(address, ast, run);
       sequence.instances.push({
         agg,
         id: pin(address, `${agg.name}#${made}.id`),
@@ -1549,34 +1714,239 @@ export const search = Effect.fn(function* (
       return sequence.instances.length - 1;
     };
 
+    /** Decide one command across the instances it names, in the run of the current sequence. */
+    const applyDecision: (
+      decision: Decided,
+      given: V | undefined,
+      /** A caller sent it: it names no more instances of an aggregate than a caller addresses. */
+      capped: boolean,
+    ) => Eval<Paths.Decided> = Effect.fnUntraced(
+      function* (decision: Decided, given: V | undefined, capped: boolean) {
+        const run = interpreter.current.run;
+        const label = `${sequence.trail.length + 1}.`;
+        const now = run.constant(`${label}now`, "Int");
+        const previous = sequence.trail[sequence.trail.length - 1];
+        if (previous) run.assume(`(>= ${now.text} ${Smt.symbol(`${previous.label}now`)})`);
+        const sent = {
+          by: reacting,
+          after: undefined,
+          again: scopeOf()?.again === true,
+          step: scopeOf()?.step,
+          pending: sequence.timers.map((waiting) => ({
+            since: waiting.since,
+            millis: waiting.millis,
+          })),
+        };
+        const site: Site = { module: decision.definition.module, node: decision.definition.node };
+        const slotOf = Effect.fnUntraced(function* (name: string, id: V) {
+          const agg = decision.aggs[name];
+          const text = textOf(id);
+          if (!agg || text === undefined)
+            return yield* Value.notTranslated(
+              site,
+              `${decision.name} reads ${name} by something that is not an id`,
+            );
+          const index = resolve(agg, id, text);
+          if (
+            capped &&
+            sequence.instances.filter((instance) => instance.agg === agg).length > options.instances
+          )
+            return yield* new Value.Infeasible();
+          const instance = sequence.instances[index]!;
+          const slot: Paths.Slot = {
+            definition: agg.definition,
+            id: instance.id,
+            state: instance.state,
+            version: Value.num(instance.version),
+          };
+          return { index, slot };
+        });
+        const step = yield* Paths.decided(
+          interpreter,
+          decision.definition,
+          decision.command,
+          label,
+          slotOf,
+          given,
+        );
+        const applied = step.applied;
+        const at = sequence.trail.length;
+        /** The instance behind each slot the decision read. */
+        const instanceOf = (slot: number): number => {
+          const read = step.slots[slot]!;
+          return sequence.instances.findIndex(
+            (instance) =>
+              instance.agg.definition === read.definition &&
+              textOf(instance.id) === textOf(read.id),
+          );
+        };
+        const first = step.slots[0];
+        const head = first ? instanceOf(0) : -1;
+        const agg = head >= 0 ? sequence.instances[head]!.agg : Object.values(decision.aggs)[0]!;
+        const base = {
+          agg,
+          instance: head,
+          command: decision.command,
+          label,
+          inputs: {
+            state: first?.state ?? Value.undef,
+            command: step.inputs.command,
+            id: first?.id ?? Value.undef,
+            commandId: step.inputs.commandId,
+            version: first?.version ?? Value.num(0),
+            now: step.inputs.now,
+          },
+          emitted: [],
+          ...sent,
+        };
+        if (applied._tag !== "Changed") {
+          sequence.trail.push({
+            ...base,
+            applied,
+            checks: [],
+            decided: { decision, parts: [], own: [] },
+          });
+          return applied;
+        }
+        const parts: Array<EntryPart> = [];
+        for (const part of applied.parts) {
+          const index = instanceOf(part.slot);
+          const instance = sequence.instances[index]!;
+          parts.push({
+            agg: instance.agg,
+            instance: index,
+            events: part.events,
+            state: part.state,
+            checks:
+              instance.agg.invariants.length > 0
+                ? yield* Paths.checks(
+                    interpreter,
+                    instance.agg.definition,
+                    part.state,
+                    { before: part.before, command: step.inputs.command, events: part.events },
+                    kept.get(`${instance.agg.name}.${decision.name}`),
+                  )
+                : [],
+          });
+        }
+        const own = (yield* Paths.decisionChecks(interpreter, decision.definition, step)).filter(
+          (check) => !kept.get(decision.name)?.has(check.name),
+        );
+        for (const part of parts) {
+          const instance = sequence.instances[part.instance]!;
+          sequence.instances[part.instance] = {
+            ...instance,
+            state: part.state,
+            version: instance.version + part.events.length,
+          };
+        }
+        sequence.trail.push({
+          ...base,
+          applied: {
+            _tag: "Changed",
+            events: applied.events,
+            state: parts[0]?.state ?? Value.undef,
+          },
+          checks: [],
+          decided: { decision, parts, own },
+        });
+        let nth = 0;
+        for (const part of parts) {
+          const instance = sequence.instances[part.instance]!;
+          const source = Value.obj({ aggregate: Value.str(part.agg.name), id: instance.id });
+          for (const event of part.events) {
+            const cls = event._tag === "Obj" ? event.brand?.cls : undefined;
+            for (const policy of policies)
+              if (policy.from === part.agg.cls && policy.on.includes(cls))
+                sequence.queue.push({
+                  policy,
+                  source,
+                  id: instance.id,
+                  event,
+                  parent: at,
+                  key: `${at}/${nth}/${policy.name}`,
+                });
+            nth++;
+            for (const view of located.views)
+              if (view.sources.has(part.agg.cls))
+                yield* fold(view, part.agg.cls, source, Value.undef, event, at);
+          }
+        }
+        return applied;
+      },
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          stopped = error;
+        }),
+      ),
+    );
+
+    /** A policy or a saga sends the command a decision implements. */
+    const sendDecision: (decision: Decided, command: V | undefined, site: Site) => Eval<V> =
+      Effect.fnUntraced(function* (decision: Decided, command: V | undefined, site: Site) {
+        if (
+          command?._tag !== "Obj" ||
+          command.brand?.kind !== "Command" ||
+          command.brand.cls !== decision.command
+        )
+          return yield* Value.notTranslated(
+            site,
+            `sends ${decision.name} something that is not its command`,
+          );
+        // Sent again by the same delivery, it gives what it gave the first time.
+        const scope = scopeOf();
+        const slot = scope ? `${scope.key}#${scope.ordinal++}` : undefined;
+        const before = slot === undefined ? undefined : sequence.decisions.get(slot);
+        const applied =
+          before ??
+          (yield* applyDecision(
+            decision,
+            pin(command, `${sequence.trail.length + 1}.command`),
+            false,
+          ));
+        if (slot !== undefined && !before && applied._tag !== "Rejected")
+          sequence.decisions.set(slot, applied);
+        if (scope && applied._tag === "Rejected") scope.refused = true;
+        if (applied._tag === "Rejected")
+          return yield* new Value.Rejected({ rejection: applied.rejection });
+        return Value.obj({
+          commits: { _tag: "Arr", items: [] },
+          events: { _tag: "Arr", items: applied._tag === "Changed" ? [...applied.events] : [] },
+          reply: Value.undef,
+        });
+      });
+
     /** A command and where it goes, as a policy or saga wrote them. */
-    const addressed = (
+    const addressed = Effect.fnUntraced(function* (
       agg: Agg,
-      target: V | undefined,
       command: V | undefined,
       site: Site,
       verb: string,
-    ) => {
+    ) {
       const cls =
         command?._tag === "Obj" && command.brand?.kind === "Command"
           ? (command.brand.cls as CommandClass)
           : undefined;
       if (!command || !cls)
-        return Effect.fail(
-          Value.notTranslated(site, `${verb} ${agg.name} something that is not a command`),
+        return yield* Value.notTranslated(
+          site,
+          `${verb} ${agg.name} something that is not a command`,
         );
       if (!agg.commands.includes(cls))
-        return Effect.fail(
-          Value.notTranslated(site, `${verb} ${cls.tag} to ${agg.name}, which does not take it`),
+        return yield* Value.notTranslated(
+          site,
+          `${verb} ${cls.tag} to ${agg.name}, which does not take it`,
         );
-      const address = target?._tag === "Obj" ? target.fields.id : target;
+      // The command's input names its instance, as the aggregate's `keyOf` reads it.
+      const address = yield* Paths.keyOf(interpreter, agg.definition, command);
       const text = textOf(address);
-      if (!address || text === undefined)
-        return Effect.fail(
-          Value.notTranslated(site, `${verb} ${cls.tag} to an address the explorer cannot follow`),
+      if (text === undefined)
+        return yield* Value.notTranslated(
+          site,
+          `${verb} ${cls.tag} to an address the explorer cannot follow`,
         );
-      return Effect.succeed({ cls, command, address, text });
-    };
+      return { cls, command, address, text };
+    });
 
     /** Whether two addresses are the same one. Symbolic ones split the path. */
     const same = (a: V, b: V): boolean => {
@@ -1586,14 +1956,9 @@ export const search = Effect.fn(function* (
       return interpreter.current.run.branch(`(= ${left} ${right})`);
     };
 
-    const send: (agg: Agg, target: V | undefined, command: V | undefined, site: Site) => Eval<V> =
-      Effect.fnUntraced(function* (
-        agg: Agg,
-        target: V | undefined,
-        command: V | undefined,
-        site: Site,
-      ) {
-        const to = yield* addressed(agg, target, command, site, "sends");
+    const send: (agg: Agg, command: V | undefined, site: Site) => Eval<V> = Effect.fnUntraced(
+      function* (agg: Agg, command: V | undefined, site: Site) {
+        const to = yield* addressed(agg, command, site, "sends");
         const index = resolve(agg, to.address, to.text);
         // A command's id comes from the delivery and its place in it: the instance that
         // took it once gives the same answer again, and does nothing more.
@@ -1621,23 +1986,22 @@ export const search = Effect.fn(function* (
           events: { _tag: "Arr", items: applied._tag === "Changed" ? applied.events : [] },
           reply: Value.undef,
         });
-      });
+      },
+    );
 
     /** Keep a command for later. It runs as a step of its own once its delay has passed. */
     const schedule: (
       agg: Agg,
-      target: V | undefined,
       command: V | undefined,
       options: V | undefined,
       site: Site,
     ) => Eval<V> = Effect.fnUntraced(function* (
       agg: Agg,
-      target: V | undefined,
       command: V | undefined,
       options: V | undefined,
       site: Site,
     ) {
-      const to = yield* addressed(agg, target, command, site, "schedules");
+      const to = yield* addressed(agg, command, site, "schedules");
       // The same arming again, by a policy handling its event again: it stays as it is.
       const scope = scopeOf();
       const slot = scope ? `${scope.key}#${scope.ordinal++}` : undefined;
@@ -1718,14 +2082,14 @@ export const search = Effect.fn(function* (
       aggs.map((agg) => [
         agg,
         Value.obj({
-          send: native(`${agg.name}.send`, ([target, command], site) =>
+          send: native(`${agg.name}.send`, ([command], site) =>
             Effect.succeed<V>({
               _tag: "Effect",
-              run: Effect.suspend(() => send(agg, target, command, site)),
+              run: Effect.suspend(() => send(agg, command, site)),
             }),
           ),
-          schedule: native(`${agg.name}.schedule`, ([target, command, options], site) =>
-            Effect.succeed(effect(() => schedule(agg, target, command, options, site))),
+          schedule: native(`${agg.name}.schedule`, ([command, options], site) =>
+            Effect.succeed(effect(() => schedule(agg, command, options, site))),
           ),
           unschedule: native(`${agg.name}.unschedule`, ([target, id], site) =>
             Effect.succeed(effect(() => unschedule(agg, target, id, site))),
@@ -1865,6 +2229,13 @@ export const search = Effect.fn(function* (
     interpreter.hooks.service = (host) => {
       const agg = byClass.get(host);
       if (agg) return clients.get(agg);
+      const decision = decisions.find((decision) => decision.cls === host);
+      if (decision)
+        return Value.obj({
+          send: native(`${decision.name}.send`, ([command], site) =>
+            Effect.succeed(effect(() => sendDecision(decision, command, site))),
+          ),
+        });
       const saga = sagaClients.get(host);
       if (saga) return saga;
       const kind =
@@ -2273,7 +2644,7 @@ export const search = Effect.fn(function* (
       const after = (at: number) =>
         asked.flatMap(({ at: made, ...call }) => (made === at + 1 ? [call] : []));
       for (const [at, entry] of played.trail.entries()) {
-        const slot = real[entry.instance]!;
+        const slot = real[entry.instance];
         const { _tag: tag, ...fields } = (yield* build("command", entry.inputs.command)) as {
           readonly _tag: string;
         };
@@ -2294,33 +2665,141 @@ export const search = Effect.fn(function* (
           read.push({ name: key.slice(key.lastIndexOf("/") + 1), value, tag: held.tag });
         }
         const now = (yield* build("now", entry.inputs.now)) as DateTime.Utc;
-        const prediction = Aggregate.predict(entry.agg.cls, slot.state, command, {
-          id: slot.id,
-          now,
-          version: slot.version,
-          commandId: (yield* build("commandId", entry.inputs.commandId)) as string,
-          context: context as Context.Context<never>,
-        });
-        const where = `step ${at + 1}, ${Symbolic.show(command)} to ${entry.agg.name} ${Symbolic.show(slot.id)}`;
-        if (prediction._tag === "Unpredictable")
+        const commandId = (yield* build("commandId", entry.inputs.commandId)) as string;
+        const decision = entry.decided?.decision;
+        const where = decision
+          ? `step ${at + 1}, ${Symbolic.show(command)}`
+          : `step ${at + 1}, ${Symbolic.show(command)} to ${entry.agg.name} ${Symbolic.show(slot?.id)}`;
+        /** What the real code did: one part for each instance it recorded on. */
+        let ran:
+          | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
+          | { readonly _tag: "Unpredictable"; readonly cause: Cause.Cause<unknown> }
+          | {
+              readonly _tag: "Accepted";
+              readonly events: ReadonlyArray<{ readonly _tag: string }>;
+              readonly wrote: ReadonlyArray<{
+                readonly slot: (typeof real)[number];
+                readonly before: unknown;
+                readonly events: ReadonlyArray<{ readonly _tag: string }>;
+                readonly after: unknown;
+              }>;
+              /** The decision's own transitions the step breaks. */
+              readonly broke: ReadonlyArray<string>;
+            };
+        if (decision) {
+          const made = yield* Effect.try({
+            try: () =>
+              Decide.run(
+                decision.cls,
+                command,
+                new Map(
+                  real.map((one) => [
+                    `${one.agg.name}/${one.id}`,
+                    { state: one.state, version: one.version },
+                  ]),
+                ),
+                { now, commandId, context: context as Context.Context<never> },
+              ),
+            catch: (cause) =>
+              new Disagreement({ reason: `the real code fails on ${where}: ${String(cause)}` }),
+          });
+          if (made._tag !== "Accepted") ran = made;
+          else {
+            const wrote = made.wrote.flatMap((wrote) => {
+              const found = real.find(
+                (one) => one.agg.cls === wrote.aggregate && one.id === wrote.id,
+              );
+              return wrote.events.length === 0
+                ? []
+                : [{ slot: found, before: wrote.before, events: wrote.events, after: wrote.after }];
+            });
+            if (wrote.some((part) => part.slot === undefined))
+              return yield* new Disagreement({
+                reason: `the real code records on an instance the explorer did not read at ${where}`,
+              });
+            const moved: Check.DecisionMoved = {
+              ran: made,
+              streams: [],
+              command,
+              context: context as Context.Context<never>,
+            };
+            ran = {
+              _tag: "Accepted",
+              events: made.events,
+              wrote: wrote as ReadonlyArray<{
+                readonly slot: (typeof real)[number];
+                readonly before: unknown;
+                readonly events: ReadonlyArray<{ readonly _tag: string }>;
+                readonly after: unknown;
+              }>,
+              broke:
+                made.events.length === 0
+                  ? []
+                  : yield* Effect.try({
+                      try: () =>
+                        decision.own.filter(
+                          (name) => !Check.transition(decision.cls, name).holds(moved),
+                        ),
+                      catch: (cause) =>
+                        new Disagreement({
+                          reason: `a rule of ${decision.name} fails on the real code at ${where}: ${String(cause)}`,
+                        }),
+                    }),
+            };
+          }
+        } else {
+          const prediction = Aggregate.predict(entry.agg.cls, slot!.state, command, {
+            now,
+            version: slot!.version,
+            commandId,
+            context: context as Context.Context<never>,
+          });
+          ran =
+            prediction._tag !== "Accepted"
+              ? prediction
+              : {
+                  _tag: "Accepted",
+                  events: prediction.events,
+                  wrote: [
+                    {
+                      slot: slot!,
+                      before: slot!.state,
+                      events: prediction.events,
+                      after: prediction.state,
+                    },
+                  ],
+                  broke: [],
+                };
+        }
+        if (ran._tag === "Unpredictable")
           return yield* new Disagreement({
-            reason: `the real code fails on ${where}: ${Cause.pretty(prediction.cause)}`,
+            reason: `the real code fails on ${where}: ${Cause.pretty(ran.cause)}`,
           });
         const expected =
           entry.applied._tag === "Rejected"
             ? `rejects with ${tagOf(entry.applied.rejection)}`
             : `records [${(entry.applied._tag === "Changed" ? entry.applied.events : []).map(tagOf).join(", ")}]`;
         const actual =
-          prediction._tag === "Rejected"
-            ? `rejects with ${prediction.rejection._tag}`
-            : `records [${prediction.events.map((event) => event._tag).join(", ")}]`;
+          ran._tag === "Rejected"
+            ? `rejects with ${ran.rejection._tag}`
+            : `records [${ran.events.map((event) => event._tag).join(", ")}]`;
         if (expected !== actual)
           return yield* new Disagreement({
             reason: `the explorer read that ${where} ${expected}, but the real code ${actual}`,
           });
         const who = {
           aggregate: entry.agg.name,
-          id: slot.id,
+          id: slot?.id ?? "",
+          recorded:
+            decision === undefined
+              ? undefined
+              : ran._tag === "Accepted"
+                ? ran.wrote.map((part) => ({
+                    aggregate: part.slot.agg.name,
+                    id: part.slot.id,
+                    events: part.events,
+                  }))
+                : [],
           by: entry.by,
           after: entry.after,
           asked: after(at),
@@ -2333,37 +2812,41 @@ export const search = Effect.fn(function* (
             );
           }),
         };
-        if (prediction._tag === "Rejected") {
+        if (ran._tag === "Rejected") {
           story.push({
             ...who,
             command,
             context: read,
             now,
-            outcome: { _tag: "Rejected", rejection: prediction.rejection },
+            outcome: { _tag: "Rejected", rejection: ran.rejection },
           });
           continue;
         }
-        const moved: Check.Moved = {
-          before: slot.state,
-          after: prediction.state,
-          command,
-          events: prediction.events,
-          context: context as Context.Context<never>,
-        };
-        slot.state = prediction.state;
-        slot.version += prediction.events.length;
-        slot.events.push(...prediction.events);
         story.push({
           ...who,
           command,
           context: read,
           now,
-          outcome: { _tag: "Accepted", events: prediction.events, state: prediction.state },
+          outcome: { _tag: "Accepted", events: ran.events, state: ran.wrote[0]?.after },
         });
-        for (const [name, holds] of Object.entries(entry.agg.rules))
-          if (holds(moved) !== true) breaks.push({ name: `${entry.agg.name}.${name}`, at });
+        for (const part of ran.wrote) {
+          const moved: Check.Moved = {
+            before: part.before,
+            after: part.after,
+            command,
+            events: part.events,
+            context: context as Context.Context<never>,
+          };
+          part.slot.state = part.after;
+          part.slot.version += part.events.length;
+          part.slot.events.push(...part.events);
+          for (const [name, holds] of Object.entries(part.slot.agg.rules))
+            if (holds(moved) !== true) breaks.push({ name: `${part.slot.agg.name}.${name}`, at });
+        }
+        for (const name of ran.broke) breaks.push({ name: `${decision!.name}.${name}`, at });
+        /** The version of the instance whose events the views are being fed. */
+        let seq = 0;
         // The real views on the real events: they emit what the explorer read, or it is wrong.
-        const commandId = (yield* build("commandId", entry.inputs.commandId)) as string;
         const emitted = new Map<ViewImpl, Array<string>>();
         const feed = (
           view: ViewImpl,
@@ -2393,7 +2876,7 @@ export const search = Effect.fn(function* (
           const envelope = {
             id: Aggregate.targetId(source),
             stream: `${from}/${Aggregate.targetId(source)}`,
-            seq: slot.version,
+            seq,
             at: now,
             commandId,
             correlationId: commandId,
@@ -2460,16 +2943,19 @@ export const search = Effect.fn(function* (
             }
           }
         };
-        const ref = Aggregate.makeRef(entry.agg.cls, slot.id as never);
-        for (const event of prediction.events)
-          for (const [index, view] of located.views.entries())
-            yield* Effect.try({
-              try: () => feed(view, index, entry.agg.cls, ref, undefined, event),
-              catch: (cause) =>
-                new Disagreement({
-                  reason: `${view.name} fails on the real code at ${where}: ${String(cause)}`,
-                }),
-            });
+        for (const part of ran.wrote) {
+          const ref = Aggregate.makeRef(part.slot.agg.cls, part.slot.id as never);
+          seq = part.slot.version;
+          for (const event of part.events)
+            for (const [index, view] of located.views.entries())
+              yield* Effect.try({
+                try: () => feed(view, index, part.slot.agg.cls, ref, undefined, event),
+                catch: (cause) =>
+                  new Disagreement({
+                    reason: `${view.name} fails on the real code at ${where}: ${String(cause)}`,
+                  }),
+              });
+        }
         for (const view of located.views) {
           const read = entry.emitted.flatMap((made) => (made.view === view ? made.tags : []));
           const tags = emitted.get(view) ?? [];
@@ -2595,10 +3081,11 @@ export const search = Effect.fn(function* (
         const applied = entry.applied;
         const want = (kind: Outcome["kind"], tag: string | undefined) => {
           if (tag === undefined) return;
-          const name = `${entry.agg.name}.${entry.command.tag} ${kind} ${tag}`;
+          const owner = entry.decided ? undefined : entry.agg.name;
+          const name = `${owner === undefined ? "" : `${owner}.`}${entry.command.tag} ${kind} ${tag}`;
           if (!outcomes.has(name))
             outcomes.set(name, {
-              aggregate: entry.agg.name,
+              aggregate: owner,
               command: entry.command.tag,
               kind,
               tag,
@@ -2613,11 +3100,13 @@ export const search = Effect.fn(function* (
         if (applied._tag === "Rejected") want("rejects", tagOf(applied.rejection));
         if (applied._tag === "Changed") {
           for (const event of applied.events) want("records", tagOf(event));
-          const state = reached.get(`${entry.agg.name} ${tagOf(applied.state)}`);
-          if (state && shorter(state.story, length))
-            wants.push((story) => {
-              if (shorter(state.story, length)) state.story = cut(story, length);
-            });
+          for (const part of entry.decided?.parts ?? [{ agg: entry.agg, state: applied.state }]) {
+            const state = reached.get(`${part.agg.name} ${tagOf(part.state)}`);
+            if (state && shorter(state.story, length))
+              wants.push((story) => {
+                if (shorter(state.story, length)) state.story = cut(story, length);
+              });
+          }
         }
       }
       for (const ended of played.endings) {
@@ -2657,17 +3146,38 @@ export const search = Effect.fn(function* (
       for (const [at, entry] of played.trail.entries()) {
         if (at < from || entry.applied._tag !== "Changed") continue;
         states++;
-        for (const check of entry.checks) {
+        // Each rule a step has to keep, under the name the report gives it, and what proves it.
+        const checked = entry.decided
+          ? [
+              ...entry.decided.parts.flatMap((part) =>
+                part.checks.map((check) => ({
+                  check,
+                  name: `${part.agg.name}.${check.name}`,
+                  by: `${part.agg.name}.${entry.command.tag}`,
+                })),
+              ),
+              ...entry.decided.own.map((check) => ({
+                check,
+                name: `${entry.command.tag}.${check.name}`,
+                by: entry.command.tag,
+              })),
+            ]
+          : entry.checks.map((check) => ({
+              check,
+              name: `${entry.agg.name}.${check.name}`,
+              by: `${entry.agg.name}.${entry.command.tag}`,
+            }));
+        for (const { check, name, by } of checked) {
           if (Result.isFailure(check.condition)) {
             const error = check.condition.failure;
             unread.set(`${error.file}:${error.line}`, error);
             continue;
           }
-          look(`${entry.agg.name}.${check.name}`);
+          look(name);
           if (
             check.condition.success !== "true" &&
-            !kept.get(`${entry.agg.name}.${entry.command.tag}`)?.has(check.name) &&
-            shorter(broken.get(`${entry.agg.name}.${check.name}`)?.story, at + 1)
+            !kept.get(by)?.has(check.name) &&
+            shorter(broken.get(name)?.story, at + 1)
           ) {
             open.push(check.condition.success);
           }
@@ -2767,9 +3277,13 @@ export const search = Effect.fn(function* (
                         events: {
                           _tag: "Arr",
                           items: played.trail.flatMap((entry) =>
-                            entry.instance === index && entry.applied._tag === "Changed"
-                              ? entry.applied.events
-                              : [],
+                            entry.decided
+                              ? entry.decided.parts.flatMap((part) =>
+                                  part.instance === index ? part.events : [],
+                                )
+                              : entry.instance === index && entry.applied._tag === "Changed"
+                                ? entry.applied.events
+                                : [],
                           ),
                         },
                       }),
@@ -2895,6 +3409,7 @@ export const search = Effect.fn(function* (
           calls: played.calls,
           receipts: played.receipts,
           armed: played.armed,
+          decisions: played.decisions,
           sagas: played.sagas,
           timers: played.timers,
           length: from.length + 1,
@@ -2968,6 +3483,7 @@ export const search = Effect.fn(function* (
           return apply(agg, index, command, undefined);
         });
       }),
+      ...decided.map((decision) => () => applyDecision(decision, undefined, true)),
       ...from.timers.map((timer, at) => () => {
         sequence.timers = sequence.timers.filter((_, index) => index !== at);
         const index = resolve(timer.agg, timer.address, textOf(timer.address)!);
@@ -3037,6 +3553,16 @@ export const search = Effect.fn(function* (
       walks.longest = Math.max(walks.longest, sent);
     }
 
+    /** Whether every command and every decision that can change what a rule is about keeps it. */
+    const provedBy = (owner: string, name: string): boolean => {
+      const agg = aggs.find((agg) => agg.name === owner);
+      // A decision's own rule: its proof is the decision's.
+      if (!agg) return kept.get(owner)?.has(name) === true;
+      return (
+        agg.commands.every((command) => kept.get(`${owner}.${command.tag}`)?.has(name) === true) &&
+        readers(agg).every((decision) => kept.get(`${owner}.${decision.name}`)?.has(name) === true)
+      );
+    };
     const found: Found = {
       sequences,
       states,
@@ -3045,21 +3571,16 @@ export const search = Effect.fn(function* (
       invariants: [...broken.values()].map((entry) => ({
         aggregate: entry.aggregate,
         name: entry.name,
-        kind: aggs.find((agg) => agg.name === entry.aggregate)!.transitions.has(entry.name)
-          ? ("transition" as const)
-          : ("invariant" as const),
+        kind:
+          aggs.find((agg) => agg.name === entry.aggregate)?.transitions.has(entry.name) === false
+            ? ("invariant" as const)
+            : ("transition" as const),
         broken: entry.story,
-        proved:
-          !entry.story &&
-          byClass.size > 0 &&
-          aggs
-            .find((agg) => agg.name === entry.aggregate)!
-            .commands.every(
-              (command) => kept.get(`${entry.aggregate}.${command.tag}`)?.has(entry.name) === true,
-            ),
+        proved: !entry.story && byClass.size > 0 && provedBy(entry.aggregate, entry.name),
         states: looked.get(`${entry.aggregate}.${entry.name}`) ?? 0,
       })),
       dead,
+      decisions: decisions.map((decision) => decision.name),
       rules: [...ruled].map(([name, story]) => ({
         name,
         broken: story,

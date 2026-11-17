@@ -9,27 +9,23 @@ export class WalletEmptied extends Domain.Event("WalletEmptied", {}) {}
 export class NothingToSpend extends Domain.Rejection("NothingToSpend", {}) {}
 
 export class Fund extends Domain.Command("Fund", {
-  target: Schema.String,
-  input: { amount: Schema.Int.check(Schema.isGreaterThan(0)) },
+  input: { id: Schema.String, amount: Schema.Int.check(Schema.isGreaterThan(0)) },
   events: [BalanceSet],
 }) {}
 
 export class Spend extends Domain.Command("Spend", {
-  target: Schema.String,
-  input: { amount: Schema.Int.check(Schema.isGreaterThan(0)) },
+  input: { id: Schema.String, amount: Schema.Int.check(Schema.isGreaterThan(0)) },
   events: [BalanceSet],
   rejects: [NothingToSpend],
 }) {}
 
 export class Overspend extends Domain.Command("Overspend", {
-  target: Schema.String,
-  input: { amount: Schema.Int.check(Schema.isGreaterThan(0)) },
+  input: { id: Schema.String, amount: Schema.Int.check(Schema.isGreaterThan(0)) },
   events: [BalanceSet],
 }) {}
 
 export class Empty extends Domain.Command("Empty", {
-  target: Schema.String,
-  input: {},
+  input: { id: Schema.String },
   events: [WalletEmptied],
 }) {}
 
@@ -42,6 +38,7 @@ export class Wallet extends Domain.Aggregate("Wallet", {
     NeverNegative: (wallet) => !Option.exists(wallet.balance, (balance) => balance < 0),
   },
   commands: [Fund, Spend, Overspend, Empty],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Fund: (state, command) => [
       new BalanceSet({

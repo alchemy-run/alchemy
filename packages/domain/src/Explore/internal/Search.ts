@@ -76,6 +76,11 @@ export interface Found {
    * event, so nothing said here is about them.
    */
   readonly dead: ReadonlyArray<string>;
+  /**
+   * The events the aggregate folds that none of its commands records: a
+   * decision records them, and no sequence here has one.
+   */
+  readonly outside: ReadonlyArray<string>;
   readonly outcomes: ReadonlyArray<Outcome>;
   readonly reached: ReadonlyArray<{ readonly tag: string; readonly story: Story | undefined }>;
   /** Code the explorer could not read: sequences through it were not run. */
@@ -236,7 +241,6 @@ export const search = Effect.fn(function* (
         ? Effect.succeed(built.value)
         : Effect.fail(new Disagreement({ reason: `${built.reason} (${what})` }));
     };
-    const id = (yield* build("id", trail[0]!.inputs.id)) as string;
     let state: unknown = aggregate.definition.initial;
     let version = 0;
     let moved: Check.Moved | undefined;
@@ -263,7 +267,6 @@ export const search = Effect.fn(function* (
       }
       const now = (yield* build("now", entry.inputs.now)) as DateTime.Utc;
       const prediction = Aggregate.predict(aggregate, state, command, {
-        id,
         now,
         version,
         commandId: (yield* build("commandId", entry.inputs.commandId)) as string,
@@ -484,6 +487,8 @@ export const search = Effect.fn(function* (
           from.state,
           Value.num(from.version),
           label,
+          // Every command of a sequence is for the instance the first one names.
+          from.trail[0] && { id: from.trail[0].inputs.id },
         ).pipe(
           Effect.flatMap((step) =>
             step.applied._tag === "Changed"
@@ -554,6 +559,9 @@ export const search = Effect.fn(function* (
       states: looked.get(name) ?? 0,
     })),
     dead: rows.flatMap((row) => (row.accepted === false ? [row.command] : [])),
+    outside: aggregate.definition.events
+      .map((event) => event.tag)
+      .filter((tag) => !commands.some((command) => command.events.some((e) => e.tag === tag))),
     outcomes: [...outcomes.values()],
     reached: [...reached].map(([tag, story]) => ({ tag, story })),
     unread: [...unread.values()],

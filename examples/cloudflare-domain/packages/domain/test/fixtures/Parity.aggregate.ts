@@ -4,8 +4,7 @@ import * as Schema from "effect/Schema";
 export class Taken extends Domain.Event("Taken", { amount: Schema.Int }) {}
 
 export class Take extends Domain.Command("Take", {
-  target: Schema.String,
-  input: { amount: Schema.Int },
+  input: { id: Schema.String, amount: Schema.Int },
   events: [Taken],
 }) {}
 
@@ -16,6 +15,7 @@ export class Parity extends Domain.Aggregate("Parity", {
   initial: { n: 0 },
   invariants: { NotNegative: (parity) => parity.n >= 0 },
   commands: [Take],
+  keyOf: (cmd) => cmd.id,
   decide: {
     Take: (_, cmd) => [new Taken({ amount: Math.sign(cmd.amount) })],
   },

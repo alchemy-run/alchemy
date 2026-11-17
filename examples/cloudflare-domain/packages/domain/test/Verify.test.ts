@@ -66,7 +66,7 @@ it.effect(
       expect(failed.message).toContain("✗ Shop.NoOrderIsHeld breaks");
       expect(failed.message).toContain("↳ Review asks Risk.score  → { risk:");
       expect(failed.message).toContain("As a story, to keep as a test:");
-      expect(failed.message).toContain('Story.when(Order.ref("A"), new Place({ total: 100 })),');
+      expect(failed.message).toContain('Story.when(new Place({ id: "A", total: 100 })),');
       expect(failed.message).toContain("Story.call(Risk.score, {}),");
       expect(failed.message).toMatch(/Story\.succeed\(Risk\.score, \{ risk: [\d.]+ \}\),/);
       expect(failed.message).toContain(
@@ -89,7 +89,7 @@ const Strict = Review.toLayer(
         .score({ orderId: source.id, total: event.total })
         .pipe(Effect.catchTag("RiskUnavailable", () => Effect.succeed(undefined)));
       yield* orders
-        .send(source, scored === undefined ? new Park({}) : new Hold({}))
+        .send(scored === undefined ? new Park({ id: source.id }) : new Hold({ id: source.id }))
         .pipe(Effect.catchTag("NotPlaced", () => Effect.void));
     });
   }),
@@ -144,7 +144,7 @@ it.effect(
         },
       ]);
       expect(Verify.render(report)).toContain(
-        "not proved: Capture breaks it from { balance: 0, reserved: 1 }, a state the rules allow",
+        'not proved: Capture { id: "" } breaks it from { balance: 0, reserved: 1 }, a state the rules allow',
       );
       // With the rule that rules that state out written down, both are proved.
       const covered = yield* Verify.aggregate(Covered);
