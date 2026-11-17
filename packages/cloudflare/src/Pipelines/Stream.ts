@@ -257,6 +257,10 @@ const constructStream = (id: string, props: unknown) =>
  * triggers a replacement, which drops buffered events and dependent
  * pipelines); the HTTP endpoint and Worker-binding toggles are mutable in
  * place.
+ * With an unchanged, explicitly declared `name`, Cloudflare cannot hold
+ * both generations at once: Alchemy deletes the previous stream before
+ * creating its replacement. This interrupts ingestion and can remove
+ * dependent pipelines. Generated names allow create-before-delete instead.
  *
  * Pipelines is ingest-only — there is no event source on a stream. To
  * process data after it lands, subscribe to the sink's bucket with
@@ -397,16 +401,22 @@ export const StreamProvider = () =>
         return { action: "replace" } as const;
       }
       if (o === undefined) return undefined;
+      // An explicitly named stream cannot coexist with its replacement.
+      // Otherwise reconcile adopts the old stream by name, then GC deletes it.
+      const replacement =
+        news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       // Schema and format are immutable. Compare CANONICAL derived values
       // so equivalent spellings (field list ⇄ Effect Schema, omitted ⇄
       // explicit defaults) never replace.
       const newSchema = yield* canonicalSchema(news.schema);
       const oldSchema = yield* canonicalSchema(o.schema);
       if (!stableEquals(newSchema, oldSchema)) {
-        return { action: "replace" } as const;
+        return replacement;
       }
       if (!stableEquals(canonicalFormat(news.format), canonicalFormat(o.format))) {
-        return { action: "replace" } as const;
+        return replacement;
       }
       if (output === undefined) return undefined;
       // http/workerBinding are patchable: diff desired against the last

@@ -86,6 +86,10 @@ export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never
  * {@link PipelineSqlInvalid}) instead of deleting the running pipeline.
  * References to streams/sinks that do not exist yet are not an error at
  * plan time — they are created in the same deploy.
+ * When an explicit `name` remains unchanged, the old pipeline must be
+ * deleted before the replacement is created because names are unique per
+ * account. This briefly stops the data flow. Generated names let the new
+ * generation be created before the old one is deleted.
  *
  * Pipelines is ingest-only: to process data after the sink writes it,
  * subscribe to the sink's bucket with `Cloudflare.R2.BucketEventNotification`.
@@ -162,7 +166,11 @@ export const PipelineProvider = () =>
             ),
         }),
       );
-      return { action: "replace" } as const;
+      // With a fixed explicit name, the replacement's by-name lookup would
+      // otherwise claim the old pipeline, which GC can then delete.
+      return news.name !== undefined && news.name === oldName
+        ? ({ action: "replace", deleteFirst: true } as const)
+        : ({ action: "replace" } as const);
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
