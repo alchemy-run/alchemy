@@ -179,6 +179,10 @@ export const serve = (
     });
 
   async function handle(request: Request, env: Record<string, unknown>): Promise<Response> {
+    // A load balancer's health check carries no token and learns nothing.
+    if (request.method === "GET" && new URL(request.url).pathname === "/") {
+      return new Response("ok");
+    }
     const expected = unpackEnvValue<unknown>(env[TOKEN_KEY] as string | undefined);
     const secret = Redacted.isRedacted(expected)
       ? String(Redacted.value(expected))
