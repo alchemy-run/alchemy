@@ -23,6 +23,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -64,6 +65,45 @@ export const SANDBOX_TOKEN_KEY = "ALCHEMY_GATEWAY_SANDBOX_TOKEN";
 
 /** The clients the gateway's Construction built, by binding key. */
 export const clients = new Map<string, unknown>();
+
+/** An HTTP origin and the headers that authenticate a request to it. */
+export interface Origin {
+  /** The base URL, without a trailing slash. */
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+}
+
+/** The origins a gateway forwards to, by id. */
+export const origins = new Map<string, Effect.Effect<Origin, unknown>>();
+
+/** The path a gateway serves its {@link origins} under. */
+export const PROXY_PATH = "/~proxy/";
+
+/** What the gateway is serving as: set by its request handler. */
+export const serving: { url: string; token: string } = { url: "", token: "" };
+
+/**
+ * An origin for something that speaks HTTP by itself: a CLI (`git`), an SDK
+ * the binding does not wrap. A binding's client returns it.
+ *
+ * On an ordinary host it is `upstream`: the real URL and its credential. In
+ * a sandbox's gateway it is the gateway's own URL and the sandbox's token,
+ * and the gateway forwards requests under it to `upstream` with the real
+ * credential. The sandbox only ever sees the second form.
+ */
+export const proxy = <E>(
+  id: string,
+  upstream: Effect.Effect<Origin, E>,
+): Effect.Effect<Origin, E> => {
+  if (!globalThis.__ALCHEMY_GATEWAY__) return upstream;
+  // Registered while the binding is constructed, so every instance of the
+  // gateway forwards it, whichever one answered the sandbox's first call.
+  origins.set(id, upstream);
+  return Effect.sync(() => ({
+    url: `${serving.url}${PROXY_PATH}${encodeURIComponent(id)}`,
+    headers: { [TOKEN_HEADER]: serving.token },
+  }));
+};
 
 /** A gateway a host Layer deployed. */
 export interface Deployed {
@@ -163,6 +203,14 @@ export const make = <R>(deploy: Effect.Effect<Deployed, never, R>) =>
                   "application/json",
                 ),
                 client.execute,
+                // A gateway's hostname can take a few seconds to answer after
+                // a deploy. A transport failure never reached the binding,
+                // so sending the call again cannot run it twice.
+                Effect.retry({
+                  while: (error) => error.reason._tag === "TransportError",
+                  schedule: Schedule.exponential("250 millis"),
+                  times: 6,
+                }),
                 unreachable(key),
               );
               if (response.status !== 200) {
@@ -294,6 +342,12 @@ type Call = (
  */
 const remoteClient = (call: Call, key: string, path: ReadonlyArray<string>): unknown => {
   const read = call(key, path, undefined);
+  // Effect's protocol is answered by `read` itself: its methods are bound to
+  // it, so `yield*` and `pipe` run the call and never see this stand-in.
+  const protocol = (prop: string | symbol) => {
+    const member = Reflect.get(read, prop, read);
+    return typeof member === "function" ? member.bind(read) : member;
+  };
   return new Proxy((..._args: unknown[]) => undefined, {
     apply: (_target, _self, args) => call(key, path, args),
     has: (_target, prop) => Reflect.has(read, prop),
@@ -302,7 +356,7 @@ const remoteClient = (call: Call, key: string, path: ReadonlyArray<string>): unk
       prop === "then"
         ? undefined
         : typeof prop === "symbol" || Reflect.has(read, prop)
-          ? Reflect.get(read, prop, read)
+          ? protocol(prop)
           : remoteClient(call, key, [...path, prop]),
   });
 };

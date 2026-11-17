@@ -21,6 +21,9 @@ import {
   clients,
   decode,
   encode,
+  origins,
+  PROXY_PATH,
+  serving,
   STREAM_FIELD_HEADER,
   TOKEN_HEADER,
   TOKEN_KEY,
@@ -41,6 +44,50 @@ const sameText = (a: string, b: string) => {
 const reply = (value: unknown, status = 200) =>
   new Response(encode(value), { status, headers: { "content-type": "application/json" } });
 
+/** Headers that describe one hop, or the encoding `fetch` already undid. */
+const HOP = [
+  "host",
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "content-length",
+  "content-encoding",
+  TOKEN_HEADER,
+];
+
+/**
+ * Forward a request under {@link PROXY_PATH} to the origin a binding
+ * registered, with that origin's credential, streaming both bodies.
+ */
+const forward = async (request: Request, url: URL, services: Context.Context<never>) => {
+  const [id = "", ...rest] = url.pathname.slice(PROXY_PATH.length).split("/");
+  const upstream = origins.get(decodeURIComponent(id));
+  if (upstream === undefined) {
+    return new Response(`the gateway forwards no origin ${id}`, { status: 404 });
+  }
+  const exit = await Effect.runPromiseExit(upstream.pipe(Effect.provideContext(services)));
+  if (!Exit.isSuccess(exit)) {
+    return new Response(String(Cause.squash(exit.cause)), { status: 502 });
+  }
+  const headers = new Headers(request.headers);
+  // The request's own encoding is forwarded as sent; only the hop's is dropped.
+  const encoding = headers.get("content-encoding");
+  for (const name of HOP) headers.delete(name);
+  if (encoding !== null) headers.set("content-encoding", encoding);
+  for (const [name, value] of Object.entries(exit.value.headers)) headers.set(name, value);
+  const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  const response = await fetch(`${exit.value.url}/${rest.join("/")}${url.search}`, {
+    method: request.method,
+    headers,
+    body: hasBody ? request.body : undefined,
+    redirect: "manual",
+    ...(hasBody ? { duplex: "half" } : {}),
+  } as RequestInit);
+  const answered = new Headers(response.headers);
+  for (const name of HOP) answered.delete(name);
+  return new Response(response.body, { status: response.status, headers: answered });
+};
+
 /**
  * Serve a sandbox's program as its gateway. `env` is the gateway's
  * environment: the values the program's bindings bound at deploy.
@@ -50,6 +97,8 @@ export const serve = (
   options?: {
     /** Platform services the program's Construction may use (a Node host's file system, …). */
     readonly services?: Layer.Layer<any>;
+    /** The gateway's public URL, when the request's own URL is not it. */
+    readonly url?: (request: Request) => string;
   },
 ) => {
   let construction: Promise<Context.Context<never>> | undefined;
@@ -78,7 +127,15 @@ export const serve = (
     );
   };
 
-  return async (request: Request, env: Record<string, unknown>): Promise<Response> => {
+  // A failure answers with its cause, so the sandbox's defect names it.
+  return (request: Request, env: Record<string, unknown>): Promise<Response> =>
+    handle(request, env).catch((cause) => {
+      // A failed Construction is tried again on the next request.
+      construction = undefined;
+      return new Response(`the gateway failed: ${cause?.stack ?? cause}`, { status: 500 });
+    });
+
+  async function handle(request: Request, env: Record<string, unknown>): Promise<Response> {
     const expected = unpackEnvValue<unknown>(env[TOKEN_KEY] as string | undefined);
     const secret = Redacted.isRedacted(expected)
       ? String(Redacted.value(expected))
@@ -90,7 +147,13 @@ export const serve = (
       return new Response("forbidden", { status: 403 });
     }
     const services = await (construction ??= construct(env));
-    const key = decodeURIComponent(new URL(request.url).pathname.slice(1));
+    const url = new URL(request.url);
+    serving.url = options?.url?.(request) ?? url.origin;
+    serving.token = secret;
+    if (url.pathname.startsWith(PROXY_PATH)) {
+      return forward(request, url, services);
+    }
+    const key = decodeURIComponent(url.pathname.slice(1));
     if (!clients.has(key)) {
       return new Response(`the gateway holds no binding ${key}`, { status: 404 });
     }
@@ -155,5 +218,5 @@ export const serve = (
     return Option.isSome(error)
       ? reply({ _tag: ErrorTag, error: encodeRpcError(error.value) })
       : new Response(String(Cause.squash(exit.cause)), { status: 500 });
-  };
+  }
 };

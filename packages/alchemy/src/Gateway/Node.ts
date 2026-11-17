@@ -1,4 +1,5 @@
 import * as http from "node:http";
+import { Readable } from "node:stream";
 /**
  * A gateway as a Node HTTP server, for hosts that run a process: a Lambda
  * Web Function, a container, a VM. The host's entry imports this module and
@@ -19,21 +20,24 @@ export const listen = (
 ) => {
   const handle = serve(entrypoint, {
     services: Layer.mergeAll(NodeServices.layer, options?.services ?? Layer.empty),
+    // The server sees its own address; the public one is the Host header.
+    url: (request) => `https://${request.headers.get("host")}`,
   });
   const answer = async (incoming: http.IncomingMessage, outgoing: http.ServerResponse) => {
     const headers = new Headers();
     for (const [name, value] of Object.entries(incoming.headers)) {
       if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
     }
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of incoming) chunks.push(chunk as Uint8Array);
     const hasBody = incoming.method !== "GET" && incoming.method !== "HEAD";
     const response = await handle(
       new Request(`http://gateway${incoming.url ?? "/"}`, {
         method: incoming.method,
         headers,
-        ...(hasBody ? { body: Buffer.concat(chunks) } : {}),
-      }),
+        // Read as it arrives, so an upload is not buffered here.
+        ...(hasBody
+          ? { body: Readable.toWeb(incoming) as unknown as ReadableStream, duplex: "half" }
+          : {}),
+      } as RequestInit),
       process.env,
     );
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
