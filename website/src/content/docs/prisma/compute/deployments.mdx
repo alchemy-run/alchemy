@@ -35,6 +35,29 @@ platform's rollback can serve it again in seconds.
 sections below use the resources it is made of: `Prisma.ComputeService`,
 `Prisma.ComputeVersion` and `Prisma.ComputeArtifact`.
 
+## Build an archive
+
+A version runs a `tar.gz` archive with `compute.manifest.json` at its root,
+next to the files it names. The platform runs `entrypoint` with Bun and sets
+`PORT`:
+
+```json
+{ "manifestVersion": "1", "entrypoint": "server.js" }
+```
+
+An archive without the manifest fails before a version is created. Build one
+with `createComputeArchive`, or let `Prisma.ComputeArtifact` build it, as
+shown below:
+
+```typescript
+import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
+import * as FileSystem from "effect/FileSystem";
+
+const fs = yield* FileSystem.FileSystem;
+const archive = yield* createComputeArchive({ directory: "./build", entrypoint: "server.js" });
+yield* fs.writeFile("./dist/app.tar.gz", archive);
+```
+
 ## Serve a version
 
 Declare the service, a version of it, and attach the version as the
@@ -69,8 +92,26 @@ const version = yield* Prisma.ComputeVersion("web-version", {
 });
 ```
 
-A new version that fails its check is deleted, and the service keeps
-serving what it served. A version that already existed is left as it is.
+The version waits up to `timeoutSeconds` (120 by default) to run, then up
+to `urlReadinessTimeoutSeconds` (60 by default) for its URL.
+
+A new version that fails its check is stopped and deleted, and the service
+keeps serving what it served. A version that already existed is left as it
+is. Alchemy waits up to 30 seconds, or `timeoutSeconds` when that is
+shorter, for the version to stop.
+
+The platform sometimes keeps a stopped version in `stopping` for many
+minutes, and only a stopped version can be deleted. The deploy then fails
+with `ComputeVersionNotRemoved`. Its message starts with the check that
+failed and names the version left behind. That version is not served, and
+Alchemy no longer tracks it, so a later deploy does not remove it. Delete it
+in the Prisma Console once it has stopped.
+
+While a version of the service is stopping, `alchemy destroy` deletes
+nothing from the service. It waits up to the service's `timeoutSeconds`
+(60 by default), then fails with `DeleteInProgress`, and the service keeps
+serving its version. Run `alchemy destroy` again once the version has
+stopped.
 
 After promoting, the service checks its stable URL:
 
@@ -141,6 +182,11 @@ const version = yield* Prisma.ComputeVersion("web-version", {
 On `Prisma.Compute`, set `destroyOldDeployment: true`. The service's own
 delete removes all its versions.
 
+The version the service serves is never deleted on its own, whatever its
+removal policy: Alchemy forgets it, and deleting the service removes it. So a
+service kept with `RemovalPolicy.retain()` keeps serving after
+`alchemy destroy`.
+
 ## Ship a changed environment variable
 
 Prisma copies the Branch's variables into a version when it creates it. A
@@ -205,8 +251,10 @@ rewritten on the next deploy. Their props and attributes follow:
 ```
 
 A service saved as `Prisma.App` that is attached with `activateVersion` in
-its first deploy after the upgrade stops with `ComputeServiceIdUnavailable`.
-Deploy once without `activateVersion`, then add it.
+its first deploy after the upgrade stops with `ComputeServiceIdUnavailable`,
+and nothing changes on the platform. Deploy once without `activateVersion`,
+then add it back. When that deploy does not change the version, running it
+again also works.
 
 A stack deployed with `Prisma.Compute` from an earlier release of
 `@alchemy.run/prisma`, which kept the service inside that one resource,
@@ -223,12 +271,16 @@ full address, such as:
 
 If the Compute sets `serviceName`, change it: a Branch cannot hold two
 services with one name. Then deploy with `--adopt`, so the new environment
-variables take over the old service's variables of the same key. The old
+variables take over the old service's variables of the same key. Without
+`--adopt`, the deploy creates the new service and then stops at the first
+variable the old service holds; deploying again with `--adopt` continues. The old
 service keeps running with its URL and versions: move its custom domains to
 the new service, and delete it in the Prisma Console when nothing uses it.
 
 To destroy the stack instead, run the same `alchemy state delete` command, then
-`alchemy destroy`, and delete the old service in the Prisma Console.
+`alchemy destroy`. When the stack also declares the project, deleting the
+project deletes the old service with it; otherwise delete the old service in
+the Prisma Console.
 
 ## Where next
 

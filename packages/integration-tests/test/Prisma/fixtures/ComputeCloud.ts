@@ -90,7 +90,14 @@ export const makeComputeCloud = () => {
     rollbackIgnored: false,
     /** Rollback calls take effect but answer with a server error. */
     rollbackResponseLost: false,
+    /**
+     * Versions whose stop never finishes, as the platform sometimes does: the
+     * version stays `stopping`, and deleting it or its service is refused.
+     */
+    stuckStopping: new Set<string>(),
   };
+  const stopRefused = () =>
+    failure(409, "conflict", "The deployment did not reach a delete-safe state after stop");
 
   const serviceFor = (domain: string) =>
     [...services.values()].find((service) => service.appEndpointDomain === domain);
@@ -252,11 +259,17 @@ export const makeComputeCloud = () => {
         return data(service);
       }
       if (tail === undefined && request.method === "DELETE") {
-        services.delete(id);
-        // The platform deletes a service's versions with it.
+        // The platform deletes a service's versions with it, and stops at the
+        // first one it cannot delete, leaving the service in place.
         for (const deployment of [...deployments.values()]) {
-          if (deployment.serviceId === id) deployments.delete(deployment.id);
+          if (deployment.serviceId !== id) continue;
+          if (knobs.stuckStopping.has(deployment.id)) {
+            deployment.status = "stopping";
+            return stopRefused();
+          }
+          deployments.delete(deployment.id);
         }
+        services.delete(id);
         return noContent();
       }
       if (tail === "deployments" && request.method === "GET") {
@@ -301,11 +314,12 @@ export const makeComputeCloud = () => {
         return data({ previewDomain: deployment.previewDomain });
       }
       if (tail === "stop" && request.method === "POST") {
-        deployment.status = "stopped";
+        deployment.status = knobs.stuckStopping.has(id) ? "stopping" : "stopped";
         return noContent();
       }
       if (tail === undefined && request.method === "GET") return data(deployment);
       if (tail === undefined && request.method === "DELETE") {
+        if (knobs.stuckStopping.has(id)) return stopRefused();
         deployments.delete(id);
         return noContent();
       }

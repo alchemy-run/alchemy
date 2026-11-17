@@ -108,8 +108,14 @@ const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
   }).pipe(Effect.onError(() => fs.remove(directory, { recursive: true }).pipe(Effect.ignore)));
 });
 
-/** Bundle an Effect-native `main` with the Prisma Compute bootstrap. */
-const bundleEffectNative = Effect.fn(function* (props: ComputeArtifactBuildProps) {
+/**
+ * Bundle an Effect-native `main` with the Prisma Compute bootstrap. `quiet`
+ * drops the bundler's warnings, for a bundle made only to compare its hash.
+ */
+const bundleEffectNative = Effect.fn(function* (
+  props: ComputeArtifactBuildProps,
+  options: { readonly quiet?: boolean } = {},
+) {
   if (!props.main) {
     return yield* new ComputeInvalidProps({
       message:
@@ -139,6 +145,7 @@ const bundleEffectNative = Effect.fn(function* (props: ComputeArtifactBuildProps
 
   return yield* Bundle.build(
     {
+      ...(options.quiet && props.bundle?.input?.onLog === undefined ? { onLog: () => {} } : {}),
       ...props.bundle?.input,
       input: realMain,
       cwd,
@@ -338,7 +345,7 @@ export const computeArtifactInputsHash = Effect.fn(function* (
 ) {
   const path = yield* Path.Path;
   if (props.main !== undefined) {
-    const bundle = yield* bundleEffectNative(props);
+    const bundle = yield* bundleEffectNative(props, { quiet: true });
     return yield* effectNativeInputsHash(props, bundle.hash);
   }
   const settings = settingsOf(props);

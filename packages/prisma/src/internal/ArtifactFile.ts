@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
+import { createGunzip } from "node:zlib";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -210,4 +211,135 @@ export const readArtifactFile = (artifact: ArtifactFile) =>
       });
     }
     return bytes;
+  });
+
+/** What `findArchiveManifest` found at the root of a `tar.gz` artifact. */
+export type ArchiveManifestCheck =
+  | { readonly _tag: "NotGzip" }
+  | { readonly _tag: "Missing" }
+  | { readonly _tag: "Invalid"; readonly reason: string }
+  | { readonly _tag: "Found"; readonly entrypoint: string };
+
+const MANIFEST_NAME = "compute.manifest.json";
+const MAX_MANIFEST_BYTES = 64 * 1024;
+
+const tarString = (block: Uint8Array, start: number, length: number) => {
+  const field = block.subarray(start, start + length);
+  const end = field.indexOf(0);
+  return new TextDecoder().decode(end === -1 ? field : field.subarray(0, end));
+};
+
+const tarEntryName = (header: Uint8Array) => {
+  const name = tarString(header, 0, 100);
+  const prefix = tarString(header, 345, 155);
+  const full = prefix.length > 0 ? `${prefix}/${name}` : name;
+  return full.replace(/^\.\//, "");
+};
+
+const manifestCheck = (text: string): ArchiveManifestCheck => {
+  try {
+    const parsed = JSON.parse(text) as { manifestVersion?: unknown; entrypoint?: unknown };
+    if (typeof parsed.manifestVersion !== "string") {
+      return { _tag: "Invalid", reason: "it has no string manifestVersion" };
+    }
+    if (typeof parsed.entrypoint !== "string" || parsed.entrypoint.length === 0) {
+      return { _tag: "Invalid", reason: "it has no entrypoint" };
+    }
+    return { _tag: "Found", entrypoint: parsed.entrypoint };
+  } catch {
+    return { _tag: "Invalid", reason: "it is not valid JSON" };
+  }
+};
+
+/**
+ * Read a `tar.gz` artifact's entries until `compute.manifest.json` at its root,
+ * without unpacking it.
+ */
+const findArchiveManifestPromise = async (
+  artifact: VerifiedFile,
+): Promise<ArchiveManifestCheck> => {
+  const chunks = readVerifiedChunks(artifact);
+  const first = await chunks.next();
+  if (first.done || first.value[0] !== 0x1f || first.value[1] !== 0x8b) {
+    await chunks.return(undefined);
+    return { _tag: "NotGzip" };
+  }
+  const gunzip = createGunzip();
+  const feed = (async () => {
+    try {
+      gunzip.write(first.value);
+      for await (const chunk of chunks) {
+        if (gunzip.destroyed) break;
+        if (!gunzip.write(chunk)) await new Promise((resolve) => gunzip.once("drain", resolve));
+      }
+      gunzip.end();
+    } catch (error) {
+      gunzip.destroy(error as Error);
+    }
+  })();
+  let buffered = new Uint8Array(0);
+  let skip = 0;
+  let manifestRemaining = -1;
+  let manifest: Uint8Array[] = [];
+  let result: ArchiveManifestCheck = { _tag: "Missing" };
+  try {
+    for await (const raw of gunzip) {
+      const chunk = raw as Uint8Array;
+      const next = new Uint8Array(buffered.length + chunk.length);
+      next.set(buffered);
+      next.set(chunk, buffered.length);
+      buffered = next;
+      while (true) {
+        if (manifestRemaining >= 0) {
+          const take = Math.min(manifestRemaining, buffered.length);
+          manifest.push(buffered.slice(0, take));
+          buffered = buffered.subarray(take);
+          manifestRemaining -= take;
+          if (manifestRemaining > 0) break;
+          result = manifestCheck(Buffer.concat(manifest).toString("utf8"));
+          gunzip.destroy();
+          return result;
+        }
+        if (skip > 0) {
+          const take = Math.min(skip, buffered.length);
+          buffered = buffered.subarray(take);
+          skip -= take;
+          if (skip > 0) break;
+        }
+        if (buffered.length < 512) break;
+        const header = buffered.subarray(0, 512);
+        buffered = buffered.subarray(512);
+        if (header.every((byte) => byte === 0)) {
+          gunzip.destroy();
+          return result;
+        }
+        const size = Number.parseInt(tarString(header, 124, 12).trim() || "0", 8);
+        const padded = Math.ceil(size / 512) * 512;
+        if (tarEntryName(header) === MANIFEST_NAME && header[156] !== 0x35) {
+          if (size > MAX_MANIFEST_BYTES) {
+            gunzip.destroy();
+            return { _tag: "Invalid", reason: "it is larger than 64 KiB" };
+          }
+          manifestRemaining = size;
+          manifest = [];
+          skip = 0;
+          // The data that follows the manifest's padding is not read.
+          continue;
+        }
+        skip = padded;
+      }
+    }
+    return result;
+  } finally {
+    gunzip.destroy();
+    await feed.catch(() => undefined);
+  }
+};
+
+export const findArchiveManifest = (artifact: VerifiedFile) =>
+  Effect.tryPromise({
+    try: () => findArchiveManifestPromise(artifact),
+    catch: toArtifactFileError(
+      "Failed to read the Prisma deployment artifact as a tar.gz archive.",
+    ),
   });

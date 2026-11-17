@@ -123,13 +123,11 @@ const deploymentDeleteFailed = (
     statusAtDelete === "stopped" && Category.hasCategory(error, "ServerError");
   return new PrismaComputeVersionDeleteFailed({
     message: [
-      `Failed to delete Prisma deployment '${deploymentId}' while it was in status '${statusAtDelete ?? "unknown"}'.`,
-      detail,
+      `Failed to delete Prisma Compute version '${deploymentId}' while it was in status '${statusAtDelete ?? "unknown"}': ${detail.replace(/\.$/, "")}.`,
       isKnownStoppedDeleteFailure
-        ? "Stopped Prisma deployments are expected to be deletable; the Management API returned a server error."
+        ? "A stopped version is expected to be deletable; the Management API returned a server error."
         : undefined,
-      "The deployment may need platform cleanup before the App or project can be deleted.",
-      `Manual check: GET /v1/deployments/${deploymentId}; manual retry: DELETE /v1/deployments/${deploymentId}.`,
+      "Run the command again, or delete the version in the Prisma Console.",
     ]
       .filter((line): line is string => line !== undefined)
       .join(" "),

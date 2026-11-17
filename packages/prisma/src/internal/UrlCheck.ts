@@ -183,7 +183,10 @@ export const waitForComputeUrl = Effect.fn(function* (
     const beforeRequest = yield* Clock.currentTimeMillis;
     const remainingBeforeRequest = timeoutMs - (beforeRequest - startedAt);
     if (remainingBeforeRequest <= 0) {
-      return yield* computeUrlTimeoutError(probeUrl, lastStatus, lastBody);
+      return yield* computeUrlTimeoutError(probeUrl, lastStatus, lastBody, {
+        timeoutSeconds,
+        healthCheck: props.healthCheck,
+      });
     }
     const requestTimeoutMs = Math.min(5_000, remainingBeforeRequest);
     const response = yield* http.execute(HttpClientRequest.get(probeUrl)).pipe(
@@ -224,22 +227,34 @@ export const waitForComputeUrl = Effect.fn(function* (
 
     const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
     if (elapsed >= timeoutMs) {
-      return yield* computeUrlTimeoutError(probeUrl, lastStatus, lastBody);
+      return yield* computeUrlTimeoutError(probeUrl, lastStatus, lastBody, {
+        timeoutSeconds,
+        healthCheck: props.healthCheck,
+      });
     }
 
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
   }
 });
 
-const computeUrlTimeoutError = (url: string, lastStatus: number | undefined, lastBody: string) =>
-  new ComputeUrlTimeout({
-    message: [
-      `Timed out waiting for Prisma Compute URL '${url}' to become reachable.`,
-      lastStatus ? `Last response: HTTP ${lastStatus}.` : "No HTTP response was received.",
-      lastBody.includes("There is no service on this URL")
-        ? "The Prisma edge returned: There is no service on this URL."
-        : undefined,
-    ]
-      .filter((line): line is string => line !== undefined)
-      .join(" "),
+const computeUrlTimeoutError = (
+  url: string,
+  lastStatus: number | undefined,
+  lastBody: string,
+  check: { readonly timeoutSeconds: number; readonly healthCheck?: ComputeHealthCheck },
+) => {
+  const after = `Timed out after ${check.timeoutSeconds} s`;
+  const accepted =
+    check.healthCheck?.statusCodes === undefined
+      ? "any 2xx status"
+      : `HTTP ${check.healthCheck.statusCodes.join(", ")}`;
+  const edgeMissing = lastBody.includes("There is no service on this URL");
+  return new ComputeUrlTimeout({
+    message:
+      lastStatus === undefined
+        ? `${after}: '${url}' gave no HTTP response.`
+        : check.healthCheck !== undefined && !edgeMissing
+          ? `${after}: the health check GET ${url} answered HTTP ${lastStatus}, and accepts ${accepted}.`
+          : `${after} waiting for Prisma's edge to serve '${url}': the last response was HTTP ${lastStatus}${edgeMissing ? ', "There is no service on this URL"' : ""}.`,
   });
+};

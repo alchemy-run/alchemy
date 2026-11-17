@@ -258,11 +258,8 @@ test.provider(
       expect(app.local).toBe(true);
       expect(app.url).toBe("http://localhost:8789");
 
-      const output = yield* fs.readFileString(outputPath).pipe(
-        Effect.retry({
-          schedule: Schedule.max([Schedule.fixed("50 millis"), Schedule.recurs(40)]),
-        }),
-      );
+      // The Compute is ready only once its dev process is: its output exists already.
+      const output = yield* fs.readFileString(outputPath);
 
       expect(JSON.parse(output)).toEqual({
         port: "8789",

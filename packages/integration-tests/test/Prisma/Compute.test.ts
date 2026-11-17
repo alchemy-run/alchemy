@@ -22,6 +22,7 @@ import { Resource } from "alchemy/Resource";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import { isActionState, State } from "alchemy/State/State";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -32,6 +33,7 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { WebSocketServer } from "ws";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
+import ApiLive, { Api } from "./fixtures/class-form-compute.ts";
 import { type ComputeCloud, makeComputeCloud } from "./fixtures/ComputeCloud.ts";
 import { makeFakeManagementApi, unhandled } from "./fixtures/FakeManagementApi.ts";
 import { testStackContext } from "./fixtures/StackContext.ts";
@@ -47,8 +49,8 @@ const tags = [
   "provider:prisma:environmentvariable",
 ];
 
-const artifactV1 = `${import.meta.dirname}/fixtures/artifact-v1.bin`;
-const artifactV2 = `${import.meta.dirname}/fixtures/artifact-v2.bin`;
+const artifactV1 = `${import.meta.dirname}/fixtures/compute-v1.tar.gz`;
+const artifactV2 = `${import.meta.dirname}/fixtures/compute-v2.tar.gz`;
 const effectMain = `${import.meta.dirname}/fixtures/compute-effect-main.ts`;
 
 /** Reads one attribute of another resource, as a downstream consumer would. */
@@ -472,6 +474,63 @@ destroyOld.test.provider(
       expect(cloud.deployments.has("dep-1")).toBe(false);
 
       yield* stack.destroy();
+    }),
+  { tags },
+);
+
+for (const kept of [true, false]) {
+  const destroyActive = harness();
+  destroyActive.test.provider(
+    `never deletes the version the service serves on destroy with destroyOldDeployment (${kept ? "retain" : "default"} policy)`,
+    (stack) =>
+      Effect.gen(function* () {
+        const { cloud } = destroyActive;
+        yield* stack.destroy();
+        const app = Compute("api", {
+          ...base,
+          artifactPath: artifactV1,
+          destroyOldDeployment: true,
+        });
+        const deployed = yield* stack.deploy(kept ? app.pipe(RemovalPolicy.retain()) : app);
+        yield* clearCalls(cloud);
+
+        yield* stack.destroy();
+        expect(cloud.writes()).not.toContain(`DELETE /v1/deployments/${deployed.versionId}`);
+        if (kept) {
+          // Everything kept, and the service still serves its version.
+          expect(cloud.services.get(deployed.serviceId)?.latestDeploymentId).toBe(
+            deployed.versionId,
+          );
+          expect(cloud.deployments.has(deployed.versionId!)).toBe(true);
+        } else {
+          expect(cloud.writes()).toContain(`DELETE /v1/services/${deployed.serviceId}`);
+          expect(cloud.deployments.size).toBe(0);
+        }
+      }),
+    { tags },
+  );
+}
+
+const stackRetain = harness();
+stackRetain.test.provider(
+  "under a stack-wide retain policy, destroyOldDeployment deletes the replaced version and destroy keeps the served one",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = stackRetain;
+      yield* stack.destroy();
+      const program = (artifactPath: string) =>
+        Effect.gen(function* () {
+          return yield* Compute("api", { ...base, artifactPath, destroyOldDeployment: true });
+        }).pipe(RemovalPolicy.retain());
+
+      yield* stack.deploy(program(artifactV1));
+      const second = yield* stack.deploy(program(artifactV2));
+      expect(second.versionId).toBe("dep-2");
+      expect(cloud.deployments.has("dep-1")).toBe(false);
+
+      yield* stack.destroy();
+      expect(cloud.services.get(second.serviceId)?.latestDeploymentId).toBe("dep-2");
+      expect(cloud.deployments.has("dep-2")).toBe(true);
     }),
   { tags },
 );
@@ -906,6 +965,44 @@ forwarded.test.provider(
   { tags },
 );
 
+const stuck = harness();
+stuck.test.provider(
+  "reports a failed version that will not stop, and destroy deletes nothing until it has stopped",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = stuck;
+      yield* stack.destroy();
+      const first = yield* stack.deploy(Compute("api", { ...base, artifactPath: artifactV1 }));
+      expect(first.versionId).toBe("dep-1");
+
+      cloud.knobs.failingPreviews.add("dep-2.preview.prisma.test");
+      cloud.knobs.stuckStopping.add("dep-2");
+      const failure = yield* stack
+        .deploy(Compute("api", { ...base, artifactPath: artifactV2 }))
+        .pipe(Effect.flip, Effect.map(String));
+      expect(failure).toContain("ComputeVersionNotRemoved");
+      expect(failure).toMatch(
+        /Timed out after 0\.2 s.*Alchemy then stopped Prisma Compute version 'dep-2'.*still stopping it after 2 s/s,
+      );
+      expect(cloud.deployments.get("dep-2")?.status).toBe("stopping");
+      expect(cloud.services.get(first.serviceId)?.latestDeploymentId).toBe("dep-1");
+
+      const refused = yield* stack.destroy().pipe(Effect.flip, Effect.map(String));
+      expect(refused).toContain("DeleteInProgress");
+      expect(refused).toContain("'dep-2' is still stopping");
+      expect(refused).toContain("still serves 'dep-1'");
+      expect(cloud.services.get(first.serviceId)?.latestDeploymentId).toBe("dep-1");
+      expect(cloud.deployments.has("dep-1")).toBe(true);
+
+      cloud.knobs.stuckStopping.delete("dep-2");
+      cloud.deployments.get("dep-2")!.status = "stopped";
+      yield* stack.destroy();
+      expect(cloud.services.size).toBe(0);
+      expect(cloud.deployments.size).toBe(0);
+    }),
+  { tags },
+);
+
 const unchecked = harness();
 unchecked.test.provider(
   "forwards verifyUrl: false, so neither the version nor the service checks its URL",
@@ -949,6 +1046,52 @@ reuse.test.provider(
       yield* stack.destroy();
     }),
   { tags },
+);
+
+const noManifest = harness();
+noManifest.test.provider(
+  "refuses a prebuilt archive without compute.manifest.json before creating a version",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = noManifest;
+      yield* stack.destroy();
+      const error = yield* stack
+        .deploy(
+          Compute("api", {
+            ...base,
+            artifactPath: `${import.meta.dirname}/fixtures/compute-no-manifest.tar.gz`,
+          }),
+        )
+        .pipe(Effect.flip, Effect.map(String));
+      expect(error).toContain("ComputeVersionInvalidProps");
+      expect(error).toContain("has no compute.manifest.json at its root");
+      expect(cloud.writes().filter((write) => write.includes("/deployments"))).toEqual([]);
+      expect(cloud.deployments.size).toBe(0);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const classExample = harness();
+classExample.test.provider(
+  "deploys the class-form example from the JSDoc, with a decoration around Effect.provide",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const api = yield* stack.deploy(Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain()));
+      expect(api.activeVersionId).toBe(api.versionId);
+      const state = yield* rows(stack);
+      expect(Object.keys(state).sort()).toEqual([
+        "api",
+        "api/Artifact",
+        "api/Service",
+        "api/Version",
+      ]);
+
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
 );
 
 const domain = harness();
@@ -1164,6 +1307,14 @@ for (const naming of ["before-rename", "after-rename"] as const) {
         expect(deploy).toMatchObject({ _tag: "ComputeCannotUpgradeInPlace" });
         expect(String(deploy.message)).toContain("alchemy state delete");
         expect(String(deploy.message)).toContain("nothing was changed");
+        // An old service has no logical ID, so nothing else claims it.
+        const everything = yield* stack.deploy(oldApp()).pipe(
+          Effect.sandbox,
+          Effect.flip,
+          Effect.map((cause) => Cause.pretty(cause)),
+        );
+        expect(everything).toContain("ComputeCannotUpgradeInPlace");
+        expect(everything).not.toContain("OwnedBySomeoneElse");
         expect(cloud.writes()).toEqual([]);
 
         // Removing it from the program would run the earlier delete, which

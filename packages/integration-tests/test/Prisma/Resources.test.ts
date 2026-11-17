@@ -4529,11 +4529,16 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           ["getDeployment", "version-1"],
           // Over the wire, an empty query arrives as an empty object.
           ["listAppDeployments", { appId: "service-1", query: {} }],
+          // The version is kept when its service serves it.
+          ["getApp", "service-1"],
           ["getDeployment", "version-1"],
           ["stopDeployment", "version-1"],
           ["getDeployment", "version-1"],
           ["deleteDeployment", "version-1"],
           ["getApp", "service-1"],
+          // The service is deleted only once none of its versions is stopping.
+          ["listAppDeployments", { appId: "service-1", query: {} }],
+          ["getDeployment", "version-1"],
           ["deleteApp", "service-1"],
           ["getSourceRepository", "repo-1"],
           ["deleteSourceRepository", "repo-1"],

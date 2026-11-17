@@ -299,7 +299,8 @@ describe(
 
       return Effect.gen(function* () {
         const error = yield* destroyComputeVersion("deployment-1").pipe(Effect.flip);
-        expect(error.message).toContain("DELETE /v1/deployments/deployment-1");
+        expect(error.message).toContain("version 'deployment-1' while it was in status 'stopped'");
+        expect(error.message).toContain("delete the version in the Prisma Console");
       }).pipe(provide(client));
     });
 
@@ -314,8 +315,7 @@ describe(
 
       return Effect.gen(function* () {
         const error = yield* destroyComputeVersion("deployment-1").pipe(Effect.flip);
-        expect(error.message).toContain("Stopped Prisma deployments are expected to be deletable");
-        expect(error.message).toContain("DELETE /v1/deployments/deployment-1");
+        expect(error.message).toContain("A stopped version is expected to be deletable");
       }).pipe(
         provide(client),
         // Server-category errors are replayed by the default policy; this

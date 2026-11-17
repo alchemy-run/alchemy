@@ -10,6 +10,7 @@ import {
 } from "@alchemy.run/prisma/Client";
 import {
   ComputeVersion as PrismaDeployment,
+  type ComputeVersionNotRemoved,
   ComputeVersionProvider,
   MAX_COMPUTE_VERSION_ARTIFACT_BYTES,
   readUploadArtifact,
@@ -36,7 +37,6 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { WebSocketServer } from "ws";
 import { executeArtifactUpload } from "../../../prisma/src/internal/ArtifactUpload.ts";
-import type { PrismaCleanupFailed } from "../../../prisma/src/internal/CleanupFailure.ts";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
 import {
   PrismaHttpClientLive,
@@ -452,19 +452,14 @@ describe(
           })
           .pipe(Effect.flip);
 
-        expect(error).toMatchObject({ _tag: "PrismaCleanupFailed" });
-        expect((error as PrismaCleanupFailed).message).toContain("version-1");
-        expect((error as PrismaCleanupFailed).message).toContain(
-          "DELETE /v1/deployments/version-1",
+        expect(error).toMatchObject({ _tag: "ComputeVersionNotRemoved" });
+        const notRemoved = error as ComputeVersionNotRemoved;
+        // The failure leads; the reason the version stayed follows.
+        expect(notRemoved.message).toMatch(
+          /^.*start failed.*Alchemy then stopped Prisma Compute version 'version-1'.*cleanup failed.*delete it in the Prisma Console/s,
         );
-        expect((error as PrismaCleanupFailed).errors).toHaveLength(2);
-        // Over the wire the injected failures decode into the typed errors.
-        expect(((error as PrismaCleanupFailed).errors[0] as Error).message).toContain(
-          "start failed",
-        );
-        expect(((error as PrismaCleanupFailed).errors[1] as Error).message).toContain(
-          "cleanup failed",
-        );
+        expect(notRemoved.message).not.toContain("DELETE /v1");
+        expect(notRemoved.errors).toHaveLength(2);
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),

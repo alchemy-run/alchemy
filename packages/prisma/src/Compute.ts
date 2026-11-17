@@ -344,7 +344,14 @@ export interface ComputeProps extends PlatformProps {
   build?: ComputeBuild | false | "auto";
   /**
    * Path to a pre-created `tar.gz` artifact file. When supplied, Alchemy reads
-   * and uploads it directly.
+   * and uploads it directly, and declares no `Prisma.ComputeArtifact`.
+   *
+   * The archive is a `tar.gz` with `compute.manifest.json` at its root,
+   * `{"manifestVersion": "1", "entrypoint": "server.js"}`, beside the files it
+   * names; the platform runs `entrypoint` with Bun and sets `PORT`. An archive
+   * without the manifest fails before a version is created. Build one with
+   * `createComputeArchive` from `@alchemy.run/prisma/ComputeArchive`, or let
+   * `Prisma.ComputeArtifact` build it from a directory.
    */
   artifactPath?: string;
   /**
@@ -357,9 +364,15 @@ export interface ComputeProps extends PlatformProps {
    * Runtime environment variables. Each key becomes a
    * `Prisma.EnvironmentVariable` at `<id>/Env/<KEY>`, written before the
    * version is created, in the class and Branch of the service's Branch. A
-   * `null` value declares no variable, so a variable declared before is
-   * deleted. A changed value creates a new version. A value set by a binding
-   * overrides the same key here.
+   * `null` value, or one that resolves to `undefined`, declares no variable,
+   * so a variable declared before is deleted. A changed value creates a new
+   * version. A value set by a binding overrides the same key here.
+   *
+   * Removing a key deletes its variable after the new version is created, so
+   * that version still has it, until a later deploy creates another version.
+   * To have the running app lose the key, deploy again with a changed
+   * `triggers` value once the key is removed: that deploy creates a version
+   * without it.
    *
    * Values are stored in Alchemy state inside a redaction marker, as plain
    * text; the version records only a salted digest of each value.
@@ -401,7 +414,10 @@ export interface ComputeProps extends PlatformProps {
   /**
    * Delete the previous version when a new one replaces it. By default a
    * replaced version is kept on the platform, where it scales to zero and the
-   * platform's rollback can return to it.
+   * platform's rollback can return to it. The version the service serves is
+   * never deleted on its own, also not by `alchemy destroy`: deleting the
+   * service removes it, and a service kept with `RemovalPolicy.retain()` keeps
+   * serving it.
    *
    * @default false
    */
@@ -419,9 +435,11 @@ export interface ComputeProps extends PlatformProps {
    */
   memo?: ComputeArtifactMemo;
   /**
-   * Poll timeout while waiting for start/stop.
+   * Maximum seconds to wait for the version to run, and for the service to
+   * serve it. A new version that fails is stopped and deleted, waiting up to
+   * 30 seconds, or this value when it is shorter, for it to stop.
    *
-   * @default 120
+   * @default 120 for the version, 60 for the service
    */
   timeoutSeconds?: number;
   /**
@@ -461,6 +479,12 @@ export interface ComputeProps extends PlatformProps {
    * Local development behavior for `alchemy dev`.
    */
   dev?: ComputeDev;
+}
+
+/** What the `Command.Dev` a `Prisma.Compute` declares under `alchemy dev` reports to it. */
+export interface ComputeDevProcess {
+  /** The URL the dev process serves once it is ready. */
+  devUrl: string | undefined;
 }
 
 /** What the children of a `Prisma.Compute` report to it. */
@@ -543,7 +567,7 @@ export interface Compute extends Resource<
      */
     composed: true;
   },
-  ComputeComposition,
+  ComputeComposition | ComputeDevProcess,
   Providers
 > {}
 
@@ -843,12 +867,29 @@ export const isCompute = (value: unknown): value is Compute =>
  * ```
  *
  * **Example:** Decorate a class-form Compute
+ * The class's module is the bundle's entry, so its Layer is the module's
+ * default export.
  * ```typescript
- * class Api extends Prisma.Compute<Api>()("api") {}
- * const ApiLive = Api.make(
- *   { project, main: import.meta.filename },
+ * // src/Api.ts
+ * import * as Prisma from "@alchemy.run/prisma";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Project } from "./Project.ts";
+ *
+ * export class Api extends Prisma.Compute<Api>()("api") {}
+ *
+ * export default Api.make(
+ *   Effect.gen(function* () {
+ *     return { project: yield* Project, main: import.meta.filename };
+ *   }),
  *   Effect.succeed({ fetch: Effect.succeed(HttpServerResponse.text("ok")) }),
  * );
+ * ```
+ *
+ * ```typescript
+ * // alchemy.run.ts
+ * import ApiLive, { Api } from "./src/Api.ts";
+ *
  * const api = yield* Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain());
  * ```
  *
@@ -1287,12 +1328,18 @@ const declareCloud = Effect.fn(function* (
   });
 });
 
-/** Under `alchemy dev`: the local process, and no cloud resource. */
-const declareDev = Effect.fn(function* (props: ComputeProps, env: EnvironmentInput) {
+/** The sid of the binding through which the dev process reports its URL. */
+const DEV_PROCESS_SID = "Prisma.Compute.DevProcess";
+
+/**
+ * Under `alchemy dev`: the local process, and no cloud resource. The Compute
+ * waits for the process to be ready by taking its URL.
+ */
+const declareDev = Effect.fn(function* (host: Compute, props: ComputeProps, env: EnvironmentInput) {
   const dev = props.dev;
   if (dev?.command === undefined) return;
   const port = dev.port ?? props.port;
-  yield* Command.Dev(
+  const devProcess = yield* Command.Dev(
     "Dev",
     definedProps({
       command: dev.command,
@@ -1307,6 +1354,7 @@ const declareDev = Effect.fn(function* (props: ComputeProps, env: EnvironmentInp
       port,
     }),
   );
+  yield* host.bind(DEV_PROCESS_SID, { devUrl: devProcess.url });
 });
 
 /**
@@ -1323,7 +1371,7 @@ const declareChildren = Effect.fn(function* (
   // A value set by a binding overrides the same key in `env`.
   const env = { ...props.env, ...runtimeEnv };
   if (yield* isLocal) {
-    yield* declareDev(props, env).pipe(Namespace.push(host.LogicalId));
+    yield* declareDev(host, props, env).pipe(Namespace.push(host.LogicalId));
   } else {
     yield* declareCloud(host, props, env, form).pipe(Namespace.push(host.LogicalId));
   }
@@ -1429,11 +1477,11 @@ const cannotUpgradeInPlace = Effect.fn(function* (fqn: string, when: "deploy" | 
       "To move to this release, which serves from a new service with a new URL:",
       `1. Run \`alchemy state delete ${address}\`. Alchemy forgets the old service. It keeps running on Prisma with its URL, its versions and its environment variables.`,
       "2. If the Compute sets serviceName, change it until the old service is deleted: a Branch cannot hold two services with one name.",
-      "3. Deploy with `--adopt`, so the new environment variables take over the old service's variables of the same key, or delete those variables in the Prisma Console first.",
+      "3. Deploy with `--adopt`, so the new environment variables take over the old service's variables of the same key, or delete those variables in the Prisma Console first. Without either, the deploy creates the new service and then stops at the first variable the old service holds; deploying again with `--adopt` continues from there.",
       "4. Move custom domains to the new service, and update anything that uses the old URL.",
       "5. Delete the old service in the Prisma Console once nothing uses it.",
       "",
-      `To destroy the stack on this release instead: run \`alchemy state delete ${address}\`, then \`alchemy destroy\`, and delete the old service in the Prisma Console.`,
+      `To destroy the stack on this release instead: run \`alchemy state delete ${address}\`, then \`alchemy destroy\`. When the stack also declares the project, deleting the project deletes the old service with it; otherwise delete the old service in the Prisma Console.`,
     ].join("\n"),
   });
 });
@@ -1512,9 +1560,13 @@ export const ComputeDevProvider = () =>
         diff: Effect.fn(function* () {
           return { action: "update" } as const;
         }),
-        reconcile: Effect.fn(function* ({ id, news }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings }) {
           const port = news.dev?.port ?? news.port;
-          const url = news.dev?.url ?? (port ? `http://localhost:${port}` : undefined);
+          const devUrl = bindings.find((binding) => binding.sid === DEV_PROCESS_SID)?.data;
+          const url =
+            news.dev?.url ??
+            (devUrl && "devUrl" in devUrl ? devUrl.devUrl : undefined) ??
+            (port ? `http://localhost:${port}` : undefined);
           const service = news.service as unknown;
           const projectId =
             news.project !== undefined

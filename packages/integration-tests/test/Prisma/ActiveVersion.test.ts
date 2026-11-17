@@ -345,6 +345,7 @@ twoActiveOnCreate.test.provider(
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
         expect(String(result.failure)).toContain("ComputeServiceTooManyActiveVersions");
+        expect(String(result.failure)).toContain("active version: 'One', 'Two'.");
       }
       expect(cloud.writes()).toEqual([]);
       expect(cloud.deployments.size).toBe(0);
@@ -706,7 +707,7 @@ twoStepUpgrade.test.provider(
       if (Result.isFailure(direct)) {
         const message = String(direct.failure);
         expect(message).toContain("ComputeServiceIdUnavailable");
-        expect(message).toContain("Deploy once with the renamed resources and without");
+        expect(message).toContain("Deploy once without Prisma.activateVersion");
       }
       expect(cloud.writes()).toEqual([]);
 
@@ -737,6 +738,50 @@ twoStepUpgrade.test.provider(
     }),
   { tags },
 );
+
+for (const variant of ["unchanged", "replaced"] as const) {
+  const retried = harness();
+  retried.test.provider(
+    `${variant === "unchanged" ? "recovers" : "does not recover"} from a service saved before the rename by running the same deploy again (${variant} version)`,
+    (stack) =>
+      Effect.gen(function* () {
+        const { cloud } = retried;
+        yield* stack.destroy();
+        yield* stack.deploy(app({ activate: false }));
+        yield* writeRowsAsBeforeRename(stack);
+        yield* clearCalls(cloud);
+        const program = app(variant === "replaced" ? { artifactPath: artifactV2 } : {});
+
+        const first = yield* stack.deploy(program).pipe(Effect.result);
+        expect(Result.isFailure(first)).toBe(true);
+        if (Result.isFailure(first)) {
+          expect(String(first.failure)).toContain("ComputeServiceIdUnavailable");
+        }
+        // Nothing changed on the platform.
+        expect(cloud.writes()).toEqual([]);
+        expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe(null);
+
+        if (variant === "replaced") {
+          // A deploy that also replaces the version fails the same way again;
+          // the two-step upgrade is the way through.
+          const second = yield* stack.deploy(program).pipe(Effect.result);
+          expect(Result.isFailure(second)).toBe(true);
+          expect(cloud.writes()).toEqual([]);
+          yield* stack.destroy();
+          return;
+        }
+        const again = yield* stack.deploy(program);
+        expect(again.service.serviceId).toBe("svc-1");
+        expect(again.service.activeVersionId).toBe(again.version.versionId);
+        expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe(again.version.versionId);
+        expect(cloud.services.size).toBe(1);
+
+        yield* stack.destroy();
+        expect(cloud.services.size).toBe(0);
+      }),
+    { tags },
+  );
+}
 
 const afterFailedRecovery = harness();
 afterFailedRecovery.test.provider(

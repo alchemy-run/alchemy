@@ -26,12 +26,12 @@ import {
 import type { ComputeService } from "./ComputeService.ts";
 import {
   inspectArtifactFile,
+  findArchiveManifest,
   readArtifactFile,
   type ArtifactFile,
 } from "./internal/ArtifactFile.ts";
 import { isContentNamedArchive } from "./internal/ArtifactStore.ts";
 import { executeArtifactUpload } from "./internal/ArtifactUpload.ts";
-import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
 import { startDeploymentIdempotent } from "./internal/DeploymentActions.ts";
 import { observeDeployment } from "./internal/DeploymentObserve.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
@@ -59,6 +59,41 @@ export class ComputeVersionInvalidProps extends Data.TaggedError("ComputeVersion
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+/**
+ * A version this deploy created failed, and Alchemy could not remove it.
+ * `errors` holds the failure, then the reason the version was not removed.
+ */
+export class ComputeVersionNotRemoved extends Data.TaggedError("ComputeVersionNotRemoved")<{
+  readonly message: string;
+  readonly errors: readonly [failure: unknown, cleanupError: unknown];
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * How long a failed version's removal waits for the version to stop: 30
+ * seconds, or `timeoutSeconds` when that is shorter.
+ */
+const cleanupStopWaitSeconds = (props: { readonly timeoutSeconds?: number }) =>
+  Math.min(30, props.timeoutSeconds ?? 30);
+
+const messageOf = (error: unknown) =>
+  error instanceof Error || (typeof error === "object" && error !== null && "message" in error)
+    ? String((error as { message: unknown }).message)
+    : String(error);
+
+const versionNotRemovedMessage = (
+  versionId: string,
+  waitedSeconds: number,
+  failure: unknown,
+  cleanupError: unknown,
+) => {
+  const reason =
+    cleanupError instanceof PrismaComputeVersionWaitTimeout
+      ? `the platform was still stopping it after ${waitedSeconds} s, and only a stopped version can be deleted`
+      : `deleting it failed: ${messageOf(cleanupError).replace(" Run the command again, or delete the version in the Prisma Console.", "").replace(/\.$/, "")}`;
+  return `${messageOf(failure).replace(/\.$/, "")}. Alchemy then stopped Prisma Compute version '${versionId}', which this deploy created, to remove it, but ${reason}. The version is not served, and Alchemy no longer tracks it: delete it in the Prisma Console once it has stopped.`;
+};
 
 export class ComputeVersionOperationFailed extends Data.TaggedError(
   "ComputeVersionOperationFailed",
@@ -95,6 +130,13 @@ export interface ComputeVersionProps {
   skipCodeUpload?: boolean;
   /**
    * Path to a pre-created artifact file to upload to the pre-signed upload URL.
+   *
+   * The archive is a `tar.gz` with `compute.manifest.json` at its root,
+   * `{"manifestVersion": "1", "entrypoint": "server.js"}`, beside the files it
+   * names; the platform runs `entrypoint` with Bun and sets `PORT`. An archive
+   * without the manifest fails before a version is created. Build one with
+   * `createComputeArchive` from `@alchemy.run/prisma/ComputeArchive`, or let
+   * `Prisma.ComputeArtifact` build it from a directory.
    */
   artifactPath?: string;
   /**
@@ -137,7 +179,9 @@ export interface ComputeVersionProps {
    */
   urlReadinessTimeoutSeconds?: number;
   /**
-   * Maximum seconds to wait for the version to report `running`.
+   * Maximum seconds to wait for the version to report `running`. A version
+   * this deploy created that then fails is stopped and deleted, waiting up to
+   * 30 seconds, or this value when it is shorter, for it to stop.
    *
    * @default 120
    */
@@ -254,7 +298,9 @@ export interface ComputeVersion extends Resource<
  * from the program or left behind by `alchemy destroy`: Alchemy forgets it
  * without deleting it, so the platform can roll the service back to it. The
  * service's own delete removes its versions. Pipe `RemovalPolicy.destroy()`
- * onto the resource to delete superseded versions instead.
+ * onto the resource to delete superseded versions instead. The version the
+ * service serves is never deleted on its own, whatever the policy: Alchemy
+ * forgets it, and deleting the service removes it.
  * :::
  *
  * Prisma's create-deployment API currently exposes neither an idempotency key
@@ -539,6 +585,37 @@ const artifactHashOf = Effect.fn(function* (props: ComputeVersionProps) {
 });
 
 /**
+ * A `tar.gz` artifact must hold `compute.manifest.json` at its root, which
+ * names the entrypoint. Refused before any version is created, because the
+ * platform starts an archive without one and its URL never answers.
+ */
+const requireComputeManifest = Effect.fn(function* (
+  artifactPath: string,
+  artifact: ArtifactFile,
+  contentType: string | undefined,
+) {
+  const check = yield* findArchiveManifest(artifact);
+  const format =
+    'A Prisma Compute artifact is a tar.gz archive with compute.manifest.json at its root, {"manifestVersion": "1", "entrypoint": "<path of the server file in the archive>"}. createComputeArchive from @alchemy.run/prisma/ComputeArchive builds one, and Prisma.ComputeArtifact builds one from a directory.';
+  if (check._tag === "NotGzip") {
+    if (contentType !== "application/gzip") return;
+    return yield* new ComputeVersionInvalidProps({
+      message: `artifactPath '${artifactPath}' is not gzip-compressed. ${format}`,
+    });
+  }
+  if (check._tag === "Missing") {
+    return yield* new ComputeVersionInvalidProps({
+      message: `artifactPath '${artifactPath}' has no compute.manifest.json at its root. ${format}`,
+    });
+  }
+  if (check._tag === "Invalid") {
+    return yield* new ComputeVersionInvalidProps({
+      message: `artifactPath '${artifactPath}' has a compute.manifest.json that cannot be used: ${check.reason}. ${format}`,
+    });
+  }
+});
+
+/**
  * Whether an unchanged `artifactPath` names an archive that is not on this
  * machine, such as a CI runner that did not build it. An archive named by
  * its SHA-256 holds the bytes its name says, so the version that uploaded it
@@ -750,7 +827,9 @@ const ProviderLive = () =>
           }
           return deployment ? attrsFrom(deployment, serviceId, output) : undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, olds: savedProps, output: saved }) {
+        reconcile: Effect.fn(function* ({ news, olds: savedProps, output: saved, session }) {
+          const note = (message: string) =>
+            session === undefined ? Effect.void : session.note(message);
           const output = saved && currentAttributes(saved);
           if (
             news.portMapping?.http !== undefined &&
@@ -798,6 +877,9 @@ const ProviderLive = () =>
                   artifactPath: news.artifactPath,
                   output: "file",
                 });
+          if (artifact !== undefined) {
+            yield* requireComputeManifest(news.artifactPath!, artifact, news.artifactContentType);
+          }
           const artifactHash =
             artifact === undefined
               ? output?.artifactHash
@@ -818,17 +900,33 @@ const ProviderLive = () =>
             }
           }
           let createdDeploymentId: string | undefined;
+          // A version created by this reconcile that then fails is not in
+          // state, so it is removed here or not at all.
           const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
             createdDeploymentId === failedDeploymentId
-              ? destroyComputeVersion(failedDeploymentId).pipe(
-                  Effect.mapError((cleanupError) =>
-                    aggregateCleanupFailure(
-                      "deployment",
-                      failedDeploymentId,
-                      `/v1/deployments/${failedDeploymentId}`,
-                      error,
-                      cleanupError,
-                    ),
+              ? note(
+                  `Version '${failedDeploymentId}' failed; stopping and deleting it, waiting up to ${cleanupStopWaitSeconds(news)} s for it to stop.`,
+                ).pipe(
+                  Effect.andThen(
+                    destroyComputeVersion(failedDeploymentId, {
+                      timeoutSeconds: cleanupStopWaitSeconds(news),
+                      ...(news.pollIntervalMs === undefined
+                        ? {}
+                        : { pollIntervalMs: news.pollIntervalMs }),
+                    }),
+                  ),
+                  Effect.mapError(
+                    (cleanupError) =>
+                      new ComputeVersionNotRemoved({
+                        message: versionNotRemovedMessage(
+                          failedDeploymentId,
+                          cleanupStopWaitSeconds(news),
+                          error,
+                          cleanupError,
+                        ),
+                        errors: [error, cleanupError],
+                        cause: error,
+                      }),
                   ),
                   Effect.andThen(() => Effect.fail(error)),
                 )
@@ -893,6 +991,18 @@ const ProviderLive = () =>
           if (news.start ?? true) {
             const currentDeployment = deployment;
             const currentDeploymentId = currentDeployment.id;
+            const waitForRunning = Effect.gen(function* () {
+              yield* note(
+                `Waiting up to ${news.timeoutSeconds ?? 120} s for version '${currentDeploymentId}' to run.`,
+              );
+              return yield* waitForComputeVersionStatus(currentDeploymentId, "running", news);
+            });
+            const waitForUrl = (domain: string | null) =>
+              news.verifyUrl === false
+                ? waitForComputeUrl(toComputeUrl(domain), news)
+                : note(
+                    `Waiting up to ${news.urlReadinessTimeoutSeconds ?? 60} s for ${toComputeUrl(domain) ?? "the version's URL"}${news.healthCheck === undefined ? "" : news.healthCheck.path} to answer.`,
+                  ).pipe(Effect.andThen(waitForComputeUrl(toComputeUrl(domain), news)));
             deployment = yield* Effect.gen(function* () {
               if (
                 currentDeployment.status !== "running" &&
@@ -900,22 +1010,14 @@ const ProviderLive = () =>
               ) {
                 const started = yield* startDeploymentIdempotent(currentDeployment.id);
                 if (started) {
-                  const running = yield* waitForComputeVersionStatus(
-                    currentDeployment.id,
-                    "running",
-                    news,
-                  );
+                  const running = yield* waitForRunning;
                   const startedRunning = { ...running, previewDomain: started.previewDomain };
-                  yield* waitForComputeUrl(toComputeUrl(startedRunning.previewDomain), news);
+                  yield* waitForUrl(startedRunning.previewDomain);
                   return startedRunning;
                 }
               }
-              const running = yield* waitForComputeVersionStatus(
-                currentDeployment.id,
-                "running",
-                news,
-              );
-              yield* waitForComputeUrl(toComputeUrl(running.previewDomain), news);
+              const running = yield* waitForRunning;
+              yield* waitForUrl(running.previewDomain);
               return running;
             }).pipe(
               Effect.catch((error) =>
@@ -926,7 +1028,7 @@ const ProviderLive = () =>
 
           return attrsFrom(deployment, serviceId, { artifactHash, triggersHash });
         }),
-        delete: Effect.fn(function* ({ output: saved }) {
+        delete: Effect.fn(function* ({ output: saved, session }) {
           const output = saved && currentAttributes(saved);
           if (isPrismaDevId(output.versionId)) return;
           const deployment = yield* observeDeployment(output.versionId).pipe(
@@ -934,6 +1036,23 @@ const ProviderLive = () =>
           );
           if (!deployment) return;
           yield* ensureVersionMembership(output.serviceId, deployment);
+          // The version the service serves is never deleted on its own: the
+          // service would stop serving. Its own delete removes it. A failed
+          // version serves nothing, so it is deleted.
+          const served =
+            deployment.status !== "failed" &&
+            (yield* getService({ serviceId: output.serviceId }).pipe(
+              Effect.map((response) => response.data.latestDeploymentId === output.versionId),
+              Effect.catchTag("NotFound", () => Effect.succeed(false)),
+            ));
+          if (served) {
+            if (session !== undefined) {
+              yield* session.note(
+                `Prisma Compute version '${deployment.id}' is the version service '${output.serviceId}' serves, so it is kept; deleting the service removes it.`,
+              );
+            }
+            return;
+          }
           yield* destroyComputeVersion(output.versionId).pipe(
             // The stop was requested; it finishes once open connections close.
             Effect.catchIf(

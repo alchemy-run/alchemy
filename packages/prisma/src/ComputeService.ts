@@ -14,7 +14,9 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { destroyComputeService, toComputeUrl } from "./ComputeLifecycle.ts";
@@ -39,6 +41,7 @@ import {
 } from "./internal/ServiceIdentity.ts";
 import { checkStableEndpoint, promoteVersionObserved } from "./internal/ServicePromotion.ts";
 import type { ComputeHealthCheck } from "./internal/UrlCheck.ts";
+import { listServiceVersions } from "./internal/VersionIdentity.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
@@ -179,7 +182,8 @@ export interface ComputeServiceProps {
   urlReadinessTimeoutSeconds?: number;
   /**
    * Maximum seconds to wait for the service to report the promoted version,
-   * or the restored version after a rollback, as live.
+   * or the restored version after a rollback, as live. Deleting the service
+   * also waits up to this long for its stopping versions to stop.
    *
    * @default 60
    */
@@ -288,8 +292,9 @@ export interface ComputeServiceLookup {
  * This resource was named `Prisma.App`. State saved under that type is still
  * read, and is rewritten under the new type on the next deploy. A row saved
  * as `Prisma.App` that is also attached with `activateVersion` in its first
- * deploy stops with `ComputeServiceIdUnavailable`: deploy once without
- * `activateVersion`, then add it.
+ * deploy stops with `ComputeServiceIdUnavailable` and changes nothing: deploy
+ * once without `activateVersion`, then add it back. When that deploy does not
+ * change the version, running it again also works.
  *
  * ### Creating a Service
  * **Example:** Service on the default branch
@@ -430,8 +435,28 @@ const listApps = (filter: { projectId?: string; logicalId?: string; branchId?: s
     return apps;
   });
 
-const createDisplayName = (id: string, displayName: string | undefined) =>
-  displayName === undefined ? createPhysicalName({ id }) : Effect.succeed(displayName);
+/**
+ * The ID a generated display name is made from: the resource's own, or, for the
+ * service a `Prisma.Compute` declares at `<compute>/Service`, the Compute's,
+ * so the service is named after what the user declared.
+ */
+const nameIdOf = Effect.fn(function* (id: string, fqn: string) {
+  if (!fqn.endsWith("/Service")) return id;
+  const stack = yield* Effect.serviceOption(Stack);
+  if (Option.isNone(stack)) return id;
+  const parent = stack.value.resources[fqn.slice(0, -"/Service".length)];
+  return parent?.Type === "Prisma.Compute" ? parent.LogicalId : id;
+});
+
+const createDisplayName = Effect.fn(function* (
+  id: string,
+  fqn: string,
+  displayName: string | undefined,
+) {
+  if (displayName !== undefined) return displayName;
+  const nameId = yield* nameIdOf(id, fqn);
+  return yield* createPhysicalName({ id: nameId });
+});
 
 const findApp = Effect.fn(function* (
   projectId: string,
@@ -600,7 +625,7 @@ const ensureService = Effect.fn(function* ({
 }) {
   yield* validateAppProps(news);
   const projectId = yield* resolveProjectId(news.project);
-  const displayName = yield* createDisplayName(id, news.displayName);
+  const displayName = yield* createDisplayName(id, fqn, news.displayName);
   const logicalId = logicalIdOf(news, fqn);
   yield* refuseSharedLogicalId(fqn, logicalId);
   const branch = yield* desiredBranchId(projectId, news);
@@ -728,12 +753,15 @@ const activeVersionSids = (bindings: unknown): string[] =>
       )
     : [];
 
+/** The version's logical ID, as `activateVersion` wrote it into the binding's sid. */
+const versionNameOf = (sid: string) => `'${sid.slice(ACTIVE_VERSION_SID_PREFIX.length, -1)}'`;
+
 const refuseSecondActiveVersion = (id: string, bindings: unknown) => {
   const sids = activeVersionSids(bindings);
   return sids.length > 1
     ? Effect.fail(
         new ComputeServiceTooManyActiveVersions({
-          message: `Prisma.ComputeService '${id}' has ${sids.length} versions attached as its active version (${sids.join(", ")}). A service serves exactly one version; attach only one with Prisma.activateVersion.`,
+          message: `Prisma.ComputeService '${id}' has ${sids.length} versions attached as its active version: ${sids.map(versionNameOf).join(", ")}. A service serves exactly one version; attach only one with Prisma.activateVersion.`,
         }),
       )
     : Effect.void;
@@ -854,14 +882,14 @@ const findServiceInProject = Effect.fn(function* (
     // so a match on it is this resource's interrupted create.
     const provenOwned =
       props.displayName === undefined &&
-      byLogicalId.name === (yield* createDisplayName(id, undefined));
+      byLogicalId.name === (yield* createDisplayName(id, fqn, undefined));
     return { app: byLogicalId, provenOwned };
   }
   // An explicit logical ID is the only identity. A derived one
   // falls back to the display name for services created before
   // logical IDs existed.
   if (props.logicalId !== undefined) return undefined;
-  const displayName = yield* createDisplayName(id, props.displayName);
+  const displayName = yield* createDisplayName(id, fqn, props.displayName);
   const byName = yield* findApp(projectId, displayName, props);
   return byName ? { app: byName, provenOwned: false } : undefined;
 });
@@ -917,12 +945,13 @@ const ProviderLive = () =>
               >),
               displayName: yield* createDisplayName(
                 id,
+                fqn,
                 (updateProps as Pick<ComputeServiceProps, "displayName">).displayName,
               ),
             };
             if (!output) {
               return deepEqual(resolvedUpdateProps, {
-                displayName: yield* createDisplayName(id, olds.displayName),
+                displayName: yield* createDisplayName(id, fqn, olds.displayName),
                 branchId: olds.branchId,
                 branchGitName: olds.branchGitName,
               })
@@ -1054,7 +1083,7 @@ const ProviderLive = () =>
               : yield* serveActiveVersion(app, versionId, output?.activeVersionId, news),
           );
         }),
-        delete: Effect.fn(function* ({ output: saved }) {
+        delete: Effect.fn(function* ({ output: saved, olds }) {
           const output = saved && currentAttributes(saved);
           if (isPrismaDevId(output.serviceId)) return;
           const app = yield* getService({ serviceId: output.serviceId }).pipe(
@@ -1067,11 +1096,50 @@ const ProviderLive = () =>
               message: `Prisma Compute service '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched service.`,
             });
           }
+          // The platform's service delete stops and deletes each version, and
+          // fails on one that is still stopping after deleting the others,
+          // which leaves the service serving nothing. Wait for such versions
+          // first, and delete nothing while one is still stopping.
+          const stopping = yield* waitForStoppingVersions(output.serviceId, olds);
+          if (stopping.length > 0) {
+            return yield* new Provider.DeleteInProgress({
+              message: `Prisma Compute service '${app.id}' was not deleted: its version${stopping.length === 1 ? "" : "s"} ${stopping.map((id) => `'${id}'`).join(", ")} ${stopping.length === 1 ? "is" : "are"} still stopping on the platform, and the platform cannot delete a service while a version is stopping. Nothing was deleted, and the service still serves ${app.latestDeploymentId ? `'${app.latestDeploymentId}'` : "no version"}. Run the command again once the version has stopped.`,
+            });
+          }
           yield* destroyComputeService(output.serviceId);
         }),
       };
     }),
   );
+
+/**
+ * Wait, up to the service's `timeoutSeconds`, for its versions that are
+ * stopping to stop, and return the IDs of those still stopping.
+ */
+const waitForStoppingVersions = Effect.fn(function* (
+  serviceId: string,
+  props: Pick<ComputeServiceProps, "timeoutSeconds" | "pollIntervalMs"> | undefined,
+) {
+  const timeoutMs = (props?.timeoutSeconds ?? 60) * 1_000;
+  const intervalMs = Math.max(props?.pollIntervalMs ?? 1_000, 1);
+  const stoppingNow = Effect.gen(function* () {
+    const versions = yield* listServiceVersions(serviceId);
+    const statuses = yield* Effect.forEach(versions, (version) =>
+      observeDeployment(version.id).pipe(
+        Effect.map((observed) => ({ id: version.id, status: observed.status })),
+        Effect.catchTag("NotFound", () => Effect.succeed({ id: version.id, status: "gone" })),
+      ),
+    );
+    return statuses.filter((version) => version.status === "stopping").map((version) => version.id);
+  });
+  const startedAt = yield* Clock.currentTimeMillis;
+  while (true) {
+    const stopping = yield* stoppingNow;
+    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
+    if (stopping.length === 0 || elapsed >= timeoutMs) return stopping;
+    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
+  }
+});
 
 const ProviderLocal = () =>
   devProvider(

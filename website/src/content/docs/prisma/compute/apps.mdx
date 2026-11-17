@@ -152,8 +152,14 @@ const app = yield* Prisma.Compute("api", {
 });
 ```
 
+Removing a key deletes its variable after the new version is created, so
+that version still has it until a later deploy creates another version. To
+have the running app lose the key, deploy again with a changed `triggers`
+value once the key is removed.
+
 A variable belongs to the project and the service's Branch, not to one
-service. Two Computes on one Branch cannot declare the same key.
+service: every service on that Branch reads it. Two Computes on one Branch
+cannot declare the same key.
 
 When `Prisma.Project` creates its default database, Prisma injects
 system-managed `DATABASE_URL` and `DATABASE_URL_POOLED` values into
@@ -206,7 +212,10 @@ is then the version's preview URL.
 ## Removal policies
 
 A decoration piped onto `yield* Prisma.Compute(...)` reaches every resource
-it declares:
+it declares except the version, which always keeps replaced versions, or
+deletes them with `destroyOldDeployment`. The version the service serves is
+never deleted on its own: with `RemovalPolicy.retain()`, `alchemy destroy`
+keeps the service, and it keeps serving.
 
 ```typescript
 const app = yield* Prisma.Compute("api", {
@@ -217,9 +226,30 @@ const app = yield* Prisma.Compute("api", {
 
 For a class declared with `Prisma.Compute<Api>()("api")`, pipe the
 decoration around `Effect.provide` of its Layer. Piped onto `yield*` of the
-class alone, it reaches nothing:
+class alone, it reaches nothing. The class's module is the bundle's entry,
+so its Layer is the module's default export:
 
 ```typescript
+// src/Api.ts
+import * as Prisma from "@alchemy.run/prisma";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Project } from "./Project.ts";
+
+export class Api extends Prisma.Compute<Api>()("api") {}
+
+export default Api.make(
+  Effect.gen(function* () {
+    return { project: yield* Project, main: import.meta.filename };
+  }),
+  Effect.succeed({ fetch: Effect.succeed(HttpServerResponse.text("ok")) }),
+);
+```
+
+```typescript
+// alchemy.run.ts
+import ApiLive, { Api } from "./src/Api.ts";
+
 const api = yield* Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain());
 ```
 
@@ -257,7 +287,7 @@ const app = yield* Prisma.Compute("web", {
 ```
 
 With `port`, Alchemy sets `PORT` and waits until the port accepts a
-connection. `app.url` is `http://localhost:5173`.
+connection before the Compute is ready. `app.url` is `http://localhost:5173`.
 
 ## Where next
 

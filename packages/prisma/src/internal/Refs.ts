@@ -72,7 +72,7 @@ export class ComputeServiceIdUnavailable extends Data.TaggedError("ComputeServic
 export const serviceIdUnavailable = () =>
   new ComputeServiceIdUnavailable({
     message:
-      "This resource received no Compute service ID. The service's saved state was written before Prisma.App was renamed Prisma.ComputeService, and Prisma.activateVersion makes the service and its version read each other before that state is rewritten. Deploy once with the renamed resources and without Prisma.activateVersion, so the service's state is rewritten, then add Prisma.activateVersion and deploy again.",
+      "This resource received no Compute service ID: the service's saved state still has the names from before Prisma.App was renamed Prisma.ComputeService, and this deploy attaches a version with Prisma.activateVersion before that state is rewritten. Nothing was changed on the platform. Deploy once without Prisma.activateVersion, so the service's state is rewritten, then add Prisma.activateVersion back and deploy again. When this deploy does not change the version, running the same deploy again also works.",
   });
 
 export const resolveServiceId = (service: string | ComputeService | undefined) =>

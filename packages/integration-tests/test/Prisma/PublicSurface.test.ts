@@ -61,6 +61,7 @@ const publicExports = [
   "DatabaseOperationFailed",
   "ComputeVersionConflict",
   "ComputeVersionInvalidProps",
+  "ComputeVersionNotRemoved",
   "ComputeVersionOperationFailed",
   "ComputeVersionUnexpectedResponse",
   "EnvironmentVariableConflict",
