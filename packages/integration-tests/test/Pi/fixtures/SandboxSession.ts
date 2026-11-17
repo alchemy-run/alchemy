@@ -28,7 +28,7 @@ const Sandboxes = Effect.gen(function* () {
 
 /** E2B finds a sandbox by its metadata and pauses it on `suspend`. */
 const SandboxLive = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
     const find = (key: string) =>
@@ -54,8 +54,8 @@ const SandboxLive = Layer.effect(
   }),
 );
 
-/** A tool of our own that works in the conversation's sandbox, through `Pi.Env`. */
-class CountBytes extends Pi.Tool<CountBytes>()(
+/** A tool of our own that works in the conversation's sandbox, through `AI.Sandbox`. */
+class CountBytes extends AI.Tool<CountBytes>()(
   "count_bytes",
   {
     description:
@@ -66,8 +66,8 @@ class CountBytes extends Pi.Tool<CountBytes>()(
   },
   Effect.gen(function* () {
     return Effect.fn(function* ({ path }) {
-      const env = yield* Pi.Env;
-      const text = yield* env.readTextFile(path).pipe(Effect.orDie);
+      const sandbox = yield* AI.Sandbox;
+      const text = yield* sandbox.readTextFile(path).pipe(Effect.orDie);
       return { bytes: new TextEncoder().encode(text).length };
     });
   }),

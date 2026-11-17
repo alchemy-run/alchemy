@@ -135,7 +135,7 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 
 ## Tools in a sandbox
 
-A Durable Object can't run processes, so Pi's coding tools run in a sandbox. An `AI.Sandbox` Layer says how to open, suspend and remove one on its platform:
+A Durable Object can't run processes, so Pi's coding tools run in a sandbox. An `AI.Sandboxes` Layer says how to open, suspend and remove one on its platform:
 
 ```typescript title="src/sandboxes/E2B.ts"
 import * as AI from "@alchemy.run/ai";
@@ -144,7 +144,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 export const E2BSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* E2B.CreateSandbox(base);
@@ -177,7 +177,7 @@ The harness chooses the `key`: one for each conversation. The Layer only maps a 
 
 All three operations are safe to repeat. `open` returns the sandbox running, whatever state it was in. `suspend` stops paying for compute and keeps the files where the platform can. `remove` deletes the sandbox.
 
-`Pi.CodingTools` require an `AI.Sandbox`, so a harness that lists them compiles only once the Layer is provided:
+`Pi.CodingTools` require `AI.Sandboxes`, so a harness that lists them compiles only once the Layer is provided:
 
 ```typescript
 const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
@@ -189,14 +189,14 @@ const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, 
 
 Pi's own `pi-env` daemon runs in the sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they do locally.
 
-A tool of your own reaches the same files and shell through `Pi.Env`. Declare it with `Pi.Tool`, which requires the sandbox as the coding tools do:
+A tool of your own runs in the harness. To reach the conversation's files and shell it uses `AI.Sandbox`, which the harness has already scoped to the call's conversation. Its Layer then requires `AI.Sandboxes`, as the coding tools do:
 
 ```typescript title="src/RunTests.ts"
-import * as Pi from "@alchemy.run/pi";
+import * as AI from "@alchemy.run/ai";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-export class RunTests extends Pi.Tool<RunTests>()("run_tests", {
+export class RunTests extends AI.Tool<RunTests>()("run_tests", {
   description: "Run the test suite and report failures.",
   parameters: Schema.Struct({ filter: Schema.optional(Schema.String) }),
   success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
@@ -206,8 +206,8 @@ export class RunTests extends Pi.Tool<RunTests>()("run_tests", {
 export const RunTestsLive = RunTests.make(
   Effect.gen(function* () {
     return Effect.fn(function* ({ filter }) {
-      const env = yield* Pi.Env;
-      const result = yield* env
+      const sandbox = yield* AI.Sandbox;
+      const result = yield* sandbox
         .exec(["npm", "test", ...(filter ? ["--", filter] : [])])
         .pipe(Effect.orDie);
       return { exitCode: result.exitCode, output: result.stdout.slice(-8000) };
@@ -230,7 +230,7 @@ yield* harness.removeSandbox(name);
 
 ### Another sandbox platform
 
-The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `AI.Sandbox` Layer. Daytona finds a sandbox by name and stops it on `suspend`:
+The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `AI.Sandboxes` Layer. Daytona finds a sandbox by name and stops it on `suspend`:
 
 ```typescript title="src/sandboxes/Daytona.ts"
 import * as AI from "@alchemy.run/ai";
@@ -239,7 +239,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 export const DaytonaSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
     const sandboxes = yield* Daytona.CreateSandbox(base);

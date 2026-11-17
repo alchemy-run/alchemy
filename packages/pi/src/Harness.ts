@@ -5,7 +5,7 @@ import {
   type McpServerService,
 } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
-import { Sandbox } from "@alchemy.run/ai/Sandbox";
+import { Sandboxes } from "@alchemy.run/ai/Sandbox";
 import type { AnySkill } from "@alchemy.run/ai/Skill";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -172,7 +172,7 @@ export interface Conversation {
   readonly id: ConversationId;
   /**
    * The key the harness opens this conversation's sandbox with: what an
-   * `AI.Sandbox` Layer names or labels the sandbox by.
+   * `AI.Sandboxes` Layer names or labels the sandbox by.
    */
   readonly sandboxKey: string;
   /** What the conversation runs with, resolved against the harness. */
@@ -207,12 +207,12 @@ export interface Conversation {
   ) => Stream.Stream<ConversationView, PiError, RuntimeContext>;
   /**
    * Stop the conversation's sandbox and keep its files, where its platform
-   * can (`AI.Sandbox`'s `suspend`). Its next tool call resumes it. Does
+   * can (`AI.Sandboxes`'s `suspend`). Its next tool call resumes it. Does
    * nothing on a harness without a sandbox.
    */
   readonly suspendSandbox: Effect.Effect<void, PiError, RuntimeContext>;
   /**
-   * Delete the conversation's sandbox (`AI.Sandbox`'s `remove`). Its next
+   * Delete the conversation's sandbox (`AI.Sandboxes`'s `remove`). Its next
    * tool call opens a new one. Does nothing on a harness without a sandbox.
    */
   readonly removeSandbox: Effect.Effect<void, PiError, RuntimeContext>;
@@ -386,7 +386,7 @@ export const Harness = <
     const storage = yield* (yield* Storage).instance;
     // Where tools find files and a shell. A harness without one runs only
     // tools that need neither; the coding tools require it in their type.
-    const sandbox = Option.getOrUndefined(yield* Effect.serviceOption(Sandbox));
+    const sandbox = Option.getOrUndefined(yield* Effect.serviceOption(Sandboxes));
     const envFor = sandbox === undefined ? undefined : makeEnvFor(sandbox);
 
     // Resolve every model and tool implementation here, where their Layers
@@ -869,7 +869,7 @@ export const Harness = <
         );
       const onSandbox = (
         call: (
-          sandbox: Sandbox["Service"],
+          sandbox: Sandboxes["Service"],
           key: string,
         ) => Effect.Effect<unknown, unknown, RuntimeContext>,
       ): Effect.Effect<void, PiError, RuntimeContext> =>

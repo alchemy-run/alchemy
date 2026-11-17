@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
  * disk. Boat stops a sandbox left running for ten minutes.
  */
 export const BoatSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const base = yield* Boat.Snapshot("BoatBase", { run: ["npm install --global pnpm"] });
     const sandboxes = yield* Boat.CreateSandbox(base);

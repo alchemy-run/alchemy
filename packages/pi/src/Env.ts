@@ -1,55 +1,9 @@
+import { SandboxError as EnvError, type Sandbox } from "@alchemy.run/ai/Sandbox";
 import type { Context as ChordContext } from "@earendil-works/chord/context";
 import type { EnvTarget as PiEnvTarget } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { fromPi } from "./internal/promise.ts";
-
-/** A file operation or command in the conversation's environment failed. */
-export class EnvError extends Data.TaggedError("EnvError")<{
-  readonly operation: string;
-  readonly code: string;
-  readonly message: string;
-  readonly path?: string;
-}> {}
-
-/** What a command printed, and its exit code. */
-export interface ExecResult {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-export interface ExecOptions {
-  readonly cwd?: string;
-  readonly env?: Record<string, string>;
-  /** Milliseconds before the command is killed. */
-  readonly timeout?: number;
-}
-
-/**
- * The environment a tool call works in: the conversation's files and shell.
- * Provided to every tool handler for the duration of its call.
- */
-export class Env extends Context.Service<
-  Env,
-  {
-    /** Run a program (an argument vector) or a shell line to completion. */
-    readonly exec: (
-      command: string | ReadonlyArray<string>,
-      options?: ExecOptions,
-    ) => Effect.Effect<ExecResult, EnvError>;
-    readonly readFile: (path: string) => Effect.Effect<Uint8Array, EnvError>;
-    readonly readTextFile: (path: string) => Effect.Effect<string, EnvError>;
-    readonly writeFile: (
-      path: string,
-      content: string | Uint8Array,
-    ) => Effect.Effect<void, EnvError>;
-    /** The raw Pi environment, for operations this view doesn't cover. */
-    readonly raw: ExecutionEnv;
-  }
->()("Pi.Env") {}
 
 type PiResult<A> =
   | { ok: true; value: A }
@@ -74,9 +28,8 @@ const unwrap = <A>(operation: string, call: (context: ChordContext) => Promise<P
     ),
   );
 
-/** The Effect view of a Pi `ExecutionEnv`. */
-export const makeEnv = (raw: ExecutionEnv): Env["Service"] => ({
-  raw,
+/** A conversation's Pi `ExecutionEnv` as the `AI.Sandbox` its tool calls use. */
+export const makeSandbox = (raw: ExecutionEnv): Sandbox["Service"] => ({
   exec: (command, options) =>
     Effect.suspend(() => {
       let stdout = "";
@@ -112,3 +65,5 @@ export type EnvTarget = PiEnvTarget & {
    */
   readonly instanceId: string;
 };
+
+export { EnvError };

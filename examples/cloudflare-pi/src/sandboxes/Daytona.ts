@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
  * one that has been stopped for a day.
  */
 export const DaytonaSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const base = yield* Daytona.Snapshot("DaytonaBase", {
       image: "node:22-bookworm",

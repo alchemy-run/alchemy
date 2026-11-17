@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
  * Archil also pauses one that is idle, and resumes it on the next command.
  */
 export const ArchilSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const base = yield* Archil.Image("ArchilBase", { image: "node:22-bookworm" });
     const sandboxes = yield* Archil.CreateSandbox(base);

@@ -1,3 +1,4 @@
+import type { Sandbox } from "@alchemy.run/ai/Sandbox";
 import type { SkillClass } from "@alchemy.run/ai/Skill";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { JsonObject, ToolExecutionResult, ToolHookCall } from "@earendil-works/pi-durable";
@@ -19,7 +20,7 @@ export interface ExtensionSpec {
 }
 
 /** Services an extension's sections and hooks may use. */
-export type ExtensionServices = Exclude<ToolServices, import("./Env.ts").Env>;
+export type ExtensionServices = Exclude<ToolServices, Sandbox>;
 
 /** The input a dynamic section renders from. */
 export interface SectionInput {

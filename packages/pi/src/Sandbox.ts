@@ -1,4 +1,4 @@
-import { Sandbox, type SandboxHandle } from "@alchemy.run/ai/Sandbox";
+import { Sandboxes, type SandboxHandle } from "@alchemy.run/ai/Sandbox";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import type { Connection } from "@earendil-works/pi-env";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
@@ -54,18 +54,18 @@ export const sandboxKey = (instanceId: string, conversationId: number | string):
  * ECS task, a container).
  *
  * @layer
- * @provides AI.Sandbox
+ * @provides AI.Sandboxes
  */
-export const LocalEnv = (options: { readonly cwd: string }): Layer.Layer<Sandbox> => {
+export const LocalEnv = (options: { readonly cwd: string }): Layer.Layer<Sandboxes> => {
   const unsupported = () =>
     Effect.fail(
       new EnvError({
         operation: "exec",
         code: "unknown",
-        message: "Pi.LocalEnv is this machine: use Pi.Env, not the sandbox handle",
+        message: "Pi.LocalEnv is this machine: it has no sandbox handle",
       }),
     );
-  return Layer.succeed(Sandbox, {
+  return Layer.succeed(Sandboxes, {
     // Pi reads the machine's own environment off the handle; no daemon runs.
     open: () =>
       Effect.succeed({
@@ -84,7 +84,7 @@ export const LocalEnv = (options: { readonly cwd: string }): Layer.Layer<Sandbox
  *
  * @internal
  */
-export const makeEnvFor = (sandboxes: Sandbox["Service"]) => {
+export const makeEnvFor = (sandboxes: Sandboxes["Service"]) => {
   const installed = new WeakSet<object>();
   return (target: EnvTarget): Effect.Effect<ExecutionEnv, EnvError, RuntimeContext> =>
     Effect.gen(function* () {

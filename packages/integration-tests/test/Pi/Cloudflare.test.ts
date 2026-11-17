@@ -183,7 +183,7 @@ test(
       expect(tools.some((used) => used.tool === "bash" && !used.isError)).toBe(true);
       expect(file.text).toContain("pi was here");
 
-      // A tool of our own reads the same sandbox through `Pi.Env`.
+      // A tool of our own reads the same sandbox through `AI.Sandbox`.
       yield* call(`/sandbox/${name}/prompt`, {
         text: "Use the count_bytes tool on /home/user/hello.txt and tell me the number.",
         requestId: "sbx-count",

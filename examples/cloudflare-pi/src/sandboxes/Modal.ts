@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
  * creates an empty one.
  */
 export const ModalSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const app = yield* Modal.App("ModalApp", {});
     const base = yield* Modal.Image("ModalBase", { app, image: "node:22-bookworm" });

@@ -1,6 +1,7 @@
 import * as AI from "@alchemy.run/ai";
 import * as Pi from "@alchemy.run/pi";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { Fast } from "./fixtures/models.ts";
 
@@ -21,11 +22,11 @@ type _PlainNeedsNoSandbox = Assert<Equals<Effect.Services<typeof plain>, Pi.Stor
 // The coding tools, as a group or one at a time, require a sandbox.
 const coding = Pi.Harness({ models: [Fast], tools: [Pi.CodingTools, Add] });
 type _CodingToolsNeedSandbox = Assert<
-  Equals<Effect.Services<typeof coding>, Pi.Storage | Fast | Add | AI.Sandbox>
+  Equals<Effect.Services<typeof coding>, Pi.Storage | Fast | Add | AI.Sandboxes>
 >;
 const bash = Pi.Harness({ models: [Fast], tools: [Pi.Bash] });
 type _OneCodingToolNeedsSandbox = Assert<
-  Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | AI.Sandbox>
+  Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | AI.Sandboxes>
 >;
 
 // An MCP server listed as a tool requires its client Layer.
@@ -35,13 +36,68 @@ type _McpServerNeedsItsLayer = Assert<
   Equals<Effect.Services<typeof withServer>, Pi.Storage | Fast | Add | Docs>
 >;
 
-// A tool of Pi's own may use `Pi.Env`, so it requires a sandbox too.
-class Count extends Pi.Tool<Count>()("count", {
+// A handler that uses the conversation's sandbox (`AI.Sandbox`) requires
+// `AI.Sandboxes`: on its Layer when it has one, on the harness otherwise.
+class Count extends AI.Tool<Count>()("count", {
   description: "Count the bytes of a file.",
   parameters: Schema.Struct({ path: Schema.String }),
   success: Schema.Number,
 }) {}
-const own = Pi.Harness({ models: [Fast], tools: [Count] });
-type _PiToolNeedsSandbox = Assert<
-  Equals<Effect.Services<typeof own>, Pi.Storage | Fast | Count | AI.Sandbox>
+const CountLive = Count.make(
+  Effect.gen(function* () {
+    return Effect.fn(function* ({ path }) {
+      type _ParametersAreTyped = Assert<Equals<typeof path, string>>;
+      const sandbox = yield* AI.Sandbox;
+      return (yield* sandbox.readFile(path).pipe(Effect.orDie)).length;
+    });
+  }),
+);
+type _SandboxToolLayerNeedsSandboxes = Assert<
+  Equals<Layer.Services<typeof CountLive>, AI.Sandboxes>
+>;
+const AddLive = Add.make(
+  Effect.succeed(
+    Effect.fn(function* ({ a, b }) {
+      return a + b;
+    }),
+  ),
+);
+type _PlainToolLayerNeedsNothing = Assert<Equals<Layer.Services<typeof AddLive>, never>>;
+
+class CountInline extends AI.Tool<CountInline>()(
+  "count_inline",
+  {
+    description: "Count the bytes of a file.",
+    parameters: Schema.Struct({ path: Schema.String }),
+    success: Schema.Number,
+  },
+  Effect.gen(function* () {
+    return Effect.fn(function* ({ path }) {
+      type _ParametersAreTyped = Assert<Equals<typeof path, string>>;
+      const sandbox = yield* AI.Sandbox;
+      return (yield* sandbox.readFile(path).pipe(Effect.orDie)).length;
+    });
+  }),
+) {}
+const classInline = Pi.Harness({ models: [Fast], tools: [CountInline] });
+type _InlineImplNeedsSandboxes = Assert<
+  Equals<Effect.Services<typeof classInline>, Pi.Storage | Fast | AI.Sandboxes>
+>;
+
+const CountValue = AI.Tool(
+  "count_value",
+  {
+    description: "Count the bytes of a file.",
+    parameters: Schema.Struct({ path: Schema.String }),
+    success: Schema.Number,
+  },
+  Effect.fn(function* ({ path }) {
+    type _ParametersAreTyped = Assert<Equals<typeof path, string>>;
+    const sandbox = yield* AI.Sandbox;
+    return (yield* sandbox.readFile(path).pipe(Effect.orDie)).length;
+  }),
+);
+const value = Pi.Harness({ models: [Fast], tools: [CountValue] });
+type _InlineToolNeedsSandboxes = Assert<
+  Equals<Effect.Services<typeof value>, Pi.Storage | Fast | AI.Sandboxes>
 >;

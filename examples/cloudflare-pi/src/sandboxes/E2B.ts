@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
  * its memory and files. E2B kills a sandbox left running for ten minutes.
  */
 export const E2BSandbox = Layer.effect(
-  AI.Sandbox,
+  AI.Sandboxes,
   Effect.gen(function* () {
     const base = yield* E2B.Template("E2BBase", { image: "node:22-bookworm" });
     const sandboxes = yield* E2B.CreateSandbox(base);
