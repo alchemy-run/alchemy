@@ -1,10 +1,12 @@
 import {
   makeDurableObjectEngine,
+  provideCallbacks,
   type DurableObjectEngineHost,
 } from "alchemy/Workers/DurableObjectEngine";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { WorkflowEngine } from "effect/workflow";
+import { DurableObjectCallbacks } from "../Workers/AlarmCallback.ts";
 import { DurableObject, type DurableObjectJurisdiction } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import type { Worker } from "../Workers/Worker.ts";
@@ -131,8 +133,10 @@ const makeEngine = (
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   makeDurableObjectEngine({
     declare: (name, impl) =>
-      Effect.map(declare(name, impl), (namespace) =>
-        jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+      Effect.map(
+        declare(name, provideCallbacks(impl, DurableObjectCallbacks) as never),
+        (namespace) =>
+          jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
       ),
     state: DurableObjectState,
   });

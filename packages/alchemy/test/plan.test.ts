@@ -6355,6 +6355,88 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  // A failed update that drops protect() leaves an `updating` row with the
+  // declared policy on top and the last successful row on `old`.
+  const failedUnprotect = (old: ResourceState | undefined) =>
+    ({
+      ...createTestResourceState({
+        logicalId: "A",
+        status: "updating",
+        props: { replaceString: "v1", string: "b" },
+      }),
+      removalPolicy: "destroy",
+      ...(old ? { old } : {}),
+    }) as ResourceState;
+
+  test(
+    "a failed unprotect update still refuses a replacement",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(
+        makePlan(declare({ replaceString: "v2", string: "b" }, false)),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "replace" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an orphan delete",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(makePlan(Effect.void));
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an Action taking over its FQN",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const A = Action("A", (input: { value: string }) => Effect.succeed(input));
+      const error = yield* refusalOf(
+        makePlan(
+          Effect.gen(function* () {
+            yield* A({ value: "x" });
+          }),
+        ),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "an updating row that was never protected can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(created({ replaceString: "v1", string: "a" })) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
+    }),
+  );
+
+  test(
+    "an updating row without old can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(undefined) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
+    }),
+  );
+
   test(
     "resuming an in-flight replacement is refused",
     Effect.gen(function* () {

@@ -24,8 +24,11 @@ export const StripeSettlements = Effect.gen(function* () {
       const accountId = intent.metadata?.accountId;
       if (!accountId) return;
       yield* accounts.send(
-        AccountId.make(accountId),
-        new RecordSettlement({ settlementId: intent.id, amount: intent.amount_received }),
+        new RecordSettlement({
+          accountId: AccountId.make(accountId),
+          settlementId: intent.id,
+          amount: intent.amount_received,
+        }),
         { commandId: `settlement:${intent.id}` },
       );
     }),
