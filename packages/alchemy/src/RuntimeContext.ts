@@ -94,6 +94,11 @@ export type GatewayContext =
   | {
       /** Inside the gateway: bindings are built for real, and their clients kept. */
       readonly phase: "gateway";
+      /**
+       * The gateway's identity, as at deploy: bindings name what they
+       * created after their host, and read it back under that name.
+       */
+      readonly self: { readonly Type: string; readonly LogicalId: string };
       /** Keep a binding's client for the sandbox to call. */
       readonly register: (key: string, client: unknown) => Effect.Effect<void>;
     }

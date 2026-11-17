@@ -64,9 +64,7 @@ export const SandboxGateway = Layer.effect(
         const secret = yield* Namespace.push(sandbox.LogicalId, makeRandom("GatewayToken"));
         const worker = (yield* Namespace.push(
           sandbox.LogicalId,
-          // Bindings name what they create after their host, so the id is
-          // unique to this sandbox.
-          Worker(`${sandbox.LogicalId}Gateway`, {
+          Worker(Gateway.gatewayId(sandbox.LogicalId), {
             main: entry,
             env: { [Gateway.TOKEN_KEY]: secret.text },
             build: { input: { plugins: [Gateway.programPlugin(sandbox)] } },
@@ -89,7 +87,7 @@ export const SandboxGateway = Layer.effect(
             }),
         } satisfies Gateway.Deployed;
       }),
-      { client: serviceClient },
+      { type: Worker.Type, client: serviceClient },
     ),
   ),
 );

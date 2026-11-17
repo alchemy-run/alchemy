@@ -32,6 +32,7 @@ import {
   asEffectOrStream,
   decodeRpcResponseStream,
   decodeRpcResult,
+  encodeRpcResponseStream,
   RPC_STREAM_HEADER,
 } from "./Rpc.ts";
 import {
@@ -52,6 +53,71 @@ export class Gateway extends Context.Service<
     readonly token: Effect.Effect<Redacted.Redacted<string>>;
   }
 >()("Alchemy.Gateway") {}
+
+/**
+ * Names the argument that is streamed after the call: its index, or
+ * `0.<field>` for a field of the first argument (a request's `Body`).
+ */
+export const STREAM_ARG_HEADER = "x-alchemy-gateway-stream-arg";
+
+/** Where a call's one `Stream` argument is, if it has one. */
+export const streamArgument = (args: ReadonlyArray<unknown>): string | undefined => {
+  const index = args.findIndex((arg) => Stream.isStream(arg) && !Effect.isEffect(arg));
+  if (index >= 0) return String(index);
+  const first = args[0];
+  if (first === null || typeof first !== "object") return undefined;
+  const field = Object.keys(first).find((name) => Stream.isStream((first as any)[name]));
+  return field === undefined ? undefined : `0.${field}`;
+};
+
+/** `args` with the argument at `location` replaced. */
+export const withStreamArgument = (
+  args: ReadonlyArray<unknown>,
+  location: string,
+  value: unknown,
+): unknown[] => {
+  const [index = "0", ...field] = location.split(".");
+  return args.map((arg, at) =>
+    at !== Number(index)
+      ? arg
+      : field.length === 0
+        ? value
+        : { ...(arg as object), [field.join(".")]: value },
+  );
+};
+
+/**
+ * A call as a request body. A `Stream` argument (an upload's body) is sent
+ * after the call, as it is produced: the call is the first line, the
+ * stream's chunks the rest.
+ */
+const requestBody = (path: ReadonlyArray<string>, args: ReadonlyArray<unknown> | undefined) => {
+  const location = args === undefined ? undefined : streamArgument(args);
+  if (args === undefined || location === undefined) {
+    return HttpClientRequest.bodyText(
+      encode({ path, ...(args === undefined ? {} : { args }) }),
+      "application/json",
+    );
+  }
+  const [index = "0", ...field] = location.split(".");
+  const holder = args[Number(index)] as any;
+  const body = (field.length === 0 ? holder : holder[field.join(".")]) as Stream.Stream<
+    unknown,
+    unknown
+  >;
+  const head = JSON.parse(encode({ path, args: withStreamArgument(args, location, null) }));
+  return (request: HttpClientRequest.HttpClientRequest) =>
+    request.pipe(
+      HttpClientRequest.setHeader(STREAM_ARG_HEADER, location),
+      HttpClientRequest.bodyStream(
+        encodeRpcResponseStream(Stream.concat(Stream.succeed(head), body)) as Stream.Stream<
+          Uint8Array,
+          never
+        >,
+        { contentType: "application/x-ndjson" },
+      ),
+    );
+};
 
 /** Names the field of a result that is streamed after it. */
 export const STREAM_FIELD_HEADER = "x-alchemy-gateway-stream-field";
@@ -149,6 +215,12 @@ export const programPlugin = (sandbox: unknown) => {
   };
 };
 
+/**
+ * The logical id of a sandbox's gateway. Bindings name what they create
+ * after their host, so it is unique to the sandbox.
+ */
+export const gatewayId = (sandboxId: string) => `${sandboxId}Gateway`;
+
 const literal = <A>(value: A) => Output.literal(value) as unknown as Output.Output<A, never>;
 
 /**
@@ -157,7 +229,9 @@ const literal = <A>(value: A) => Output.literal(value) as unknown as Output.Outp
  */
 export const make = <R>(
   deploy: Effect.Effect<Deployed, never, R>,
-  options?: {
+  options: {
+    /** The gateway's resource type, as bindings see their host. */
+    readonly type: string;
     /**
      * How this sandbox reaches the gateway, when not over the public
      * internet (a Worker calls a Worker through a service binding). Read on
@@ -209,6 +283,7 @@ export const make = <R>(
         Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T);
       sandbox.gateway = {
         phase: "gateway",
+        self: { Type: options.type, LogicalId: gatewayId(sandbox.id) },
         register: (key, built) => Effect.sync(() => void clients.set(key, built)),
       };
     } else {
@@ -221,11 +296,8 @@ export const make = <R>(
                 `${(yield* url).replace(/\/+$/, "")}/${encodeURIComponent(key)}`,
               ).pipe(
                 HttpClientRequest.setHeader(TOKEN_HEADER, Redacted.value(yield* token)),
-                HttpClientRequest.bodyText(
-                  encode({ path, ...(args === undefined ? {} : { args }) }),
-                  "application/json",
-                ),
-                ((yield* options?.client ?? Effect.succeed(undefined)) ?? client).execute,
+                requestBody(path, args),
+                ((yield* options.client ?? Effect.succeed(undefined)) ?? client).execute,
                 // A gateway's hostname can take a few seconds to answer after
                 // a deploy. A transport failure never reached the binding,
                 // so sending the call again cannot run it twice.

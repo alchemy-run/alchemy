@@ -41,9 +41,7 @@ export const SandboxGateway = Layer.effect(
         const secret = yield* Namespace.push(sandbox.LogicalId, makeRandom("GatewayToken"));
         const fn = (yield* Namespace.push(
           sandbox.LogicalId,
-          // Bindings name what they create after their host, so the id is
-          // unique to this sandbox.
-          WebFunction(`${sandbox.LogicalId}Gateway`, {
+          WebFunction(Gateway.gatewayId(sandbox.LogicalId), {
             main: entry,
             // The gateway checks the sandbox's token itself.
             authType: "ApplicationManaged",
@@ -63,6 +61,7 @@ export const SandboxGateway = Layer.effect(
             }),
         } satisfies Gateway.Deployed;
       }),
+      { type: WebFunction.Type },
     ),
   ),
 );

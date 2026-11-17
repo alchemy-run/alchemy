@@ -1,6 +1,7 @@
 import * as Archil from "@alchemy.run/archil";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -8,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import type { Served } from "./conformance/app.ts";
 import { expectGatewayed } from "./conformance/conformance.ts";
+import StreamingArchil, { GatewayDisk } from "./fixtures/archil-disk.ts";
 import GatewayedArchil from "./fixtures/archil.ts";
 
 const { test } = Test.make({
@@ -33,6 +35,39 @@ test.provider(
     }),
   {
     tags: ["provider:archil", "provider:e2b", "provider:cloudflare", "live"],
+    timeout: 600_000,
+  },
+);
+
+test.provider(
+  "an Archil sandbox uploads and downloads streams through its gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const sandbox = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* GatewayDisk;
+          return yield* StreamingArchil;
+        }),
+      );
+
+      const served = (yield* HttpClient.get(`${sandbox.url}/`).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.json
+            : Effect.flatMap(res.text, (text) => Effect.fail(new Error(`${res.status}: ${text}`))),
+        ),
+        // A fresh hostname or a waking sandbox can take a few seconds.
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
+      )) as unknown as { downloaded: number; listed: string[] };
+      // A stream argument, a stream result, and a method that is a stream.
+      expect(served.downloaded).toBe(1024 * 1024);
+      expect(served.listed).toContain("stream.bin");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:archil", "provider:cloudflare", "live"],
     timeout: 600_000,
   },
 );

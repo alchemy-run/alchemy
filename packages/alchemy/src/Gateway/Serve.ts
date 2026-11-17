@@ -16,6 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import {
   clients,
@@ -24,11 +25,19 @@ import {
   origins,
   PROXY_PATH,
   serving,
+  STREAM_ARG_HEADER,
   STREAM_FIELD_HEADER,
   TOKEN_HEADER,
   TOKEN_KEY,
+  withStreamArgument,
 } from "../Gateway.ts";
-import { encodeRpcError, encodeRpcResponseStream, ErrorTag, RPC_STREAM_HEADER } from "../Rpc.ts";
+import {
+  decodeRpcResponseStream,
+  encodeRpcError,
+  encodeRpcResponseStream,
+  ErrorTag,
+  RPC_STREAM_HEADER,
+} from "../Rpc.ts";
 import { reifyBoundConfigProvider } from "../Runtime.ts";
 import { entrypointLayer, stackFromEnv } from "../Runtime/Bootstrap.ts";
 import { unpackEnvValue } from "../RuntimeContext.ts";
@@ -43,6 +52,40 @@ const sameText = (a: string, b: string) => {
 
 const reply = (value: unknown, status = 200) =>
   new Response(encode(value), { status, headers: { "content-type": "application/json" } });
+
+interface Call {
+  readonly path: ReadonlyArray<string>;
+  readonly args?: ReadonlyArray<unknown>;
+}
+
+/**
+ * Read a call. With a streamed argument, the call is the body's first line
+ * and the rest is that argument's stream, read as the binding consumes it.
+ */
+const readCall = async (request: Request): Promise<Call> => {
+  const location = request.headers.get(STREAM_ARG_HEADER);
+  if (location === null || request.body === null) return decode(await request.text()) as Call;
+  const body = request.body;
+  const scope = Scope.makeUnsafe();
+  const [head, rest] = await Effect.runPromise(
+    Stream.peel(
+      decodeRpcResponseStream(
+        Stream.fromReadableStream({ evaluate: () => body, onError: (cause) => cause }),
+      ),
+      Sink.head(),
+    ).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
+  // Through the gateway's own codec, so bytes in the other arguments survive.
+  const call = decode(JSON.stringify(Option.getOrUndefined(head))) as Required<Call>;
+  return {
+    path: call.path,
+    args: withStreamArgument(
+      call.args,
+      location,
+      rest.pipe(Stream.onExit((exit) => Scope.close(scope, exit))),
+    ),
+  };
+};
 
 /** Headers that describe one hop, or the encoding `fetch` already undid. */
 const HOP = [
@@ -157,10 +200,7 @@ export const serve = (
     if (!clients.has(key)) {
       return new Response(`the gateway holds no binding ${key}`, { status: 404 });
     }
-    const { path, args } = decode(await request.text()) as {
-      path: ReadonlyArray<string>;
-      args?: ReadonlyArray<unknown>;
-    };
+    const { path, args } = await readCall(request);
     let target: any = clients.get(key);
     let owner: unknown;
     for (const name of path) {

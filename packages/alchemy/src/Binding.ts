@@ -295,8 +295,9 @@ const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, nev
 export const Host: Effect.Effect<ResourceLike | undefined> = Effect.flatMap(
   CurrentRuntimeContext,
   (ctx) =>
-    // A sandbox's bindings attach to its gateway, not to the sandbox.
-    ctx?.gateway?.phase === "plan"
+    // A sandbox's bindings attach to its gateway, not to the sandbox, and
+    // are built there under the same host.
+    ctx?.gateway?.phase === "plan" || ctx?.gateway?.phase === "gateway"
       ? Effect.succeed(ctx.gateway.self as ResourceLike)
       : Effect.serviceOption(Self as unknown as Context.Service<ResourceLike, ResourceLike>).pipe(
           Effect.map(Option.getOrUndefined),
